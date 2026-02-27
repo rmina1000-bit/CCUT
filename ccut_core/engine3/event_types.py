@@ -1,0 +1,10 @@
+from enum import Enum
+
+
+class EventType(str, Enum):
+    USER_UTTERANCE = "USER_UTTERANCE"
+    POINTER_SELECTION = "POINTER_SELECTION"
+    UI_ACTION = "UI_ACTION"
+    DECISION_COMMIT = "DECISION_COMMIT"
+    UNDO = "UNDO"
+    REDO = "REDO"
