@@ -1,0 +1,8 @@
+ui/node_modules/
+ccut_core/storage/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.env
+*.tmp

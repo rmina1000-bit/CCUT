@@ -1,0 +1,198 @@
+/* ── Right Panel ─────────────────────────────────────────── */
+.right-panel {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: #0d1117;
+}
+
+/* ── Original Panorama ───────────────────────────────────── */
+.original-panorama {
+  position: sticky;
+  top: 0;
+  flex: 0 0 12%;
+  min-height: 48px;
+  display: flex;
+  align-items: stretch;
+  background: #07090f;
+  border-bottom: 1px solid #1e2a3a;
+  overflow: hidden;
+  z-index: 10;
+  padding: 4px 0;
+}
+
+.pano-label {
+  writing-mode: vertical-rl;
+  font-size: 9px;
+  color: #374151;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  padding: 0 6px;
+  flex-shrink: 0;
+}
+
+.pano-track {
+  flex: 1;
+  position: relative;
+  overflow: hidden;
+  margin: 4px 4px 4px 0;
+}
+
+.pano-frag {
+  position: absolute;
+  top: 0;
+  height: 100%;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  border-radius: 3px;
+  cursor: pointer;
+  overflow: hidden;
+  transition: filter 0.1s;
+  min-width: 4px;
+  box-sizing: border-box;
+  padding-right: 2px;
+}
+
+.pano-boundary {
+  position: absolute;
+  top: 0;
+  height: 100%;
+  width: 4px;
+  cursor: col-resize;
+  z-index: 10;
+  background: rgba(56, 189, 248, 0.15);
+  border-left: 1px solid rgba(56, 189, 248, 0.35);
+  border-right: 1px solid rgba(56, 189, 248, 0.35);
+  transition: background 0.1s;
+}
+.pano-boundary:hover {
+  background: rgba(56, 189, 248, 0.55);
+}
+.pano-boundary.dragging {
+  background: rgba(56, 189, 248, 0.8);
+  border-color: #38bdf8;
+}
+.pano-frag:hover { filter: brightness(1.35); }
+.pano-frag-label {
+  font-size: 8px;
+  color: rgba(255,255,255,0.7);
+  padding: 2px 3px;
+  pointer-events: none;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+/* ── Edit Structure Box ──────────────────────────────────── */
+.edit-structure-box {
+  flex: 0 0 68%;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  overflow-x: hidden;
+  border-bottom: 1px solid #1e2a3a;
+  padding: 8px 0;
+}
+
+.esb-label {
+  font-size: 9px;
+  color: #374151;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  padding: 0 12px 6px;
+  flex-shrink: 0;
+}
+
+.esb-fragment {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  margin: 2px 8px;
+  border-radius: 4px;
+  cursor: grab;
+  border: 1px solid transparent;
+  transition: background 0.1s, border-color 0.1s;
+  position: relative;
+  will-change: transform;
+  user-select: none;
+}
+.esb-fragment:active { cursor: grabbing; }
+.esb-fragment:hover  { background: #0f1a2e; border-color: #1e3a5a; }
+.esb-fragment.selected {
+  background: #0a1f3d;
+  border-color: #38bdf8;
+}
+
+.esb-swatch {
+  width: 8px;
+  border-radius: 2px;
+  flex-shrink: 0;
+  align-self: stretch;
+  min-height: 32px;
+}
+
+.esb-info { flex: 1; min-width: 0; }
+.esb-id   { font-size: 11px; font-weight: bold; color: #c8d0e0; }
+.esb-meta { font-size: 10px; color: #6b7280; margin-top: 2px; }
+
+.esb-duration-bar {
+  height: 4px;
+  border-radius: 2px;
+  margin-top: 4px;
+  opacity: 0.5;
+}
+
+.esb-drop-indicator {
+  height: 2px;
+  margin: 0 8px;
+  border-radius: 1px;
+  background: #38bdf8;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 80ms;
+}
+.esb-drop-indicator.visible { opacity: 1; }
+
+/* ── Board Area ──────────────────────────────────────────── */
+.board-area {
+  flex: 0 0 20%;
+  position: relative;
+  overflow: hidden;
+  background: #07090f;
+}
+
+.board-label {
+  position: absolute;
+  top: 8px;
+  left: 12px;
+  font-size: 9px;
+  color: #374151;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.board-fragment {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  cursor: grab;
+  font-size: 10px;
+  color: rgba(255,255,255,0.8);
+  border: 1px solid rgba(255,255,255,0.15);
+  user-select: none;
+  min-width: 48px;
+  min-height: 28px;
+  padding: 4px 8px;
+}
+.board-fragment:active  { cursor: grabbing; }
+.board-fragment:hover   { border-color: #38bdf8; filter: brightness(1.2); }
+.board-fragment.selected { border-color: #38bdf8; box-shadow: 0 0 0 1px #38bdf8; }
