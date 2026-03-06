@@ -1,5 +1,5 @@
 import React, { useRef, useCallback } from 'react';
-import { useLayout } from '../context/LayoutContext.js';
+import { useLayout } from '../context/LayoutContext';
 
 const MIN_PX = 40;
 

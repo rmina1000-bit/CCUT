@@ -22,7 +22,7 @@ from adapters.engine_read_adapter import (
 )
 from adapters.write_gateway import send_command, ALLOWED_TYPES
 from workspace.workspace_view import build_workspace
-from semantic.semantic_view import build_semantic_view
+
 from api.fragment_api import router as fragment_router
 from proposal_engine.proposal_api import router as proposal_router
 from edit_log.decision_api import router as decision_router
@@ -293,12 +293,12 @@ function renderWorkspace(){
       ondragstart="wsDragStart(event,${i})" ondragover="wsDragOver(event)"
       ondrop="wsDrop(event,${i})" ondragleave="wsDragLeave(event)"
       onclick="wsSelect(${i})">
-      <button class="sem-btn" onclick="event.stopPropagation();showBalloon(${i},this)" title="Semantic Assist">⋯</button>
+
       <div class="ws-frag-label"><div class="ws-frag-id">${f.id}</div><div class="ws-frag-dur">${f.duration}s</div></div>
     </div>`;
   }).join('');
   document.getElementById('ws-detail').innerHTML=_wsF.map(f=>kv(f.id,`${f.start} → ${f.end} (${f.duration}s)`)).join('');
-  loadSemantic();
+
 }
 function wsDragStart(e,i){_dragIdx=i;e.target.classList.add('dragging');e.dataTransfer.effectAllowed='move';}
 function wsDragOver(e){e.preventDefault();e.dataTransfer.dropEffect='move';e.currentTarget.classList.add('drag-over');}
@@ -314,46 +314,7 @@ function wsSelect(i){
   const f=_wsF[i];
   document.getElementById('ws-detail').innerHTML=kv('ID',f.id)+kv('Start',f.start)+kv('End',f.end)+kv('Duration',f.duration+'s')+kv('Position',`${i+1} of ${_wsF.length}`);
 }
-let _semSuggestions=[];
-async function loadSemantic(){
-  const d=await api('/ui/semantic');
-  if(!d)return;
-  _semSuggestions=d.suggestions||[];
-}
-function showBalloon(fragIdx,anchor){
-  const frag=_wsF[fragIdx];
-  if(!frag)return;
-  const suggs=_semSuggestions.filter(g=>g.ids.includes(frag.id));
-  const balloon=document.getElementById('sem-balloon');
-  document.getElementById('balloon-overlay').style.display='block';
-  if(!suggs.length){
-    balloon.innerHTML=`<h4>Semantic Assist</h4><div class="balloon-reason">No suggestions for '${frag.id}'</div><div class="balloon-btns"><button class="btn" onclick="closeBalloon()">Close</button></div>`;
-  } else {
-    const s=suggs[0];
-    balloon.innerHTML=`<h4>Suggested Group</h4><div class="balloon-ids">${s.ids.join(' + ')}</div><div class="balloon-type">${s.type}</div><div class="balloon-reason">${s.reason}</div><div class="balloon-btns"><button class="btn btn-write" onclick="acceptGroup('${s.id}')">Accept</button><button class="btn" style="border-color:#333;color:#6b7280" onclick="closeBalloon()">Ignore</button></div>`;
-  }
-  const rect=anchor.getBoundingClientRect();
-  balloon.style.top=(rect.bottom+8)+'px';
-  balloon.style.left=Math.min(rect.left,window.innerWidth-260)+'px';
-  balloon.style.display='block';
-}
-function closeBalloon(){
-  document.getElementById('sem-balloon').style.display='none';
-  document.getElementById('balloon-overlay').style.display='none';
-}
-async function acceptGroup(sgId){
-  closeBalloon();
-  const el=document.getElementById('ws-status');
-  if(_gSeal===false){el.innerHTML='<span class="status-red">✗ Write disabled — engine not sealed</span>';return;}
-  const sg=_semSuggestions.find(s=>s.id===sgId);
-  if(!sg)return;
-  const res=await fetch('/ui/command',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({type:'MERGE',payload:{ids:sg.ids,semantic_group:sgId,source:'Assist'}})}).then(r=>r.json()).catch(e=>({error:String(e)}));
-  if(res.ok){
-    _lastCommitSeq=res.seq;
-    el.innerHTML=`<span class="status-green">✓ Semantic group accepted — seq ${res.seq??'–'}</span>`;
-    setTimeout(()=>globalRefresh(),500);
-  } else el.innerHTML=`<span class="status-red">✗ ${res.error||'Error'}</span>`;
-}
+
 
 function resetLayout(){loadWorkspace();document.getElementById('ws-status').innerHTML='';}
 async function commitLayout(){
@@ -542,11 +503,6 @@ def ui_workspace():
     proj = read_projection()
     return build_workspace(proj)
 
-
-@app.get("/ui/semantic")
-def ui_semantic():
-    proj = read_projection()
-    return build_semantic_view(proj)
 
 
 if __name__ == "__main__":

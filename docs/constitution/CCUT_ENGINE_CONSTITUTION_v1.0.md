@@ -27,6 +27,7 @@ All future work directives must comply with this constitution.
 - No randomness, no timestamps, no external state may influence replay output.
 - Replay must never raise; all malformed entries are silently skipped.
 - `replay_until(seq)` uses the nearest snapshot as a base, then applies delta events only.
+- **Runtime UUID allowance**: UUIDs and object URLs may be used at runtime for UI identity and media playback. They must never be written into `decision_log.jsonl` entries, as they would break replay determinism across sessions.
 
 ### 3. Engine / UI Separation
 

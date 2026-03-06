@@ -34,6 +34,7 @@ export function VideoProvider({ children }) {
 
   const [visible, setVisible] = useState(false);
   const [pos,     setPos]     = useState({ top: 0, left: 0 });
+  const [videoURL, setVideoURL] = useState(null);
 
   /**
    * hoverPlay(fragmentId, src, startTime, anchorRect)
@@ -118,14 +119,16 @@ export function VideoProvider({ children }) {
   }, []);
 
   return (
-    <VideoContext.Provider value={{ videoRef, hoverPlay, hoverStop, setHoverEnabled }}>
+    <VideoContext.Provider value={{ videoRef, hoverPlay, hoverStop, setHoverEnabled, videoURL, setVideoURL }}>
       {children}
       <video
         ref={videoRef}
+        src={videoURL}
         width={240}
         height={135}
         muted
         preload="metadata"
+        playsInline
         style={{
           position:     'fixed',
           top:          pos.top,

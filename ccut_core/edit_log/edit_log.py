@@ -26,6 +26,7 @@ from typing import Any, Dict, List
 
 _LOG_PATH = Path("storage/decision_log.jsonl")
 _LOCK = threading.Lock()
+_SNAPSHOT_INTERVAL = 10   # auto-checkpoint every N events
 
 # Cached seq counter; initialized lazily on first write
 _seq: int = 0
@@ -96,6 +97,24 @@ def append_event(event_type: str, payload: Dict[str, Any]) -> Dict[str, Any]:
         }
         with open(_LOG_PATH, "a", encoding="utf-8") as fh:
             fh.write(json.dumps(entry, ensure_ascii=False) + "\n")
+
+    try:
+        from decision_reducer import process_event
+        process_event(entry)
+    except Exception:
+        pass
+
+    # Auto-checkpoint: snapshot every SNAPSHOT_INTERVAL events.
+    # Lazy imports prevent circular dependency (replay_engine imports edit_log).
+    seq = entry["seq"]
+    if seq % _SNAPSHOT_INTERVAL == 0:
+        try:
+            from .replay_engine  import replay     as _replay
+            from .snapshot_store import save_snapshot as _save
+            _save(seq, _replay())
+        except Exception:
+            pass  # snapshot failure must never block the caller
+
     return entry
 
 

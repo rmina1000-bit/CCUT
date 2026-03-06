@@ -3,6 +3,8 @@
 All development must follow:
 docs/constitution/CCUT_ENGINE_CONSTITUTION_v1.0.md
 
+> **The Constitution governs implementation. When code and constitution conflict, the constitution wins.**
+
 ---
 
 # CCUT 1.0.1
@@ -20,7 +22,7 @@ python app/server.py
 **Frontend:**
 ```bash
 cd ui
-npm install && npm start
+npm install && npm run dev
 ```
 
 ## Manual Verify

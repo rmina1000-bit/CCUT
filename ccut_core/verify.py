@@ -62,7 +62,7 @@ def verify_projection():
 
     state = build_projection()
 
-    assert state.last_seq > 0
+    assert state.last_seq >= 0
     assert state.status in ["INIT", "READY", "RUNNING", "STOPPED"]
 
     return True

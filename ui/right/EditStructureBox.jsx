@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
-import { useVideo } from '../context/VideoContext.js';
+import { useVideo } from '../context/VideoContext';
 import { logEvent } from '../utils/logEvent.js';
 
 const FRAG_COLORS = [

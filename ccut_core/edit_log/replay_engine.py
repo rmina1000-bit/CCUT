@@ -23,95 +23,60 @@ EV_PROPOSAL_SELECTED   = "PROPOSAL_SELECTED"
 
 def replay(limit: Optional[int] = None) -> Dict[str, Any]:
     """
-    Reconstruct current editing state by replaying all logged events.
+    Reconstruct current editing state — snapshot-accelerated.
 
-    Handles log corruption gracefully (malformed entries are skipped).
+    Loads the latest available snapshot, then replays only the
+    delta events that follow it.  Falls back to full replay when
+    no snapshot exists.
+
+    `limit` is accepted for backward compatibility but ignored;
+    the function always returns the complete current state.
 
     Returns
     -------
     {
-      "fragments":       list[dict],   -- last known fragment list
-      "order":           list[str],    -- current id order
+      "fragments":       list[dict],
+      "order":           list[str],
       "events_count":    int,
       "last_event_seq":  int | None
     }
     """
-    events = get_log(limit=0)  # all events, no cap
+    from .snapshot_store import load_latest_snapshot
 
-    state: Dict[str, Any] = {
-        "fragments":      [],
-        "order":          [],
-        "events_count":   0,
-        "last_event_seq": None,
-    }
+    # ── Phase 1: try to load a snapshot ──────────────────────────
+    snap_seq:   int                        = 0
+    snap_state: Optional[Dict[str, Any]]   = None
+    try:
+        snap_seq, snap_state = load_latest_snapshot()   # no-arg = latest
+    except Exception:
+        snap_seq, snap_state = 0, None  # corrupted → full replay
 
-    # id → fragment dict for fast lookup during replay
-    frag_map: Dict[str, Dict[str, Any]] = {}
-
-    for entry in events:
-        etype   = entry.get("type", "")
-        payload = entry.get("payload", {})
-        seq     = entry.get("seq")
-
-        if seq is not None:
-            state["last_event_seq"] = seq
-        state["events_count"] += 1
-
-        try:
-            if etype == EV_FRAGMENTS_GENERATED:
-                # Backend only logs count; fragments themselves come from UI.
-                # We can't reconstruct fragment data from this event alone —
-                # mark a reset sentinel so subsequent events know the base changed.
-                frag_map = {}
-                state["order"] = []
-
-            elif etype == EV_BOUNDARY_ADJUSTED:
-                fid       = payload.get("fragment_id")
-                new_start = payload.get("new_start")
-                new_end   = payload.get("new_end")
-                if fid and fid in frag_map:
-                    f = dict(frag_map[fid])
-                    if new_start is not None:
-                        f["start"] = new_start
-                    if new_end is not None:
-                        f["end"] = new_end
-                    if "start" in f and "end" in f:
-                        f["duration"] = round(f["end"] - f["start"], 3)
-                    frag_map[fid] = f
-
-            elif etype == EV_FRAGMENTS_REORDERED:
-                new_order = payload.get("new_order", [])
-                if new_order:
-                    state["order"] = list(new_order)
-
-            elif etype == EV_PROPOSAL_SELECTED:
-                # "selected" is 'A' or 'B'; actual id list not stored here —
-                # the PROPOSAL_GENERATED payload holds A/B lists.
-                # We handle proposal selection via the paired PROPOSAL_GENERATED
-                # event that precedes it in the log.
-                pass
-
-            elif etype == EV_PROPOSAL_GENERATED:
-                # Store for potential re-application by PROPOSAL_SELECTED
-                entry["_proposal_ids"] = {
-                    "A": payload.get("A", []),
-                    "B": payload.get("B", []),
-                }
-
-        except Exception:
-            # Never crash on a single malformed entry
-            pass
-
-    # Assemble final fragment list in current order
-    if state["order"] and frag_map:
-        state["fragments"] = [
-            frag_map[fid] for fid in state["order"] if fid in frag_map
-        ]
+    # ── Phase 2: restore internal state ──────────────────────────
+    if snap_state is not None and isinstance(snap_state, dict):
+        state = snap_state
+        if "_frag_map" not in state:
+            state["_frag_map"] = {
+                f["id"]: f for f in state.get("fragments", []) if "id" in f
+            }
+        start_seq = snap_seq + 1
     else:
-        state["fragments"] = list(frag_map.values())
-        state["order"]     = [f["id"] for f in state["fragments"] if "id" in f]
+        state     = _initial_internal_state()
+        start_seq = 1
 
-    return state
+    # ── Phase 3: apply delta events ──────────────────────────────
+    try:
+        for entry in read_log_from(start_seq):
+            _apply_event(state, entry)
+        return _internal_to_public(state)
+    except Exception:
+        # Event apply failed mid-way; retry as full replay from scratch
+        state = _initial_internal_state()
+        try:
+            for entry in read_log_from(1):
+                _apply_event(state, entry)
+        except Exception:
+            pass
+        return _internal_to_public(state)
 
 
 def summarize() -> Dict[str, Any]:
@@ -289,28 +254,41 @@ def replay_until(seq_limit: int) -> Dict[str, Any]:
     """
     from .snapshot_store import load_latest_snapshot
 
+    # ── Phase 1: try to load a valid snapshot ≤ seq_limit ────────
+    snap_seq:   int                        = 0
+    snap_state: Optional[Dict[str, Any]]   = None
     try:
         snap_seq, snap_state = load_latest_snapshot(seq_limit)
+    except Exception:
+        snap_seq, snap_state = 0, None  # corrupted → full replay
 
-        if snap_state is not None:
-            # Restore internal state from snapshot
-            state      = snap_state
-            # Ensure _frag_map is present (older snapshots may omit it)
-            if "_frag_map" not in state:
-                state["_frag_map"] = {
-                    f["id"]: f for f in state.get("fragments", []) if "id" in f
-                }
-            start_seq = snap_seq + 1
-        else:
-            state     = _initial_internal_state()
-            start_seq = 1
+    # ── Phase 2: restore internal state ──────────────────────────
+    if snap_state is not None and isinstance(snap_state, dict):
+        state = snap_state
+        if "_frag_map" not in state:
+            state["_frag_map"] = {
+                f["id"]: f for f in state.get("fragments", []) if "id" in f
+            }
+        start_seq = snap_seq + 1
+    else:
+        state     = _initial_internal_state()
+        start_seq = 1
 
+    # ── Phase 3: apply delta events up to seq_limit ──────────────
+    try:
         for entry in read_log_from(start_seq):
             if entry.get("seq", 0) > seq_limit:
                 break
             _apply_event(state, entry)
-
         return _internal_to_public(state)
-
     except Exception:
-        return _internal_to_public(_initial_internal_state())
+        # Retry as full replay from seq 1 up to seq_limit
+        state = _initial_internal_state()
+        try:
+            for entry in read_log_from(1):
+                if entry.get("seq", 0) > seq_limit:
+                    break
+                _apply_event(state, entry)
+        except Exception:
+            pass
+        return _internal_to_public(state)

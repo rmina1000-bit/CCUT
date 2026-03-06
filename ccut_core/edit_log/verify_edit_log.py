@@ -50,6 +50,11 @@ def verify_snapshot_integrity() -> Tuple[bool, str]:
         try:
             with open(path, "r", encoding="utf-8") as fh:
                 data = json.load(fh)
+            
+            # Unwrap new snapshot format {"seq": int, "state": dict}
+            if isinstance(data, dict) and "state" in data:
+                data = data["state"]
+                
             missing = required - set(data.keys())
             if missing:
                 bad.append(f"{name}: missing keys {missing}")

@@ -1,7 +1,7 @@
 """
 proposal_engine.py
 ------------------
-Deterministic A/B proposal generator.  No AI model required.
+Deterministic A/B proposal generator.  Pure heuristic — no external models.
 
 Proposal A — Curated linear
   • Original fragment order preserved
@@ -28,9 +28,9 @@ SHORT_THRESHOLD: float = 3.0   # seconds — fragments at or below removed in A
 
 def _score(frag: dict, idx: int, total: int) -> float:
     """
-    Deterministic salience score.
+    Salience score.  Fully deterministic: same input always yields same output.
 
-    Components (no randomness):
+    Components:
       - duration        : longer = more important
       - positional bias : first & last 20 % of sequence +1.0 (hook / resolution)
     """

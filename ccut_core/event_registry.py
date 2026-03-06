@@ -15,6 +15,9 @@ EVENT_REGISTRY = {
     "META_UPDATE": {
         "required_fields": set(),
     },
+    "DECISION_COMMIT": {
+        "required_fields": {"action", "data"},
+    },
 }
 
 
