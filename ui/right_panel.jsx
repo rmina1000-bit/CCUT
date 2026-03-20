@@ -1,319 +1,310 @@
-/**
- * right_panel.jsx
- * --------------
- * UI-RIGHT-01 Implementation
- * 1단: 원본 인지 파노라마 (12%) - 고정 (position: sticky)
- * 2단: 편집 구조 박스 (68%) - A B C D ... (스크롤 가능)
- * 3단: 보드 (20%) - 보류 공간 (자유 배치)
- */
-
-import React, { useEffect, useRef, useCallback, useState } from 'react';
+import React, { useEffect, useRef, useCallback, useState, useMemo } from 'react';
 import { useVideo } from './context/VideoContext';
 import { usePanoramaEngine } from './panorama_engine.js';
 import ChatUI from './chat_ui.jsx';
 import './right_panel.css';
 
-export default function RightPanel({ isEditing, selectedProposal, fragments, onFragmentsChange, chatProps }) {
-  const { videoRef, videoURL } = useVideo();
-  const {
-    originalFragments,
-    editStructure,
-    boardFragments,
-    selectedIds,
-    initialize,
-    moveToBoard,
-    restoreFromBoard,
-    toggleSelect,
-    applyProposal,
-    moveFragment,
-    insertFromBoard
-  } = usePanoramaEngine(fragments || []);
+const TrashIcon = () => (
+  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M3 6h18" />
+    <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" />
+    <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" />
+    <line x1="10" y1="11" x2="10" y2="17" />
+    <line x1="14" y1="11" x2="14" y2="17" />
+  </svg>
+);
 
-  // Sync back to parent (if needed for API commit)
+const FragmentItem = ({ frag, focusKey, focusedKey, isDragging, isOriginal, tier, index, onFocus, onDragStart, onDragOver, onDrop, getLabel, updateStatus, videoURL, style: customStyle }) => {
+  const videoRef = useRef(null);
+  const duration = frag.duration || Math.max(1, frag.end - frag.start);
+  const width = isOriginal ? Math.max(120, Math.min(240, duration * 45)) : 160;
+  const isFocused = focusedKey === focusKey;
+
+  // Direct playback trigger for better reliability
+  const triggerPlay = () => {
+    if (!videoRef.current) return;
+    videoRef.current.muted = false;
+    videoRef.current.volume = 1.0;
+    videoRef.current.play().catch(e => console.warn("Auto-play blocked, retrying...", e));
+  };
+
+  const triggerStop = () => {
+    if (!videoRef.current) return;
+    videoRef.current.muted = true;
+    videoRef.current.pause();
+  };
+
+  useEffect(() => {
+    if (isFocused) {
+      triggerPlay();
+    } else {
+      triggerStop();
+    }
+  }, [isFocused]);
+
+  return (
+    <>
+      <div
+        className={`panorama-bar ${isFocused ? 'focused' : ''} ${isOriginal ? '' : 'edit-fragment-card'} ${isDragging ? 'dragging' : ''}`}
+        style={{
+          width: isOriginal ? `${width}px` : (isFocused ? '320px' : '160px'),
+          height: isOriginal ? undefined : (isFocused ? '180px' : '90px'),
+          zIndex: isFocused ? 1000000 : (isDragging ? 5 : 1),
+          transform: isFocused ? 'scale(2.2) translateY(-15%)' : 'scale(1.0)',
+          transition: 'transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.2s',
+          aspectRatio: '16/9',
+          ...(isFocused ? {
+            boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.8), 0 0 0 4000px rgba(0,0,0,0.5)',
+          } : {}),
+          ...customStyle
+        }}
+        draggable
+        onDragStart={(e) => onDragStart(e, frag, tier, index)}
+        onDragOver={(e) => onDragOver(e)}
+        onDrop={(e) => onDrop(e, index)}
+        onMouseDown={(e) => {
+          if (videoRef.current) {
+            videoRef.current.muted = false;
+            videoRef.current.volume = 0;
+          }
+        }}
+        onClick={(e) => {
+          e.stopPropagation();
+          const willFocus = focusedKey !== focusKey;
+          onFocus(focusKey);
+          if (willFocus) {
+            triggerPlay();
+          }
+        }}
+      >
+        <video
+          key={isFocused ? `playing-${frag.id}` : `static-${frag.id}`}
+          ref={videoRef}
+          src={`${frag.src || videoURL}#t=${frag.start}`}
+          loop
+          playsInline
+          preload="auto"
+          onLoadedMetadata={(e) => {
+            e.target.currentTime = frag.start;
+            if (isFocused) {
+              e.target.play().catch(err => console.error("Immediate play failed:", err));
+            }
+          }}
+          style={{
+            width: '100%',
+            height: '100%',
+            objectFit: isFocused ? 'contain' : 'cover',
+            background: isFocused ? '#000' : 'transparent'
+          }}
+        />
+        <div className="fragment-label">
+          <span>{getLabel(frag.id)}</span>
+          <span>{duration.toFixed(1)}s</span>
+        </div>
+        {frag.status && (
+          <div className={`status-badge status-${frag.status}`}>
+            {frag.status.charAt(0).toUpperCase()}
+          </div>
+        )}
+        <div className="status-controls">
+          <button onClick={(e) => { e.stopPropagation(); updateStatus?.(frag.id, 'keep'); }} className="status-btn keep">K</button>
+          <button onClick={(e) => { e.stopPropagation(); updateStatus?.(frag.id, 'hold'); }} className="status-btn hold">H</button>
+          <button onClick={(e) => { e.stopPropagation(); updateStatus?.(frag.id, 'discard'); }} className="status-btn discard">D</button>
+        </div>
+      </div>
+    </>
+  );
+};
+
+export default function RightPanel({ sources, fragments, selectedFragments, onFragmentsChange, chatProps }) {
+  const { videoURL } = useVideo();
+  const engine = usePanoramaEngine(fragments || [], selectedFragments || []);
+  const {
+    originalFragments = [],
+    editStructure = [],
+    boardFragments = [],
+    updateFragmentStatus,
+    removeFragment,
+    moveFragment,
+    insertFromOriginal,
+    insertFromBoard,
+    moveToBoard
+  } = engine || {};
+
+  const [focusedKey, setFocusedKey] = useState(null);
+  const [draggingItem, setDraggingItem] = useState(null);
+  const [isOverTrash, setIsOverTrash] = useState(false);
+
   useEffect(() => {
     onFragmentsChange?.(editStructure);
   }, [editStructure, onFragmentsChange]);
 
-  // Handle initialization with Selected Proposal
-  useEffect(() => {
-    if (isEditing && selectedProposal) {
-      applyProposal(selectedProposal.fragments); // filter edits to match proposal
+  const sourceRows = useMemo(() => {
+    const frags = originalFragments || [];
+    if (!sources || sources.length === 0) {
+      return [{ id: 'default', fileName: 'Source', fragments: frags }];
     }
-  }, [isEditing, selectedProposal, applyProposal]);
+    return sources.map(s => ({
+      ...s,
+      fragments: frags.filter(f => f.sourceId === s.id)
+    }));
+  }, [sources, originalFragments]);
 
-  const [hoverState, setHoverState] = useState({ id: null, tier: null });
-  const [hasShownBoardMsg, setHasShownBoardMsg] = useState(false);
-  const [boardPositions, setBoardPositions] = useState({});
-  const hoverTimerRef = useRef(null);
+  const getGlobalLabel = useCallback((fragId) => {
+    const frag = originalFragments.find(f => f.id === fragId);
+    if (!frag) return '??';
+    const sourceIdx = sourceRows.findIndex(row => row.fragments.some(f => f.id === fragId));
+    if (sourceIdx === -1) return '??';
+    const prefix = String.fromCharCode(65 + sourceIdx);
+    const fragIdxInSource = sourceRows[sourceIdx].fragments.findIndex(f => f.id === fragId);
+    return `${prefix}${fragIdxInSource + 1}`;
+  }, [originalFragments, sourceRows]);
 
-  const handleHoverTier1 = useCallback((e, frag) => {
-    clearTimeout(hoverTimerRef.current);
-    hoverTimerRef.current = setTimeout(() => {
-      setHoverState({ id: frag.id, tier: 1 });
-    }, 60);
-  }, []);
+  const handleFocus = (key) => {
+    setFocusedKey(prev => (prev === key ? null : key));
+  };
 
-  const handleHoverTier2 = useCallback((e, frag) => {
-    clearTimeout(hoverTimerRef.current);
-    hoverTimerRef.current = setTimeout(() => {
-      setHoverState({ id: frag.id, tier: 2 });
-    }, 60);
-  }, []);
+  const onDragStart = (e, frag, sourceTier, index) => {
+    setFocusedKey(null);
+    setDraggingItem({ ...frag, sourceTier, index });
+    e.dataTransfer.setData('fragId', frag.id);
+  };
 
-  const handleHoverTier3 = useCallback((e, frag) => {
-    clearTimeout(hoverTimerRef.current);
-    hoverTimerRef.current = setTimeout(() => {
-      setHoverState({ id: frag.id, tier: 3 });
+  const onDragOver = (e) => { e.preventDefault(); };
 
-      // Send chat message only once
-      if (!hasShownBoardMsg && chatProps?.onBotMessage) {
-        chatProps.onBotMessage('이 조각은 다시 보드에서 꺼내야 편집할 수 있습니다.');
-        setHasShownBoardMsg(true);
+  const onDropToTier2 = (e, hoverIndex) => {
+    e.preventDefault();
+    if (!draggingItem) return;
+    const { id, sourceTier, index: dragIndex } = draggingItem;
+    if (sourceTier === 'tier1') {
+      insertFromOriginal?.(id, hoverIndex ?? editStructure.length);
+    } else if (sourceTier === 'tier2') {
+      if (dragIndex !== hoverIndex) {
+        moveFragment?.(dragIndex, hoverIndex ?? editStructure.length);
       }
-    }, 60);
-  }, [hasShownBoardMsg, chatProps]);
-
-  const handleLeave = useCallback((e, frag) => {
-    clearTimeout(hoverTimerRef.current);
-    setHoverState({ id: null, tier: null });
-  }, []);
-
-  const handleDragStart = (e, fragId, fromBoard = false, index = null) => {
-    e.dataTransfer.setData('text/plain', fragId);
-    e.dataTransfer.setData('source', fromBoard ? 'board' : 'edit');
-    if (index !== null) {
-      e.dataTransfer.setData('index', index);
+    } else if (sourceTier === 'board') {
+      insertFromBoard?.(id, hoverIndex ?? editStructure.length);
     }
+    setDraggingItem(null);
   };
 
-  const handleDropOnBoard = (e) => {
+  const onDropToBoard = (e) => {
     e.preventDefault();
-    const fragId = parseInt(e.dataTransfer.getData('text/plain'), 10);
-    const source = e.dataTransfer.getData('source');
-
-    const rect = e.currentTarget.getBoundingClientRect();
-    const x = e.clientX - rect.left - 60; // offset center of 120px card
-    const y = e.clientY - rect.top - 16;  // offset center of 32px card
-
-    setBoardPositions(prev => ({ ...prev, [fragId]: { left: x, top: y } }));
-
-    if (source === 'edit') {
-      moveToBoard([fragId]);
-    }
+    if (!draggingItem) return;
+    const { id, sourceTier } = draggingItem;
+    if (sourceTier === 'tier2') moveToBoard?.([id]);
+    setDraggingItem(null);
   };
 
-  const handleDropOnEdit = (e, toIndex) => {
+  const onDropToTrash = (e) => {
     e.preventDefault();
-    e.stopPropagation();
-    const fragId = parseInt(e.dataTransfer.getData('text/plain'), 10);
-    const source = e.dataTransfer.getData('source');
-    const dragIndex = parseInt(e.dataTransfer.getData('index'), 10);
-
-    if (source === 'board') {
-      insertFromBoard(fragId, toIndex);
-    } else if (source === 'edit') {
-      if (!isNaN(dragIndex) && dragIndex !== toIndex) {
-        // Adjust toIndex if we are dragging from before to after
-        const finalTargetIndex = toIndex > dragIndex ? toIndex - 1 : toIndex;
-        moveFragment(dragIndex, finalTargetIndex);
-      }
-    }
-  };
-
-  const handleContainerDrop = (e) => {
-    e.preventDefault();
-    if (e.target.className.includes('panorama-tier2')) {
-      handleDropOnEdit(e, editStructure.length);
-    }
-  };
-
-  // Tier 1 Original Panorama Scrolling
-  const tier1Ref = useRef(null);
-  const scrollPanorama = (dir) => {
-    if (tier1Ref.current) {
-      tier1Ref.current.scrollBy({ left: dir * 300, behavior: 'smooth' });
-    }
+    setIsOverTrash(false);
+    if (!draggingItem) return;
+    const { id } = draggingItem;
+    removeFragment?.(id);
+    setDraggingItem(null);
   };
 
   return (
-    <div className="right-panel-container">
-      {/* Hidden Video Engine */}
-      <video
-        ref={videoRef}
-        src={videoURL}
-        preload="metadata"
-        muted
-        playsInline
-        style={{ width: '100%', maxHeight: '0px', visibility: 'hidden', position: 'absolute' }}
-      />
-
-      {isEditing ? (
-        <>
-          {/* 1단 - 원본 인지 파노라마 (18%) 고정 */}
-          <div className="panorama-tier1" ref={tier1Ref}>
-            <div className="panorama-scroll-btn left" onClick={() => scrollPanorama(-1)}>&lt;</div>
-            {originalFragments.map((frag) => {
-              const duration = frag.duration || Math.max(1, frag.end - frag.start);
-              const baseWidth = Math.max(100, duration * 30); // scale factor matched with tier 2
-              const isDirectHover = hoverState.id === frag.id && hoverState.tier === 1;
-              const isLinkedHover = hoverState.id === frag.id && (hoverState.tier === 2 || hoverState.tier === 3);
-              const width = isDirectHover ? baseWidth * 1.6 : baseWidth;
-
-              let hoverClass = '';
-              if (isDirectHover) hoverClass = 'hover-active';
-              if (isLinkedHover) hoverClass = 'linked-active';
-
-              return (
-                <div
-                  key={`orig-${frag.id}`}
-                  className={`panorama-bar ${hoverClass}`}
-                  style={{ width: `${width}px`, minWidth: `${width}px`, position: 'relative', overflow: 'hidden' }}
-                  onMouseEnter={(e) => handleHoverTier1(e, frag)}
-                  onMouseLeave={(e) => handleLeave(e, frag)}
-                >
-                  {isDirectHover && videoURL && (
-                    <video
-                      src={`${videoURL}#t=${frag.start}`}
-                      autoPlay
-                      muted
-                      loop
-                      onLoadedMetadata={(e) => { e.target.currentTime = frag.start; e.target.play().catch(() => { }); }}
-                      style={{ width: '100%', height: '100%', objectFit: 'cover', position: 'absolute', top: 0, left: 0, opacity: 0.5 }}
-                    />
-                  )}
-                  <span style={{ position: 'relative', zIndex: 2 }}>{frag.id}</span>
-                </div>
-              );
-            })}
-            <div className="panorama-scroll-btn right" onClick={() => scrollPanorama(1)}>&gt;</div>
+    <div className="right-panel-container" onClick={() => setFocusedKey(null)}>
+      <div className="panorama-tier1-wrapper">
+        <div className="right-panel-label">Sources</div>
+        {sourceRows.map((row) => (
+          <div key={row.id} className="panorama-source-row">
+            <div className="source-header"><span>{row.fileName}</span></div>
+            <div className="panorama-row-scroller">
+              {row.fragments.map((f, i) => (
+                <FragmentItem
+                  key={`t1-${f.id}`}
+                  frag={f}
+                  focusKey={`tier1-${f.id}`}
+                  focusedKey={focusedKey}
+                  isOriginal={true}
+                  tier="tier1"
+                  index={i}
+                  isDragging={draggingItem?.id === f.id}
+                  onFocus={handleFocus}
+                  onDragStart={onDragStart}
+                  onDragOver={onDragOver}
+                  onDrop={() => { }}
+                  getLabel={getGlobalLabel}
+                  updateStatus={updateFragmentStatus}
+                  videoURL={videoURL}
+                />
+              ))}
+            </div>
           </div>
+        ))}
+      </div>
 
-          {/* 2단 - 편집 구조 박스 (62%, 채팅 있으면 42%) 스크롤 영역 */}
-          <div
-            className="panorama-tier2"
-            style={{ height: chatProps ? '42%' : '62%' }}
-            onDragOver={(e) => e.preventDefault()}
-            onDrop={handleContainerDrop}
-          >
-            {editStructure.map((frag, idx) => {
-              const isSelected = selectedIds.includes(frag.id);
-              const isActive = hoverState.id === frag.id && hoverState.tier === 2;
-              const isLinkedActive = hoverState.id === frag.id && hoverState.tier === 1;
+      <div className="panorama-tier2" onDragOver={onDragOver} onDrop={(e) => onDropToTier2(e, editStructure.length)}>
+        <div className="right-panel-label">Proposal Structure</div>
+        {editStructure.length === 0 ? <div className="empty-zone">Drag fragments here.</div> :
+          editStructure.map((f, i) => (
+            <FragmentItem
+              key={`t2-${f.id}-${i}`}
+              frag={f}
+              focusKey={`tier2-${f.id}-${i}`}
+              focusedKey={focusedKey}
+              isOriginal={false}
+              tier="tier2"
+              index={i}
+              isDragging={draggingItem?.id === f.id}
+              onFocus={handleFocus}
+              onDragStart={onDragStart}
+              onDragOver={onDragOver}
+              onDrop={onDropToTier2}
+              getLabel={getGlobalLabel}
+              updateStatus={updateFragmentStatus}
+              videoURL={videoURL}
+            />
+          ))
+        }
+      </div>
 
-              // Make edit fragments proportional to duration to visually distinguish length
-              const duration = frag.duration || Math.max(1, frag.end - frag.start);
-              const baseWidth = Math.max(100, duration * 30); // scale factor for tier 2
-              const cardWidth = isActive ? baseWidth * 1.6 : baseWidth;
-
-              const combinedClasses = `edit-fragment-card ${isSelected ? 'selected' : ''} ${isActive ? 'hover-active' : ''} ${isLinkedActive ? 'linked-active' : ''}`.trim();
-
-              return (
-                <React.Fragment key={`edit-group-${frag.id}-${idx}`}>
-                  <div
-                    className={combinedClasses}
-                    style={{ width: `${cardWidth}px`, flexShrink: 0 }}
-                    draggable
-                    onDragStart={(e) => handleDragStart(e, frag.id, false, idx)}
-                    onDragOver={(e) => e.preventDefault()}
-                    onDrop={(e) => handleDropOnEdit(e, idx)}
-                    onMouseEnter={(e) => handleHoverTier2(e, frag)}
-                    onMouseLeave={(e) => handleLeave(e, frag)}
-                    onClick={(e) => toggleSelect(frag.id, e.shiftKey)}
-                  >
-                    {isActive && videoURL && (
-                      <video
-                        src={`${videoURL}#t=${frag.start}`}
-                        autoPlay
-                        muted
-                        loop
-                        onLoadedMetadata={(e) => { e.target.currentTime = frag.start; e.target.play().catch(() => { }); }}
-                        style={{ width: '100%', height: '100%', objectFit: 'cover', position: 'absolute', top: 0, left: 0, opacity: 0.5 }}
-                      />
-                    )}
-                    <div style={{ fontWeight: 'bold', position: 'relative', zIndex: 2 }}>{frag.id}</div>
-                    <div style={{ fontSize: 9, color: '#6b7280', marginTop: 4, position: 'relative', zIndex: 2 }}>
-                      {parseFloat(frag.start).toFixed(1)}s – {parseFloat(frag.end).toFixed(1)}s
-                    </div>
-                    <div className="edit-fragment-edge left" onMouseDown={(e) => { e.stopPropagation(); /* resize logic */ }} />
-                    <div className="edit-fragment-edge right" onMouseDown={(e) => { e.stopPropagation(); /* resize logic */ }} />
-                  </div>
-                  {idx < editStructure.length - 1 && (
-                    <div
-                      className="fragment-divider"
-                      onDragOver={(e) => e.preventDefault()}
-                      onDrop={(e) => handleDropOnEdit(e, idx + 1)}
-                      onMouseDown={(e) => { e.stopPropagation(); /* ratio adj */ }}
-                    />
-                  )}
-                </React.Fragment>
-              );
-            })}
-          </div>
-
-          {/* 3단 - 보드 (항상 20% 정도 고정, 채팅창이 와도 렌더링 유지) */}
-          <div
-            className="panorama-tier3"
-            style={{ height: '20%', minHeight: '120px', flexShrink: 0 }}
-            onDragOver={(e) => e.preventDefault()}
-            onDrop={handleDropOnBoard}
-          >
-            <div className="board-label">Board</div>
-            {boardFragments.length === 0 && (
-              <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', fontSize: 11, color: '#4b5563' }}>
-                보류할 조각을 이곳으로 드래그
-              </div>
-            )}
-            {boardFragments.map((frag, idx) => {
-              const isActive = hoverState.id === frag.id && hoverState.tier === 3;
-              const isLinkedActive = hoverState.id === frag.id && hoverState.tier === 1;
-              const pos = boardPositions[frag.id] || { top: 20 + (idx * 10), left: 10 + (idx * 130) };
-              const combinedClasses = `board-fragment-card ${isActive ? 'hover-active' : ''} ${isLinkedActive ? 'linked-active' : ''}`.trim();
-
-              return (
-                <div
-                  key={`board-${frag.id}`}
-                  className={combinedClasses}
-                  draggable
-                  onDragStart={(e) => handleDragStart(e, frag.id, true)}
-                  onMouseEnter={(e) => handleHoverTier3(e, frag)}
-                  onMouseLeave={(e) => handleLeave(e, frag)}
-                  style={{ top: pos.top, left: pos.left }} // Whiteboard absolute positioning
-                >
-                  {isActive && videoURL && (
-                    <video
-                      src={`${videoURL}#t=${frag.start}`}
-                      autoPlay
-                      muted
-                      loop
-                      onLoadedMetadata={(e) => { e.target.currentTime = frag.start; e.target.play().catch(() => { }); }}
-                      style={{ width: '100%', height: '100%', objectFit: 'cover', position: 'absolute', top: 0, left: 0, opacity: 0.5 }}
-                    />
-                  )}
-                  <span style={{ position: 'relative', zIndex: 2 }}>{frag.id} ({parseFloat(frag.start).toFixed(1)}s)</span>
-                </div>
-              );
-            })}
-          </div>
-        </>
-      ) : (
-        <div style={{ flex: 1 }}></div>
-      )}
-
-      {/* 4단 선택적 렌더링 - 채팅 영역 (중앙이 좁아져 넘어왔을 때 보드 밑에 위치) */}
-      {chatProps && (
-        <div style={{
-          flexShrink: 0,
-          borderTop: '1px solid #1e2a3a',
-          background: '#05080f',
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          padding: '8px 0',
-          minHeight: '200px'
-        }}>
-          <ChatUI {...chatProps} />
+      <div className="panorama-tier3">
+        <div className="right-panel-label">Board / Decision Area</div>
+        <div className="board-fragments-area" onDragOver={onDragOver} onDrop={onDropToBoard}>
+          {boardFragments.map((f, i) => (
+            <FragmentItem
+              key={`board-${f.id}`}
+              frag={f}
+              focusKey={`board-${f.id}`}
+              focusedKey={focusedKey}
+              isOriginal={false}
+              tier="board"
+              index={i}
+              isDragging={draggingItem?.id === f.id}
+              onFocus={handleFocus}
+              onDragStart={onDragStart}
+              onDragOver={onDragOver}
+              onDrop={() => { }}
+              getLabel={getGlobalLabel}
+              updateStatus={updateFragmentStatus}
+              videoURL={videoURL}
+              style={{
+                transform: `rotate(${(i % 2 === 0 ? 1 : -1) * 2}deg)`,
+                boxShadow: draggingItem?.id === f.id ? '0 10px 20px rgba(0,0,0,0.6)' : '0 4px 6px rgba(0,0,0,0.4)',
+                opacity: draggingItem?.id === f.id ? 0.6 : 1
+              }}
+            />
+          ))}
+          {boardFragments.length === 0 && <div className="board-placeholder">Hold fragments here.</div>}
         </div>
-      )}
+        <div
+          className={`trash-zone ${isOverTrash ? 'pulse' : ''}`}
+          onDragOver={onDragOver}
+          onDragEnter={() => setIsOverTrash(true)}
+          onDragLeave={() => setIsOverTrash(false)}
+          onDrop={onDropToTrash}
+          style={isOverTrash ? { borderColor: '#ef4444', color: '#ef4444', transform: 'scale(1.15)', background: 'rgba(239, 68, 68, 0.15)' } : {}}
+        >
+          <TrashIcon />
+          <span>Trash</span>
+        </div>
+      </div>
+
+      {chatProps && <div className="bottom-chat-layer"><ChatUI {...chatProps} /></div>}
     </div>
   );
 }

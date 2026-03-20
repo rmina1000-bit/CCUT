@@ -1,0 +1,1019 @@
+﻿<!DOCTYPE html>
+<html lang="en"><head>
+  <script type="module">import { injectIntoGlobalHook } from "/@react-refresh";
+injectIntoGlobalHook(window);
+window.$RefreshReg$ = () => {};
+window.$RefreshSig$ = () => (type) => type;</script>
+
+  <script type="module" src="/@vite/client"></script>
+
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CCUT Component Smoke</title>
+  <style>
+    html,
+    body {
+      margin: 0;
+      width: 100%;
+      height: 100%;
+      background: #0d1117;
+    }
+  </style>
+<style type="text/css" data-vite-dev-id="D:/CCUT 1.0.2/ui/src/index.css">:root {
+  --background: 228 12% 10%;
+  --foreground: 220 10% 88%;
+  --card: 228 10% 13%;
+  --primary: 211 55% 58%;
+  --primary-foreground: 0 0% 100%;
+  --secondary: 228 8% 17%;
+  --muted: 228 6% 21%;
+  --muted-foreground: 220 6% 50%;
+  --destructive: 0 50% 55%;
+  --border: 228 6% 18%;
+  --input: 228 6% 22%;
+  --ring: 211 55% 58%;
+  --ccut-bg-deep: 228 12% 10%;
+  --ccut-bg-panel: 228 10% 13%;
+  --ccut-bg-elevated: 228 8% 16%;
+  --ccut-amber: 30 50% 55%;
+  --ccut-indigo: 220 35% 52%;
+  --ccut-stroke: 228 5% 20%;
+  color-scheme: dark;
+  font-family: Inter, system-ui, sans-serif;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  overflow: hidden;
+  background:
+    radial-gradient(circle at top right, hsl(var(--primary) / 0.08), transparent 28%),
+    radial-gradient(circle at bottom left, hsl(var(--ccut-indigo) / 0.08), transparent 32%),
+    hsl(var(--ccut-bg-deep));
+  color: hsl(var(--foreground));
+}
+
+button,
+input {
+  font: inherit;
+}
+
+button {
+  color: inherit;
+}
+
+button:focus-visible,
+input:focus-visible,
+[role='button']:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px hsl(var(--ring)), 0 0 0 4px hsl(var(--background));
+}
+
+.ccut-shell {
+  display: flex;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+
+.left-nav {
+  width: 56px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  padding: 10px 0;
+  border-right: 1px solid hsl(var(--border) / 0.75);
+  background: linear-gradient(180deg, hsl(var(--secondary)), hsl(var(--card)));
+}
+
+.left-nav__brand {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  display: grid;
+  place-items: center;
+  background: linear-gradient(135deg, hsl(var(--primary) / 0.24), hsl(var(--secondary)));
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+}
+
+.left-nav__items {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.nav-link {
+  width: 36px;
+  height: 36px;
+  border: 1px solid hsl(var(--border) / 0.8);
+  border-radius: 10px;
+  background: hsl(var(--secondary) / 0.8);
+  cursor: pointer;
+  transition: background 120ms ease-out, border-color 120ms ease-out, transform 120ms ease-out;
+}
+
+.nav-link:hover,
+.nav-link.is-active {
+  background: hsl(var(--primary) / 0.16);
+  border-color: hsl(var(--primary) / 0.5);
+  transform: translateY(-1px);
+}
+
+.center-column {
+  min-width: 260px;
+  border-right: 1px solid hsl(var(--border) / 0.65);
+  background: linear-gradient(180deg, hsl(var(--card)), hsl(var(--secondary)));
+}
+
+.center-panel {
+  height: 100%;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  overflow-y: auto;
+}
+
+.panel-card,
+.workspace-section {
+  background: linear-gradient(180deg, hsl(var(--card)), hsl(var(--ccut-bg-elevated)));
+  border: 1px solid hsl(var(--border) / 0.85);
+  border-radius: 8px;
+  box-shadow: inset 0 1px 0 hsl(0 0% 100% / 0.02);
+}
+
+.panel-card {
+  padding: 12px;
+}
+
+.panel-card--summary {
+  min-height: 156px;
+}
+
+.panel-card--detail {
+  min-height: 260px;
+}
+
+.panel-card--preview {
+  min-height: 110px;
+}
+
+.panel-card--chat {
+  margin-top: auto;
+}
+
+.panel-header,
+.section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.section-header {
+  padding: 10px 12px 8px;
+}
+
+.section-header h3,
+.panel-header h3,
+.detail-copy h2 {
+  margin: 0;
+}
+
+.eyebrow {
+  display: block;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: hsl(var(--muted-foreground));
+}
+
+.panel-chip,
+.ghost-button,
+.source-tab,
+.tile-action {
+  border-radius: 6px;
+  border: 1px solid hsl(var(--border) / 0.8);
+}
+
+.panel-chip {
+  padding: 4px 8px;
+  font-size: 11px;
+  color: hsl(var(--muted-foreground));
+  background: hsl(var(--muted) / 0.6);
+}
+
+.summary-grid {
+  margin-top: 10px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.summary-card {
+  padding: 10px;
+  border-radius: 8px;
+  background: hsl(var(--secondary) / 0.65);
+  border: 1px solid hsl(var(--border) / 0.65);
+}
+
+.summary-card.is-active {
+  border-color: hsl(var(--primary) / 0.55);
+  box-shadow: 0 0 0 1px hsl(var(--primary) / 0.2) inset;
+}
+
+.summary-card__id {
+  display: inline-block;
+  margin-bottom: 6px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+}
+
+.summary-card p,
+.structure-context,
+.render-preview-placeholder,
+.hold-empty,
+.metrics-placeholder {
+  margin: 6px 0 0;
+  color: hsl(var(--muted-foreground));
+  line-height: 1.45;
+  font-size: 12px;
+}
+
+.detail-layout {
+  margin-top: 12px;
+  display: grid;
+  grid-template-columns: 132px 1fr;
+  gap: 12px;
+}
+
+.detail-thumb {
+  height: 132px;
+  overflow: hidden;
+  border-radius: 8px;
+  border: 1px solid hsl(var(--border) / 0.7);
+}
+
+.detail-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.metadata-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.metadata-grid div,
+.metric-row__bar {
+  background: hsl(var(--secondary) / 0.55);
+  border-radius: 8px;
+}
+
+.metadata-grid div {
+  padding: 8px;
+}
+
+.metadata-grid span {
+  display: block;
+  font-size: 10px;
+  color: hsl(var(--muted-foreground));
+  margin-bottom: 4px;
+}
+
+.metrics-card {
+  margin-top: 12px;
+  display: grid;
+  gap: 8px;
+}
+
+.time-lens-card {
+  margin-top: 12px;
+  padding: 10px;
+  border-radius: 8px;
+  border: 1px solid hsl(var(--ccut-indigo) / 0.32);
+  background:
+    linear-gradient(180deg, hsl(var(--secondary) / 0.82), hsl(var(--card) / 0.94)),
+    linear-gradient(135deg, hsl(var(--ccut-indigo) / 0.08), transparent 55%);
+}
+
+.time-lens-card__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.time-lens-card__header strong {
+  display: block;
+  margin-top: 2px;
+  font-size: 12px;
+}
+
+.time-lens-strip {
+  margin-top: 10px;
+  display: flex;
+  gap: 6px;
+}
+
+.time-lens-slice {
+  min-width: 0;
+  padding: 8px;
+  border-radius: 8px;
+  border: 1px solid hsl(var(--border) / 0.72);
+  background:
+    linear-gradient(180deg, hsl(var(--secondary) / 0.92), hsl(var(--muted) / 0.55)),
+    linear-gradient(135deg, hsl(var(--primary) / 0.08), transparent 60%);
+  box-shadow: inset 0 1px 0 hsl(0 0% 100% / 0.03);
+}
+
+.time-lens-slice.is-anchor {
+  border-color: hsl(var(--primary) / 0.45);
+  box-shadow:
+    0 0 0 1px hsl(var(--primary) / 0.18),
+    inset 0 1px 0 hsl(0 0% 100% / 0.05);
+}
+
+.time-lens-slice strong,
+.time-lens-slice__label,
+.time-lens-slice__frames {
+  display: block;
+}
+
+.time-lens-slice__label {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: hsl(var(--muted-foreground));
+  margin-bottom: 6px;
+}
+
+.time-lens-slice strong {
+  font-size: 12px;
+}
+
+.time-lens-slice__frames,
+.time-lens-card__note {
+  margin-top: 4px;
+  font-size: 11px;
+  line-height: 1.45;
+  color: hsl(var(--muted-foreground));
+}
+
+.metric-row {
+  display: grid;
+  grid-template-columns: 80px 1fr;
+  gap: 8px;
+  align-items: center;
+  font-size: 11px;
+}
+
+.metric-row__bar {
+  height: 8px;
+  overflow: hidden;
+}
+
+.metric-row__bar > div {
+  height: 100%;
+  background: linear-gradient(90deg, hsl(var(--primary)), hsl(var(--ccut-indigo)));
+}
+
+.empty-detail {
+  margin-top: 14px;
+  min-height: 180px;
+  display: grid;
+  place-items: center;
+  border: 1px dashed hsl(var(--border) / 0.8);
+  border-radius: 8px;
+  color: hsl(var(--muted-foreground));
+  text-align: center;
+  padding: 12px;
+}
+
+.render-preview-placeholder {
+  margin-top: 12px;
+  min-height: 68px;
+  border-radius: 8px;
+  border: 1px dashed hsl(var(--border) / 0.7);
+  display: grid;
+  place-items: center;
+  text-align: center;
+  padding: 12px;
+}
+
+.chat-shell {
+  margin-top: 10px;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px;
+}
+
+.chat-shell input {
+  min-width: 0;
+  height: 38px;
+  padding: 0 12px;
+  border-radius: 8px;
+  border: 1px solid hsl(var(--input));
+  background: hsl(var(--secondary));
+  color: hsl(var(--foreground));
+}
+
+.chat-shell button,
+.ghost-button {
+  height: 38px;
+  padding: 0 12px;
+  cursor: pointer;
+  background: hsl(var(--secondary));
+}
+
+.ghost-button:hover,
+.chat-shell button:hover,
+.source-tab:hover,
+.tile-action:hover {
+  border-color: hsl(var(--primary) / 0.5);
+  background: hsl(var(--primary) / 0.14);
+}
+
+.vertical-splitter {
+  width: 6px;
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  background: transparent;
+  border: 0;
+  cursor: col-resize;
+}
+
+.vertical-splitter__pill {
+  width: 2px;
+  height: 40px;
+  border-radius: 999px;
+  background: hsl(var(--border) / 0.4);
+  transition: height 120ms ease-out, background 120ms ease-out;
+}
+
+.vertical-splitter:hover .vertical-splitter__pill {
+  height: 56px;
+  background: hsl(var(--primary) / 0.4);
+}
+
+.vertical-splitter:active .vertical-splitter__pill {
+  height: 64px;
+  background: hsl(var(--primary) / 0.6);
+}
+
+.right-workspace {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px;
+}
+
+.workspace-section {
+  min-width: 0;
+  overflow: hidden;
+}
+
+.workspace-section--panorama {
+  flex: 0 0 118px;
+  display: flex;
+  flex-direction: column;
+}
+
+.workspace-section--map {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.workspace-section--hold {
+  flex: 0 0 170px;
+  display: flex;
+  flex-direction: column;
+  min-height: 120px;
+}
+
+.source-tabs {
+  display: flex;
+  gap: 6px;
+  padding: 0 12px 8px;
+}
+
+.source-tab {
+  min-width: 30px;
+  height: 28px;
+  background: hsl(var(--secondary));
+  cursor: pointer;
+}
+
+.source-tab.is-active {
+  border-color: hsl(var(--primary) / 0.6);
+  background: hsl(var(--primary) / 0.18);
+}
+
+.panorama-strip {
+  flex: 1;
+  overflow-x: auto;
+  overflow-y: hidden;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 12px 10px;
+}
+
+.fragment-map-board {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-wrap: wrap;
+  align-content: flex-start;
+  gap: 10px 8px;
+  padding: 8px 12px 12px;
+}
+
+.fragment-map-slot {
+  position: relative;
+}
+
+.fragment-map-flow-node {
+  transform-origin: center center;
+  will-change: transform;
+}
+
+.fragment-map-slot.is-drop-before::before,
+.fragment-map-slot.is-drop-after::after {
+  content: '';
+  position: absolute;
+  top: -4px;
+  bottom: -4px;
+  width: 3px;
+  border-radius: 999px;
+  background: hsl(var(--primary));
+}
+
+.fragment-map-slot.is-drop-before::before {
+  left: -6px;
+}
+
+.fragment-map-slot.is-drop-after::after {
+  right: -6px;
+}
+
+.fragment-map-slot.is-replace-target .fragment-tile {
+  border-color: hsl(var(--ccut-amber) / 0.75);
+  box-shadow:
+    0 0 0 1px hsl(var(--ccut-amber) / 0.35),
+    0 0 18px hsl(var(--ccut-amber) / 0.12);
+}
+
+.boundary-handle,
+.synthetic-seam {
+  align-self: stretch;
+  min-height: 72px;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+.boundary-handle {
+  width: 3px;
+  margin: 0 2px;
+  border-radius: 999px;
+  background: hsl(var(--border) / 0.85);
+  transition: width 120ms ease-out, background 120ms ease-out;
+}
+
+.boundary-handle:hover {
+  width: 4px;
+  background: hsl(var(--primary) / 0.65);
+}
+
+.synthetic-seam {
+  width: 20px;
+  display: grid;
+  place-items: center;
+  gap: 3px;
+  border-radius: 8px;
+  background: hsl(var(--ccut-amber) / 0.08);
+  cursor: pointer;
+}
+
+.synthetic-seam span {
+  width: 4px;
+  height: 4px;
+  border-radius: 999px;
+  background: hsl(var(--ccut-amber));
+}
+
+.hold-board {
+  position: relative;
+  flex: 1;
+  min-height: 120px;
+  overflow: hidden;
+  padding: 0 12px 12px;
+}
+
+.hold-board__item {
+  position: absolute;
+}
+
+.hold-board__replace-handle {
+  position: absolute;
+  top: -10px;
+  right: -8px;
+  z-index: 6;
+  height: 24px;
+  padding: 0 8px;
+  border-radius: 999px;
+  border: 1px solid hsl(var(--ccut-amber) / 0.55);
+  background: hsl(var(--background) / 0.92);
+  color: hsl(var(--foreground));
+  font-size: 10px;
+  cursor: grab;
+}
+
+.hold-board__replace-handle:active {
+  cursor: grabbing;
+}
+
+.fragment-tile {
+  position: relative;
+  overflow: hidden;
+  border-radius: 6px;
+  border: 1px solid hsl(var(--border) / 0.5);
+  background: hsl(var(--secondary));
+  transition:
+    transform 150ms ease-out,
+    opacity 120ms ease-out,
+    border-color 120ms ease-out,
+    box-shadow 120ms ease-out;
+  cursor: pointer;
+  user-select: none;
+}
+
+.fragment-tile.is-selected {
+  border-color: hsl(var(--primary) / 0.6);
+  box-shadow:
+    0 0 6px 1px hsl(var(--primary) / 0.18),
+    inset 0 0 4px hsl(var(--primary) / 0.04);
+}
+
+.fragment-tile.is-highlighted:not(.is-selected) {
+  border-color: hsl(var(--primary) / 0.3);
+}
+
+.fragment-tile.is-time-lens {
+  box-shadow: 0 0 0 1px hsl(var(--ccut-indigo) / 0.55), 0 10px 24px hsl(var(--background) / 0.35);
+}
+
+.fragment-tile.is-excluded {
+  filter: saturate(0.7);
+}
+
+.fragment-tile__thumb,
+.fragment-tile__shade {
+  position: absolute;
+  inset: 0;
+}
+
+.fragment-tile__thumb {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.fragment-tile__shade {
+  background: linear-gradient(180deg, hsl(0 0% 0% / 0.04), hsl(0 0% 0% / 0.42));
+}
+
+.fragment-tile__id,
+.fragment-tile__duration,
+.fragment-tile__status {
+  position: absolute;
+  z-index: 2;
+  font-size: 10px;
+}
+
+.fragment-tile__id {
+  top: 8px;
+  left: 8px;
+  font-weight: 700;
+}
+
+.fragment-tile__duration {
+  right: 8px;
+  bottom: 8px;
+  font-size: 9px;
+}
+
+.fragment-tile__status {
+  left: 8px;
+  bottom: 8px;
+  padding: 2px 6px;
+  border-radius: 999px;
+  background: hsl(var(--destructive) / 0.2);
+}
+
+.fragment-tile__dots {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 2;
+  display: flex;
+  gap: 3px;
+}
+
+.fragment-tile__dots span {
+  width: 5px;
+  height: 5px;
+  border-radius: 999px;
+  background: hsl(var(--primary-foreground) / 0.92);
+}
+
+.fragment-tile__actions {
+  position: absolute;
+  inset: auto 6px 6px auto;
+  z-index: 3;
+  display: flex;
+  gap: 4px;
+  opacity: 0;
+  transition: opacity 120ms ease-out;
+}
+
+.fragment-tile:hover .fragment-tile__actions,
+.fragment-tile:focus-within .fragment-tile__actions {
+  opacity: 1;
+}
+
+.tile-action {
+  height: 22px;
+  padding: 0 8px;
+  background: hsl(var(--background) / 0.65);
+  font-size: 10px;
+  cursor: pointer;
+}
+
+.fragment-tile__progress-fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  z-index: 1;
+  background: linear-gradient(90deg, hsl(var(--primary) / 0.18), hsl(var(--primary) / 0.06));
+}
+
+.fragment-tile__progress-line {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  z-index: 2;
+  width: 1px;
+  background: hsl(var(--primary-foreground) / 0.82);
+}
+
+.fragment-tile__progress-bar {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 2;
+  height: 3px;
+  background: hsl(var(--background) / 0.45);
+}
+
+.fragment-tile__progress-bar > div {
+  height: 100%;
+  background: hsl(var(--primary));
+}
+
+.precision-overlay {
+  position: fixed;
+  z-index: 40;
+  max-width: min(90vw, 760px);
+  padding: 10px;
+  border-radius: 6px;
+  border: 1px solid hsl(var(--border) / 0.9);
+  background: linear-gradient(180deg, hsl(var(--ccut-bg-elevated)), hsl(var(--card)));
+  box-shadow:
+    0 6px 24px -6px hsl(var(--background) / 0.6),
+    0 1px 4px -1px hsl(var(--primary) / 0.06);
+}
+
+.precision-overlay__header,
+.precision-overlay__footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.precision-overlay__meta {
+  display: grid;
+  gap: 2px;
+}
+
+.precision-overlay__scope,
+.precision-overlay__hint {
+  font-size: 11px;
+  color: hsl(var(--muted-foreground));
+}
+
+.precision-overlay__chain {
+  margin: 10px 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  overflow-x: auto;
+}
+
+.precision-overlay__segment {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.precision-overlay__boundary {
+  position: absolute;
+  top: 10px;
+  right: -6px;
+  width: 12px;
+  height: calc(100% - 20px);
+  border: 0;
+  border-radius: 999px;
+  background: linear-gradient(180deg, hsl(var(--primary) / 0.15), hsl(var(--primary) / 0.45));
+  cursor: pointer;
+}
+
+.precision-overlay__boundary.is-active {
+  background: linear-gradient(180deg, hsl(var(--primary) / 0.35), hsl(var(--primary)));
+  box-shadow: 0 0 0 1px hsl(var(--background) / 0.5);
+  cursor: col-resize;
+}
+
+.precision-overlay__junction {
+  position: absolute;
+  top: 50%;
+  right: -28px;
+  transform: translateY(-50%);
+  padding: 2px 6px;
+  border-radius: 999px;
+  border: 1px dashed hsl(var(--border) / 0.8);
+  background: hsl(var(--background) / 0.75);
+  font-size: 10px;
+  color: hsl(var(--muted-foreground));
+  white-space: nowrap;
+}
+
+.precision-overlay__actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.ghost-button--primary {
+  border-color: hsl(var(--primary) / 0.45);
+  background: hsl(var(--primary) / 0.12);
+}
+
+.precision-overlay__footer {
+  font-size: 11px;
+  color: hsl(var(--muted-foreground));
+}
+
+.toast-stack {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  z-index: 60;
+  display: grid;
+  gap: 8px;
+}
+
+.toast {
+  min-width: 260px;
+  max-width: 360px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid hsl(var(--border) / 0.9);
+  background: hsl(var(--secondary) / 0.95);
+  box-shadow: 0 12px 28px hsl(var(--background) / 0.3);
+  font-size: 12px;
+}
+
+.toast--error {
+  border-color: hsl(var(--destructive) / 0.55);
+}
+
+.toast--info {
+  border-color: hsl(var(--primary) / 0.45);
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: hsl(var(--border) / 0.8);
+  border-radius: 999px;
+}
+
+@media (max-width: 1100px) {
+  .detail-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .summary-grid,
+  .metadata-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0ms !important;
+    transition-duration: 0ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+</style></head>
+
+<body>
+  <div id="smoke-root"><div style="padding: 12px; display: grid; gap: 12px;"><section class="panel-card" data-smoke-component="FragmentTile"><div class="panel-header"><span class="eyebrow">Component Smoke</span><span class="panel-chip">FragmentTile</span></div><div style="margin-top: 12px;"><div class="fragment-tile fragment-tile--edit" role="button" tabindex="0" aria-selected="false" aria-expanded="false" data-fragment-id="A2" style="width: 48px; height: 72px; transform: scale(1); opacity: 1;"><img src="data:image/svg+xml;charset=UTF-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%20320%20180%22%20preserveAspectRatio%3D%22none%22%3E%3Cdefs%3E%3ClinearGradient%20id%3D%22g%22%20x1%3D%220%25%22%20y1%3D%220%25%22%20x2%3D%22100%25%22%20y2%3D%22100%25%22%3E%3Cstop%20offset%3D%220%25%22%20stop-color%3D%22hsl(30%2058%25%2028%25)%22%2F%3E%3Cstop%20offset%3D%22100%25%22%20stop-color%3D%22hsl(52%2042%25%2016%25)%22%2F%3E%3C%2FlinearGradient%3E%3ClinearGradient%20id%3D%22shine%22%20x1%3D%220%25%22%20y1%3D%220%25%22%20x2%3D%22100%25%22%20y2%3D%220%25%22%3E%3Cstop%20offset%3D%220%25%22%20stop-color%3D%22hsla(0%200%25%20100%25%20%2F%200.08)%22%2F%3E%3Cstop%20offset%3D%22100%25%22%20stop-color%3D%22hsla(0%200%25%20100%25%20%2F%200)%22%2F%3E%3C%2FlinearGradient%3E%3C%2Fdefs%3E%3Crect%20width%3D%22320%22%20height%3D%22180%22%20fill%3D%22url(%23g)%22%2F%3E%3Crect%20x%3D%220%22%20y%3D%220%22%20width%3D%22320%22%20height%3D%22180%22%20fill%3D%22url(%23shine)%22%2F%3E%3Crect%20x%3D%2218%22%20y%3D%2218%22%20width%3D%22284%22%20height%3D%22144%22%20rx%3D%2218%22%20fill%3D%22hsla(228%2012%25%2010%25%20%2F%200.18)%22%20stroke%3D%22hsla(0%200%25%20100%25%20%2F%200.14)%22%2F%3E%3Cpath%20d%3D%22M20%20120%20Q90%2055%20150%2096%20T300%2078%22%20fill%3D%22none%22%20stroke%3D%22hsla(0%200%25%20100%25%20%2F%200.18)%22%20stroke-width%3D%228%22%20stroke-linecap%3D%22round%22%2F%3E%3Cpath%20d%3D%22M12%20136%20Q96%20100%20160%20118%20T310%20110%22%20fill%3D%22none%22%20stroke%3D%22hsla(0%200%25%20100%25%20%2F%200.11)%22%20stroke-width%3D%2214%22%20stroke-linecap%3D%22round%22%2F%3E%3Ctext%20x%3D%2228%22%20y%3D%2244%22%20fill%3D%22rgba(255%2C255%2C255%2C0.92)%22%20font-size%3D%2222%22%20font-family%3D%22Inter%2Csystem-ui%2Csans-serif%22%20font-weight%3D%22700%22%3EA2%3C%2Ftext%3E%3Ctext%20x%3D%2228%22%20y%3D%22154%22%20fill%3D%22rgba(255%2C255%2C255%2C0.84)%22%20font-size%3D%2214%22%20font-family%3D%22Inter%2Csystem-ui%2Csans-serif%22%3E68f%3C%2Ftext%3E%3Ctext%20x%3D%22250%22%20y%3D%22154%22%20fill%3D%22rgba(255%2C255%2C255%2C0.7)%22%20font-size%3D%2212%22%20font-family%3D%22Inter%2Csystem-ui%2Csans-serif%22%3E%2540112%3C%2Ftext%3E%3C%2Fsvg%3E" alt="A2 thumbnail" class="fragment-tile__thumb"><div class="fragment-tile__shade"></div><span class="fragment-tile__id">A2</span><span class="fragment-tile__duration">2.8s</span><div class="fragment-tile__actions"><button type="button" class="tile-action" data-action-button="true" aria-label="Play A2">Play</button><button type="button" class="tile-action" data-action-button="true" aria-label="Exclude A2">Exclude</button><button type="button" class="tile-action" data-action-button="true" aria-label="Move A2 to Hold Area">Hold</button></div></div></div></section><section class="panel-card" data-smoke-component="OriginalPanorama"><div class="panel-header"><span class="eyebrow">Component Smoke</span><span class="panel-chip">OriginalPanorama</span></div><div style="margin-top: 12px;"><section class="workspace-section workspace-section--panorama"><div class="section-header"><div><span class="eyebrow">Original Panorama</span><h3>Source Material Map</h3></div><button type="button" class="ghost-button">Intelligence On</button></div><div class="source-tabs" role="tablist" aria-label="Source videos"><button type="button" class="source-tab is-active" role="tab" aria-selected="true">A</button><button type="button" class="source-tab" role="tab" aria-selected="false">B</button><button type="button" class="source-tab" role="tab" aria-selected="false">C</button><button type="button" class="source-tab" role="tab" aria-selected="false">D</button><button type="button" class="source-tab" role="tab" aria-selected="false">E</button><button type="button" class="source-tab" role="tab" aria-selected="false">F</button><button type="button" class="source-tab" role="tab" aria-selected="false">G</button></div><div class="panorama-strip"><div class="fragment-tile fragment-tile--panorama is-selected is-highlighted" role="button" tabindex="0" aria-selected="true" data-fragment-id="A2" style="width: 60px; height: 64px; transform: scale(1.05); opacity: 1; z-index: 30;"><img src="data:image/svg+xml;charset=UTF-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%20320%20180%22%20preserveAspectRatio%3D%22none%22%3E%3Cdefs%3E%3ClinearGradient%20id%3D%22g%22%20x1%3D%220%25%22%20y1%3D%220%25%22%20x2%3D%22100%25%22%20y2%3D%22100%25%22%3E%3Cstop%20offset%3D%220%25%22%20stop-color%3D%22hsl(30%2058%25%2028%25)%22%2F%3E%3Cstop%20offset%3D%22100%25%22%20stop-color%3D%22hsl(52%2042%25%2016%25)%22%2F%3E%3C%2FlinearGradient%3E%3ClinearGradient%20id%3D%22shine%22%20x1%3D%220%25%22%20y1%3D%220%25%22%20x2%3D%22100%25%22%20y2%3D%220%25%22%3E%3Cstop%20offset%3D%220%25%22%20stop-color%3D%22hsla(0%200%25%20100%25%20%2F%200.08)%22%2F%3E%3Cstop%20offset%3D%22100%25%22%20stop-color%3D%22hsla(0%200%25%20100%25%20%2F%200)%22%2F%3E%3C%2FlinearGradient%3E%3C%2Fdefs%3E%3Crect%20width%3D%22320%22%20height%3D%22180%22%20fill%3D%22url(%23g)%22%2F%3E%3Crect%20x%3D%220%22%20y%3D%220%22%20width%3D%22320%22%20height%3D%22180%22%20fill%3D%22url(%23shine)%22%2F%3E%3Crect%20x%3D%2218%22%20y%3D%2218%22%20width%3D%22284%22%20height%3D%22144%22%20rx%3D%2218%22%20fill%3D%22hsla(228%2012%25%2010%25%20%2F%200.18)%22%20stroke%3D%22hsla(0%200%25%20100%25%20%2F%200.14)%22%2F%3E%3Cpath%20d%3D%22M20%20120%20Q90%2055%20150%2096%20T300%2078%22%20fill%3D%22none%22%20stroke%3D%22hsla(0%200%25%20100%25%20%2F%200.18)%22%20stroke-width%3D%228%22%20stroke-linecap%3D%22round%22%2F%3E%3Cpath%20d%3D%22M12%20136%20Q96%20100%20160%20118%20T310%20110%22%20fill%3D%22none%22%20stroke%3D%22hsla(0%200%25%20100%25%20%2F%200.11)%22%20stroke-width%3D%2214%22%20stroke-linecap%3D%22round%22%2F%3E%3Ctext%20x%3D%2228%22%20y%3D%2244%22%20fill%3D%22rgba(255%2C255%2C255%2C0.92)%22%20font-size%3D%2222%22%20font-family%3D%22Inter%2Csystem-ui%2Csans-serif%22%20font-weight%3D%22700%22%3EA2%3C%2Ftext%3E%3Ctext%20x%3D%2228%22%20y%3D%22154%22%20fill%3D%22rgba(255%2C255%2C255%2C0.84)%22%20font-size%3D%2214%22%20font-family%3D%22Inter%2Csystem-ui%2Csans-serif%22%3E68f%3C%2Ftext%3E%3Ctext%20x%3D%22250%22%20y%3D%22154%22%20fill%3D%22rgba(255%2C255%2C255%2C0.7)%22%20font-size%3D%2212%22%20font-family%3D%22Inter%2Csystem-ui%2Csans-serif%22%3E%2540112%3C%2Ftext%3E%3C%2Fsvg%3E" alt="A2 thumbnail" class="fragment-tile__thumb"><div class="fragment-tile__shade"></div><span class="fragment-tile__id">A2</span><span class="fragment-tile__duration">2.8s</span><div class="fragment-tile__dots" aria-hidden="true"><span style="opacity: 0.6;"></span><span style="opacity: 0.5;"></span><span style="opacity: 0.38;"></span></div><div class="fragment-tile__actions"></div></div><div class="fragment-tile fragment-tile--panorama" role="button" tabindex="0" aria-selected="false" data-fragment-id="A3" style="width: 60px; height: 64px; transform: scale(1); opacity: 1;"><img src="data:image/svg+xml;charset=UTF-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%20320%20180%22%20preserveAspectRatio%3D%22none%22%3E%3Cdefs%3E%3ClinearGradient%20id%3D%22g%22%20x1%3D%220%25%22%20y1%3D%220%25%22%20x2%3D%22100%25%22%20y2%3D%22100%25%22%3E%3Cstop%20offset%3D%220%25%22%20stop-color%3D%22hsl(30%2058%25%2028%25)%22%2F%3E%3Cstop%20offset%3D%22100%25%22%20stop-color%3D%22hsl(52%2042%25%2016%25)%22%2F%3E%3C%2FlinearGradient%3E%3ClinearGradient%20id%3D%22shine%22%20x1%3D%220%25%22%20y1%3D%220%25%22%20x2%3D%22100%25%22%20y2%3D%220%25%22%3E%3Cstop%20offset%3D%220%25%22%20stop-color%3D%22hsla(0%200%25%20100%25%20%2F%200.08)%22%2F%3E%3Cstop%20offset%3D%22100%25%22%20stop-color%3D%22hsla(0%200%25%20100%25%20%2F%200)%22%2F%3E%3C%2FlinearGradient%3E%3C%2Fdefs%3E%3Crect%20width%3D%22320%22%20height%3D%22180%22%20fill%3D%22url(%23g)%22%2F%3E%3Crect%20x%3D%220%22%20y%3D%220%22%20width%3D%22320%22%20height%3D%22180%22%20fill%3D%22url(%23shine)%22%2F%3E%3Crect%20x%3D%2218%22%20y%3D%2218%22%20width%3D%22284%22%20height%3D%22144%22%20rx%3D%2218%22%20fill%3D%22hsla(228%2012%25%2010%25%20%2F%200.18)%22%20stroke%3D%22hsla(0%200%25%20100%25%20%2F%200.14)%22%2F%3E%3Cpath%20d%3D%22M20%20120%20Q90%2055%20150%2096%20T300%2078%22%20fill%3D%22none%22%20stroke%3D%22hsla(0%200%25%20100%25%20%2F%200.18)%22%20stroke-width%3D%228%22%20stroke-linecap%3D%22round%22%2F%3E%3Cpath%20d%3D%22M12%20136%20Q96%20100%20160%20118%20T310%20110%22%20fill%3D%22none%22%20stroke%3D%22hsla(0%200%25%20100%25%20%2F%200.11)%22%20stroke-width%3D%2214%22%20stroke-linecap%3D%22round%22%2F%3E%3Ctext%20x%3D%2228%22%20y%3D%2244%22%20fill%3D%22rgba(255%2C255%2C255%2C0.92)%22%20font-size%3D%2222%22%20font-family%3D%22Inter%2Csystem-ui%2Csans-serif%22%20font-weight%3D%22700%22%3EA3%3C%2Ftext%3E%3Ctext%20x%3D%2228%22%20y%3D%22154%22%20fill%3D%22rgba(255%2C255%2C255%2C0.84)%22%20font-size%3D%2214%22%20font-family%3D%22Inter%2Csystem-ui%2Csans-serif%22%3E56f%3C%2Ftext%3E%3Ctext%20x%3D%22250%22%20y%3D%22154%22%20fill%3D%22rgba(255%2C255%2C255%2C0.7)%22%20font-size%3D%2212%22%20font-family%3D%22Inter%2Csystem-ui%2Csans-serif%22%3E%2540174%3C%2Ftext%3E%3C%2Fsvg%3E" alt="A3 thumbnail" class="fragment-tile__thumb"><div class="fragment-tile__shade"></div><span class="fragment-tile__id">A3</span><span class="fragment-tile__duration">2.3s</span><div class="fragment-tile__dots" aria-hidden="true"><span style="opacity: 0.66;"></span><span style="opacity: 0.55;"></span><span style="opacity: 0.42;"></span></div><div class="fragment-tile__actions"></div></div></div></section></div></section><section class="panel-card" data-smoke-component="FragmentMap"><div class="panel-header"><span class="eyebrow">Component Smoke</span><span class="panel-chip">FragmentMap</span></div><div style="margin-top: 12px;"><section class="workspace-section workspace-section--map"><div class="section-header"><div><span class="eyebrow">Fragment Map</span><h3>Edit Structure</h3></div><span class="panel-chip">8 visible</span></div><div class="fragment-map-board" aria-label="Fragment structure board"><div class="fragment-map-flow-node fragment-map-slot"><div class="fragment-tile fragment-tile--edit is-selected" role="button" tabindex="0" aria-selected="true" aria-expanded="false" draggable="false" data-fragment-id="A2" style="width: 48px; height: 72px; transform: scale(1.08); opacity: 1; z-index: 30;"><img src="data:image/svg+xml;charset=UTF-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%20320%20180%22%20preserveAspectRatio%3D%22none%22%3E%3Cdefs%3E%3ClinearGradient%20id%3D%22g%22%20x1%3D%220%25%22%20y1%3D%220%25%22%20x2%3D%22100%25%22%20y2%3D%22100%25%22%3E%3Cstop%20offset%3D%220%25%22%20stop-color%3D%22hsl(30%2058%25%2028%25)%22%2F%3E%3Cstop%20offset%3D%22100%25%22%20stop-color%3D%22hsl(52%2042%25%2016%25)%22%2F%3E%3C%2FlinearGradient%3E%3ClinearGradient%20id%3D%22shine%22%20x1%3D%220%25%22%20y1%3D%220%25%22%20x2%3D%22100%25%22%20y2%3D%220%25%22%3E%3Cstop%20offset%3D%220%25%22%20stop-color%3D%22hsla(0%200%25%20100%25%20%2F%200.08)%22%2F%3E%3Cstop%20offset%3D%22100%25%22%20stop-color%3D%22hsla(0%200%25%20100%25%20%2F%200)%22%2F%3E%3C%2FlinearGradient%3E%3C%2Fdefs%3E%3Crect%20width%3D%22320%22%20height%3D%22180%22%20fill%3D%22url(%23g)%22%2F%3E%3Crect%20x%3D%220%22%20y%3D%220%22%20width%3D%22320%22%20height%3D%22180%22%20fill%3D%22url(%23shine)%22%2F%3E%3Crect%20x%3D%2218%22%20y%3D%2218%22%20width%3D%22284%22%20height%3D%22144%22%20rx%3D%2218%22%20fill%3D%22hsla(228%2012%25%2010%25%20%2F%200.18)%22%20stroke%3D%22hsla(0%200%25%20100%25%20%2F%200.14)%22%2F%3E%3Cpath%20d%3D%22M20%20120%20Q90%2055%20150%2096%20T300%2078%22%20fill%3D%22none%22%20stroke%3D%22hsla(0%200%25%20100%25%20%2F%200.18)%22%20stroke-width%3D%228%22%20stroke-linecap%3D%22round%22%2F%3E%3Cpath%20d%3D%22M12%20136%20Q96%20100%20160%20118%20T310%20110%22%20fill%3D%22none%22%20stroke%3D%22hsla(0%200%25%20100%25%20%2F%200.11)%22%20stroke-width%3D%2214%22%20stroke-linecap%3D%22round%22%2F%3E%3Ctext%20x%3D%2228%22%20y%3D%2244%22%20fill%3D%22rgba(255%2C255%2C255%2C0.92)%22%20font-size%3D%2222%22%20font-family%3D%22Inter%2Csystem-ui%2Csans-serif%22%20font-weight%3D%22700%22%3EA2%3C%2Ftext%3E%3Ctext%20x%3D%2228%22%20y%3D%22154%22%20fill%3D%22rgba(255%2C255%2C255%2C0.84)%22%20font-size%3D%2214%22%20font-family%3D%22Inter%2Csystem-ui%2Csans-serif%22%3E68f%3C%2Ftext%3E%3Ctext%20x%3D%22250%22%20y%3D%22154%22%20fill%3D%22rgba(255%2C255%2C255%2C0.7)%22%20font-size%3D%2212%22%20font-family%3D%22Inter%2Csystem-ui%2Csans-serif%22%3E%2540112%3C%2Ftext%3E%3C%2Fsvg%3E" alt="A2 thumbnail" class="fragment-tile__thumb"><div class="fragment-tile__shade"></div><span class="fragment-tile__id">A2</span><span class="fragment-tile__duration">2.8s</span><div class="fragment-tile__actions"><button type="button" class="tile-action" data-action-button="true" aria-label="Play A2">Play</button><button type="button" class="tile-action" data-action-button="true" aria-label="Exclude A2">Exclude</button><button type="button" class="tile-action" data-action-button="true" aria-label="Move A2 to Hold Area">Hold</button></div></div></div><button type="button" class="fragment-map-flow-node boundary-handle" aria-haspopup="dialog" aria-label="Open precision editor between A2 and A3"></button><div class="fragment-map-flow-node fragment-map-slot"><div class="fragment-tile fragment-tile--edit" role="button" tabindex="0" aria-selected="false" aria-expanded="false" draggable="false" data-fragment-id="A3" style="width: 48px; height: 72px; transform: scale(1); opacity: 1;"><img src="data:image/svg+xml;charset=UTF-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%20320%20180%22%20preserveAspectRatio%3D%22none%22%3E%3Cdefs%3E%3ClinearGradient%20id%3D%22g%22%20x1%3D%220%25%22%20y1%3D%220%25%22%20x2%3D%22100%25%22%20y2%3D%22100%25%22%3E%3Cstop%20offset%3D%220%25%22%20stop-color%3D%22hsl(30%2058%25%2028%25)%22%2F%3E%3Cstop%20offset%3D%22100%25%22%20stop-color%3D%22hsl(52%2042%25%2016%25)%22%2F%3E%3C%2FlinearGradient%3E%3ClinearGradient%20id%3D%22shine%22%20x1%3D%220%25%22%20y1%3D%220%25%22%20x2%3D%22100%25%22%20y2%3D%220%25%22%3E%3Cstop%20offset%3D%220%25%22%20stop-color%3D%22hsla(0%200%25%20100%25%20%2F%200.08)%22%2F%3E%3Cstop%20offset%3D%22100%25%22%20stop-color%3D%22hsla(0%200%25%20100%25%20%2F%200)%22%2F%3E%3C%2FlinearGradient%3E%3C%2Fdefs%3E%3Crect%20width%3D%22320%22%20height%3D%22180%22%20fill%3D%22url(%23g)%22%2F%3E%3Crect%20x%3D%220%22%20y%3D%220%22%20width%3D%22320%22%20height%3D%22180%22%20fill%3D%22url(%23shine)%22%2F%3E%3Crect%20x%3D%2218%22%20y%3D%2218%22%20width%3D%22284%22%20height%3D%22144%22%20rx%3D%2218%22%20fill%3D%22hsla(228%2012%25%2010%25%20%2F%200.18)%22%20stroke%3D%22hsla(0%200%25%20100%25%20%2F%200.14)%22%2F%3E%3Cpath%20d%3D%22M20%20120%20Q90%2055%20150%2096%20T300%2078%22%20fill%3D%22none%22%20stroke%3D%22hsla(0%200%25%20100%25%20%2F%200.18)%22%20stroke-width%3D%228%22%20stroke-linecap%3D%22round%22%2F%3E%3Cpath%20d%3D%22M12%20136%20Q96%20100%20160%20118%20T310%20110%22%20fill%3D%22none%22%20stroke%3D%22hsla(0%200%25%20100%25%20%2F%200.11)%22%20stroke-width%3D%2214%22%20stroke-linecap%3D%22round%22%2F%3E%3Ctext%20x%3D%2228%22%20y%3D%2244%22%20fill%3D%22rgba(255%2C255%2C255%2C0.92)%22%20font-size%3D%2222%22%20font-family%3D%22Inter%2Csystem-ui%2Csans-serif%22%20font-weight%3D%22700%22%3EA3%3C%2Ftext%3E%3Ctext%20x%3D%2228%22%20y%3D%22154%22%20fill%3D%22rgba(255%2C255%2C255%2C0.84)%22%20font-size%3D%2214%22%20font-family%3D%22Inter%2Csystem-ui%2Csans-serif%22%3E56f%3C%2Ftext%3E%3Ctext%20x%3D%22250%22%20y%3D%22154%22%20fill%3D%22rgba(255%2C255%2C255%2C0.7)%22%20font-size%3D%2212%22%20font-family%3D%22Inter%2Csystem-ui%2Csans-serif%22%3E%2540174%3C%2Ftext%3E%3C%2Fsvg%3E" alt="A3 thumbnail" class="fragment-tile__thumb"><div class="fragment-tile__shade"></div><span class="fragment-tile__id">A3</span><span class="fragment-tile__duration">2.3s</span><div class="fragment-tile__actions"><button type="button" class="tile-action" data-action-button="true" aria-label="Play A3">Play</button><button type="button" class="tile-action" data-action-button="true" aria-label="Exclude A3">Exclude</button><button type="button" class="tile-action" data-action-button="true" aria-label="Move A3 to Hold Area">Hold</button></div></div></div><button type="button" class="fragment-map-flow-node boundary-handle" aria-haspopup="dialog" aria-label="Open precision editor between A3 and B1"></button><div class="fragment-map-flow-node fragment-map-slot"><div class="fragment-tile fragment-tile--edit" role="button" tabindex="0" aria-selected="false" aria-expanded="false" draggable="false" data-fragment-id="B1" style="width: 51.8px; height: 72px; transform: scale(1); opacity: 1;"><img src="data:image/svg+xml;charset=UTF-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%20320%20180%22%20preserveAspectRatio%3D%22none%22%3E%3Cdefs%3E%3ClinearGradient%20id%3D%22g%22%20x1%3D%220%25%22%20y1%3D%220%25%22%20x2%3D%22100%25%22%20y2%3D%22100%25%22%3E%3Cstop%20offset%3D%220%25%22%20stop-color%3D%22hsl(200%2058%25%2028%25)%22%2F%3E%3Cstop%20offset%3D%22100%25%22%20stop-color%3D%22hsl(222%2042%25%2016%25)%22%2F%3E%3C%2FlinearGradient%3E%3ClinearGradient%20id%3D%22shine%22%20x1%3D%220%25%22%20y1%3D%220%25%22%20x2%3D%22100%25%22%20y2%3D%220%25%22%3E%3Cstop%20offset%3D%220%25%22%20stop-color%3D%22hsla(0%200%25%20100%25%20%2F%200.08)%22%2F%3E%3Cstop%20offset%3D%22100%25%22%20stop-color%3D%22hsla(0%200%25%20100%25%20%2F%200)%22%2F%3E%3C%2FlinearGradient%3E%3C%2Fdefs%3E%3Crect%20width%3D%22320%22%20height%3D%22180%22%20fill%3D%22url(%23g)%22%2F%3E%3Crect%20x%3D%220%22%20y%3D%220%22%20width%3D%22320%22%20height%3D%22180%22%20fill%3D%22url(%23shine)%22%2F%3E%3Crect%20x%3D%2218%22%20y%3D%2218%22%20width%3D%22284%22%20height%3D%22144%22%20rx%3D%2218%22%20fill%3D%22hsla(228%2012%25%2010%25%20%2F%200.18)%22%20stroke%3D%22hsla(0%200%25%20100%25%20%2F%200.14)%22%2F%3E%3Cpath%20d%3D%22M20%20120%20Q90%2055%20150%2096%20T300%2078%22%20fill%3D%22none%22%20stroke%3D%22hsla(0%200%25%20100%25%20%2F%200.18)%22%20stroke-width%3D%228%22%20stroke-linecap%3D%22round%22%2F%3E%3Cpath%20d%3D%22M12%20136%20Q96%20100%20160%20118%20T310%20110%22%20fill%3D%22none%22%20stroke%3D%22hsla(0%200%25%20100%25%20%2F%200.11)%22%20stroke-width%3D%2214%22%20stroke-linecap%3D%22round%22%2F%3E%3Ctext%20x%3D%2228%22%20y%3D%2244%22%20fill%3D%22rgba(255%2C255%2C255%2C0.92)%22%20font-size%3D%2222%22%20font-family%3D%22Inter%2Csystem-ui%2Csans-serif%22%20font-weight%3D%22700%22%3EB1%3C%2Ftext%3E%3Ctext%20x%3D%2228%22%20y%3D%22154%22%20fill%3D%22rgba(255%2C255%2C255%2C0.84)%22%20font-size%3D%2214%22%20font-family%3D%22Inter%2Csystem-ui%2Csans-serif%22%3E74f%3C%2Ftext%3E%3Ctext%20x%3D%22250%22%20y%3D%22154%22%20fill%3D%22rgba(255%2C255%2C255%2C0.7)%22%20font-size%3D%2212%22%20font-family%3D%22Inter%2Csystem-ui%2Csans-serif%22%3E%254069%3C%2Ftext%3E%3C%2Fsvg%3E" alt="B1 thumbnail" class="fragment-tile__thumb"><div class="fragment-tile__shade"></div><span class="fragment-tile__id">B1</span><span class="fragment-tile__duration">3.1s</span><div class="fragment-tile__actions"><button type="button" class="tile-action" data-action-button="true" aria-label="Play B1">Play</button><button type="button" class="tile-action" data-action-button="true" aria-label="Exclude B1">Exclude</button><button type="button" class="tile-action" data-action-button="true" aria-label="Move B1 to Hold Area">Hold</button></div></div></div><button type="button" class="fragment-map-flow-node boundary-handle" aria-haspopup="dialog" aria-label="Open precision editor between B1 and C1"></button><div class="fragment-map-flow-node fragment-map-slot"><div class="fragment-tile fragment-tile--edit" role="button" tabindex="0" aria-selected="false" aria-expanded="false" draggable="false" data-fragment-id="C1" style="width: 48px; height: 72px; transform: scale(1); opacity: 1;"><img src="data:image/svg+xml;charset=UTF-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%20320%20180%22%20preserveAspectRatio%3D%22none%22%3E%3Cdefs%3E%3ClinearGradient%20id%3D%22g%22%20x1%3D%220%25%22%20y1%3D%220%25%22%20x2%3D%22100%25%22%20y2%3D%22100%25%22%3E%3Cstop%20offset%3D%220%25%22%20stop-color%3D%22hsl(120%2058%25%2028%25)%22%2F%3E%3Cstop%20offset%3D%22100%25%22%20stop-color%3D%22hsl(142%2042%25%2016%25)%22%2F%3E%3C%2FlinearGradient%3E%3ClinearGradient%20id%3D%22shine%22%20x1%3D%220%25%22%20y1%3D%220%25%22%20x2%3D%22100%25%22%20y2%3D%220%25%22%3E%3Cstop%20offset%3D%220%25%22%20stop-color%3D%22hsla(0%200%25%20100%25%20%2F%200.08)%22%2F%3E%3Cstop%20offset%3D%22100%25%22%20stop-color%3D%22hsla(0%200%25%20100%25%20%2F%200)%22%2F%3E%3C%2FlinearGradient%3E%3C%2Fdefs%3E%3Crect%20width%3D%22320%22%20height%3D%22180%22%20fill%3D%22url(%23g)%22%2F%3E%3Crect%20x%3D%220%22%20y%3D%220%22%20width%3D%22320%22%20height%3D%22180%22%20fill%3D%22url(%23shine)%22%2F%3E%3Crect%20x%3D%2218%22%20y%3D%2218%22%20width%3D%22284%22%20height%3D%22144%22%20rx%3D%2218%22%20fill%3D%22hsla(228%2012%25%2010%25%20%2F%200.18)%22%20stroke%3D%22hsla(0%200%25%20100%25%20%2F%200.14)%22%2F%3E%3Cpath%20d%3D%22M20%20120%20Q90%2055%20150%2096%20T300%2078%22%20fill%3D%22none%22%20stroke%3D%22hsla(0%200%25%20100%25%20%2F%200.18)%22%20stroke-width%3D%228%22%20stroke-linecap%3D%22round%22%2F%3E%3Cpath%20d%3D%22M12%20136%20Q96%20100%20160%20118%20T310%20110%22%20fill%3D%22none%22%20stroke%3D%22hsla(0%200%25%20100%25%20%2F%200.11)%22%20stroke-width%3D%2214%22%20stroke-linecap%3D%22round%22%2F%3E%3Ctext%20x%3D%2228%22%20y%3D%2244%22%20fill%3D%22rgba(255%2C255%2C255%2C0.92)%22%20font-size%3D%2222%22%20font-family%3D%22Inter%2Csystem-ui%2Csans-serif%22%20font-weight%3D%22700%22%3EC1%3C%2Ftext%3E%3Ctext%20x%3D%2228%22%20y%3D%22154%22%20fill%3D%22rgba(255%2C255%2C255%2C0.84)%22%20font-size%3D%2214%22%20font-family%3D%22Inter%2Csystem-ui%2Csans-serif%22%3E68f%3C%2Ftext%3E%3Ctext%20x%3D%22250%22%20y%3D%22154%22%20fill%3D%22rgba(255%2C255%2C255%2C0.7)%22%20font-size%3D%2212%22%20font-family%3D%22Inter%2Csystem-ui%2Csans-serif%22%3E%254098%3C%2Ftext%3E%3C%2Fsvg%3E" alt="C1 thumbnail" class="fragment-tile__thumb"><div class="fragment-tile__shade"></div><span class="fragment-tile__id">C1</span><span class="fragment-tile__duration">2.8s</span><div class="fragment-tile__actions"><button type="button" class="tile-action" data-action-button="true" aria-label="Play C1">Play</button><button type="button" class="tile-action" data-action-button="true" aria-label="Exclude C1">Exclude</button><button type="button" class="tile-action" data-action-button="true" aria-label="Move C1 to Hold Area">Hold</button></div></div></div><button type="button" class="fragment-map-flow-node synthetic-seam" title="1 hidden" aria-haspopup="dialog" aria-label="Open precision editor for 1 hidden fragments"><span></span><span></span><span></span></button><div class="fragment-map-flow-node fragment-map-slot"><div class="fragment-tile fragment-tile--edit" role="button" tabindex="0" aria-selected="false" aria-expanded="false" draggable="false" data-fragment-id="C3" style="width: 50.4px; height: 72px; transform: scale(1); opacity: 1;"><img src="data:image/svg+xml;charset=UTF-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%20320%20180%22%20preserveAspectRatio%3D%22none%22%3E%3Cdefs%3E%3ClinearGradient%20id%3D%22g%22%20x1%3D%220%25%22%20y1%3D%220%25%22%20x2%3D%22100%25%22%20y2%3D%22100%25%22%3E%3Cstop%20offset%3D%220%25%22%20stop-color%3D%22hsl(120%2058%25%2028%25)%22%2F%3E%3Cstop%20offset%3D%22100%25%22%20stop-color%3D%22hsl(142%2042%25%2016%25)%22%2F%3E%3C%2FlinearGradient%3E%3ClinearGradient%20id%3D%22shine%22%20x1%3D%220%25%22%20y1%3D%220%25%22%20x2%3D%22100%25%22%20y2%3D%220%25%22%3E%3Cstop%20offset%3D%220%25%22%20stop-color%3D%22hsla(0%200%25%20100%25%20%2F%200.08)%22%2F%3E%3Cstop%20offset%3D%22100%25%22%20stop-color%3D%22hsla(0%200%25%20100%25%20%2F%200)%22%2F%3E%3C%2FlinearGradient%3E%3C%2Fdefs%3E%3Crect%20width%3D%22320%22%20height%3D%22180%22%20fill%3D%22url(%23g)%22%2F%3E%3Crect%20x%3D%220%22%20y%3D%220%22%20width%3D%22320%22%20height%3D%22180%22%20fill%3D%22url(%23shine)%22%2F%3E%3Crect%20x%3D%2218%22%20y%3D%2218%22%20width%3D%22284%22%20height%3D%22144%22%20rx%3D%2218%22%20fill%3D%22hsla(228%2012%25%2010%25%20%2F%200.18)%22%20stroke%3D%22hsla(0%200%25%20100%25%20%2F%200.14)%22%2F%3E%3Cpath%20d%3D%22M20%20120%20Q90%2055%20150%2096%20T300%2078%22%20fill%3D%22none%22%20stroke%3D%22hsla(0%200%25%20100%25%20%2F%200.18)%22%20stroke-width%3D%228%22%20stroke-linecap%3D%22round%22%2F%3E%3Cpath%20d%3D%22M12%20136%20Q96%20100%20160%20118%20T310%20110%22%20fill%3D%22none%22%20stroke%3D%22hsla(0%200%25%20100%25%20%2F%200.11)%22%20stroke-width%3D%2214%22%20stroke-linecap%3D%22round%22%2F%3E%3Ctext%20x%3D%2228%22%20y%3D%2244%22%20fill%3D%22rgba(255%2C255%2C255%2C0.92)%22%20font-size%3D%2222%22%20font-family%3D%22Inter%2Csystem-ui%2Csans-serif%22%20font-weight%3D%22700%22%3EC3%3C%2Ftext%3E%3Ctext%20x%3D%2228%22%20y%3D%22154%22%20fill%3D%22rgba(255%2C255%2C255%2C0.84)%22%20font-size%3D%2214%22%20font-family%3D%22Inter%2Csystem-ui%2Csans-serif%22%3E72f%3C%2Ftext%3E%3Ctext%20x%3D%22250%22%20y%3D%22154%22%20fill%3D%22rgba(255%2C255%2C255%2C0.7)%22%20font-size%3D%2212%22%20font-family%3D%22Inter%2Csystem-ui%2Csans-serif%22%3E%2540202%3C%2Ftext%3E%3C%2Fsvg%3E" alt="C3 thumbnail" class="fragment-tile__thumb"><div class="fragment-tile__shade"></div><span class="fragment-tile__id">C3</span><span class="fragment-tile__duration">3.0s</span><div class="fragment-tile__actions"><button type="button" class="tile-action" data-action-button="true" aria-label="Play C3">Play</button><button type="button" class="tile-action" data-action-button="true" aria-label="Exclude C3">Exclude</button><button type="button" class="tile-action" data-action-button="true" aria-label="Move C3 to Hold Area">Hold</button></div></div></div><button type="button" class="fragment-map-flow-node boundary-handle" aria-haspopup="dialog" aria-label="Open precision editor between C3 and D1"></button><div class="fragment-map-flow-node fragment-map-slot"><div class="fragment-tile fragment-tile--edit" role="button" tabindex="0" aria-selected="false" aria-expanded="false" draggable="false" data-fragment-id="D1" style="width: 48px; height: 72px; transform: scale(1); opacity: 1;"><img src="data:image/svg+xml;charset=UTF-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%20320%20180%22%20preserveAspectRatio%3D%22none%22%3E%3Cdefs%3E%3ClinearGradient%20id%3D%22g%22%20x1%3D%220%25%22%20y1%3D%220%25%22%20x2%3D%22100%25%22%20y2%3D%22100%25%22%3E%3Cstop%20offset%3D%220%25%22%20stop-color%3D%22hsl(0%2058%25%2028%25)%22%2F%3E%3Cstop%20offset%3D%22100%25%22%20stop-color%3D%22hsl(22%2042%25%2016%25)%22%2F%3E%3C%2FlinearGradient%3E%3ClinearGradient%20id%3D%22shine%22%20x1%3D%220%25%22%20y1%3D%220%25%22%20x2%3D%22100%25%22%20y2%3D%220%25%22%3E%3Cstop%20offset%3D%220%25%22%20stop-color%3D%22hsla(0%200%25%20100%25%20%2F%200.08)%22%2F%3E%3Cstop%20offset%3D%22100%25%22%20stop-color%3D%22hsla(0%200%25%20100%25%20%2F%200)%22%2F%3E%3C%2FlinearGradient%3E%3C%2Fdefs%3E%3Crect%20width%3D%22320%22%20height%3D%22180%22%20fill%3D%22url(%23g)%22%2F%3E%3Crect%20x%3D%220%22%20y%3D%220%22%20width%3D%22320%22%20height%3D%22180%22%20fill%3D%22url(%23shine)%22%2F%3E%3Crect%20x%3D%2218%22%20y%3D%2218%22%20width%3D%22284%22%20height%3D%22144%22%20rx%3D%2218%22%20fill%3D%22hsla(228%2012%25%2010%25%20%2F%200.18)%22%20stroke%3D%22hsla(0%200%25%20100%25%20%2F%200.14)%22%2F%3E%3Cpath%20d%3D%22M20%20120%20Q90%2055%20150%2096%20T300%2078%22%20fill%3D%22none%22%20stroke%3D%22hsla(0%200%25%20100%25%20%2F%200.18)%22%20stroke-width%3D%228%22%20stroke-linecap%3D%22round%22%2F%3E%3Cpath%20d%3D%22M12%20136%20Q96%20100%20160%20118%20T310%20110%22%20fill%3D%22none%22%20stroke%3D%22hsla(0%200%25%20100%25%20%2F%200.11)%22%20stroke-width%3D%2214%22%20stroke-linecap%3D%22round%22%2F%3E%3Ctext%20x%3D%2228%22%20y%3D%2244%22%20fill%3D%22rgba(255%2C255%2C255%2C0.92)%22%20font-size%3D%2222%22%20font-family%3D%22Inter%2Csystem-ui%2Csans-serif%22%20font-weight%3D%22700%22%3ED1%3C%2Ftext%3E%3Ctext%20x%3D%2228%22%20y%3D%22154%22%20fill%3D%22rgba(255%2C255%2C255%2C0.84)%22%20font-size%3D%2214%22%20font-family%3D%22Inter%2Csystem-ui%2Csans-serif%22%3E58f%3C%2Ftext%3E%3Ctext%20x%3D%22250%22%20y%3D%22154%22%20fill%3D%22rgba(255%2C255%2C255%2C0.7)%22%20font-size%3D%2212%22%20font-family%3D%22Inter%2Csystem-ui%2Csans-serif%22%3E%2540125%3C%2Ftext%3E%3C%2Fsvg%3E" alt="D1 thumbnail" class="fragment-tile__thumb"><div class="fragment-tile__shade"></div><span class="fragment-tile__id">D1</span><span class="fragment-tile__duration">2.4s</span><div class="fragment-tile__actions"><button type="button" class="tile-action" data-action-button="true" aria-label="Play D1">Play</button><button type="button" class="tile-action" data-action-button="true" aria-label="Exclude D1">Exclude</button><button type="button" class="tile-action" data-action-button="true" aria-label="Move D1 to Hold Area">Hold</button></div></div></div><button type="button" class="fragment-map-flow-node synthetic-seam" title="2 hidden" aria-haspopup="dialog" aria-label="Open precision editor for 2 hidden fragments"><span></span><span></span><span></span></button><div class="fragment-map-flow-node fragment-map-slot"><div class="fragment-tile fragment-tile--edit" role="button" tabindex="0" aria-selected="false" aria-expanded="false" draggable="false" data-fragment-id="D4" style="width: 48px; height: 72px; transform: scale(1); opacity: 1;"><img src="data:image/svg+xml;charset=UTF-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%20320%20180%22%20preserveAspectRatio%3D%22none%22%3E%3Cdefs%3E%3ClinearGradient%20id%3D%22g%22%20x1%3D%220%25%22%20y1%3D%220%25%22%20x2%3D%22100%25%22%20y2%3D%22100%25%22%3E%3Cstop%20offset%3D%220%25%22%20stop-color%3D%22hsl(0%2058%25%2028%25)%22%2F%3E%3Cstop%20offset%3D%22100%25%22%20stop-color%3D%22hsl(22%2042%25%2016%25)%22%2F%3E%3C%2FlinearGradient%3E%3ClinearGradient%20id%3D%22shine%22%20x1%3D%220%25%22%20y1%3D%220%25%22%20x2%3D%22100%25%22%20y2%3D%220%25%22%3E%3Cstop%20offset%3D%220%25%22%20stop-color%3D%22hsla(0%200%25%20100%25%20%2F%200.08)%22%2F%3E%3Cstop%20offset%3D%22100%25%22%20stop-color%3D%22hsla(0%200%25%20100%25%20%2F%200)%22%2F%3E%3C%2FlinearGradient%3E%3C%2Fdefs%3E%3Crect%20width%3D%22320%22%20height%3D%22180%22%20fill%3D%22url(%23g)%22%2F%3E%3Crect%20x%3D%220%22%20y%3D%220%22%20width%3D%22320%22%20height%3D%22180%22%20fill%3D%22url(%23shine)%22%2F%3E%3Crect%20x%3D%2218%22%20y%3D%2218%22%20width%3D%22284%22%20height%3D%22144%22%20rx%3D%2218%22%20fill%3D%22hsla(228%2012%25%2010%25%20%2F%200.18)%22%20stroke%3D%22hsla(0%200%25%20100%25%20%2F%200.14)%22%2F%3E%3Cpath%20d%3D%22M20%20120%20Q90%2055%20150%2096%20T300%2078%22%20fill%3D%22none%22%20stroke%3D%22hsla(0%200%25%20100%25%20%2F%200.18)%22%20stroke-width%3D%228%22%20stroke-linecap%3D%22round%22%2F%3E%3Cpath%20d%3D%22M12%20136%20Q96%20100%20160%20118%20T310%20110%22%20fill%3D%22none%22%20stroke%3D%22hsla(0%200%25%20100%25%20%2F%200.11)%22%20stroke-width%3D%2214%22%20stroke-linecap%3D%22round%22%2F%3E%3Ctext%20x%3D%2228%22%20y%3D%2244%22%20fill%3D%22rgba(255%2C255%2C255%2C0.92)%22%20font-size%3D%2222%22%20font-family%3D%22Inter%2Csystem-ui%2Csans-serif%22%20font-weight%3D%22700%22%3ED4%3C%2Ftext%3E%3Ctext%20x%3D%2228%22%20y%3D%22154%22%20fill%3D%22rgba(255%2C255%2C255%2C0.84)%22%20font-size%3D%2214%22%20font-family%3D%22Inter%2Csystem-ui%2Csans-serif%22%3E64f%3C%2Ftext%3E%3Ctext%20x%3D%22250%22%20y%3D%22154%22%20fill%3D%22rgba(255%2C255%2C255%2C0.7)%22%20font-size%3D%2212%22%20font-family%3D%22Inter%2Csystem-ui%2Csans-serif%22%3E%2540240%3C%2Ftext%3E%3C%2Fsvg%3E" alt="D4 thumbnail" class="fragment-tile__thumb"><div class="fragment-tile__shade"></div><span class="fragment-tile__id">D4</span><span class="fragment-tile__duration">2.7s</span><div class="fragment-tile__actions"><button type="button" class="tile-action" data-action-button="true" aria-label="Play D4">Play</button><button type="button" class="tile-action" data-action-button="true" aria-label="Exclude D4">Exclude</button><button type="button" class="tile-action" data-action-button="true" aria-label="Move D4 to Hold Area">Hold</button></div></div></div><button type="button" class="fragment-map-flow-node boundary-handle" aria-haspopup="dialog" aria-label="Open precision editor between D4 and E1"></button><div class="fragment-map-flow-node fragment-map-slot"><div class="fragment-tile fragment-tile--edit" role="button" tabindex="0" aria-selected="false" aria-expanded="false" draggable="false" data-fragment-id="E1" style="width: 57.4px; height: 72px; transform: scale(1); opacity: 1;"><img src="data:image/svg+xml;charset=UTF-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%20320%20180%22%20preserveAspectRatio%3D%22none%22%3E%3Cdefs%3E%3ClinearGradient%20id%3D%22g%22%20x1%3D%220%25%22%20y1%3D%220%25%22%20x2%3D%22100%25%22%20y2%3D%22100%25%22%3E%3Cstop%20offset%3D%220%25%22%20stop-color%3D%22hsl(280%2058%25%2028%25)%22%2F%3E%3Cstop%20offset%3D%22100%25%22%20stop-color%3D%22hsl(302%2042%25%2016%25)%22%2F%3E%3C%2FlinearGradient%3E%3ClinearGradient%20id%3D%22shine%22%20x1%3D%220%25%22%20y1%3D%220%25%22%20x2%3D%22100%25%22%20y2%3D%220%25%22%3E%3Cstop%20offset%3D%220%25%22%20stop-color%3D%22hsla(0%200%25%20100%25%20%2F%200.08)%22%2F%3E%3Cstop%20offset%3D%22100%25%22%20stop-color%3D%22hsla(0%200%25%20100%25%20%2F%200)%22%2F%3E%3C%2FlinearGradient%3E%3C%2Fdefs%3E%3Crect%20width%3D%22320%22%20height%3D%22180%22%20fill%3D%22url(%23g)%22%2F%3E%3Crect%20x%3D%220%22%20y%3D%220%22%20width%3D%22320%22%20height%3D%22180%22%20fill%3D%22url(%23shine)%22%2F%3E%3Crect%20x%3D%2218%22%20y%3D%2218%22%20width%3D%22284%22%20height%3D%22144%22%20rx%3D%2218%22%20fill%3D%22hsla(228%2012%25%2010%25%20%2F%200.18)%22%20stroke%3D%22hsla(0%200%25%20100%25%20%2F%200.14)%22%2F%3E%3Cpath%20d%3D%22M20%20120%20Q90%2055%20150%2096%20T300%2078%22%20fill%3D%22none%22%20stroke%3D%22hsla(0%200%25%20100%25%20%2F%200.18)%22%20stroke-width%3D%228%22%20stroke-linecap%3D%22round%22%2F%3E%3Cpath%20d%3D%22M12%20136%20Q96%20100%20160%20118%20T310%20110%22%20fill%3D%22none%22%20stroke%3D%22hsla(0%200%25%20100%25%20%2F%200.11)%22%20stroke-width%3D%2214%22%20stroke-linecap%3D%22round%22%2F%3E%3Ctext%20x%3D%2228%22%20y%3D%2244%22%20fill%3D%22rgba(255%2C255%2C255%2C0.92)%22%20font-size%3D%2222%22%20font-family%3D%22Inter%2Csystem-ui%2Csans-serif%22%20font-weight%3D%22700%22%3EE1%3C%2Ftext%3E%3Ctext%20x%3D%2228%22%20y%3D%22154%22%20fill%3D%22rgba(255%2C255%2C255%2C0.84)%22%20font-size%3D%2214%22%20font-family%3D%22Inter%2Csystem-ui%2Csans-serif%22%3E82f%3C%2Ftext%3E%3Ctext%20x%3D%22250%22%20y%3D%22154%22%20fill%3D%22rgba(255%2C255%2C255%2C0.7)%22%20font-size%3D%2212%22%20font-family%3D%22Inter%2Csystem-ui%2Csans-serif%22%3E%2540129%3C%2Ftext%3E%3C%2Fsvg%3E" alt="E1 thumbnail" class="fragment-tile__thumb"><div class="fragment-tile__shade"></div><span class="fragment-tile__id">E1</span><span class="fragment-tile__duration">3.4s</span><div class="fragment-tile__actions"><button type="button" class="tile-action" data-action-button="true" aria-label="Play E1">Play</button><button type="button" class="tile-action" data-action-button="true" aria-label="Exclude E1">Exclude</button><button type="button" class="tile-action" data-action-button="true" aria-label="Move E1 to Hold Area">Hold</button></div></div></div></div></section></div></section><section class="panel-card" data-smoke-component="ReservedFragments"><div class="panel-header"><span class="eyebrow">Component Smoke</span><span class="panel-chip">ReservedFragments</span></div><div style="margin-top: 12px;"><section class="workspace-section workspace-section--hold"><div class="section-header"><div><span class="eyebrow">Hold Area</span><h3>Free Placement Board</h3></div><span class="panel-chip">Exact drop positions preserved</span></div><div class="hold-board"><div class="hold-board__item" style="left: 24px; top: 24px;"><button type="button" class="hold-board__replace-handle" draggable="true" data-action-button="true" aria-label="Drag F1 to replace an edit fragment">Replace</button><div class="fragment-tile fragment-tile--reserved is-selected" role="button" tabindex="0" aria-selected="true" data-fragment-id="F1" style="width: 48px; height: 56px; transform: scale(1.04); opacity: 1; z-index: 30;"><img src="data:image/svg+xml;charset=UTF-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%20320%20180%22%20preserveAspectRatio%3D%22none%22%3E%3Cdefs%3E%3ClinearGradient%20id%3D%22g%22%20x1%3D%220%25%22%20y1%3D%220%25%22%20x2%3D%22100%25%22%20y2%3D%22100%25%22%3E%3Cstop%20offset%3D%220%25%22%20stop-color%3D%22hsl(50%2058%25%2028%25)%22%2F%3E%3Cstop%20offset%3D%22100%25%22%20stop-color%3D%22hsl(72%2042%25%2016%25)%22%2F%3E%3C%2FlinearGradient%3E%3ClinearGradient%20id%3D%22shine%22%20x1%3D%220%25%22%20y1%3D%220%25%22%20x2%3D%22100%25%22%20y2%3D%220%25%22%3E%3Cstop%20offset%3D%220%25%22%20stop-color%3D%22hsla(0%200%25%20100%25%20%2F%200.08)%22%2F%3E%3Cstop%20offset%3D%22100%25%22%20stop-color%3D%22hsla(0%200%25%20100%25%20%2F%200)%22%2F%3E%3C%2FlinearGradient%3E%3C%2Fdefs%3E%3Crect%20width%3D%22320%22%20height%3D%22180%22%20fill%3D%22url(%23g)%22%2F%3E%3Crect%20x%3D%220%22%20y%3D%220%22%20width%3D%22320%22%20height%3D%22180%22%20fill%3D%22url(%23shine)%22%2F%3E%3Crect%20x%3D%2218%22%20y%3D%2218%22%20width%3D%22284%22%20height%3D%22144%22%20rx%3D%2218%22%20fill%3D%22hsla(228%2012%25%2010%25%20%2F%200.18)%22%20stroke%3D%22hsla(0%200%25%20100%25%20%2F%200.14)%22%2F%3E%3Cpath%20d%3D%22M20%20120%20Q90%2055%20150%2096%20T300%2078%22%20fill%3D%22none%22%20stroke%3D%22hsla(0%200%25%20100%25%20%2F%200.18)%22%20stroke-width%3D%228%22%20stroke-linecap%3D%22round%22%2F%3E%3Cpath%20d%3D%22M12%20136%20Q96%20100%20160%20118%20T310%20110%22%20fill%3D%22none%22%20stroke%3D%22hsla(0%200%25%20100%25%20%2F%200.11)%22%20stroke-width%3D%2214%22%20stroke-linecap%3D%22round%22%2F%3E%3Ctext%20x%3D%2228%22%20y%3D%2244%22%20fill%3D%22rgba(255%2C255%2C255%2C0.92)%22%20font-size%3D%2222%22%20font-family%3D%22Inter%2Csystem-ui%2Csans-serif%22%20font-weight%3D%22700%22%3EF1%3C%2Ftext%3E%3Ctext%20x%3D%2228%22%20y%3D%22154%22%20fill%3D%22rgba(255%2C255%2C255%2C0.84)%22%20font-size%3D%2214%22%20font-family%3D%22Inter%2Csystem-ui%2Csans-serif%22%3E60f%3C%2Ftext%3E%3Ctext%20x%3D%22250%22%20y%3D%22154%22%20fill%3D%22rgba(255%2C255%2C255%2C0.7)%22%20font-size%3D%2212%22%20font-family%3D%22Inter%2Csystem-ui%2Csans-serif%22%3E%2540150%3C%2Ftext%3E%3C%2Fsvg%3E" alt="F1 thumbnail" class="fragment-tile__thumb"><div class="fragment-tile__shade"></div><span class="fragment-tile__id">F1</span><span class="fragment-tile__duration">2.5s</span><div class="fragment-tile__actions"><button type="button" class="tile-action" data-action-button="true" aria-label="Play F1">Play</button><button type="button" class="tile-action" data-action-button="true" aria-label="Restore F1 to edit structure">Restore</button></div></div></div><div class="hold-board__item" style="left: 148px; top: 48px;"><button type="button" class="hold-board__replace-handle" draggable="true" data-action-button="true" aria-label="Drag G2 to replace an edit fragment">Replace</button><div class="fragment-tile fragment-tile--reserved" role="button" tabindex="0" aria-selected="false" data-fragment-id="G2" style="width: 48px; height: 56px; transform: scale(1); opacity: 1;"><img src="data:image/svg+xml;charset=UTF-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%20320%20180%22%20preserveAspectRatio%3D%22none%22%3E%3Cdefs%3E%3ClinearGradient%20id%3D%22g%22%20x1%3D%220%25%22%20y1%3D%220%25%22%20x2%3D%22100%25%22%20y2%3D%22100%25%22%3E%3Cstop%20offset%3D%220%25%22%20stop-color%3D%22hsl(320%2058%25%2028%25)%22%2F%3E%3Cstop%20offset%3D%22100%25%22%20stop-color%3D%22hsl(342%2042%25%2016%25)%22%2F%3E%3C%2FlinearGradient%3E%3ClinearGradient%20id%3D%22shine%22%20x1%3D%220%25%22%20y1%3D%220%25%22%20x2%3D%22100%25%22%20y2%3D%220%25%22%3E%3Cstop%20offset%3D%220%25%22%20stop-color%3D%22hsla(0%200%25%20100%25%20%2F%200.08)%22%2F%3E%3Cstop%20offset%3D%22100%25%22%20stop-color%3D%22hsla(0%200%25%20100%25%20%2F%200)%22%2F%3E%3C%2FlinearGradient%3E%3C%2Fdefs%3E%3Crect%20width%3D%22320%22%20height%3D%22180%22%20fill%3D%22url(%23g)%22%2F%3E%3Crect%20x%3D%220%22%20y%3D%220%22%20width%3D%22320%22%20height%3D%22180%22%20fill%3D%22url(%23shine)%22%2F%3E%3Crect%20x%3D%2218%22%20y%3D%2218%22%20width%3D%22284%22%20height%3D%22144%22%20rx%3D%2218%22%20fill%3D%22hsla(228%2012%25%2010%25%20%2F%200.18)%22%20stroke%3D%22hsla(0%200%25%20100%25%20%2F%200.14)%22%2F%3E%3Cpath%20d%3D%22M20%20120%20Q90%2055%20150%2096%20T300%2078%22%20fill%3D%22none%22%20stroke%3D%22hsla(0%200%25%20100%25%20%2F%200.18)%22%20stroke-width%3D%228%22%20stroke-linecap%3D%22round%22%2F%3E%3Cpath%20d%3D%22M12%20136%20Q96%20100%20160%20118%20T310%20110%22%20fill%3D%22none%22%20stroke%3D%22hsla(0%200%25%20100%25%20%2F%200.11)%22%20stroke-width%3D%2214%22%20stroke-linecap%3D%22round%22%2F%3E%3Ctext%20x%3D%2228%22%20y%3D%2244%22%20fill%3D%22rgba(255%2C255%2C255%2C0.92)%22%20font-size%3D%2222%22%20font-family%3D%22Inter%2Csystem-ui%2Csans-serif%22%20font-weight%3D%22700%22%3EG2%3C%2Ftext%3E%3Ctext%20x%3D%2228%22%20y%3D%22154%22%20fill%3D%22rgba(255%2C255%2C255%2C0.84)%22%20font-size%3D%2214%22%20font-family%3D%22Inter%2Csystem-ui%2Csans-serif%22%3E54f%3C%2Ftext%3E%3Ctext%20x%3D%22250%22%20y%3D%22154%22%20fill%3D%22rgba(255%2C255%2C255%2C0.7)%22%20font-size%3D%2212%22%20font-family%3D%22Inter%2Csystem-ui%2Csans-serif%22%3E%2540237%3C%2Ftext%3E%3C%2Fsvg%3E" alt="G2 thumbnail" class="fragment-tile__thumb"><div class="fragment-tile__shade"></div><span class="fragment-tile__id">G2</span><span class="fragment-tile__duration">2.3s</span><div class="fragment-tile__actions"><button type="button" class="tile-action" data-action-button="true" aria-label="Play G2">Play</button><button type="button" class="tile-action" data-action-button="true" aria-label="Restore G2 to edit structure">Restore</button></div></div></div></div></section></div></section><section class="panel-card" data-smoke-component="BoundaryPrecisionOverlay"><div class="panel-header"><span class="eyebrow">Component Smoke</span><span class="panel-chip">BoundaryPrecisionOverlay</span></div><div style="margin-top: 12px;"></div></section></div></div>
+  <script>
+    window.__CCUT_COMPONENT_SMOKE__ = {
+      consoleErrorCount: 0,
+      pageErrorCount: 0,
+      consoleErrors: [],
+      pageErrors: [],
+      components: {}
+    };
+
+    (function (state) {
+      var originalConsoleError = console.error.bind(console);
+      console.error = function () {
+        state.consoleErrorCount += 1;
+        state.consoleErrors.push(Array.prototype.map.call(arguments, function (value) {
+          return typeof value === 'string' ? value : String(value);
+        }).join(' '));
+        return originalConsoleError.apply(console, arguments);
+      };
+
+      window.addEventListener('error', function (event) {
+        state.pageErrorCount += 1;
+        state.pageErrors.push(event.message || 'Unknown page error');
+      });
+
+      window.addEventListener('unhandledrejection', function (event) {
+        state.pageErrorCount += 1;
+        state.pageErrors.push(event.reason && event.reason.message ? event.reason.message : String(event.reason));
+      });
+    })(window.__CCUT_COMPONENT_SMOKE__);
+  </script>
+  <script id="component-smoke-json" type="application/json">{"pass":true,"consoleErrorCount":0,"pageErrorCount":0,"consoleErrors":[],"pageErrors":[],"components":{"FragmentTile":{"status":"pass"},"OriginalPanorama":{"status":"pass"},"FragmentMap":{"status":"pass"},"ReservedFragments":{"status":"pass"},"BoundaryPrecisionOverlay":{"status":"pass"}}}</script>
+  <script type="module" src="/src/smoke/componentSmoke.tsx?t=1773933073975"></script>
+
+
+
+<div class="precision-overlay" role="dialog" aria-modal="false" aria-label="Precision Boundary Editor" style="top: 214px; left: 288px;"><div class="precision-overlay__header"><div class="precision-overlay__meta"><span class="eyebrow">Precision Boundary Editor</span><span class="precision-overlay__scope">Same-source local correction · 3 fragments</span></div><button type="button" class="ghost-button">Close</button></div><div class="precision-overlay__chain"><div class="precision-overlay__segment"><div class="fragment-tile fragment-tile--edit" role="button" tabindex="0" aria-selected="false" aria-expanded="false" data-fragment-id="C1" style="width: 48px; height: 72px; transform: scale(1); opacity: 1;"><img src="data:image/svg+xml;charset=UTF-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%20320%20180%22%20preserveAspectRatio%3D%22none%22%3E%3Cdefs%3E%3ClinearGradient%20id%3D%22g%22%20x1%3D%220%25%22%20y1%3D%220%25%22%20x2%3D%22100%25%22%20y2%3D%22100%25%22%3E%3Cstop%20offset%3D%220%25%22%20stop-color%3D%22hsl(120%2058%25%2028%25)%22%2F%3E%3Cstop%20offset%3D%22100%25%22%20stop-color%3D%22hsl(142%2042%25%2016%25)%22%2F%3E%3C%2FlinearGradient%3E%3ClinearGradient%20id%3D%22shine%22%20x1%3D%220%25%22%20y1%3D%220%25%22%20x2%3D%22100%25%22%20y2%3D%220%25%22%3E%3Cstop%20offset%3D%220%25%22%20stop-color%3D%22hsla(0%200%25%20100%25%20%2F%200.08)%22%2F%3E%3Cstop%20offset%3D%22100%25%22%20stop-color%3D%22hsla(0%200%25%20100%25%20%2F%200)%22%2F%3E%3C%2FlinearGradient%3E%3C%2Fdefs%3E%3Crect%20width%3D%22320%22%20height%3D%22180%22%20fill%3D%22url(%23g)%22%2F%3E%3Crect%20x%3D%220%22%20y%3D%220%22%20width%3D%22320%22%20height%3D%22180%22%20fill%3D%22url(%23shine)%22%2F%3E%3Crect%20x%3D%2218%22%20y%3D%2218%22%20width%3D%22284%22%20height%3D%22144%22%20rx%3D%2218%22%20fill%3D%22hsla(228%2012%25%2010%25%20%2F%200.18)%22%20stroke%3D%22hsla(0%200%25%20100%25%20%2F%200.14)%22%2F%3E%3Cpath%20d%3D%22M20%20120%20Q90%2055%20150%2096%20T300%2078%22%20fill%3D%22none%22%20stroke%3D%22hsla(0%200%25%20100%25%20%2F%200.18)%22%20stroke-width%3D%228%22%20stroke-linecap%3D%22round%22%2F%3E%3Cpath%20d%3D%22M12%20136%20Q96%20100%20160%20118%20T310%20110%22%20fill%3D%22none%22%20stroke%3D%22hsla(0%200%25%20100%25%20%2F%200.11)%22%20stroke-width%3D%2214%22%20stroke-linecap%3D%22round%22%2F%3E%3Ctext%20x%3D%2228%22%20y%3D%2244%22%20fill%3D%22rgba(255%2C255%2C255%2C0.92)%22%20font-size%3D%2222%22%20font-family%3D%22Inter%2Csystem-ui%2Csans-serif%22%20font-weight%3D%22700%22%3EC1%3C%2Ftext%3E%3Ctext%20x%3D%2228%22%20y%3D%22154%22%20fill%3D%22rgba(255%2C255%2C255%2C0.84)%22%20font-size%3D%2214%22%20font-family%3D%22Inter%2Csystem-ui%2Csans-serif%22%3E68f%3C%2Ftext%3E%3Ctext%20x%3D%22250%22%20y%3D%22154%22%20fill%3D%22rgba(255%2C255%2C255%2C0.7)%22%20font-size%3D%2212%22%20font-family%3D%22Inter%2Csystem-ui%2Csans-serif%22%3E%254098%3C%2Ftext%3E%3C%2Fsvg%3E" alt="C1 thumbnail" class="fragment-tile__thumb"><div class="fragment-tile__shade"></div><span class="fragment-tile__id">C1</span><span class="fragment-tile__duration">2.8s</span><div class="fragment-tile__actions"><button type="button" class="tile-action" data-action-button="true" aria-label="Play C1">Play</button></div></div><button type="button" class="precision-overlay__boundary is-inactive" aria-pressed="false" aria-label="Select internal boundary between C1 and C2"></button></div><div class="precision-overlay__segment"><div class="fragment-tile fragment-tile--edit is-excluded" role="button" tabindex="0" aria-selected="false" aria-expanded="false" data-fragment-id="C2" style="width: 48px; height: 72px; transform: scale(1); opacity: 1;"><img src="data:image/svg+xml;charset=UTF-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%20320%20180%22%20preserveAspectRatio%3D%22none%22%3E%3Cdefs%3E%3ClinearGradient%20id%3D%22g%22%20x1%3D%220%25%22%20y1%3D%220%25%22%20x2%3D%22100%25%22%20y2%3D%22100%25%22%3E%3Cstop%20offset%3D%220%25%22%20stop-color%3D%22hsl(120%2058%25%2028%25)%22%2F%3E%3Cstop%20offset%3D%22100%25%22%20stop-color%3D%22hsl(142%2042%25%2016%25)%22%2F%3E%3C%2FlinearGradient%3E%3ClinearGradient%20id%3D%22shine%22%20x1%3D%220%25%22%20y1%3D%220%25%22%20x2%3D%22100%25%22%20y2%3D%220%25%22%3E%3Cstop%20offset%3D%220%25%22%20stop-color%3D%22hsla(0%200%25%20100%25%20%2F%200.08)%22%2F%3E%3Cstop%20offset%3D%22100%25%22%20stop-color%3D%22hsla(0%200%25%20100%25%20%2F%200)%22%2F%3E%3C%2FlinearGradient%3E%3C%2Fdefs%3E%3Crect%20width%3D%22320%22%20height%3D%22180%22%20fill%3D%22url(%23g)%22%2F%3E%3Crect%20x%3D%220%22%20y%3D%220%22%20width%3D%22320%22%20height%3D%22180%22%20fill%3D%22url(%23shine)%22%2F%3E%3Crect%20x%3D%2218%22%20y%3D%2218%22%20width%3D%22284%22%20height%3D%22144%22%20rx%3D%2218%22%20fill%3D%22hsla(228%2012%25%2010%25%20%2F%200.18)%22%20stroke%3D%22hsla(0%200%25%20100%25%20%2F%200.14)%22%2F%3E%3Cpath%20d%3D%22M20%20120%20Q90%2055%20150%2096%20T300%2078%22%20fill%3D%22none%22%20stroke%3D%22hsla(0%200%25%20100%25%20%2F%200.18)%22%20stroke-width%3D%228%22%20stroke-linecap%3D%22round%22%2F%3E%3Cpath%20d%3D%22M12%20136%20Q96%20100%20160%20118%20T310%20110%22%20fill%3D%22none%22%20stroke%3D%22hsla(0%200%25%20100%25%20%2F%200.11)%22%20stroke-width%3D%2214%22%20stroke-linecap%3D%22round%22%2F%3E%3Ctext%20x%3D%2228%22%20y%3D%2244%22%20fill%3D%22rgba(255%2C255%2C255%2C0.92)%22%20font-size%3D%2222%22%20font-family%3D%22Inter%2Csystem-ui%2Csans-serif%22%20font-weight%3D%22700%22%3EC2%3C%2Ftext%3E%3Ctext%20x%3D%2228%22%20y%3D%22154%22%20fill%3D%22rgba(255%2C255%2C255%2C0.84)%22%20font-size%3D%2214%22%20font-family%3D%22Inter%2Csystem-ui%2Csans-serif%22%3E34f%3C%2Ftext%3E%3Ctext%20x%3D%22250%22%20y%3D%22154%22%20fill%3D%22rgba(255%2C255%2C255%2C0.7)%22%20font-size%3D%2212%22%20font-family%3D%22Inter%2Csystem-ui%2Csans-serif%22%3E%2540149%3C%2Ftext%3E%3C%2Fsvg%3E" alt="C2 thumbnail" class="fragment-tile__thumb"><div class="fragment-tile__shade"></div><span class="fragment-tile__id">C2</span><span class="fragment-tile__duration">1.4s</span><span class="fragment-tile__status">Excluded</span><div class="fragment-tile__actions"><button type="button" class="tile-action" data-action-button="true" aria-label="Play C2">Play</button></div></div><button type="button" class="precision-overlay__boundary is-inactive" aria-pressed="false" aria-label="Select internal boundary between C2 and C3"></button></div><div class="precision-overlay__segment"><div class="fragment-tile fragment-tile--edit" role="button" tabindex="0" aria-selected="false" aria-expanded="false" data-fragment-id="C3" style="width: 50.4px; height: 72px; transform: scale(1); opacity: 1;"><img src="data:image/svg+xml;charset=UTF-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%20320%20180%22%20preserveAspectRatio%3D%22none%22%3E%3Cdefs%3E%3ClinearGradient%20id%3D%22g%22%20x1%3D%220%25%22%20y1%3D%220%25%22%20x2%3D%22100%25%22%20y2%3D%22100%25%22%3E%3Cstop%20offset%3D%220%25%22%20stop-color%3D%22hsl(120%2058%25%2028%25)%22%2F%3E%3Cstop%20offset%3D%22100%25%22%20stop-color%3D%22hsl(142%2042%25%2016%25)%22%2F%3E%3C%2FlinearGradient%3E%3ClinearGradient%20id%3D%22shine%22%20x1%3D%220%25%22%20y1%3D%220%25%22%20x2%3D%22100%25%22%20y2%3D%220%25%22%3E%3Cstop%20offset%3D%220%25%22%20stop-color%3D%22hsla(0%200%25%20100%25%20%2F%200.08)%22%2F%3E%3Cstop%20offset%3D%22100%25%22%20stop-color%3D%22hsla(0%200%25%20100%25%20%2F%200)%22%2F%3E%3C%2FlinearGradient%3E%3C%2Fdefs%3E%3Crect%20width%3D%22320%22%20height%3D%22180%22%20fill%3D%22url(%23g)%22%2F%3E%3Crect%20x%3D%220%22%20y%3D%220%22%20width%3D%22320%22%20height%3D%22180%22%20fill%3D%22url(%23shine)%22%2F%3E%3Crect%20x%3D%2218%22%20y%3D%2218%22%20width%3D%22284%22%20height%3D%22144%22%20rx%3D%2218%22%20fill%3D%22hsla(228%2012%25%2010%25%20%2F%200.18)%22%20stroke%3D%22hsla(0%200%25%20100%25%20%2F%200.14)%22%2F%3E%3Cpath%20d%3D%22M20%20120%20Q90%2055%20150%2096%20T300%2078%22%20fill%3D%22none%22%20stroke%3D%22hsla(0%200%25%20100%25%20%2F%200.18)%22%20stroke-width%3D%228%22%20stroke-linecap%3D%22round%22%2F%3E%3Cpath%20d%3D%22M12%20136%20Q96%20100%20160%20118%20T310%20110%22%20fill%3D%22none%22%20stroke%3D%22hsla(0%200%25%20100%25%20%2F%200.11)%22%20stroke-width%3D%2214%22%20stroke-linecap%3D%22round%22%2F%3E%3Ctext%20x%3D%2228%22%20y%3D%2244%22%20fill%3D%22rgba(255%2C255%2C255%2C0.92)%22%20font-size%3D%2222%22%20font-family%3D%22Inter%2Csystem-ui%2Csans-serif%22%20font-weight%3D%22700%22%3EC3%3C%2Ftext%3E%3Ctext%20x%3D%2228%22%20y%3D%22154%22%20fill%3D%22rgba(255%2C255%2C255%2C0.84)%22%20font-size%3D%2214%22%20font-family%3D%22Inter%2Csystem-ui%2Csans-serif%22%3E72f%3C%2Ftext%3E%3Ctext%20x%3D%22250%22%20y%3D%22154%22%20fill%3D%22rgba(255%2C255%2C255%2C0.7)%22%20font-size%3D%2212%22%20font-family%3D%22Inter%2Csystem-ui%2Csans-serif%22%3E%2540202%3C%2Ftext%3E%3C%2Fsvg%3E" alt="C3 thumbnail" class="fragment-tile__thumb"><div class="fragment-tile__shade"></div><span class="fragment-tile__id">C3</span><span class="fragment-tile__duration">3.0s</span><div class="fragment-tile__actions"><button type="button" class="tile-action" data-action-button="true" aria-label="Play C3">Play</button></div></div></div></div><div class="precision-overlay__footer"><span class="precision-overlay__hint">Select one internal boundary to edit. Cross-source junctions are reveal-only.</span><div class="precision-overlay__actions"><button type="button" class="ghost-button">Prev Boundary</button><button type="button" class="ghost-button">Next Boundary</button><button type="button" class="ghost-button" disabled="">Reset Boundary</button><button type="button" class="ghost-button" disabled="">Reset All</button><button type="button" class="ghost-button">Cancel</button><button type="button" class="ghost-button ghost-button--primary">Apply</button></div></div><div class="precision-overlay__footer"><span>Hidden chain preserved. Minimum fragment duration 15f.</span></div></div></body></html>
+

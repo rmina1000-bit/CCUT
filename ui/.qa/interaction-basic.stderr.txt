@@ -1,0 +1,8 @@
+Created TensorFlow Lite XNNPACK delegate for CPU.
+[19760:18020:0318/221629.996:ERROR:google_apis\gcm\engine\registration_request.cc:291] Registration response error message: DEPRECATED_ENDPO[13256:17412:0319/011539.834:ERROR:google_apis\gcm\engine\connection_factory_impl.cc:483] ConnectionHandler failed with net error: -2
+[13256:17412:0319/074233.760:ERROR:google_apis\gcm\engine\connection_factory_impl.cc:483] ConnectionHandler failed with net error: -2
+[13256:14840:0319/222559.801:ERROR:components\device_event_log\device_event_log_impl.cc:202] [22:25:59.798] USB: usb_service_win.cc:104 SetupDiGetDeviceProperty({{A45C254E-DF1C-4EFD-8020-67D146A850E0}, 6}) failed: 요소가 없습니다. (0x490)
+[13256:17412:0319/222600.591:ERROR:google_apis\gcm\engine\connection_factory_impl.cc:434] Failed to connect to MCS endpoint with error -105
+[13256:17412:0320/030650.274:ERROR:google_apis\gcm\engine\connection_factory_impl.cc:483] ConnectionHandler failed with net error: -2
+[13256:17412:0320/040724.125:ERROR:google_apis\gcm\engine\connection_factory_impl.cc:483] ConnectionHandler failed with net error: -2
+[13256:17412:0320/060616.522:ERROR:google_apis\gcm\engine\connection_factory_impl.cc:434] Failed to connect to MCS endpoint with error -105

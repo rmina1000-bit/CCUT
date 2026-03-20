@@ -1,17 +1,75 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>CCUT Workspace</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link
+    href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600&family=Cormorant+Garamond:wght@400;500;600&display=swap"
+    rel="stylesheet">
   <style>
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-    html, body, #root { width: 100%; height: 100%; overflow: hidden; background: #0d1117; }
+    *,
+    *::before,
+    *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    html,
+    body,
+    #root {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: #0d1117;
+    }
   </style>
-  <script type="module" crossorigin src="/assets/index-4hEXeuMi.js"></script>
-  <link rel="stylesheet" crossorigin href="/assets/index-EhU1zJnu.css">
+  <script type="module" crossorigin src="/assets/index-DRPgLHa2.js"></script>
+  <link rel="stylesheet" crossorigin href="/assets/index-CXkKpR0k.css">
 </head>
+
 <body>
   <div id="root"></div>
+  <script>
+    (function () {
+      var params = new URLSearchParams(window.location.search);
+      if (!params.has('__sanity')) {
+        return;
+      }
+
+      var state = {
+        consoleErrorCount: 0,
+        pageErrorCount: 0,
+        consoleErrors: [],
+        pageErrors: []
+      };
+
+      window.__CCUT_SANITY__ = state;
+
+      var originalConsoleError = console.error.bind(console);
+      console.error = function () {
+        state.consoleErrorCount += 1;
+        state.consoleErrors.push(Array.prototype.map.call(arguments, function (value) {
+          return typeof value === 'string' ? value : String(value);
+        }).join(' '));
+        return originalConsoleError.apply(console, arguments);
+      };
+
+      window.addEventListener('error', function (event) {
+        state.pageErrorCount += 1;
+        state.pageErrors.push(event.message || 'Unknown page error');
+      });
+
+      window.addEventListener('unhandledrejection', function (event) {
+        state.pageErrorCount += 1;
+        state.pageErrors.push(event.reason && event.reason.message ? event.reason.message : String(event.reason));
+      });
+    })();
+  </script>
 </body>
+
 </html>

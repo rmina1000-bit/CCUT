@@ -4,15 +4,25 @@
   "private": true,
   "scripts": {
     "dev": "vite",
+    "typecheck": "tsc --noEmit",
+    "lint": "node ./scripts/run-lint-if-available.cjs",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "verify:gates": "node ./scripts/run-build-gates.cjs",
+    "smoke:mount": "powershell -ExecutionPolicy Bypass -File .\\scripts\\run-component-smoke.ps1",
+    "sanity:browser": "powershell -ExecutionPolicy Bypass -File .\\scripts\\run-browser-sanity.ps1",
+    "spec:interaction-basic": "powershell -ExecutionPolicy Bypass -File .\\scripts\\run-interaction-basic.ps1",
+    "verify:phase": "npm run verify:gates && npm run smoke:mount && npm run sanity:browser"
   },
   "dependencies": {
     "react": "^18.2.0",
     "react-dom": "^18.2.0"
   },
   "devDependencies": {
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^4.2.0",
+    "typescript": "^5.9.3",
     "vite": "^5.0.0"
   }
 }

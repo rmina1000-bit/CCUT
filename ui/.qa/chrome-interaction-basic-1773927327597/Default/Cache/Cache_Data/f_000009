@@ -1,0 +1,473 @@
+import { createHotContext as __vite__createHotContext } from "/@vite/client";import.meta.hot = __vite__createHotContext("/src/components/CenterPanel.tsx");import __vite__cjsImport0_react_jsxDevRuntime from "/node_modules/.vite/deps/react_jsx-dev-runtime.js?v=4bc04a86"; const jsxDEV = __vite__cjsImport0_react_jsxDevRuntime["jsxDEV"];
+import * as RefreshRuntime from "/@react-refresh";
+const inWebWorker = typeof WorkerGlobalScope !== "undefined" && self instanceof WorkerGlobalScope;
+let prevRefreshReg;
+let prevRefreshSig;
+if (import.meta.hot && !inWebWorker) {
+  if (!window.$RefreshReg$) {
+    throw new Error(
+      "@vitejs/plugin-react can't detect preamble. Something is wrong."
+    );
+  }
+  prevRefreshReg = window.$RefreshReg$;
+  prevRefreshSig = window.$RefreshSig$;
+  window.$RefreshReg$ = RefreshRuntime.getRefreshReg("D:/CCUT 1.0.2/ui/src/components/CenterPanel.tsx");
+  window.$RefreshSig$ = RefreshRuntime.createSignatureFunctionForTransform;
+}
+import { formatDuration } from "/src/utils/fragmentUtils.ts?t=1773854484293";
+const TIME_LENS_LABELS = ["Lead-in", "Beat", "Pivot", "Carry", "Resolve"];
+function buildTimeLensSlices(fragment) {
+  const sliceCount = Math.min(TIME_LENS_LABELS.length, Math.max(4, Math.ceil(fragment.duration / 18)));
+  const baseDuration = Math.floor(fragment.duration / sliceCount);
+  const remainder = fragment.duration % sliceCount;
+  const center = (sliceCount - 1) / 2;
+  let cursor = fragment.start_frame;
+  return Array.from({ length: sliceCount }, (_, index) => {
+    const duration = baseDuration + (index < remainder ? 1 : 0);
+    const startFrame = cursor;
+    const endFrame = cursor + duration;
+    cursor = endFrame;
+    return {
+      id: `${fragment.fragment_id}-lens-${index + 1}`,
+      label: TIME_LENS_LABELS[index] || `Window ${index + 1}`,
+      startFrame,
+      endFrame,
+      duration,
+      emphasis: Math.max(0.34, 1 - Math.abs(index - center) / Math.max(1, center + 0.5))
+    };
+  });
+}
+function MetricBar({ label, value }) {
+  return /* @__PURE__ */ jsxDEV("div", { className: "metric-row", children: [
+    /* @__PURE__ */ jsxDEV("span", { children: label }, void 0, false, {
+      fileName: "D:/CCUT 1.0.2/ui/src/components/CenterPanel.tsx",
+      lineNumber: 71,
+      columnNumber: 7
+    }, this),
+    /* @__PURE__ */ jsxDEV("div", { className: "metric-row__bar", children: /* @__PURE__ */ jsxDEV("div", { style: { width: `${Math.round(value * 100)}%` } }, void 0, false, {
+      fileName: "D:/CCUT 1.0.2/ui/src/components/CenterPanel.tsx",
+      lineNumber: 73,
+      columnNumber: 9
+    }, this) }, void 0, false, {
+      fileName: "D:/CCUT 1.0.2/ui/src/components/CenterPanel.tsx",
+      lineNumber: 72,
+      columnNumber: 7
+    }, this)
+  ] }, void 0, true, {
+    fileName: "D:/CCUT 1.0.2/ui/src/components/CenterPanel.tsx",
+    lineNumber: 70,
+    columnNumber: 5
+  }, this);
+}
+_c = MetricBar;
+export function CenterPanel({
+  sources,
+  selectedFragment,
+  activeSource,
+  focusExpandedId,
+  timeLensId,
+  intelligenceOn,
+  visibleCount
+}) {
+  const activeSourceMeta = sources.find((source) => source.id === activeSource) || sources[0];
+  const isTimeLensActive = !!selectedFragment && timeLensId === selectedFragment.fragment_id;
+  const timeLensSlices = selectedFragment && isTimeLensActive ? buildTimeLensSlices(selectedFragment) : [];
+  return /* @__PURE__ */ jsxDEV("section", { className: "center-panel", children: [
+    /* @__PURE__ */ jsxDEV("div", { className: "panel-card panel-card--summary", children: [
+      /* @__PURE__ */ jsxDEV("div", { className: "panel-header", children: [
+        /* @__PURE__ */ jsxDEV("span", { className: "eyebrow", children: "Source Summary" }, void 0, false, {
+          fileName: "D:/CCUT 1.0.2/ui/src/components/CenterPanel.tsx",
+          lineNumber: 96,
+          columnNumber: 11
+        }, this),
+        /* @__PURE__ */ jsxDEV("span", { className: "panel-chip", children: [
+          "Visible ",
+          visibleCount
+        ] }, void 0, true, {
+          fileName: "D:/CCUT 1.0.2/ui/src/components/CenterPanel.tsx",
+          lineNumber: 97,
+          columnNumber: 11
+        }, this)
+      ] }, void 0, true, {
+        fileName: "D:/CCUT 1.0.2/ui/src/components/CenterPanel.tsx",
+        lineNumber: 95,
+        columnNumber: 9
+      }, this),
+      /* @__PURE__ */ jsxDEV("div", { className: "summary-grid", children: sources.map(
+        (source) => /* @__PURE__ */ jsxDEV("div", { className: `summary-card${source.id === activeSource ? " is-active" : ""}`, children: [
+          /* @__PURE__ */ jsxDEV("span", { className: "summary-card__id", children: source.label }, void 0, false, {
+            fileName: "D:/CCUT 1.0.2/ui/src/components/CenterPanel.tsx",
+            lineNumber: 102,
+            columnNumber: 15
+          }, this),
+          /* @__PURE__ */ jsxDEV("strong", { children: [
+            source.totalFrames,
+            "f"
+          ] }, void 0, true, {
+            fileName: "D:/CCUT 1.0.2/ui/src/components/CenterPanel.tsx",
+            lineNumber: 103,
+            columnNumber: 15
+          }, this),
+          /* @__PURE__ */ jsxDEV("p", { children: source.description }, void 0, false, {
+            fileName: "D:/CCUT 1.0.2/ui/src/components/CenterPanel.tsx",
+            lineNumber: 104,
+            columnNumber: 15
+          }, this)
+        ] }, source.id, true, {
+          fileName: "D:/CCUT 1.0.2/ui/src/components/CenterPanel.tsx",
+          lineNumber: 101,
+          columnNumber: 11
+        }, this)
+      ) }, void 0, false, {
+        fileName: "D:/CCUT 1.0.2/ui/src/components/CenterPanel.tsx",
+        lineNumber: 99,
+        columnNumber: 9
+      }, this)
+    ] }, void 0, true, {
+      fileName: "D:/CCUT 1.0.2/ui/src/components/CenterPanel.tsx",
+      lineNumber: 94,
+      columnNumber: 7
+    }, this),
+    /* @__PURE__ */ jsxDEV("div", { className: "panel-card panel-card--detail", children: [
+      /* @__PURE__ */ jsxDEV("div", { className: "panel-header", children: [
+        /* @__PURE__ */ jsxDEV("span", { className: "eyebrow", children: "Selected Fragment Detail" }, void 0, false, {
+          fileName: "D:/CCUT 1.0.2/ui/src/components/CenterPanel.tsx",
+          lineNumber: 112,
+          columnNumber: 11
+        }, this),
+        /* @__PURE__ */ jsxDEV("span", { className: "panel-chip", children: timeLensId ? "Time Lens" : focusExpandedId ? "Focus Expanded" : "Idle" }, void 0, false, {
+          fileName: "D:/CCUT 1.0.2/ui/src/components/CenterPanel.tsx",
+          lineNumber: 113,
+          columnNumber: 11
+        }, this)
+      ] }, void 0, true, {
+        fileName: "D:/CCUT 1.0.2/ui/src/components/CenterPanel.tsx",
+        lineNumber: 111,
+        columnNumber: 9
+      }, this),
+      selectedFragment ? /* @__PURE__ */ jsxDEV("div", { className: "detail-layout", children: [
+        /* @__PURE__ */ jsxDEV("div", { className: "detail-thumb", children: /* @__PURE__ */ jsxDEV("img", { src: selectedFragment.thumbnail?.thumbnail_url, alt: `${selectedFragment.fragment_id} thumbnail` }, void 0, false, {
+          fileName: "D:/CCUT 1.0.2/ui/src/components/CenterPanel.tsx",
+          lineNumber: 121,
+          columnNumber: 15
+        }, this) }, void 0, false, {
+          fileName: "D:/CCUT 1.0.2/ui/src/components/CenterPanel.tsx",
+          lineNumber: 120,
+          columnNumber: 13
+        }, this),
+        /* @__PURE__ */ jsxDEV("div", { className: "detail-copy", children: [
+          /* @__PURE__ */ jsxDEV("h2", { children: selectedFragment.fragment_id }, void 0, false, {
+            fileName: "D:/CCUT 1.0.2/ui/src/components/CenterPanel.tsx",
+            lineNumber: 124,
+            columnNumber: 15
+          }, this),
+          /* @__PURE__ */ jsxDEV("div", { className: "metadata-grid", children: [
+            /* @__PURE__ */ jsxDEV("div", { children: [
+              /* @__PURE__ */ jsxDEV("span", { children: "Source" }, void 0, false, {
+                fileName: "D:/CCUT 1.0.2/ui/src/components/CenterPanel.tsx",
+                lineNumber: 127,
+                columnNumber: 19
+              }, this),
+              /* @__PURE__ */ jsxDEV("strong", { children: selectedFragment.source_video }, void 0, false, {
+                fileName: "D:/CCUT 1.0.2/ui/src/components/CenterPanel.tsx",
+                lineNumber: 128,
+                columnNumber: 19
+              }, this)
+            ] }, void 0, true, {
+              fileName: "D:/CCUT 1.0.2/ui/src/components/CenterPanel.tsx",
+              lineNumber: 126,
+              columnNumber: 17
+            }, this),
+            /* @__PURE__ */ jsxDEV("div", { children: [
+              /* @__PURE__ */ jsxDEV("span", { children: "Duration" }, void 0, false, {
+                fileName: "D:/CCUT 1.0.2/ui/src/components/CenterPanel.tsx",
+                lineNumber: 131,
+                columnNumber: 19
+              }, this),
+              /* @__PURE__ */ jsxDEV("strong", { children: formatDuration(selectedFragment.duration) }, void 0, false, {
+                fileName: "D:/CCUT 1.0.2/ui/src/components/CenterPanel.tsx",
+                lineNumber: 132,
+                columnNumber: 19
+              }, this)
+            ] }, void 0, true, {
+              fileName: "D:/CCUT 1.0.2/ui/src/components/CenterPanel.tsx",
+              lineNumber: 130,
+              columnNumber: 17
+            }, this),
+            /* @__PURE__ */ jsxDEV("div", { children: [
+              /* @__PURE__ */ jsxDEV("span", { children: "Frames" }, void 0, false, {
+                fileName: "D:/CCUT 1.0.2/ui/src/components/CenterPanel.tsx",
+                lineNumber: 135,
+                columnNumber: 19
+              }, this),
+              /* @__PURE__ */ jsxDEV("strong", { children: [
+                selectedFragment.start_frame,
+                "-",
+                selectedFragment.end_frame
+              ] }, void 0, true, {
+                fileName: "D:/CCUT 1.0.2/ui/src/components/CenterPanel.tsx",
+                lineNumber: 136,
+                columnNumber: 19
+              }, this)
+            ] }, void 0, true, {
+              fileName: "D:/CCUT 1.0.2/ui/src/components/CenterPanel.tsx",
+              lineNumber: 134,
+              columnNumber: 17
+            }, this),
+            /* @__PURE__ */ jsxDEV("div", { children: [
+              /* @__PURE__ */ jsxDEV("span", { children: "Status" }, void 0, false, {
+                fileName: "D:/CCUT 1.0.2/ui/src/components/CenterPanel.tsx",
+                lineNumber: 141,
+                columnNumber: 19
+              }, this),
+              /* @__PURE__ */ jsxDEV("strong", { children: selectedFragment.excluded ? "Excluded" : "Visible" }, void 0, false, {
+                fileName: "D:/CCUT 1.0.2/ui/src/components/CenterPanel.tsx",
+                lineNumber: 142,
+                columnNumber: 19
+              }, this)
+            ] }, void 0, true, {
+              fileName: "D:/CCUT 1.0.2/ui/src/components/CenterPanel.tsx",
+              lineNumber: 140,
+              columnNumber: 17
+            }, this)
+          ] }, void 0, true, {
+            fileName: "D:/CCUT 1.0.2/ui/src/components/CenterPanel.tsx",
+            lineNumber: 125,
+            columnNumber: 15
+          }, this),
+          /* @__PURE__ */ jsxDEV("p", { className: "structure-context", children: [
+            selectedFragment.fragment_id,
+            " is currently aligned with source ",
+            activeSourceMeta.label,
+            ". Focus and Time Lens are kept separate so fragment identity stays stable during inspection."
+          ] }, void 0, true, {
+            fileName: "D:/CCUT 1.0.2/ui/src/components/CenterPanel.tsx",
+            lineNumber: 145,
+            columnNumber: 15
+          }, this),
+          isTimeLensActive ? /* @__PURE__ */ jsxDEV("div", { className: "time-lens-card", children: [
+            /* @__PURE__ */ jsxDEV("div", { className: "time-lens-card__header", children: [
+              /* @__PURE__ */ jsxDEV("div", { children: [
+                /* @__PURE__ */ jsxDEV("span", { className: "eyebrow", children: "Time Lens Preview" }, void 0, false, {
+                  fileName: "D:/CCUT 1.0.2/ui/src/components/CenterPanel.tsx",
+                  lineNumber: 153,
+                  columnNumber: 23
+                }, this),
+                /* @__PURE__ */ jsxDEV("strong", { children: "Read-only internal windows" }, void 0, false, {
+                  fileName: "D:/CCUT 1.0.2/ui/src/components/CenterPanel.tsx",
+                  lineNumber: 154,
+                  columnNumber: 23
+                }, this)
+              ] }, void 0, true, {
+                fileName: "D:/CCUT 1.0.2/ui/src/components/CenterPanel.tsx",
+                lineNumber: 152,
+                columnNumber: 21
+              }, this),
+              /* @__PURE__ */ jsxDEV("span", { className: "panel-chip", children: [
+                timeLensSlices.length,
+                " slices"
+              ] }, void 0, true, {
+                fileName: "D:/CCUT 1.0.2/ui/src/components/CenterPanel.tsx",
+                lineNumber: 156,
+                columnNumber: 21
+              }, this)
+            ] }, void 0, true, {
+              fileName: "D:/CCUT 1.0.2/ui/src/components/CenterPanel.tsx",
+              lineNumber: 151,
+              columnNumber: 19
+            }, this),
+            /* @__PURE__ */ jsxDEV("div", { className: "time-lens-strip", "aria-label": "Time Lens sub-fragment preview", children: timeLensSlices.map(
+              (slice, index) => /* @__PURE__ */ jsxDEV(
+                "div",
+                {
+                  className: `time-lens-slice${index === Math.floor(timeLensSlices.length / 2) ? " is-anchor" : ""}`,
+                  style: {
+                    flex: `${slice.duration} 1 0`,
+                    opacity: slice.emphasis
+                  },
+                  children: [
+                    /* @__PURE__ */ jsxDEV("span", { className: "time-lens-slice__label", children: slice.label }, void 0, false, {
+                      fileName: "D:/CCUT 1.0.2/ui/src/components/CenterPanel.tsx",
+                      lineNumber: 168,
+                      columnNumber: 25
+                    }, this),
+                    /* @__PURE__ */ jsxDEV("strong", { children: formatDuration(slice.duration) }, void 0, false, {
+                      fileName: "D:/CCUT 1.0.2/ui/src/components/CenterPanel.tsx",
+                      lineNumber: 169,
+                      columnNumber: 25
+                    }, this),
+                    /* @__PURE__ */ jsxDEV("span", { className: "time-lens-slice__frames", children: [
+                      slice.startFrame,
+                      "-",
+                      slice.endFrame
+                    ] }, void 0, true, {
+                      fileName: "D:/CCUT 1.0.2/ui/src/components/CenterPanel.tsx",
+                      lineNumber: 170,
+                      columnNumber: 25
+                    }, this)
+                  ]
+                },
+                slice.id,
+                true,
+                {
+                  fileName: "D:/CCUT 1.0.2/ui/src/components/CenterPanel.tsx",
+                  lineNumber: 160,
+                  columnNumber: 17
+                },
+                this
+              )
+            ) }, void 0, false, {
+              fileName: "D:/CCUT 1.0.2/ui/src/components/CenterPanel.tsx",
+              lineNumber: 158,
+              columnNumber: 19
+            }, this),
+            /* @__PURE__ */ jsxDEV("p", { className: "time-lens-card__note", children: "Time Lens stays read-only for now. It exposes internal pacing windows without turning CCUT into a timeline editor." }, void 0, false, {
+              fileName: "D:/CCUT 1.0.2/ui/src/components/CenterPanel.tsx",
+              lineNumber: 176,
+              columnNumber: 19
+            }, this)
+          ] }, void 0, true, {
+            fileName: "D:/CCUT 1.0.2/ui/src/components/CenterPanel.tsx",
+            lineNumber: 150,
+            columnNumber: 13
+          }, this) : null,
+          intelligenceOn && selectedFragment.intelligence ? /* @__PURE__ */ jsxDEV("div", { className: "metrics-card", children: [
+            /* @__PURE__ */ jsxDEV(MetricBar, { label: "Narrative", value: selectedFragment.intelligence.narrative }, void 0, false, {
+              fileName: "D:/CCUT 1.0.2/ui/src/components/CenterPanel.tsx",
+              lineNumber: 184,
+              columnNumber: 19
+            }, this),
+            /* @__PURE__ */ jsxDEV(MetricBar, { label: "Emotional", value: selectedFragment.intelligence.emotional }, void 0, false, {
+              fileName: "D:/CCUT 1.0.2/ui/src/components/CenterPanel.tsx",
+              lineNumber: 185,
+              columnNumber: 19
+            }, this),
+            /* @__PURE__ */ jsxDEV(MetricBar, { label: "Action", value: selectedFragment.intelligence.action }, void 0, false, {
+              fileName: "D:/CCUT 1.0.2/ui/src/components/CenterPanel.tsx",
+              lineNumber: 186,
+              columnNumber: 19
+            }, this),
+            /* @__PURE__ */ jsxDEV(MetricBar, { label: "Dialogue", value: selectedFragment.intelligence.dialogue }, void 0, false, {
+              fileName: "D:/CCUT 1.0.2/ui/src/components/CenterPanel.tsx",
+              lineNumber: 187,
+              columnNumber: 19
+            }, this)
+          ] }, void 0, true, {
+            fileName: "D:/CCUT 1.0.2/ui/src/components/CenterPanel.tsx",
+            lineNumber: 183,
+            columnNumber: 13
+          }, this) : /* @__PURE__ */ jsxDEV("div", { className: "metrics-placeholder", children: "Intelligence metrics are optional and stay secondary to structure." }, void 0, false, {
+            fileName: "D:/CCUT 1.0.2/ui/src/components/CenterPanel.tsx",
+            lineNumber: 190,
+            columnNumber: 13
+          }, this)
+        ] }, void 0, true, {
+          fileName: "D:/CCUT 1.0.2/ui/src/components/CenterPanel.tsx",
+          lineNumber: 123,
+          columnNumber: 13
+        }, this)
+      ] }, void 0, true, {
+        fileName: "D:/CCUT 1.0.2/ui/src/components/CenterPanel.tsx",
+        lineNumber: 119,
+        columnNumber: 9
+      }, this) : /* @__PURE__ */ jsxDEV("div", { className: "empty-detail", children: "Select a fragment from the board, panorama, or Hold Area to inspect its structure identity." }, void 0, false, {
+        fileName: "D:/CCUT 1.0.2/ui/src/components/CenterPanel.tsx",
+        lineNumber: 195,
+        columnNumber: 9
+      }, this)
+    ] }, void 0, true, {
+      fileName: "D:/CCUT 1.0.2/ui/src/components/CenterPanel.tsx",
+      lineNumber: 110,
+      columnNumber: 7
+    }, this),
+    /* @__PURE__ */ jsxDEV("div", { className: "panel-card panel-card--preview", children: [
+      /* @__PURE__ */ jsxDEV("div", { className: "panel-header", children: [
+        /* @__PURE__ */ jsxDEV("span", { className: "eyebrow", children: "Render Preview" }, void 0, false, {
+          fileName: "D:/CCUT 1.0.2/ui/src/components/CenterPanel.tsx",
+          lineNumber: 203,
+          columnNumber: 11
+        }, this),
+        /* @__PURE__ */ jsxDEV("span", { className: "panel-chip", children: "Placeholder" }, void 0, false, {
+          fileName: "D:/CCUT 1.0.2/ui/src/components/CenterPanel.tsx",
+          lineNumber: 204,
+          columnNumber: 11
+        }, this)
+      ] }, void 0, true, {
+        fileName: "D:/CCUT 1.0.2/ui/src/components/CenterPanel.tsx",
+        lineNumber: 202,
+        columnNumber: 9
+      }, this),
+      /* @__PURE__ */ jsxDEV("div", { className: "render-preview-placeholder", children: "Final playback stays implied by the fragment board. No timeline strip or sequence minimap is rendered here." }, void 0, false, {
+        fileName: "D:/CCUT 1.0.2/ui/src/components/CenterPanel.tsx",
+        lineNumber: 206,
+        columnNumber: 9
+      }, this)
+    ] }, void 0, true, {
+      fileName: "D:/CCUT 1.0.2/ui/src/components/CenterPanel.tsx",
+      lineNumber: 201,
+      columnNumber: 7
+    }, this),
+    /* @__PURE__ */ jsxDEV("div", { className: "panel-card panel-card--chat", children: [
+      /* @__PURE__ */ jsxDEV("div", { className: "panel-header", children: [
+        /* @__PURE__ */ jsxDEV("span", { className: "eyebrow", children: "Chat Bar" }, void 0, false, {
+          fileName: "D:/CCUT 1.0.2/ui/src/components/CenterPanel.tsx",
+          lineNumber: 213,
+          columnNumber: 11
+        }, this),
+        /* @__PURE__ */ jsxDEV("span", { className: "panel-chip", children: "Static" }, void 0, false, {
+          fileName: "D:/CCUT 1.0.2/ui/src/components/CenterPanel.tsx",
+          lineNumber: 214,
+          columnNumber: 11
+        }, this)
+      ] }, void 0, true, {
+        fileName: "D:/CCUT 1.0.2/ui/src/components/CenterPanel.tsx",
+        lineNumber: 212,
+        columnNumber: 9
+      }, this),
+      /* @__PURE__ */ jsxDEV("div", { className: "chat-shell", children: [
+        /* @__PURE__ */ jsxDEV("input", { type: "text", placeholder: "Ask for two structural alternatives", "aria-label": "Chat input" }, void 0, false, {
+          fileName: "D:/CCUT 1.0.2/ui/src/components/CenterPanel.tsx",
+          lineNumber: 217,
+          columnNumber: 11
+        }, this),
+        /* @__PURE__ */ jsxDEV("button", { type: "button", children: "Send" }, void 0, false, {
+          fileName: "D:/CCUT 1.0.2/ui/src/components/CenterPanel.tsx",
+          lineNumber: 218,
+          columnNumber: 11
+        }, this)
+      ] }, void 0, true, {
+        fileName: "D:/CCUT 1.0.2/ui/src/components/CenterPanel.tsx",
+        lineNumber: 216,
+        columnNumber: 9
+      }, this)
+    ] }, void 0, true, {
+      fileName: "D:/CCUT 1.0.2/ui/src/components/CenterPanel.tsx",
+      lineNumber: 211,
+      columnNumber: 7
+    }, this)
+  ] }, void 0, true, {
+    fileName: "D:/CCUT 1.0.2/ui/src/components/CenterPanel.tsx",
+    lineNumber: 93,
+    columnNumber: 5
+  }, this);
+}
+_c2 = CenterPanel;
+var _c, _c2;
+$RefreshReg$(_c, "MetricBar");
+$RefreshReg$(_c2, "CenterPanel");
+if (import.meta.hot && !inWebWorker) {
+  window.$RefreshReg$ = prevRefreshReg;
+  window.$RefreshSig$ = prevRefreshSig;
+}
+if (import.meta.hot && !inWebWorker) {
+  RefreshRuntime.__hmr_import(import.meta.url).then((currentExports) => {
+    RefreshRuntime.registerExportsForReactRefresh("D:/CCUT 1.0.2/ui/src/components/CenterPanel.tsx", currentExports);
+    import.meta.hot.accept((nextExports) => {
+      if (!nextExports) return;
+      const invalidateMessage = RefreshRuntime.validateRefreshBoundaryAndEnqueueUpdate("D:/CCUT 1.0.2/ui/src/components/CenterPanel.tsx", currentExports, nextExports);
+      if (invalidateMessage) import.meta.hot.invalidate(invalidateMessage);
+    });
+  });
+}
+
+//# sourceMappingURL=data:application/json;base64,eyJ2ZXJzaW9uIjozLCJtYXBwaW5ncyI6IkFBbURNOzs7Ozs7Ozs7Ozs7Ozs7O0FBbkROLFNBQVNBLHNCQUFzQjtBQXNCL0IsTUFBTUMsbUJBQW1CLENBQUMsV0FBVyxRQUFRLFNBQVMsU0FBUyxTQUFTO0FBRXhFLFNBQVNDLG9CQUFvQkMsVUFBcUM7QUFDaEUsUUFBTUMsYUFBYUMsS0FBS0MsSUFBSUwsaUJBQWlCTSxRQUFRRixLQUFLRyxJQUFJLEdBQUdILEtBQUtJLEtBQUtOLFNBQVNPLFdBQVcsRUFBRSxDQUFDLENBQUM7QUFDbkcsUUFBTUMsZUFBZU4sS0FBS08sTUFBTVQsU0FBU08sV0FBV04sVUFBVTtBQUM5RCxRQUFNUyxZQUFZVixTQUFTTyxXQUFXTjtBQUN0QyxRQUFNVSxVQUFVVixhQUFhLEtBQUs7QUFDbEMsTUFBSVcsU0FBU1osU0FBU2E7QUFFdEIsU0FBT0MsTUFBTUMsS0FBSyxFQUFFWCxRQUFRSCxXQUFXLEdBQUcsQ0FBQ2UsR0FBR0MsVUFBVTtBQUN0RCxVQUFNVixXQUFXQyxnQkFBZ0JTLFFBQVFQLFlBQVksSUFBSTtBQUN6RCxVQUFNUSxhQUFhTjtBQUNuQixVQUFNTyxXQUFXUCxTQUFTTDtBQUMxQkssYUFBU087QUFFVCxXQUFPO0FBQUEsTUFDTEMsSUFBSSxHQUFHcEIsU0FBU3FCLFdBQVcsU0FBU0osUUFBUSxDQUFDO0FBQUEsTUFDN0NLLE9BQU94QixpQkFBaUJtQixLQUFLLEtBQUssVUFBVUEsUUFBUSxDQUFDO0FBQUEsTUFDckRDO0FBQUFBLE1BQ0FDO0FBQUFBLE1BQ0FaO0FBQUFBLE1BQ0FnQixVQUFVckIsS0FBS0csSUFBSSxNQUFNLElBQUlILEtBQUtzQixJQUFJUCxRQUFRTixNQUFNLElBQUlULEtBQUtHLElBQUksR0FBR00sU0FBUyxHQUFHLENBQUM7QUFBQSxJQUNuRjtBQUFBLEVBQ0YsQ0FBQztBQUNIO0FBRUEsU0FBU2MsVUFBVSxFQUFFSCxPQUFPSSxNQUF3QyxHQUFHO0FBQ3JFLFNBQ0UsdUJBQUMsU0FBSSxXQUFVLGNBQ2I7QUFBQSwyQkFBQyxVQUFNSixtQkFBUDtBQUFBO0FBQUE7QUFBQTtBQUFBLFdBQWE7QUFBQSxJQUNiLHVCQUFDLFNBQUksV0FBVSxtQkFDYixpQ0FBQyxTQUFJLE9BQU8sRUFBRUssT0FBTyxHQUFHekIsS0FBSzBCLE1BQU1GLFFBQVEsR0FBRyxDQUFDLElBQUksS0FBbkQ7QUFBQTtBQUFBO0FBQUE7QUFBQSxXQUFxRCxLQUR2RDtBQUFBO0FBQUE7QUFBQTtBQUFBLFdBRUE7QUFBQSxPQUpGO0FBQUE7QUFBQTtBQUFBO0FBQUEsU0FLQTtBQUVKO0FBQUNHLEtBVFFKO0FBV0YsZ0JBQVNLLFlBQVk7QUFBQSxFQUMxQkM7QUFBQUEsRUFDQUM7QUFBQUEsRUFDQUM7QUFBQUEsRUFDQUM7QUFBQUEsRUFDQUM7QUFBQUEsRUFDQUM7QUFBQUEsRUFDQUM7QUFDZ0IsR0FBRztBQUNuQixRQUFNQyxtQkFBbUJQLFFBQVFRLEtBQUssQ0FBQ0MsV0FBV0EsT0FBT3BCLE9BQU9hLFlBQVksS0FBS0YsUUFBUSxDQUFDO0FBQzFGLFFBQU1VLG1CQUFtQixDQUFDLENBQUNULG9CQUFvQkcsZUFBZUgsaUJBQWlCWDtBQUMvRSxRQUFNcUIsaUJBQWlCVixvQkFBb0JTLG1CQUFtQjFDLG9CQUFvQmlDLGdCQUFnQixJQUFJO0FBRXRHLFNBQ0UsdUJBQUMsYUFBUSxXQUFVLGdCQUNqQjtBQUFBLDJCQUFDLFNBQUksV0FBVSxrQ0FDYjtBQUFBLDZCQUFDLFNBQUksV0FBVSxnQkFDYjtBQUFBLCtCQUFDLFVBQUssV0FBVSxXQUFVLDhCQUExQjtBQUFBO0FBQUE7QUFBQTtBQUFBLGVBQXdDO0FBQUEsUUFDeEMsdUJBQUMsVUFBSyxXQUFVLGNBQWE7QUFBQTtBQUFBLFVBQVNLO0FBQUFBLGFBQXRDO0FBQUE7QUFBQTtBQUFBO0FBQUEsZUFBbUQ7QUFBQSxXQUZyRDtBQUFBO0FBQUE7QUFBQTtBQUFBLGFBR0E7QUFBQSxNQUNBLHVCQUFDLFNBQUksV0FBVSxnQkFDWk4sa0JBQVFZO0FBQUFBLFFBQUksQ0FBQ0gsV0FDWix1QkFBQyxTQUFvQixXQUFXLGVBQWVBLE9BQU9wQixPQUFPYSxlQUFlLGVBQWUsRUFBRSxJQUMzRjtBQUFBLGlDQUFDLFVBQUssV0FBVSxvQkFBb0JPLGlCQUFPbEIsU0FBM0M7QUFBQTtBQUFBO0FBQUE7QUFBQSxpQkFBaUQ7QUFBQSxVQUNqRCx1QkFBQyxZQUFRa0I7QUFBQUEsbUJBQU9JO0FBQUFBLFlBQVk7QUFBQSxlQUE1QjtBQUFBO0FBQUE7QUFBQTtBQUFBLGlCQUE2QjtBQUFBLFVBQzdCLHVCQUFDLE9BQUdKLGlCQUFPSyxlQUFYO0FBQUE7QUFBQTtBQUFBO0FBQUEsaUJBQXVCO0FBQUEsYUFIZkwsT0FBT3BCLElBQWpCO0FBQUE7QUFBQTtBQUFBO0FBQUEsZUFJQTtBQUFBLE1BQ0QsS0FQSDtBQUFBO0FBQUE7QUFBQTtBQUFBLGFBUUE7QUFBQSxTQWJGO0FBQUE7QUFBQTtBQUFBO0FBQUEsV0FjQTtBQUFBLElBRUEsdUJBQUMsU0FBSSxXQUFVLGlDQUNiO0FBQUEsNkJBQUMsU0FBSSxXQUFVLGdCQUNiO0FBQUEsK0JBQUMsVUFBSyxXQUFVLFdBQVUsd0NBQTFCO0FBQUE7QUFBQTtBQUFBO0FBQUEsZUFBa0Q7QUFBQSxRQUNsRCx1QkFBQyxVQUFLLFdBQVUsY0FDYmUsdUJBQWEsY0FBY0Qsa0JBQWtCLG1CQUFtQixVQURuRTtBQUFBO0FBQUE7QUFBQTtBQUFBLGVBRUE7QUFBQSxXQUpGO0FBQUE7QUFBQTtBQUFBO0FBQUEsYUFLQTtBQUFBLE1BRUNGLG1CQUNDLHVCQUFDLFNBQUksV0FBVSxpQkFDYjtBQUFBLCtCQUFDLFNBQUksV0FBVSxnQkFDYixpQ0FBQyxTQUFJLEtBQUtBLGlCQUFpQmMsV0FBV0MsZUFBZSxLQUFLLEdBQUdmLGlCQUFpQlgsV0FBVyxnQkFBekY7QUFBQTtBQUFBO0FBQUE7QUFBQSxlQUFzRyxLQUR4RztBQUFBO0FBQUE7QUFBQTtBQUFBLGVBRUE7QUFBQSxRQUNBLHVCQUFDLFNBQUksV0FBVSxlQUNiO0FBQUEsaUNBQUMsUUFBSVcsMkJBQWlCWCxlQUF0QjtBQUFBO0FBQUE7QUFBQTtBQUFBLGlCQUFrQztBQUFBLFVBQ2xDLHVCQUFDLFNBQUksV0FBVSxpQkFDYjtBQUFBLG1DQUFDLFNBQ0M7QUFBQSxxQ0FBQyxVQUFLLHNCQUFOO0FBQUE7QUFBQTtBQUFBO0FBQUEscUJBQVk7QUFBQSxjQUNaLHVCQUFDLFlBQVFXLDJCQUFpQmdCLGdCQUExQjtBQUFBO0FBQUE7QUFBQTtBQUFBLHFCQUF1QztBQUFBLGlCQUZ6QztBQUFBO0FBQUE7QUFBQTtBQUFBLG1CQUdBO0FBQUEsWUFDQSx1QkFBQyxTQUNDO0FBQUEscUNBQUMsVUFBSyx3QkFBTjtBQUFBO0FBQUE7QUFBQTtBQUFBLHFCQUFjO0FBQUEsY0FDZCx1QkFBQyxZQUFRbkQseUJBQWVtQyxpQkFBaUJ6QixRQUFRLEtBQWpEO0FBQUE7QUFBQTtBQUFBO0FBQUEscUJBQW1EO0FBQUEsaUJBRnJEO0FBQUE7QUFBQTtBQUFBO0FBQUEsbUJBR0E7QUFBQSxZQUNBLHVCQUFDLFNBQ0M7QUFBQSxxQ0FBQyxVQUFLLHNCQUFOO0FBQUE7QUFBQTtBQUFBO0FBQUEscUJBQVk7QUFBQSxjQUNaLHVCQUFDLFlBQ0V5QjtBQUFBQSxpQ0FBaUJuQjtBQUFBQSxnQkFBWTtBQUFBLGdCQUFFbUIsaUJBQWlCaUI7QUFBQUEsbUJBRG5EO0FBQUE7QUFBQTtBQUFBO0FBQUEscUJBRUE7QUFBQSxpQkFKRjtBQUFBO0FBQUE7QUFBQTtBQUFBLG1CQUtBO0FBQUEsWUFDQSx1QkFBQyxTQUNDO0FBQUEscUNBQUMsVUFBSyxzQkFBTjtBQUFBO0FBQUE7QUFBQTtBQUFBLHFCQUFZO0FBQUEsY0FDWix1QkFBQyxZQUFRakIsMkJBQWlCa0IsV0FBVyxhQUFhLGFBQWxEO0FBQUE7QUFBQTtBQUFBO0FBQUEscUJBQTREO0FBQUEsaUJBRjlEO0FBQUE7QUFBQTtBQUFBO0FBQUEsbUJBR0E7QUFBQSxlQWxCRjtBQUFBO0FBQUE7QUFBQTtBQUFBLGlCQW1CQTtBQUFBLFVBQ0EsdUJBQUMsT0FBRSxXQUFVLHFCQUNWbEI7QUFBQUEsNkJBQWlCWDtBQUFBQSxZQUFZO0FBQUEsWUFBbUNpQixpQkFBaUJoQjtBQUFBQSxZQUFNO0FBQUEsZUFEMUY7QUFBQTtBQUFBO0FBQUE7QUFBQSxpQkFHQTtBQUFBLFVBQ0NtQixtQkFDQyx1QkFBQyxTQUFJLFdBQVUsa0JBQ2I7QUFBQSxtQ0FBQyxTQUFJLFdBQVUsMEJBQ2I7QUFBQSxxQ0FBQyxTQUNDO0FBQUEsdUNBQUMsVUFBSyxXQUFVLFdBQVUsaUNBQTFCO0FBQUE7QUFBQTtBQUFBO0FBQUEsdUJBQTJDO0FBQUEsZ0JBQzNDLHVCQUFDLFlBQU8sMENBQVI7QUFBQTtBQUFBO0FBQUE7QUFBQSx1QkFBa0M7QUFBQSxtQkFGcEM7QUFBQTtBQUFBO0FBQUE7QUFBQSxxQkFHQTtBQUFBLGNBQ0EsdUJBQUMsVUFBSyxXQUFVLGNBQWNDO0FBQUFBLCtCQUFldEM7QUFBQUEsZ0JBQU87QUFBQSxtQkFBcEQ7QUFBQTtBQUFBO0FBQUE7QUFBQSxxQkFBMkQ7QUFBQSxpQkFMN0Q7QUFBQTtBQUFBO0FBQUE7QUFBQSxtQkFNQTtBQUFBLFlBQ0EsdUJBQUMsU0FBSSxXQUFVLG1CQUFrQixjQUFXLGtDQUN6Q3NDLHlCQUFlQztBQUFBQSxjQUFJLENBQUNRLE9BQU9sQyxVQUMxQjtBQUFBLGdCQUFDO0FBQUE7QUFBQSxrQkFFQyxXQUFXLGtCQUFrQkEsVUFBVWYsS0FBS08sTUFBTWlDLGVBQWV0QyxTQUFTLENBQUMsSUFBSSxlQUFlLEVBQUU7QUFBQSxrQkFDaEcsT0FBTztBQUFBLG9CQUNMZ0QsTUFBTSxHQUFHRCxNQUFNNUMsUUFBUTtBQUFBLG9CQUN2QjhDLFNBQVNGLE1BQU01QjtBQUFBQSxrQkFDakI7QUFBQSxrQkFFQTtBQUFBLDJDQUFDLFVBQUssV0FBVSwwQkFBMEI0QixnQkFBTTdCLFNBQWhEO0FBQUE7QUFBQTtBQUFBO0FBQUEsMkJBQXNEO0FBQUEsb0JBQ3RELHVCQUFDLFlBQVF6Qix5QkFBZXNELE1BQU01QyxRQUFRLEtBQXRDO0FBQUE7QUFBQTtBQUFBO0FBQUEsMkJBQXdDO0FBQUEsb0JBQ3hDLHVCQUFDLFVBQUssV0FBVSwyQkFDYjRDO0FBQUFBLDRCQUFNakM7QUFBQUEsc0JBQVc7QUFBQSxzQkFBRWlDLE1BQU1oQztBQUFBQSx5QkFENUI7QUFBQTtBQUFBO0FBQUE7QUFBQSwyQkFFQTtBQUFBO0FBQUE7QUFBQSxnQkFYS2dDLE1BQU0vQjtBQUFBQSxnQkFEYjtBQUFBO0FBQUE7QUFBQTtBQUFBO0FBQUE7QUFBQTtBQUFBLGNBYUE7QUFBQSxZQUNELEtBaEJIO0FBQUE7QUFBQTtBQUFBO0FBQUEsbUJBaUJBO0FBQUEsWUFDQSx1QkFBQyxPQUFFLFdBQVUsd0JBQXNCLGtJQUFuQztBQUFBO0FBQUE7QUFBQTtBQUFBLG1CQUdBO0FBQUEsZUE3QkY7QUFBQTtBQUFBO0FBQUE7QUFBQSxpQkE4QkEsSUFDRTtBQUFBLFVBQ0hnQixrQkFBa0JKLGlCQUFpQnNCLGVBQ2xDLHVCQUFDLFNBQUksV0FBVSxnQkFDYjtBQUFBLG1DQUFDLGFBQVUsT0FBTSxhQUFZLE9BQU90QixpQkFBaUJzQixhQUFhQyxhQUFsRTtBQUFBO0FBQUE7QUFBQTtBQUFBLG1CQUE0RTtBQUFBLFlBQzVFLHVCQUFDLGFBQVUsT0FBTSxhQUFZLE9BQU92QixpQkFBaUJzQixhQUFhRSxhQUFsRTtBQUFBO0FBQUE7QUFBQTtBQUFBLG1CQUE0RTtBQUFBLFlBQzVFLHVCQUFDLGFBQVUsT0FBTSxVQUFTLE9BQU94QixpQkFBaUJzQixhQUFhRyxVQUEvRDtBQUFBO0FBQUE7QUFBQTtBQUFBLG1CQUFzRTtBQUFBLFlBQ3RFLHVCQUFDLGFBQVUsT0FBTSxZQUFXLE9BQU96QixpQkFBaUJzQixhQUFhSSxZQUFqRTtBQUFBO0FBQUE7QUFBQTtBQUFBLG1CQUEwRTtBQUFBLGVBSjVFO0FBQUE7QUFBQTtBQUFBO0FBQUEsaUJBS0EsSUFFQSx1QkFBQyxTQUFJLFdBQVUsdUJBQXNCLGtGQUFyQztBQUFBO0FBQUE7QUFBQTtBQUFBLGlCQUF1RztBQUFBLGFBbkUzRztBQUFBO0FBQUE7QUFBQTtBQUFBLGVBcUVBO0FBQUEsV0F6RUY7QUFBQTtBQUFBO0FBQUE7QUFBQSxhQTBFQSxJQUVBLHVCQUFDLFNBQUksV0FBVSxnQkFBYywyR0FBN0I7QUFBQTtBQUFBO0FBQUE7QUFBQSxhQUVBO0FBQUEsU0F2Rko7QUFBQTtBQUFBO0FBQUE7QUFBQSxXQXlGQTtBQUFBLElBRUEsdUJBQUMsU0FBSSxXQUFVLGtDQUNiO0FBQUEsNkJBQUMsU0FBSSxXQUFVLGdCQUNiO0FBQUEsK0JBQUMsVUFBSyxXQUFVLFdBQVUsOEJBQTFCO0FBQUE7QUFBQTtBQUFBO0FBQUEsZUFBd0M7QUFBQSxRQUN4Qyx1QkFBQyxVQUFLLFdBQVUsY0FBYSwyQkFBN0I7QUFBQTtBQUFBO0FBQUE7QUFBQSxlQUF3QztBQUFBLFdBRjFDO0FBQUE7QUFBQTtBQUFBO0FBQUEsYUFHQTtBQUFBLE1BQ0EsdUJBQUMsU0FBSSxXQUFVLDhCQUE0QiwySEFBM0M7QUFBQTtBQUFBO0FBQUE7QUFBQSxhQUVBO0FBQUEsU0FQRjtBQUFBO0FBQUE7QUFBQTtBQUFBLFdBUUE7QUFBQSxJQUVBLHVCQUFDLFNBQUksV0FBVSwrQkFDYjtBQUFBLDZCQUFDLFNBQUksV0FBVSxnQkFDYjtBQUFBLCtCQUFDLFVBQUssV0FBVSxXQUFVLHdCQUExQjtBQUFBO0FBQUE7QUFBQTtBQUFBLGVBQWtDO0FBQUEsUUFDbEMsdUJBQUMsVUFBSyxXQUFVLGNBQWEsc0JBQTdCO0FBQUE7QUFBQTtBQUFBO0FBQUEsZUFBbUM7QUFBQSxXQUZyQztBQUFBO0FBQUE7QUFBQTtBQUFBLGFBR0E7QUFBQSxNQUNBLHVCQUFDLFNBQUksV0FBVSxjQUNiO0FBQUEsK0JBQUMsV0FBTSxNQUFLLFFBQU8sYUFBWSx1Q0FBc0MsY0FBVyxnQkFBaEY7QUFBQTtBQUFBO0FBQUE7QUFBQSxlQUE0RjtBQUFBLFFBQzVGLHVCQUFDLFlBQU8sTUFBSyxVQUFTLG9CQUF0QjtBQUFBO0FBQUE7QUFBQTtBQUFBLGVBQTBCO0FBQUEsV0FGNUI7QUFBQTtBQUFBO0FBQUE7QUFBQSxhQUdBO0FBQUEsU0FSRjtBQUFBO0FBQUE7QUFBQTtBQUFBLFdBU0E7QUFBQSxPQS9IRjtBQUFBO0FBQUE7QUFBQTtBQUFBLFNBZ0lBO0FBRUo7QUFBQ0MsTUFoSmU3QjtBQUFXLElBQUFELElBQUE4QjtBQUFBLGFBQUE5QixJQUFBO0FBQUEsYUFBQThCLEtBQUEiLCJuYW1lcyI6WyJmb3JtYXREdXJhdGlvbiIsIlRJTUVfTEVOU19MQUJFTFMiLCJidWlsZFRpbWVMZW5zU2xpY2VzIiwiZnJhZ21lbnQiLCJzbGljZUNvdW50IiwiTWF0aCIsIm1pbiIsImxlbmd0aCIsIm1heCIsImNlaWwiLCJkdXJhdGlvbiIsImJhc2VEdXJhdGlvbiIsImZsb29yIiwicmVtYWluZGVyIiwiY2VudGVyIiwiY3Vyc29yIiwic3RhcnRfZnJhbWUiLCJBcnJheSIsImZyb20iLCJfIiwiaW5kZXgiLCJzdGFydEZyYW1lIiwiZW5kRnJhbWUiLCJpZCIsImZyYWdtZW50X2lkIiwibGFiZWwiLCJlbXBoYXNpcyIsImFicyIsIk1ldHJpY0JhciIsInZhbHVlIiwid2lkdGgiLCJyb3VuZCIsIl9jIiwiQ2VudGVyUGFuZWwiLCJzb3VyY2VzIiwic2VsZWN0ZWRGcmFnbWVudCIsImFjdGl2ZVNvdXJjZSIsImZvY3VzRXhwYW5kZWRJZCIsInRpbWVMZW5zSWQiLCJpbnRlbGxpZ2VuY2VPbiIsInZpc2libGVDb3VudCIsImFjdGl2ZVNvdXJjZU1ldGEiLCJmaW5kIiwic291cmNlIiwiaXNUaW1lTGVuc0FjdGl2ZSIsInRpbWVMZW5zU2xpY2VzIiwibWFwIiwidG90YWxGcmFtZXMiLCJkZXNjcmlwdGlvbiIsInRodW1ibmFpbCIsInRodW1ibmFpbF91cmwiLCJzb3VyY2VfdmlkZW8iLCJlbmRfZnJhbWUiLCJleGNsdWRlZCIsInNsaWNlIiwiZmxleCIsIm9wYWNpdHkiLCJpbnRlbGxpZ2VuY2UiLCJuYXJyYXRpdmUiLCJlbW90aW9uYWwiLCJhY3Rpb24iLCJkaWFsb2d1ZSIsIl9jMiJdLCJpZ25vcmVMaXN0IjpbXSwic291cmNlcyI6WyJDZW50ZXJQYW5lbC50c3giXSwic291cmNlc0NvbnRlbnQiOlsiaW1wb3J0IHsgZm9ybWF0RHVyYXRpb24gfSBmcm9tICcuLi91dGlscy9mcmFnbWVudFV0aWxzJztcbmltcG9ydCB0eXBlIHsgRnJhZ21lbnQsIFNvdXJjZVZpZGVvIH0gZnJvbSAnLi4vdHlwZXMvYm91bmRhcnlUeXBlcyc7XG5cbmludGVyZmFjZSBDZW50ZXJQYW5lbFByb3BzIHtcbiAgc291cmNlczogU291cmNlVmlkZW9bXTtcbiAgc2VsZWN0ZWRGcmFnbWVudDogRnJhZ21lbnQgfCBudWxsO1xuICBhY3RpdmVTb3VyY2U6IHN0cmluZztcbiAgZm9jdXNFeHBhbmRlZElkOiBzdHJpbmcgfCBudWxsO1xuICB0aW1lTGVuc0lkOiBzdHJpbmcgfCBudWxsO1xuICBpbnRlbGxpZ2VuY2VPbjogYm9vbGVhbjtcbiAgdmlzaWJsZUNvdW50OiBudW1iZXI7XG59XG5cbnR5cGUgVGltZUxlbnNTbGljZSA9IHtcbiAgaWQ6IHN0cmluZztcbiAgbGFiZWw6IHN0cmluZztcbiAgc3RhcnRGcmFtZTogbnVtYmVyO1xuICBlbmRGcmFtZTogbnVtYmVyO1xuICBkdXJhdGlvbjogbnVtYmVyO1xuICBlbXBoYXNpczogbnVtYmVyO1xufTtcblxuY29uc3QgVElNRV9MRU5TX0xBQkVMUyA9IFsnTGVhZC1pbicsICdCZWF0JywgJ1Bpdm90JywgJ0NhcnJ5JywgJ1Jlc29sdmUnXTtcblxuZnVuY3Rpb24gYnVpbGRUaW1lTGVuc1NsaWNlcyhmcmFnbWVudDogRnJhZ21lbnQpOiBUaW1lTGVuc1NsaWNlW10ge1xuICBjb25zdCBzbGljZUNvdW50ID0gTWF0aC5taW4oVElNRV9MRU5TX0xBQkVMUy5sZW5ndGgsIE1hdGgubWF4KDQsIE1hdGguY2VpbChmcmFnbWVudC5kdXJhdGlvbiAvIDE4KSkpO1xuICBjb25zdCBiYXNlRHVyYXRpb24gPSBNYXRoLmZsb29yKGZyYWdtZW50LmR1cmF0aW9uIC8gc2xpY2VDb3VudCk7XG4gIGNvbnN0IHJlbWFpbmRlciA9IGZyYWdtZW50LmR1cmF0aW9uICUgc2xpY2VDb3VudDtcbiAgY29uc3QgY2VudGVyID0gKHNsaWNlQ291bnQgLSAxKSAvIDI7XG4gIGxldCBjdXJzb3IgPSBmcmFnbWVudC5zdGFydF9mcmFtZTtcblxuICByZXR1cm4gQXJyYXkuZnJvbSh7IGxlbmd0aDogc2xpY2VDb3VudCB9LCAoXywgaW5kZXgpID0+IHtcbiAgICBjb25zdCBkdXJhdGlvbiA9IGJhc2VEdXJhdGlvbiArIChpbmRleCA8IHJlbWFpbmRlciA/IDEgOiAwKTtcbiAgICBjb25zdCBzdGFydEZyYW1lID0gY3Vyc29yO1xuICAgIGNvbnN0IGVuZEZyYW1lID0gY3Vyc29yICsgZHVyYXRpb247XG4gICAgY3Vyc29yID0gZW5kRnJhbWU7XG5cbiAgICByZXR1cm4ge1xuICAgICAgaWQ6IGAke2ZyYWdtZW50LmZyYWdtZW50X2lkfS1sZW5zLSR7aW5kZXggKyAxfWAsXG4gICAgICBsYWJlbDogVElNRV9MRU5TX0xBQkVMU1tpbmRleF0gfHwgYFdpbmRvdyAke2luZGV4ICsgMX1gLFxuICAgICAgc3RhcnRGcmFtZSxcbiAgICAgIGVuZEZyYW1lLFxuICAgICAgZHVyYXRpb24sXG4gICAgICBlbXBoYXNpczogTWF0aC5tYXgoMC4zNCwgMSAtIE1hdGguYWJzKGluZGV4IC0gY2VudGVyKSAvIE1hdGgubWF4KDEsIGNlbnRlciArIDAuNSkpXG4gICAgfTtcbiAgfSk7XG59XG5cbmZ1bmN0aW9uIE1ldHJpY0Jhcih7IGxhYmVsLCB2YWx1ZSB9OiB7IGxhYmVsOiBzdHJpbmc7IHZhbHVlOiBudW1iZXIgfSkge1xuICByZXR1cm4gKFxuICAgIDxkaXYgY2xhc3NOYW1lPVwibWV0cmljLXJvd1wiPlxuICAgICAgPHNwYW4+e2xhYmVsfTwvc3Bhbj5cbiAgICAgIDxkaXYgY2xhc3NOYW1lPVwibWV0cmljLXJvd19fYmFyXCI+XG4gICAgICAgIDxkaXYgc3R5bGU9e3sgd2lkdGg6IGAke01hdGgucm91bmQodmFsdWUgKiAxMDApfSVgIH19IC8+XG4gICAgICA8L2Rpdj5cbiAgICA8L2Rpdj5cbiAgKTtcbn1cblxuZXhwb3J0IGZ1bmN0aW9uIENlbnRlclBhbmVsKHtcbiAgc291cmNlcyxcbiAgc2VsZWN0ZWRGcmFnbWVudCxcbiAgYWN0aXZlU291cmNlLFxuICBmb2N1c0V4cGFuZGVkSWQsXG4gIHRpbWVMZW5zSWQsXG4gIGludGVsbGlnZW5jZU9uLFxuICB2aXNpYmxlQ291bnRcbn06IENlbnRlclBhbmVsUHJvcHMpIHtcbiAgY29uc3QgYWN0aXZlU291cmNlTWV0YSA9IHNvdXJjZXMuZmluZCgoc291cmNlKSA9PiBzb3VyY2UuaWQgPT09IGFjdGl2ZVNvdXJjZSkgfHwgc291cmNlc1swXTtcbiAgY29uc3QgaXNUaW1lTGVuc0FjdGl2ZSA9ICEhc2VsZWN0ZWRGcmFnbWVudCAmJiB0aW1lTGVuc0lkID09PSBzZWxlY3RlZEZyYWdtZW50LmZyYWdtZW50X2lkO1xuICBjb25zdCB0aW1lTGVuc1NsaWNlcyA9IHNlbGVjdGVkRnJhZ21lbnQgJiYgaXNUaW1lTGVuc0FjdGl2ZSA/IGJ1aWxkVGltZUxlbnNTbGljZXMoc2VsZWN0ZWRGcmFnbWVudCkgOiBbXTtcblxuICByZXR1cm4gKFxuICAgIDxzZWN0aW9uIGNsYXNzTmFtZT1cImNlbnRlci1wYW5lbFwiPlxuICAgICAgPGRpdiBjbGFzc05hbWU9XCJwYW5lbC1jYXJkIHBhbmVsLWNhcmQtLXN1bW1hcnlcIj5cbiAgICAgICAgPGRpdiBjbGFzc05hbWU9XCJwYW5lbC1oZWFkZXJcIj5cbiAgICAgICAgICA8c3BhbiBjbGFzc05hbWU9XCJleWVicm93XCI+U291cmNlIFN1bW1hcnk8L3NwYW4+XG4gICAgICAgICAgPHNwYW4gY2xhc3NOYW1lPVwicGFuZWwtY2hpcFwiPlZpc2libGUge3Zpc2libGVDb3VudH08L3NwYW4+XG4gICAgICAgIDwvZGl2PlxuICAgICAgICA8ZGl2IGNsYXNzTmFtZT1cInN1bW1hcnktZ3JpZFwiPlxuICAgICAgICAgIHtzb3VyY2VzLm1hcCgoc291cmNlKSA9PiAoXG4gICAgICAgICAgICA8ZGl2IGtleT17c291cmNlLmlkfSBjbGFzc05hbWU9e2BzdW1tYXJ5LWNhcmQke3NvdXJjZS5pZCA9PT0gYWN0aXZlU291cmNlID8gJyBpcy1hY3RpdmUnIDogJyd9YH0+XG4gICAgICAgICAgICAgIDxzcGFuIGNsYXNzTmFtZT1cInN1bW1hcnktY2FyZF9faWRcIj57c291cmNlLmxhYmVsfTwvc3Bhbj5cbiAgICAgICAgICAgICAgPHN0cm9uZz57c291cmNlLnRvdGFsRnJhbWVzfWY8L3N0cm9uZz5cbiAgICAgICAgICAgICAgPHA+e3NvdXJjZS5kZXNjcmlwdGlvbn08L3A+XG4gICAgICAgICAgICA8L2Rpdj5cbiAgICAgICAgICApKX1cbiAgICAgICAgPC9kaXY+XG4gICAgICA8L2Rpdj5cblxuICAgICAgPGRpdiBjbGFzc05hbWU9XCJwYW5lbC1jYXJkIHBhbmVsLWNhcmQtLWRldGFpbFwiPlxuICAgICAgICA8ZGl2IGNsYXNzTmFtZT1cInBhbmVsLWhlYWRlclwiPlxuICAgICAgICAgIDxzcGFuIGNsYXNzTmFtZT1cImV5ZWJyb3dcIj5TZWxlY3RlZCBGcmFnbWVudCBEZXRhaWw8L3NwYW4+XG4gICAgICAgICAgPHNwYW4gY2xhc3NOYW1lPVwicGFuZWwtY2hpcFwiPlxuICAgICAgICAgICAge3RpbWVMZW5zSWQgPyAnVGltZSBMZW5zJyA6IGZvY3VzRXhwYW5kZWRJZCA/ICdGb2N1cyBFeHBhbmRlZCcgOiAnSWRsZSd9XG4gICAgICAgICAgPC9zcGFuPlxuICAgICAgICA8L2Rpdj5cblxuICAgICAgICB7c2VsZWN0ZWRGcmFnbWVudCA/IChcbiAgICAgICAgICA8ZGl2IGNsYXNzTmFtZT1cImRldGFpbC1sYXlvdXRcIj5cbiAgICAgICAgICAgIDxkaXYgY2xhc3NOYW1lPVwiZGV0YWlsLXRodW1iXCI+XG4gICAgICAgICAgICAgIDxpbWcgc3JjPXtzZWxlY3RlZEZyYWdtZW50LnRodW1ibmFpbD8udGh1bWJuYWlsX3VybH0gYWx0PXtgJHtzZWxlY3RlZEZyYWdtZW50LmZyYWdtZW50X2lkfSB0aHVtYm5haWxgfSAvPlxuICAgICAgICAgICAgPC9kaXY+XG4gICAgICAgICAgICA8ZGl2IGNsYXNzTmFtZT1cImRldGFpbC1jb3B5XCI+XG4gICAgICAgICAgICAgIDxoMj57c2VsZWN0ZWRGcmFnbWVudC5mcmFnbWVudF9pZH08L2gyPlxuICAgICAgICAgICAgICA8ZGl2IGNsYXNzTmFtZT1cIm1ldGFkYXRhLWdyaWRcIj5cbiAgICAgICAgICAgICAgICA8ZGl2PlxuICAgICAgICAgICAgICAgICAgPHNwYW4+U291cmNlPC9zcGFuPlxuICAgICAgICAgICAgICAgICAgPHN0cm9uZz57c2VsZWN0ZWRGcmFnbWVudC5zb3VyY2VfdmlkZW99PC9zdHJvbmc+XG4gICAgICAgICAgICAgICAgPC9kaXY+XG4gICAgICAgICAgICAgICAgPGRpdj5cbiAgICAgICAgICAgICAgICAgIDxzcGFuPkR1cmF0aW9uPC9zcGFuPlxuICAgICAgICAgICAgICAgICAgPHN0cm9uZz57Zm9ybWF0RHVyYXRpb24oc2VsZWN0ZWRGcmFnbWVudC5kdXJhdGlvbil9PC9zdHJvbmc+XG4gICAgICAgICAgICAgICAgPC9kaXY+XG4gICAgICAgICAgICAgICAgPGRpdj5cbiAgICAgICAgICAgICAgICAgIDxzcGFuPkZyYW1lczwvc3Bhbj5cbiAgICAgICAgICAgICAgICAgIDxzdHJvbmc+XG4gICAgICAgICAgICAgICAgICAgIHtzZWxlY3RlZEZyYWdtZW50LnN0YXJ0X2ZyYW1lfS17c2VsZWN0ZWRGcmFnbWVudC5lbmRfZnJhbWV9XG4gICAgICAgICAgICAgICAgICA8L3N0cm9uZz5cbiAgICAgICAgICAgICAgICA8L2Rpdj5cbiAgICAgICAgICAgICAgICA8ZGl2PlxuICAgICAgICAgICAgICAgICAgPHNwYW4+U3RhdHVzPC9zcGFuPlxuICAgICAgICAgICAgICAgICAgPHN0cm9uZz57c2VsZWN0ZWRGcmFnbWVudC5leGNsdWRlZCA/ICdFeGNsdWRlZCcgOiAnVmlzaWJsZSd9PC9zdHJvbmc+XG4gICAgICAgICAgICAgICAgPC9kaXY+XG4gICAgICAgICAgICAgIDwvZGl2PlxuICAgICAgICAgICAgICA8cCBjbGFzc05hbWU9XCJzdHJ1Y3R1cmUtY29udGV4dFwiPlxuICAgICAgICAgICAgICAgIHtzZWxlY3RlZEZyYWdtZW50LmZyYWdtZW50X2lkfSBpcyBjdXJyZW50bHkgYWxpZ25lZCB3aXRoIHNvdXJjZSB7YWN0aXZlU291cmNlTWV0YS5sYWJlbH0uIEZvY3VzIGFuZFxuICAgICAgICAgICAgICAgIFRpbWUgTGVucyBhcmUga2VwdCBzZXBhcmF0ZSBzbyBmcmFnbWVudCBpZGVudGl0eSBzdGF5cyBzdGFibGUgZHVyaW5nIGluc3BlY3Rpb24uXG4gICAgICAgICAgICAgIDwvcD5cbiAgICAgICAgICAgICAge2lzVGltZUxlbnNBY3RpdmUgPyAoXG4gICAgICAgICAgICAgICAgPGRpdiBjbGFzc05hbWU9XCJ0aW1lLWxlbnMtY2FyZFwiPlxuICAgICAgICAgICAgICAgICAgPGRpdiBjbGFzc05hbWU9XCJ0aW1lLWxlbnMtY2FyZF9faGVhZGVyXCI+XG4gICAgICAgICAgICAgICAgICAgIDxkaXY+XG4gICAgICAgICAgICAgICAgICAgICAgPHNwYW4gY2xhc3NOYW1lPVwiZXllYnJvd1wiPlRpbWUgTGVucyBQcmV2aWV3PC9zcGFuPlxuICAgICAgICAgICAgICAgICAgICAgIDxzdHJvbmc+UmVhZC1vbmx5IGludGVybmFsIHdpbmRvd3M8L3N0cm9uZz5cbiAgICAgICAgICAgICAgICAgICAgPC9kaXY+XG4gICAgICAgICAgICAgICAgICAgIDxzcGFuIGNsYXNzTmFtZT1cInBhbmVsLWNoaXBcIj57dGltZUxlbnNTbGljZXMubGVuZ3RofSBzbGljZXM8L3NwYW4+XG4gICAgICAgICAgICAgICAgICA8L2Rpdj5cbiAgICAgICAgICAgICAgICAgIDxkaXYgY2xhc3NOYW1lPVwidGltZS1sZW5zLXN0cmlwXCIgYXJpYS1sYWJlbD1cIlRpbWUgTGVucyBzdWItZnJhZ21lbnQgcHJldmlld1wiPlxuICAgICAgICAgICAgICAgICAgICB7dGltZUxlbnNTbGljZXMubWFwKChzbGljZSwgaW5kZXgpID0+IChcbiAgICAgICAgICAgICAgICAgICAgICA8ZGl2XG4gICAgICAgICAgICAgICAgICAgICAgICBrZXk9e3NsaWNlLmlkfVxuICAgICAgICAgICAgICAgICAgICAgICAgY2xhc3NOYW1lPXtgdGltZS1sZW5zLXNsaWNlJHtpbmRleCA9PT0gTWF0aC5mbG9vcih0aW1lTGVuc1NsaWNlcy5sZW5ndGggLyAyKSA/ICcgaXMtYW5jaG9yJyA6ICcnfWB9XG4gICAgICAgICAgICAgICAgICAgICAgICBzdHlsZT17e1xuICAgICAgICAgICAgICAgICAgICAgICAgICBmbGV4OiBgJHtzbGljZS5kdXJhdGlvbn0gMSAwYCxcbiAgICAgICAgICAgICAgICAgICAgICAgICAgb3BhY2l0eTogc2xpY2UuZW1waGFzaXNcbiAgICAgICAgICAgICAgICAgICAgICAgIH19XG4gICAgICAgICAgICAgICAgICAgICAgPlxuICAgICAgICAgICAgICAgICAgICAgICAgPHNwYW4gY2xhc3NOYW1lPVwidGltZS1sZW5zLXNsaWNlX19sYWJlbFwiPntzbGljZS5sYWJlbH08L3NwYW4+XG4gICAgICAgICAgICAgICAgICAgICAgICA8c3Ryb25nPntmb3JtYXREdXJhdGlvbihzbGljZS5kdXJhdGlvbil9PC9zdHJvbmc+XG4gICAgICAgICAgICAgICAgICAgICAgICA8c3BhbiBjbGFzc05hbWU9XCJ0aW1lLWxlbnMtc2xpY2VfX2ZyYW1lc1wiPlxuICAgICAgICAgICAgICAgICAgICAgICAgICB7c2xpY2Uuc3RhcnRGcmFtZX0te3NsaWNlLmVuZEZyYW1lfVxuICAgICAgICAgICAgICAgICAgICAgICAgPC9zcGFuPlxuICAgICAgICAgICAgICAgICAgICAgIDwvZGl2PlxuICAgICAgICAgICAgICAgICAgICApKX1cbiAgICAgICAgICAgICAgICAgIDwvZGl2PlxuICAgICAgICAgICAgICAgICAgPHAgY2xhc3NOYW1lPVwidGltZS1sZW5zLWNhcmRfX25vdGVcIj5cbiAgICAgICAgICAgICAgICAgICAgVGltZSBMZW5zIHN0YXlzIHJlYWQtb25seSBmb3Igbm93LiBJdCBleHBvc2VzIGludGVybmFsIHBhY2luZyB3aW5kb3dzIHdpdGhvdXQgdHVybmluZyBDQ1VUIGludG8gYVxuICAgICAgICAgICAgICAgICAgICB0aW1lbGluZSBlZGl0b3IuXG4gICAgICAgICAgICAgICAgICA8L3A+XG4gICAgICAgICAgICAgICAgPC9kaXY+XG4gICAgICAgICAgICAgICkgOiBudWxsfVxuICAgICAgICAgICAgICB7aW50ZWxsaWdlbmNlT24gJiYgc2VsZWN0ZWRGcmFnbWVudC5pbnRlbGxpZ2VuY2UgPyAoXG4gICAgICAgICAgICAgICAgPGRpdiBjbGFzc05hbWU9XCJtZXRyaWNzLWNhcmRcIj5cbiAgICAgICAgICAgICAgICAgIDxNZXRyaWNCYXIgbGFiZWw9XCJOYXJyYXRpdmVcIiB2YWx1ZT17c2VsZWN0ZWRGcmFnbWVudC5pbnRlbGxpZ2VuY2UubmFycmF0aXZlfSAvPlxuICAgICAgICAgICAgICAgICAgPE1ldHJpY0JhciBsYWJlbD1cIkVtb3Rpb25hbFwiIHZhbHVlPXtzZWxlY3RlZEZyYWdtZW50LmludGVsbGlnZW5jZS5lbW90aW9uYWx9IC8+XG4gICAgICAgICAgICAgICAgICA8TWV0cmljQmFyIGxhYmVsPVwiQWN0aW9uXCIgdmFsdWU9e3NlbGVjdGVkRnJhZ21lbnQuaW50ZWxsaWdlbmNlLmFjdGlvbn0gLz5cbiAgICAgICAgICAgICAgICAgIDxNZXRyaWNCYXIgbGFiZWw9XCJEaWFsb2d1ZVwiIHZhbHVlPXtzZWxlY3RlZEZyYWdtZW50LmludGVsbGlnZW5jZS5kaWFsb2d1ZX0gLz5cbiAgICAgICAgICAgICAgICA8L2Rpdj5cbiAgICAgICAgICAgICAgKSA6IChcbiAgICAgICAgICAgICAgICA8ZGl2IGNsYXNzTmFtZT1cIm1ldHJpY3MtcGxhY2Vob2xkZXJcIj5JbnRlbGxpZ2VuY2UgbWV0cmljcyBhcmUgb3B0aW9uYWwgYW5kIHN0YXkgc2Vjb25kYXJ5IHRvIHN0cnVjdHVyZS48L2Rpdj5cbiAgICAgICAgICAgICAgKX1cbiAgICAgICAgICAgIDwvZGl2PlxuICAgICAgICAgIDwvZGl2PlxuICAgICAgICApIDogKFxuICAgICAgICAgIDxkaXYgY2xhc3NOYW1lPVwiZW1wdHktZGV0YWlsXCI+XG4gICAgICAgICAgICBTZWxlY3QgYSBmcmFnbWVudCBmcm9tIHRoZSBib2FyZCwgcGFub3JhbWEsIG9yIEhvbGQgQXJlYSB0byBpbnNwZWN0IGl0cyBzdHJ1Y3R1cmUgaWRlbnRpdHkuXG4gICAgICAgICAgPC9kaXY+XG4gICAgICAgICl9XG4gICAgICA8L2Rpdj5cblxuICAgICAgPGRpdiBjbGFzc05hbWU9XCJwYW5lbC1jYXJkIHBhbmVsLWNhcmQtLXByZXZpZXdcIj5cbiAgICAgICAgPGRpdiBjbGFzc05hbWU9XCJwYW5lbC1oZWFkZXJcIj5cbiAgICAgICAgICA8c3BhbiBjbGFzc05hbWU9XCJleWVicm93XCI+UmVuZGVyIFByZXZpZXc8L3NwYW4+XG4gICAgICAgICAgPHNwYW4gY2xhc3NOYW1lPVwicGFuZWwtY2hpcFwiPlBsYWNlaG9sZGVyPC9zcGFuPlxuICAgICAgICA8L2Rpdj5cbiAgICAgICAgPGRpdiBjbGFzc05hbWU9XCJyZW5kZXItcHJldmlldy1wbGFjZWhvbGRlclwiPlxuICAgICAgICAgIEZpbmFsIHBsYXliYWNrIHN0YXlzIGltcGxpZWQgYnkgdGhlIGZyYWdtZW50IGJvYXJkLiBObyB0aW1lbGluZSBzdHJpcCBvciBzZXF1ZW5jZSBtaW5pbWFwIGlzIHJlbmRlcmVkIGhlcmUuXG4gICAgICAgIDwvZGl2PlxuICAgICAgPC9kaXY+XG5cbiAgICAgIDxkaXYgY2xhc3NOYW1lPVwicGFuZWwtY2FyZCBwYW5lbC1jYXJkLS1jaGF0XCI+XG4gICAgICAgIDxkaXYgY2xhc3NOYW1lPVwicGFuZWwtaGVhZGVyXCI+XG4gICAgICAgICAgPHNwYW4gY2xhc3NOYW1lPVwiZXllYnJvd1wiPkNoYXQgQmFyPC9zcGFuPlxuICAgICAgICAgIDxzcGFuIGNsYXNzTmFtZT1cInBhbmVsLWNoaXBcIj5TdGF0aWM8L3NwYW4+XG4gICAgICAgIDwvZGl2PlxuICAgICAgICA8ZGl2IGNsYXNzTmFtZT1cImNoYXQtc2hlbGxcIj5cbiAgICAgICAgICA8aW5wdXQgdHlwZT1cInRleHRcIiBwbGFjZWhvbGRlcj1cIkFzayBmb3IgdHdvIHN0cnVjdHVyYWwgYWx0ZXJuYXRpdmVzXCIgYXJpYS1sYWJlbD1cIkNoYXQgaW5wdXRcIiAvPlxuICAgICAgICAgIDxidXR0b24gdHlwZT1cImJ1dHRvblwiPlNlbmQ8L2J1dHRvbj5cbiAgICAgICAgPC9kaXY+XG4gICAgICA8L2Rpdj5cbiAgICA8L3NlY3Rpb24+XG4gICk7XG59XG4iXSwiZmlsZSI6IkQ6L0NDVVQgMS4wLjIvdWkvc3JjL2NvbXBvbmVudHMvQ2VudGVyUGFuZWwudHN4In0=

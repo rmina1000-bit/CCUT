@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CCUT Component Smoke</title>
+  <style>
+    html,
+    body {
+      margin: 0;
+      width: 100%;
+      height: 100%;
+      background: #0d1117;
+    }
+  </style>
+</head>
+
+<body>
+  <div id="smoke-root"></div>
+  <script>
+    window.__CCUT_COMPONENT_SMOKE__ = {
+      consoleErrorCount: 0,
+      pageErrorCount: 0,
+      consoleErrors: [],
+      pageErrors: [],
+      components: {}
+    };
+
+    (function (state) {
+      var originalConsoleError = console.error.bind(console);
+      console.error = function () {
+        state.consoleErrorCount += 1;
+        state.consoleErrors.push(Array.prototype.map.call(arguments, function (value) {
+          return typeof value === 'string' ? value : String(value);
+        }).join(' '));
+        return originalConsoleError.apply(console, arguments);
+      };
+
+      window.addEventListener('error', function (event) {
+        state.pageErrorCount += 1;
+        state.pageErrors.push(event.message || 'Unknown page error');
+      });
+
+      window.addEventListener('unhandledrejection', function (event) {
+        state.pageErrorCount += 1;
+        state.pageErrors.push(event.reason && event.reason.message ? event.reason.message : String(event.reason));
+      });
+    })(window.__CCUT_COMPONENT_SMOKE__);
+  </script>
+  <script id="component-smoke-json" type="application/json">{"pass":false,"status":"pending"}</script>
+  <script type="module" src="/src/smoke/componentSmoke.tsx"></script>
+</body>
+
+</html>

@@ -1,7 +1,7 @@
 import React, { useEffect, useRef } from 'react';
 import { useLayout } from '../context/LayoutContext';
 
-export default function ResizablePanel({ id, children }) {
+export default function ResizablePanel({ id, headerLeft = null, children }) {
   const { widths, collapsed, setRef, toggleCollapse } = useLayout();
   const elRef = useRef(null);
 
@@ -22,31 +22,16 @@ export default function ResizablePanel({ id, children }) {
       className={`panel panel-${id}${isCollapsed ? ' collapsed' : ''}`}
       style={{
         width: isCollapsed ? 40 : `${widths[id]}%`,
+        flexGrow: isCollapsed ? 0 : widths[id],
+        flexShrink: isCollapsed ? 0 : 1,
         position: 'relative',
         height: '100%',
-        overflow: 'hidden'
+        display: 'flex',
+        flexDirection: 'column',
+        overflow: id === 'right' ? 'visible' : 'hidden'
       }}
     >
-      <button
-        className="collapse-btn"
-        onClick={() => toggleCollapse(id)}
-        title={isCollapsed ? 'Expand panel' : 'Collapse panel'}
-        style={{
-          position: 'absolute',
-          top: 0,
-          left: 0,
-          zIndex: 1000,
-          background: 'transparent',
-          border: 'none',
-          color: '#38bdf8',
-          fontSize: 16,
-          cursor: 'pointer',
-          padding: '4px 8px'
-        }}
-      >
-        ☰
-      </button>
-      <div className="panel-content" style={{ width: '100%', height: '100%' }}>
+      <div className="panel-content" style={{ flex: 1, width: '100%', overflow: id === 'right' ? 'visible' : 'hidden', display: 'flex', flexDirection: 'column' }}>
         {children}
       </div>
     </div>

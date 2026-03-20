@@ -6,8 +6,8 @@ export default function CenterPanel({ chatProps }) {
     <div style={{
       width: '100%',
       height: '100vh',
-      background: '#05080f',
-      borderRight: '1px solid #1e2a3a',
+      background: '#18181b',
+      borderRight: '1px solid #27272a',
       display: 'flex',
       flexDirection: 'column',
       fontFamily: "'Courier New', monospace",

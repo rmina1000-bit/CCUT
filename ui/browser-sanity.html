@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CCUT Browser Sanity</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      font-family: Inter, system-ui, sans-serif;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html,
+    body {
+      margin: 0;
+      width: 100%;
+      height: 100%;
+      background: #0d1117;
+      color: #e5e7eb;
+    }
+
+    .sanity-shell {
+      height: 100%;
+      display: grid;
+      grid-template-rows: auto 1fr;
+      gap: 12px;
+      padding: 12px;
+    }
+
+    .sanity-card {
+      border: 1px solid rgba(96, 165, 250, 0.25);
+      border-radius: 12px;
+      background: rgba(15, 23, 42, 0.92);
+      padding: 12px 14px;
+    }
+
+    .sanity-card pre {
+      margin: 8px 0 0;
+      white-space: pre-wrap;
+      font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    }
+
+    .sanity-frame {
+      width: 100%;
+      height: 100%;
+      border: 1px solid rgba(148, 163, 184, 0.25);
+      border-radius: 12px;
+      background: #0d1117;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="sanity-shell">
+    <div class="sanity-card">
+      <strong>CCUT Browser Sanity Runner</strong>
+      <pre id="browser-sanity-status">Starting...</pre>
+    </div>
+    <iframe id="browser-sanity-frame" class="sanity-frame" title="CCUT browser sanity frame"></iframe>
+  </div>
+  <script id="browser-sanity-json" type="application/json">{"pass":false,"status":"pending"}</script>
+  <script type="module" src="/src/smoke/browserSanityRunner.ts"></script>
+</body>
+
+</html>

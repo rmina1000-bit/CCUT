@@ -1,35 +1,73 @@
-import React, { useState, useCallback } from 'react';
+import React, { useCallback, useEffect } from 'react';
+import { AppStateProvider } from './context/AppStateContext.jsx';
+import { WorkspaceProvider, useWorkspace } from './context/WorkspaceContext.jsx';
 import { LayoutProvider } from './context/LayoutContext.jsx';
 import { VideoProvider } from './context/VideoContext.jsx';
 import MainLayout from './layout/MainLayout.jsx';
+import UploadDecisionModal from './UploadDecisionModal.jsx';
+import { logEvent } from './utils/logEvent.js';
 
-export default function App() {
-  const [fragments, setFragments] = useState([]);
+function AppContent() {
+  const {
+    selectedWorkspaceId,
+    getSelectedWorkspaceData,
+    updateWorkspaceData
+  } = useWorkspace();
+
+  const workspaceData = getSelectedWorkspaceData() || {};
+  const fragments = workspaceData?.fragments || [];
+
+  const handleWorkspaceDataChange = useCallback((patch) => {
+    if (selectedWorkspaceId) {
+      updateWorkspaceData(selectedWorkspaceId, patch);
+    }
+  }, [selectedWorkspaceId, updateWorkspaceData]);
 
   const onFragmentsLoad = useCallback((newFrags) => {
-    setFragments(newFrags);
-  }, []);
+    handleWorkspaceDataChange({ fragments: newFrags });
+  }, [handleWorkspaceDataChange]);
+
+  const handleSetFragments = useCallback((newFrags) => {
+    const resolvedFrags = typeof newFrags === 'function' ? newFrags(fragments) : newFrags;
+    handleWorkspaceDataChange({ fragments: resolvedFrags });
+  }, [fragments, handleWorkspaceDataChange]);
 
   const onAction = useCallback(async (action) => {
-    try {
-      await fetch('http://localhost:8765/append-event', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          type: action.type,
-          payload: action.payload,
-        }),
-      });
-    } catch (e) {
-      console.warn('Failed to log UI action:', e);
+    if (typeof action === 'string') {
+      logEvent('CHAT_MESSAGE_SENT', { text: action });
+      return;
+    }
+    if (action && action.type) {
+      logEvent(action.type, action.payload);
     }
   }, []);
+
+  if (!selectedWorkspaceId) return null; // Wait for context seeding
 
   return (
     <LayoutProvider>
       <VideoProvider>
-        <MainLayout fragments={fragments} onFragments={setFragments} onAction={onAction} onFragmentsLoad={onFragmentsLoad} />
+        <MainLayout
+          key={selectedWorkspaceId}
+          workspaceData={workspaceData}
+          onWorkspaceDataChange={handleWorkspaceDataChange}
+          fragments={fragments}
+          onFragments={handleSetFragments}
+          onAction={onAction}
+          onFragmentsLoad={onFragmentsLoad}
+        />
+        <UploadDecisionModal />
       </VideoProvider>
     </LayoutProvider>
+  );
+}
+
+export default function App() {
+  return (
+    <AppStateProvider>
+      <WorkspaceProvider>
+        <AppContent />
+      </WorkspaceProvider>
+    </AppStateProvider>
   );
 }

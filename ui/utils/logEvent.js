@@ -12,9 +12,18 @@
 const API_BASE = 'http://localhost:8765';
 
 export function logEvent(type, payload = {}) {
+  if (!type) {
+    console.warn('[logEvent] Missing type! Payload:', payload);
+    return;
+  }
+
+  const body = { type, payload };
+
   fetch(`${API_BASE}/append-event`, {
-    method:  'POST',
+    method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body:    JSON.stringify({ type, payload }),
-  }).catch(() => {});  // intentional no-op on error
+    body: JSON.stringify(body),
+  }).catch((err) => {
+    console.error('[logEvent] Fetch failed:', err);
+  });
 }

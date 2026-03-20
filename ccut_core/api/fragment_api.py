@@ -39,7 +39,10 @@ async def generate(file: UploadFile = File(...)):
 
         fragments = generate_fragments(tmp_path)
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=str(exc)) from exc
+        import traceback
+        error_msg = f"Fragment generation failed: {str(exc)}\n{traceback.format_exc()}"
+        print(error_msg)
+        raise HTTPException(status_code=500, detail=error_msg) from exc
     finally:
         try:
             os.unlink(tmp_path)
