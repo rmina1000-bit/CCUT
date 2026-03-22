@@ -56,8 +56,8 @@ export function OriginalPanorama({
     <section className="workspace-section workspace-section--panorama">
       <div className="section-header">
         <div>
-          <span className="eyebrow">Original Panorama</span>
-          <h3>Source Material Map</h3>
+          <span className="eyebrow">오리지널 파노라마</span>
+          <h3>원본맵</h3>
         </div>
         <button type="button" className="ghost-button" onClick={onToggleIntelligence}>
           {intelligenceOn ? 'Intelligence On' : 'Intelligence Off'}

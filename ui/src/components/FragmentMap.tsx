@@ -399,8 +399,8 @@ export function FragmentMap({
     <section className="workspace-section workspace-section--map">
       <div className="section-header">
         <div>
-          <span className="eyebrow">Fragment Map</span>
-          <h3>Edit Structure</h3>
+          <span className="eyebrow">조각 지도</span>
+          <h3>조각맵</h3>
         </div>
         <span className="panel-chip">{visibleFragments.length} visible</span>
       </div>

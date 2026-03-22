@@ -21,8 +21,7 @@ const LeftNav: React.FC<LeftNavProps> = ({ activeItem, onItemClick }) => {
       {/* Logo — flush */}
       <div className="px-5 pt-4 pb-0">
         <span className="text-[16px] font-semibold tracking-[0.06em]">
-          <span className="bg-gradient-to-r from-blue-400 to-primary bg-clip-text text-transparent">CC</span>
-          <span className="text-[14.5px] font-semibold text-foreground/70 tracking-[0.04em]">UT</span>
+          <span className="bg-gradient-to-r from-blue-400 to-primary bg-clip-text text-transparent">CCUT</span>
         </span>
       </div>
 
