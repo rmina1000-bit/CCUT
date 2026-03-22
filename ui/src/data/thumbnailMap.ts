@@ -6,3 +6,7 @@ export const thumbnailMap = Object.fromEntries(
     fragment.thumbnail?.thumbnail_url || ''
   ])
 );
+
+export function getFragmentThumbnail(fragmentId: string): string | null {
+  return thumbnailMap[fragmentId] || null;
+}
