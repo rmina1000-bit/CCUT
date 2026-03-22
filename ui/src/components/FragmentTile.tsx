@@ -43,21 +43,21 @@ const SELECTED_SCALE: Record<FragmentTileVariant, number> = {
 };
 
 const HEIGHTS: Record<FragmentTileVariant, number> = {
-  panorama: 80,
-  edit: 96,
+  panorama: 72,
+  edit: 100,
   reserved: 72
 };
 
 const MAX_WIDTH: Record<FragmentTileVariant, number> = {
-  panorama: 160,
-  edit: 200,
-  reserved: 140
+  panorama: 120,
+  edit: 180,
+  reserved: 120
 };
 
 const MIN_WIDTH: Record<FragmentTileVariant, number> = {
-  panorama: 60,
-  edit: 64,
-  reserved: 56
+  panorama: 56,
+  edit: 72,
+  reserved: 60
 };
 
 export function FragmentTile({

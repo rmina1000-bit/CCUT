@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef } from 'react';
+import { Eye } from 'lucide-react';
 import { FragmentTile } from './FragmentTile';
 import type { Fragment, SourceVideo } from '../types/boundaryTypes';
 
@@ -54,28 +55,26 @@ export function OriginalPanorama({
 
   return (
     <section className="workspace-section workspace-section--panorama">
-      <div className="section-header">
-        <div>
-          <span className="eyebrow">오리지널 파노라마</span>
-          <h3>원본맵</h3>
+      <div className="panorama-header">
+        <span className="panorama-header__title">원본맵</span>
+        <div className="panorama-header__tabs" role="tablist" aria-label="Source videos">
+          {sources.map((source) => (
+            <button
+              key={source.id}
+              type="button"
+              className={`panorama-tab${source.id === activeSource ? ' is-active' : ''}`}
+              onClick={() => onSourceChange(source.id)}
+              role="tab"
+              aria-selected={source.id === activeSource}
+            >
+              {source.label}
+            </button>
+          ))}
         </div>
-        <button type="button" className="ghost-button" onClick={onToggleIntelligence}>
-          {intelligenceOn ? 'Intelligence On' : 'Intelligence Off'}
+        <button type="button" className="panorama-header__info" onClick={onToggleIntelligence}>
+          <Eye size={13} />
+          <span>정보</span>
         </button>
-      </div>
-      <div className="source-tabs" role="tablist" aria-label="Source videos">
-        {sources.map((source) => (
-          <button
-            key={source.id}
-            type="button"
-            className={`source-tab${source.id === activeSource ? ' is-active' : ''}`}
-            onClick={() => onSourceChange(source.id)}
-            role="tab"
-            aria-selected={source.id === activeSource}
-          >
-            {source.label}
-          </button>
-        ))}
       </div>
       <div className="panorama-strip" ref={stripRef}>
         {sourceFragments.map((fragment) => {

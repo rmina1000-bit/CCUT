@@ -395,14 +395,22 @@ export function FragmentMap({
     previousPositionsRef.current = nextPositions;
   }, [flowSignature]);
 
+  // Build frame ruler ticks from edit fragments
+  const frameRulerTicks = useMemo(() => {
+    let cumulative = 0;
+    const ticks: { frame: number }[] = [{ frame: 0 }];
+    editFragments.forEach((f) => {
+      cumulative += f.duration;
+      ticks.push({ frame: cumulative });
+    });
+    return ticks;
+  }, [editFragments]);
+
   return (
     <section className="workspace-section workspace-section--map">
-      <div className="section-header">
-        <div>
-          <span className="eyebrow">조각 지도</span>
-          <h3>조각맵</h3>
-        </div>
-        <span className="panel-chip">{visibleFragments.length} visible</span>
+      <div className="section-header section-header--inline">
+        <h3>조각맵</h3>
+        <span className="section-count">{editFragments.length}</span>
       </div>
 
       <div
@@ -554,6 +562,12 @@ export function FragmentMap({
             </button>
           );
         })}
+      </div>
+
+      <div className="frame-ruler" aria-hidden="true">
+        {frameRulerTicks.map((tick, i) => (
+          <span key={i} className="frame-ruler__tick">F{tick.frame}</span>
+        ))}
       </div>
     </section>
   );

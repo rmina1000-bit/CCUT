@@ -509,7 +509,7 @@ input:focus-visible,
 }
 
 .workspace-section--panorama {
-  flex: 0 0 138px;
+  flex: 0 0 120px;
   display: flex;
   flex-direction: column;
 }
@@ -522,10 +522,94 @@ input:focus-visible,
 }
 
 .workspace-section--hold {
-  flex: 0 0 190px;
+  flex: 0 0 140px;
   display: flex;
   flex-direction: column;
-  min-height: 140px;
+  min-height: 120px;
+}
+
+.panorama-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px 6px;
+}
+
+.panorama-header__title {
+  font-size: 14px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.panorama-header__tabs {
+  display: flex;
+  gap: 4px;
+}
+
+.panorama-tab {
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  background: transparent;
+  font-size: 12px;
+  font-weight: 500;
+  color: hsl(var(--muted-foreground));
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  transition: background 100ms, color 100ms, border-color 100ms;
+}
+
+.panorama-tab:hover {
+  color: hsl(var(--foreground));
+  background: hsl(var(--secondary) / 0.8);
+}
+
+.panorama-tab.is-active {
+  background: hsl(var(--primary) / 0.2);
+  color: hsl(var(--primary));
+  border-color: hsl(var(--primary) / 0.4);
+  font-weight: 700;
+}
+
+.panorama-header__info {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  border: 1px solid hsl(var(--border) / 0.6);
+  background: transparent;
+  color: hsl(var(--muted-foreground));
+  font-size: 11px;
+  cursor: pointer;
+  transition: color 100ms, border-color 100ms;
+}
+
+.panorama-header__info:hover {
+  color: hsl(var(--foreground));
+  border-color: hsl(var(--primary) / 0.5);
+}
+
+.section-header--inline {
+  padding: 10px 12px 6px;
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.section-header--inline h3 {
+  font-size: 14px;
+  font-weight: 700;
+  margin: 0;
+}
+
+.section-count {
+  font-size: 12px;
+  color: hsl(var(--muted-foreground));
+  font-weight: 400;
 }
 
 .source-tabs {
@@ -555,8 +639,8 @@ input:focus-visible,
   overflow-y: hidden;
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 0 12px 10px;
+  gap: 4px;
+  padding: 0 12px 8px;
 }
 
 .fragment-map-board {
@@ -566,8 +650,8 @@ input:focus-visible,
   display: flex;
   flex-wrap: wrap;
   align-content: flex-start;
-  gap: 10px 8px;
-  padding: 8px 12px 12px;
+  gap: 6px;
+  padding: 6px 12px 8px;
 }
 
 .fragment-map-slot {
@@ -608,7 +692,7 @@ input:focus-visible,
 .boundary-handle,
 .synthetic-seam {
   align-self: stretch;
-  min-height: 96px;
+  min-height: 100px;
   border: 0;
   background: transparent;
   cursor: pointer;
@@ -644,6 +728,22 @@ input:focus-visible,
   background: hsl(var(--ccut-amber));
 }
 
+.frame-ruler {
+  display: flex;
+  gap: 0;
+  padding: 2px 12px 6px;
+  overflow-x: auto;
+  border-top: 1px solid hsl(var(--border) / 0.3);
+}
+
+.frame-ruler__tick {
+  flex: 1;
+  font-size: 9px;
+  color: hsl(var(--muted-foreground) / 0.5);
+  white-space: nowrap;
+  min-width: 0;
+}
+
 .hold-board {
   position: relative;
   flex: 1;
@@ -656,7 +756,7 @@ input:focus-visible,
   display: flex;
   flex-wrap: wrap;
   align-items: flex-start;
-  gap: 10px;
+  gap: 8px;
   overflow-y: auto;
 }
 
@@ -698,8 +798,8 @@ input:focus-visible,
 .fragment-tile {
   position: relative;
   overflow: hidden;
-  border-radius: 6px;
-  border: 1px solid hsl(var(--border) / 0.5);
+  border-radius: 8px;
+  border: 1px solid hsl(var(--border) / 0.4);
   background: hsl(var(--secondary));
   transition:
     transform 150ms ease-out,
@@ -742,7 +842,7 @@ input:focus-visible,
 }
 
 .fragment-tile__shade {
-  background: linear-gradient(180deg, hsl(0 0% 0% / 0.04), hsl(0 0% 0% / 0.42));
+  background: linear-gradient(180deg, hsl(0 0% 0% / 0.02), hsl(0 0% 0% / 0.55));
 }
 
 .fragment-tile__id,
@@ -750,19 +850,22 @@ input:focus-visible,
 .fragment-tile__status {
   position: absolute;
   z-index: 2;
-  font-size: 10px;
 }
 
 .fragment-tile__id {
-  top: 8px;
-  left: 8px;
+  top: 6px;
+  left: 6px;
+  font-size: 11px;
   font-weight: 700;
+  text-shadow: 0 1px 3px hsl(0 0% 0% / 0.6);
 }
 
 .fragment-tile__duration {
-  right: 8px;
-  bottom: 8px;
-  font-size: 9px;
+  right: 6px;
+  bottom: 6px;
+  font-size: 10px;
+  color: hsl(var(--foreground) / 0.85);
+  text-shadow: 0 1px 3px hsl(0 0% 0% / 0.6);
 }
 
 .fragment-tile__status {

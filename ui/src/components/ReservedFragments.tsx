@@ -37,12 +37,9 @@ export function ReservedFragments({
 }: ReservedFragmentsProps) {
   return (
     <section className="workspace-section workspace-section--hold">
-      <div className="section-header">
-        <div>
-          <span className="eyebrow">보류 구역</span>
-          <h3>보류맵</h3>
-        </div>
-        <span className="panel-chip"></span>
+      <div className="section-header section-header--inline">
+        <h3>보류맵</h3>
+        <span className="section-count">{fragments.length}</span>
       </div>
       <div className="hold-board hold-board--flex">
         {fragments.length ? null : <p className="hold-empty">Move fragments here to remove them from the edit structure without deleting identity.</p>}
