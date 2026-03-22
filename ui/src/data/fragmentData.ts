@@ -1,5 +1,6 @@
 import { ensureFragmentThumbnail } from '../services/thumbnailService';
 import type { Fragment, HoldPosition, SourceVideo } from '../types/boundaryTypes';
+export type { Fragment } from '../types/boundaryTypes';
 
 const SOURCE_HUES: Record<string, number> = {
   A: 30,
@@ -52,7 +53,7 @@ function makeFragment(
   });
 }
 
-const initialEditFragments: Fragment[] = [
+export const initialEditFragments: Fragment[] = [
   makeFragment('A2', 'A', 78, 68),
   makeFragment('A3', 'A', 146, 56),
   makeFragment('B1', 'B', 32, 74),
@@ -66,7 +67,7 @@ const initialEditFragments: Fragment[] = [
   makeFragment('E1', 'E', 88, 82)
 ];
 
-const initialReservedFragments: Fragment[] = [
+export const initialReservedFragments: Fragment[] = [
   makeFragment('F1', 'F', 120, 60),
   makeFragment('G2', 'G', 210, 54)
 ];

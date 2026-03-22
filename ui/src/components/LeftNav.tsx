@@ -3,8 +3,8 @@ import { Archive, Upload, Settings, User, Clapperboard } from "lucide-react";
 import { ScrollArea } from "./ui/scroll-area";
 
 interface LeftNavProps {
-  activeNavItem: string;
-  onChange: (item: string) => void;
+  activeItem: string;
+  onItemClick: (item: string) => void;
 }
 
 const projects = [
@@ -15,7 +15,7 @@ const projects = [
   { id: "p5", name: "여행 하이라이트", date: "3월 8일", count: 2 },
 ];
 
-const LeftNav: React.FC<LeftNavProps> = ({ activeNavItem, onChange }) => {
+const LeftNav: React.FC<LeftNavProps> = ({ activeItem, onItemClick }) => {
   return (
     <div className="w-[220px] flex flex-col bg-[hsl(228_14%_8%)] h-full flex-shrink-0 border-r border-border/50">
       {/* Logo — flush */}
@@ -29,9 +29,9 @@ const LeftNav: React.FC<LeftNavProps> = ({ activeNavItem, onChange }) => {
       {/* Archive + SNS Upload */}
       <div className="px-2 mt-1 flex flex-col gap-0.5">
         <button
-          onClick={() => onChange("archive")}
+          onClick={() => onItemClick("archive")}
           className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg transition-colors duration-100
-            ${activeNavItem === "archive"
+            ${activeItem === "archive"
               ? "bg-secondary text-foreground"
               : "text-foreground/60 hover:text-foreground/80 hover:bg-secondary/40"
             }`}
@@ -40,9 +40,9 @@ const LeftNav: React.FC<LeftNavProps> = ({ activeNavItem, onChange }) => {
           <span className="text-[13px]">아카이브</span>
         </button>
         <button
-          onClick={() => onChange("upload")}
+          onClick={() => onItemClick("upload")}
           className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg transition-colors duration-100
-            ${activeNavItem === "upload"
+            ${activeItem === "upload"
               ? "bg-secondary text-foreground"
               : "text-foreground/60 hover:text-foreground/80 hover:bg-secondary/40"
             }`}
@@ -62,11 +62,11 @@ const LeftNav: React.FC<LeftNavProps> = ({ activeNavItem, onChange }) => {
       <ScrollArea className="flex-1 mt-1 px-2 min-h-0">
         <div className="flex flex-col gap-0.5">
           {projects.map((proj) => {
-            const isActive = activeNavItem === proj.id;
+            const isActive = activeItem === proj.id;
             return (
               <button
                 key={proj.id}
-                onClick={() => onChange(proj.id)}
+                onClick={() => onItemClick(proj.id)}
                 className={`w-full text-left px-3 py-2.5 rounded-lg transition-colors duration-100 group
                   ${isActive
                     ? "bg-secondary text-foreground"
@@ -89,9 +89,9 @@ const LeftNav: React.FC<LeftNavProps> = ({ activeNavItem, onChange }) => {
       {/* Bottom: Account + Settings */}
       <div className="px-2 pb-3 pt-1 flex flex-col gap-0.5 border-t border-border/20">
         <button
-          onClick={() => onChange("account")}
+          onClick={() => onItemClick("account")}
           className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg transition-colors duration-100
-            ${activeNavItem === "account"
+            ${activeItem === "account"
               ? "bg-secondary text-foreground"
               : "text-foreground/60 hover:text-foreground/80 hover:bg-secondary/40"
             }`}
@@ -100,9 +100,9 @@ const LeftNav: React.FC<LeftNavProps> = ({ activeNavItem, onChange }) => {
           <span className="text-[13px]">내 계정</span>
         </button>
         <button
-          onClick={() => onChange("settings")}
+          onClick={() => onItemClick("settings")}
           className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg transition-colors duration-100
-            ${activeNavItem === "settings"
+            ${activeItem === "settings"
               ? "bg-secondary text-foreground"
               : "text-foreground/60 hover:text-foreground/80 hover:bg-secondary/40"
             }`}

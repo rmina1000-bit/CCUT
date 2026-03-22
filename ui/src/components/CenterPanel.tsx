@@ -1,7 +1,6 @@
 import React, { useState, useRef, useEffect } from "react";
 import { Upload, Send, Play, Loader2, Check, User, Bot, Plus } from "lucide-react";
-import type { Fragment, SourceVideo } from "../types/boundaryTypes";
-import { formatDuration } from "../utils/fragmentUtils";
+import type { Fragment } from "../types/boundaryTypes";
 import { ScrollArea } from "./ui/scroll-area";
 
 type AppState = "empty" | "analyzing" | "proposal" | "chat";
@@ -21,17 +20,9 @@ interface ChatMessage {
 }
 
 interface CenterPanelProps {
-  sources?: SourceVideo[];
   selectedFragment: Fragment | null;
-  activeSource?: string;
-  focusExpandedId?: string | null;
-  timeLensId?: string | null;
-  intelligenceOn?: boolean;
-  visibleCount?: number;
-  precisionPairSelectionIds?: string[];
-  chatInput?: string;
-  onChatInputChange?: (v: string) => void;
-  onChatSubmit?: (msg: string) => void;
+  selectedSource: string;
+  editSequence?: Fragment[];
 }
 
 const mockProposals: { a: ProposalOption; b: ProposalOption } = {
@@ -49,26 +40,14 @@ const mockProposals: { a: ProposalOption; b: ProposalOption } = {
   },
 };
 
-const CenterPanel: React.FC<CenterPanelProps> = ({
-  sources = [],
-  selectedFragment,
-  activeSource,
-  chatInput: externalChatInput,
-  onChatInputChange,
-  onChatSubmit,
-}) => {
+const CenterPanel: React.FC<CenterPanelProps> = ({ selectedFragment, selectedSource, editSequence = [] }) => {
   const [appState, setAppState] = useState<AppState>("empty");
-  const [internalChatInput, setInternalChatInput] = useState("");
+  const [chatInput, setChatInput] = useState("");
   const [selectedProposal, setSelectedProposal] = useState<string | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [analyzeProgress, setAnalyzeProgress] = useState(0);
   const chatEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-
-  const chatInput = externalChatInput ?? internalChatInput;
-  const setChatInput = onChatInputChange ?? setInternalChatInput;
-
-  const sourceInfo = sources.find((s) => s.id === activeSource);
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -106,10 +85,6 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
 
   const handleSendMessage = () => {
     if (!chatInput.trim()) return;
-    if (onChatSubmit) {
-      onChatSubmit(chatInput);
-      return;
-    }
     const userMsg: ChatMessage = { id: Date.now().toString(), role: "user", content: chatInput };
     setMessages(prev => [...prev, userMsg]);
     setChatInput("");
@@ -195,21 +170,6 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
     return (
       <div className="flex flex-col bg-card/40 h-full w-full">
         <div className="flex-1 overflow-y-auto">
-          {sourceInfo && (
-            <div className="px-4 pt-3 pb-2 space-y-1">
-              <span className="text-[9px] font-medium text-muted-foreground/50 uppercase tracking-wider">Source</span>
-              <p className="text-[12px] font-medium text-foreground/85">{sourceInfo.label}</p>
-              <p className="text-[10px] text-muted-foreground/60 leading-relaxed">{sourceInfo.description}</p>
-              <div className="flex gap-2.5 text-[9px] text-muted-foreground/40">
-                <span>{sourceInfo.totalFrames} frames</span>
-                <span>{sourceInfo.fps} fps</span>
-                <span>{formatDuration(sourceInfo.totalFrames, sourceInfo.fps)}</span>
-              </div>
-            </div>
-          )}
-
-          <div className="mx-4 h-px bg-border/20" />
-
           <div className="px-4 py-3 space-y-2">
             <h3 className="text-[11px] font-medium text-foreground/70">편집안 선택</h3>
             <div className="grid grid-cols-2 gap-2">
