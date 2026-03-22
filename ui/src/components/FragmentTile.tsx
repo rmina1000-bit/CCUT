@@ -43,20 +43,20 @@ const SELECTED_SCALE: Record<FragmentTileVariant, number> = {
 };
 
 const HEIGHTS: Record<FragmentTileVariant, number> = {
-  panorama: 72,
-  edit: 96,
+  panorama: 80,
+  edit: 120,
   reserved: 66
 };
 
 const MAX_WIDTH: Record<FragmentTileVariant, number> = {
   panorama: 120,
-  edit: 180,
+  edit: 220,
   reserved: 120
 };
 
 const MIN_WIDTH: Record<FragmentTileVariant, number> = {
   panorama: 56,
-  edit: 72,
+  edit: 80,
   reserved: 60
 };
 

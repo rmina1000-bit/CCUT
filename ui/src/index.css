@@ -509,7 +509,7 @@ input:focus-visible,
 }
 
 .workspace-section--panorama {
-  flex: 0 0 120px;
+  flex: 0 0 130px;
   display: flex;
   flex-direction: column;
 }
@@ -692,7 +692,7 @@ input:focus-visible,
 .boundary-handle,
 .synthetic-seam {
   align-self: stretch;
-  min-height: 100px;
+  min-height: 120px;
   border: 0;
   background: transparent;
   cursor: pointer;
