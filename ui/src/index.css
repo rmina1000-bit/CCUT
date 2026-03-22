@@ -1,28 +1,54 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-:root {
-  --background: 228 12% 10%;
-  --foreground: 220 10% 88%;
-  --card: 228 10% 13%;
-  --primary: 211 55% 58%;
-  --primary-foreground: 0 0% 100%;
-  --secondary: 228 8% 17%;
-  --muted: 228 6% 21%;
-  --muted-foreground: 220 6% 50%;
-  --destructive: 0 50% 55%;
-  --border: 228 6% 18%;
-  --input: 228 6% 22%;
-  --ring: 211 55% 58%;
-  --ccut-bg-deep: 228 12% 10%;
-  --ccut-bg-panel: 228 10% 13%;
-  --ccut-bg-elevated: 228 8% 16%;
-  --ccut-amber: 30 50% 55%;
-  --ccut-indigo: 220 35% 52%;
-  --ccut-stroke: 228 5% 20%;
-  color-scheme: dark;
-  font-family: Inter, system-ui, sans-serif;
+@layer base {
+  :root {
+    --background: 228 12% 10%;
+    --foreground: 220 10% 88%;
+    --card: 228 10% 13%;
+    --card-foreground: 220 10% 88%;
+    --popover: 228 10% 13%;
+    --popover-foreground: 220 10% 88%;
+    --primary: 211 55% 58%;
+    --primary-foreground: 220 10% 88%;
+    --secondary: 228 8% 17%;
+    --secondary-foreground: 220 8% 78%;
+    --muted: 228 6% 21%;
+    --muted-foreground: 220 6% 50%;
+    --accent: 228 8% 17%;
+    --accent-foreground: 220 8% 78%;
+    --destructive: 0 62% 50%;
+    --destructive-foreground: 0 0% 95%;
+    --border: 228 6% 18%;
+    --input: 228 6% 18%;
+    --ring: 211 55% 58%;
+    --radius: 0.5rem;
+    --ccut-bg-deep: 228 12% 10%;
+    --ccut-bg-panel: 228 10% 13%;
+    --ccut-gold: 211 55% 58%;
+    --ccut-gold-dim: 211 35% 40%;
+    --ccut-text-primary: 220 10% 88%;
+    --ccut-text-secondary: 220 6% 50%;
+    --ccut-intelligence-start: 220 35% 52%;
+    --ccut-intelligence-end: 30 50% 55%;
+    --sidebar-background: 228 14% 8%;
+    --sidebar-foreground: 220 8% 78%;
+    --sidebar-primary: 211 55% 58%;
+    --sidebar-primary-foreground: 220 10% 88%;
+    --sidebar-accent: 228 8% 17%;
+    --sidebar-accent-foreground: 220 8% 78%;
+    --sidebar-border: 228 6% 18%;
+    --sidebar-ring: 211 55% 58%;
+    --ccut-bg-elevated: 228 8% 16%;
+    --ccut-amber: 30 50% 55%;
+    --ccut-indigo: 220 35% 52%;
+    --ccut-stroke: 228 5% 20%;
+    color-scheme: dark;
+    font-family: 'Inter', system-ui, sans-serif;
+  }
 }
 
 *,
