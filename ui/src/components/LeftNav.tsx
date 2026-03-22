@@ -20,8 +20,8 @@ const LeftNav: React.FC<LeftNavProps> = ({ activeItem, onItemClick }) => {
     <div className="w-[220px] flex flex-col bg-[hsl(228_14%_8%)] h-full flex-shrink-0 border-r border-border/50">
       {/* Logo — flush */}
       <div className="px-5 pt-4 pb-0">
-        <span className="text-[16px] font-semibold tracking-[0.06em] leading-none">
-          <span className="bg-gradient-to-r from-blue-400 to-primary bg-clip-text text-transparent">CC</span><span className="text-[14.5px] font-semibold text-foreground/70 tracking-[0.04em]">UT</span>
+        <span className="text-[17px] font-bold tracking-[0.12em] bg-gradient-to-r from-blue-400 to-primary bg-clip-text text-transparent">
+          CCUT
         </span>
       </div>
 
