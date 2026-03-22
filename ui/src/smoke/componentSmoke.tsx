@@ -105,6 +105,8 @@ function SmokeApp() {
             highlightedFragmentId={visibleFragment.fragment_id}
             focusExpandedId={null}
             intelligenceOn={true}
+            playingFragmentId={null}
+            playProgress={0}
             fragmentOverrides={new Map()}
             onSourceChange={() => undefined}
             onFragmentSelect={noopFragmentHandler}
