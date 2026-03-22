@@ -3,8 +3,8 @@ import { Archive, Upload, Settings, User, Clapperboard } from "lucide-react";
 import { ScrollArea } from "./ui/scroll-area";
 
 interface LeftNavProps {
-  activeItem: string;
-  onItemClick: (item: string) => void;
+  activeNavItem: string;
+  onChange: (item: string) => void;
 }
 
 const projects = [
@@ -15,22 +15,23 @@ const projects = [
   { id: "p5", name: "여행 하이라이트", date: "3월 8일", count: 2 },
 ];
 
-const LeftNav: React.FC<LeftNavProps> = ({ activeItem, onItemClick }) => {
+const LeftNav: React.FC<LeftNavProps> = ({ activeNavItem, onChange }) => {
   return (
     <div className="w-[220px] flex flex-col bg-[hsl(228_14%_8%)] h-full flex-shrink-0 border-r border-border/50">
       {/* Logo — flush */}
       <div className="px-5 pt-4 pb-0">
         <span className="text-[16px] font-semibold tracking-[0.06em]">
-          <span className="bg-gradient-to-r from-blue-400 to-primary bg-clip-text text-transparent">CCUT</span>
+          <span className="bg-gradient-to-r from-blue-400 to-primary bg-clip-text text-transparent">CC</span>
+          <span className="text-[14.5px] font-semibold text-foreground/70 tracking-[0.04em]">UT</span>
         </span>
       </div>
 
       {/* Archive + SNS Upload */}
       <div className="px-2 mt-1 flex flex-col gap-0.5">
         <button
-          onClick={() => onItemClick("archive")}
+          onClick={() => onChange("archive")}
           className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg transition-colors duration-100
-            ${activeItem === "archive"
+            ${activeNavItem === "archive"
               ? "bg-secondary text-foreground"
               : "text-foreground/60 hover:text-foreground/80 hover:bg-secondary/40"
             }`}
@@ -39,9 +40,9 @@ const LeftNav: React.FC<LeftNavProps> = ({ activeItem, onItemClick }) => {
           <span className="text-[13px]">아카이브</span>
         </button>
         <button
-          onClick={() => onItemClick("upload")}
+          onClick={() => onChange("upload")}
           className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg transition-colors duration-100
-            ${activeItem === "upload"
+            ${activeNavItem === "upload"
               ? "bg-secondary text-foreground"
               : "text-foreground/60 hover:text-foreground/80 hover:bg-secondary/40"
             }`}
@@ -61,11 +62,11 @@ const LeftNav: React.FC<LeftNavProps> = ({ activeItem, onItemClick }) => {
       <ScrollArea className="flex-1 mt-1 px-2 min-h-0">
         <div className="flex flex-col gap-0.5">
           {projects.map((proj) => {
-            const isActive = activeItem === proj.id;
+            const isActive = activeNavItem === proj.id;
             return (
               <button
                 key={proj.id}
-                onClick={() => onItemClick(proj.id)}
+                onClick={() => onChange(proj.id)}
                 className={`w-full text-left px-3 py-2.5 rounded-lg transition-colors duration-100 group
                   ${isActive
                     ? "bg-secondary text-foreground"
@@ -88,9 +89,9 @@ const LeftNav: React.FC<LeftNavProps> = ({ activeItem, onItemClick }) => {
       {/* Bottom: Account + Settings */}
       <div className="px-2 pb-3 pt-1 flex flex-col gap-0.5 border-t border-border/20">
         <button
-          onClick={() => onItemClick("account")}
+          onClick={() => onChange("account")}
           className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg transition-colors duration-100
-            ${activeItem === "account"
+            ${activeNavItem === "account"
               ? "bg-secondary text-foreground"
               : "text-foreground/60 hover:text-foreground/80 hover:bg-secondary/40"
             }`}
@@ -99,9 +100,9 @@ const LeftNav: React.FC<LeftNavProps> = ({ activeItem, onItemClick }) => {
           <span className="text-[13px]">내 계정</span>
         </button>
         <button
-          onClick={() => onItemClick("settings")}
+          onClick={() => onChange("settings")}
           className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg transition-colors duration-100
-            ${activeItem === "settings"
+            ${activeNavItem === "settings"
               ? "bg-secondary text-foreground"
               : "text-foreground/60 hover:text-foreground/80 hover:bg-secondary/40"
             }`}

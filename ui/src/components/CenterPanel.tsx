@@ -21,10 +21,17 @@ interface ChatMessage {
 }
 
 interface CenterPanelProps {
+  sources?: SourceVideo[];
   selectedFragment: Fragment | null;
-  selectedSource: string;
-  editSequence?: Fragment[];
-  sourceVideos?: SourceVideo[];
+  activeSource?: string;
+  focusExpandedId?: string | null;
+  timeLensId?: string | null;
+  intelligenceOn?: boolean;
+  visibleCount?: number;
+  precisionPairSelectionIds?: string[];
+  chatInput?: string;
+  onChatInputChange?: (v: string) => void;
+  onChatSubmit?: (msg: string) => void;
 }
 
 const mockProposals: { a: ProposalOption; b: ProposalOption } = {
@@ -42,16 +49,26 @@ const mockProposals: { a: ProposalOption; b: ProposalOption } = {
   },
 };
 
-const CenterPanel: React.FC<CenterPanelProps> = ({ selectedFragment, selectedSource, editSequence = [], sourceVideos = [] }) => {
+const CenterPanel: React.FC<CenterPanelProps> = ({
+  sources = [],
+  selectedFragment,
+  activeSource,
+  chatInput: externalChatInput,
+  onChatInputChange,
+  onChatSubmit,
+}) => {
   const [appState, setAppState] = useState<AppState>("empty");
-  const [chatInput, setChatInput] = useState("");
+  const [internalChatInput, setInternalChatInput] = useState("");
   const [selectedProposal, setSelectedProposal] = useState<string | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [analyzeProgress, setAnalyzeProgress] = useState(0);
   const chatEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const sourceInfo = sourceVideos.find((s) => s.id === selectedSource);
+  const chatInput = externalChatInput ?? internalChatInput;
+  const setChatInput = onChatInputChange ?? setInternalChatInput;
+
+  const sourceInfo = sources.find((s) => s.id === activeSource);
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -89,6 +106,10 @@ const CenterPanel: React.FC<CenterPanelProps> = ({ selectedFragment, selectedSou
 
   const handleSendMessage = () => {
     if (!chatInput.trim()) return;
+    if (onChatSubmit) {
+      onChatSubmit(chatInput);
+      return;
+    }
     const userMsg: ChatMessage = { id: Date.now().toString(), role: "user", content: chatInput };
     setMessages(prev => [...prev, userMsg]);
     setChatInput("");
