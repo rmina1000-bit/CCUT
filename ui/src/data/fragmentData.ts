@@ -12,7 +12,7 @@ const SOURCE_HUES: Record<string, number> = {
   G: 320
 };
 
-const sourceVideos: SourceVideo[] = [
+export const sourceVideos: SourceVideo[] = [
   { id: 'A', label: 'A', totalFrames: 720, fps: 24, description: 'Opening conversation beats and establishing shots.' },
   { id: 'B', label: 'B', totalFrames: 840, fps: 24, description: 'Secondary reactions and supporting cutaways.' },
   { id: 'C', label: 'C', totalFrames: 900, fps: 24, description: 'Interview core narrative with alternate trims.' },
@@ -72,7 +72,7 @@ export const initialReservedFragments: Fragment[] = [
   makeFragment('G2', 'G', 210, 54)
 ];
 
-const initialHoldAreaPositions: Record<string, HoldPosition> = {
+export const initialHoldAreaPositions: Record<string, HoldPosition> = {
   F1: { x: 24, y: 24 },
   G2: { x: 148, y: 48 }
 };
