@@ -1,3 +1,4 @@
+import { Trash2 } from 'lucide-react';
 import { FragmentTile } from './FragmentTile';
 import type { Fragment, HoldPosition } from '../types/boundaryTypes';
 
@@ -43,57 +44,56 @@ export function ReservedFragments({
         </div>
         <span className="panel-chip"></span>
       </div>
-      <div className="hold-board">
+      <div className="hold-board hold-board--flex">
         {fragments.length ? null : <p className="hold-empty">Move fragments here to remove them from the edit structure without deleting identity.</p>}
-        {fragments.map((fragment) => {
-          const position = positions[fragment.fragment_id] || { x: 18, y: 18 };
-          return (
-            <div
-              key={fragment.fragment_id}
-              className="hold-board__item"
-              style={{ left: position.x, top: position.y }}
-              onMouseDown={(event) => onRepositionStart(fragment, event)}
+        {fragments.map((fragment) => (
+          <div
+            key={fragment.fragment_id}
+            className="hold-board__item hold-board__item--inline"
+            onMouseDown={(event) => onRepositionStart(fragment, event)}
+          >
+            <button
+              type="button"
+              className="hold-board__replace-handle"
+              draggable
+              data-action-button="true"
+              aria-label={`Drag ${fragment.fragment_id} to replace an edit fragment`}
+              onClick={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+              }}
+              onMouseDown={(event) => {
+                event.stopPropagation();
+              }}
+              onDragStart={(event) => {
+                event.stopPropagation();
+                event.dataTransfer.effectAllowed = 'move';
+                event.dataTransfer.setData('text/plain', fragment.fragment_id);
+                onReplaceDragStart(fragment.fragment_id);
+              }}
+              onDragEnd={onReplaceDragEnd}
             >
-              <button
-                type="button"
-                className="hold-board__replace-handle"
-                draggable
-                data-action-button="true"
-                aria-label={`Drag ${fragment.fragment_id} to replace an edit fragment`}
-                onClick={(event) => {
-                  event.preventDefault();
-                  event.stopPropagation();
-                }}
-                onMouseDown={(event) => {
-                  event.stopPropagation();
-                }}
-                onDragStart={(event) => {
-                  event.stopPropagation();
-                  event.dataTransfer.effectAllowed = 'move';
-                  event.dataTransfer.setData('text/plain', fragment.fragment_id);
-                  onReplaceDragStart(fragment.fragment_id);
-                }}
-                onDragEnd={onReplaceDragEnd}
-              >
-                Replace
-              </button>
-              <FragmentTile
-                fragment={fragment}
-                variant="reserved"
-                isSelected={selectedFragmentId === fragment.fragment_id}
-                isFocusExpanded={false}
-                isTimeLens={false}
-                isDimmed={!!(focusExpandedId || timeLensId) && selectedFragmentId !== fragment.fragment_id}
-                isPlaying={playingFragmentId === fragment.fragment_id}
-                playProgress={playingFragmentId === fragment.fragment_id ? playProgress : 0}
-                onSingleClick={() => onSelect(fragment)}
-                onPlayToggle={() => onPlayToggle(fragment)}
-                onRestoreFromHold={() => onRestore(fragment)}
-                onThumbnailError={onThumbnailError}
-              />
-            </div>
-          );
-        })}
+              Replace
+            </button>
+            <FragmentTile
+              fragment={fragment}
+              variant="reserved"
+              isSelected={selectedFragmentId === fragment.fragment_id}
+              isFocusExpanded={false}
+              isTimeLens={false}
+              isDimmed={!!(focusExpandedId || timeLensId) && selectedFragmentId !== fragment.fragment_id}
+              isPlaying={playingFragmentId === fragment.fragment_id}
+              playProgress={playingFragmentId === fragment.fragment_id ? playProgress : 0}
+              onSingleClick={() => onSelect(fragment)}
+              onPlayToggle={() => onPlayToggle(fragment)}
+              onRestoreFromHold={() => onRestore(fragment)}
+              onThumbnailError={onThumbnailError}
+            />
+          </div>
+        ))}
+        <div className="hold-board__trash-icon" aria-label="보류 구역">
+          <Trash2 size={18} />
+        </div>
       </div>
     </section>
   );

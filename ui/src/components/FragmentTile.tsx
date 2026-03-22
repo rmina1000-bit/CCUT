@@ -43,21 +43,21 @@ const SELECTED_SCALE: Record<FragmentTileVariant, number> = {
 };
 
 const HEIGHTS: Record<FragmentTileVariant, number> = {
-  panorama: 64,
-  edit: 72,
-  reserved: 56
+  panorama: 80,
+  edit: 96,
+  reserved: 72
 };
 
-const WIDTH_SCALE: Record<FragmentTileVariant, number> = {
-  panorama: 0.6,
-  edit: 0.7,
-  reserved: 0.5
+const MAX_WIDTH: Record<FragmentTileVariant, number> = {
+  panorama: 160,
+  edit: 200,
+  reserved: 140
 };
 
 const MIN_WIDTH: Record<FragmentTileVariant, number> = {
   panorama: 60,
-  edit: 48,
-  reserved: 48
+  edit: 64,
+  reserved: 56
 };
 
 export function FragmentTile({
@@ -174,7 +174,7 @@ export function FragmentTile({
         .filter(Boolean)
         .join(' ')}
       style={{
-        width: Math.max(MIN_WIDTH[variant], displayDuration * WIDTH_SCALE[variant]),
+        width: Math.max(MIN_WIDTH[variant], Math.min(MAX_WIDTH[variant], displayDuration / 30 * 40)),
         height: HEIGHTS[variant],
         transform: `scale(${scale})`,
         opacity,
@@ -217,6 +217,25 @@ export function FragmentTile({
               }}
             />
           ))}
+        </div>
+      ) : null}
+
+      {variant === 'edit' && fragment.intelligence ? (
+        <div className="fragment-tile__intel-bar" aria-hidden="true">
+          <div
+            className="fragment-tile__intel-segment"
+            style={{
+              flex: fragment.intelligence.hook,
+              background: `hsl(211 55% ${40 + fragment.intelligence.hook * 30}%)`
+            }}
+          />
+          <div
+            className="fragment-tile__intel-segment"
+            style={{
+              flex: fragment.intelligence.emotional,
+              background: `hsl(0 50% ${35 + fragment.intelligence.emotional * 30}%)`
+            }}
+          />
         </div>
       ) : null}
 
