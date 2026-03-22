@@ -11,6 +11,8 @@ interface OriginalPanoramaProps {
   highlightedFragmentId: string | null;
   focusExpandedId: string | null;
   intelligenceOn: boolean;
+  playingFragmentId: string | null;
+  playProgress: number;
   fragmentOverrides: Map<string, number>;
   onSourceChange: (sourceId: string) => void;
   onFragmentSelect: (fragment: Fragment) => void;
@@ -26,6 +28,8 @@ export function OriginalPanorama({
   highlightedFragmentId,
   focusExpandedId,
   intelligenceOn,
+  playingFragmentId,
+  playProgress,
   fragmentOverrides,
   onSourceChange,
   onFragmentSelect,
@@ -89,8 +93,8 @@ export function OriginalPanorama({
               isFocusExpanded={false}
               isTimeLens={false}
               isDimmed={isDimmed}
-              isPlaying={false}
-              playProgress={0}
+              isPlaying={playingFragmentId === fragment.fragment_id}
+              playProgress={playingFragmentId === fragment.fragment_id ? playProgress : 0}
               intelligenceOn={intelligenceOn}
               durationOverride={fragmentOverrides.get(fragment.fragment_id)}
               highlighted={highlightedFragmentId === fragment.fragment_id}

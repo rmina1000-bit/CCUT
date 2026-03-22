@@ -818,7 +818,8 @@ input:focus-visible,
 }
 
 .fragment-tile.is-highlighted:not(.is-selected) {
-  border-color: hsl(var(--primary) / 0.3);
+  border-color: hsl(var(--ccut-amber) / 0.6);
+  box-shadow: 0 0 0 1px hsl(var(--ccut-amber) / 0.2);
 }
 
 .fragment-tile.is-time-lens {

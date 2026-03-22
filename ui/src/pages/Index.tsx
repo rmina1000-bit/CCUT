@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useRef, useEffect } from "react";
+import React, { useState, useCallback, useRef, useEffect, useMemo } from "react";
 import LeftNav from "@/components/LeftNav";
 import CenterPanel from "@/components/CenterPanel";
 import { OriginalPanorama } from "@/components/OriginalPanorama";
@@ -33,6 +33,12 @@ const Index: React.FC = () => {
   const [reservedFragments, setReservedFragments] = useState<Fragment[]>(initialReservedFragments);
   const [holdPositions] = useState<Record<string, HoldPosition>>(initialHoldAreaPositions);
 
+  // Playing state: which fragment is playing and where the click originated
+  const [playingFragmentId, setPlayingFragmentId] = useState<string | null>(null);
+  const [playOrigin, setPlayOrigin] = useState<'edit' | 'panorama' | null>(null);
+  const [playProgress, setPlayProgress] = useState(0);
+  const playTimerRef = useRef<number | null>(null);
+
   // Fragment overrides — Map<string, number> (duration overrides for boundary drag)
   const [fragmentOverrides, setFragmentOverrides] = useState<Map<string, number>>(new Map());
 
@@ -44,6 +50,45 @@ const Index: React.FC = () => {
   const [isDragging, setIsDragging] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const leftNavWidth = 220;
+
+  // Simulated playback progress
+  const startPlay = useCallback((fragmentId: string, origin: 'edit' | 'panorama') => {
+    if (playTimerRef.current) clearInterval(playTimerRef.current);
+    setPlayingFragmentId(fragmentId);
+    setPlayOrigin(origin);
+    setPlayProgress(0);
+    playTimerRef.current = window.setInterval(() => {
+      setPlayProgress((prev) => {
+        if (prev >= 100) {
+          if (playTimerRef.current) clearInterval(playTimerRef.current);
+          playTimerRef.current = null;
+          setPlayingFragmentId(null);
+          setPlayOrigin(null);
+          return 0;
+        }
+        return prev + 2;
+      });
+    }, 80);
+  }, []);
+
+  const stopPlay = useCallback(() => {
+    if (playTimerRef.current) clearInterval(playTimerRef.current);
+    playTimerRef.current = null;
+    setPlayingFragmentId(null);
+    setPlayOrigin(null);
+    setPlayProgress(0);
+  }, []);
+
+  useEffect(() => {
+    return () => { if (playTimerRef.current) clearInterval(playTimerRef.current); };
+  }, []);
+
+  // Cross-highlight: when edit plays, panorama gets highlight border (not play)
+  // When panorama plays, edit gets highlight border (not play)
+  const editPlayingId = playOrigin === 'edit' ? playingFragmentId : null;
+  const panoramaPlayingId = playOrigin === 'panorama' ? playingFragmentId : null;
+  const editHighlightIds = playOrigin === 'panorama' && playingFragmentId ? [playingFragmentId] : [];
+  const panoramaHighlightId = playOrigin === 'edit' ? playingFragmentId : highlightedPanoramaFrag;
 
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY, String(centerWidth));
@@ -73,9 +118,10 @@ const Index: React.FC = () => {
     };
   }, [isDragging]);
 
-  // Single click toggles selection
+  // Edit fragment click: select + switch source + auto-play + highlight panorama
   const handleEditFragmentClick = useCallback((f: Fragment) => {
-    if (selectedFragment?.fragment_id === f.fragment_id) {
+    if (selectedFragment?.fragment_id === f.fragment_id && playingFragmentId === f.fragment_id) {
+      stopPlay();
       setSelectedFragment(null);
       setHighlightedPanoramaFrag(null);
       setExpandedFragment(null);
@@ -84,8 +130,9 @@ const Index: React.FC = () => {
       setActiveSource(f.source_video);
       setHighlightedPanoramaFrag(f.fragment_id);
       setExpandedFragment(null);
+      startPlay(f.fragment_id, 'edit');
     }
-  }, [selectedFragment]);
+  }, [selectedFragment, playingFragmentId, startPlay, stopPlay]);
 
   // Double click enters Time Lens
   const handleEditFragmentDoubleClick = useCallback((f: Fragment) => {
@@ -95,14 +142,18 @@ const Index: React.FC = () => {
     setExpandedFragment((prev) => (prev === f.fragment_id ? null : f.fragment_id));
   }, []);
 
+  // Panorama fragment click: play panorama + highlight edit fragment border
   const handlePanoramaFragmentClick = useCallback((f: Fragment) => {
-    if (selectedFragment?.fragment_id === f.fragment_id) {
+    if (selectedFragment?.fragment_id === f.fragment_id && playingFragmentId === f.fragment_id) {
+      stopPlay();
       setSelectedFragment(null);
       setHighlightedPanoramaFrag(null);
     } else {
       setSelectedFragment(f);
+      setHighlightedPanoramaFrag(f.fragment_id);
+      startPlay(f.fragment_id, 'panorama');
     }
-  }, [selectedFragment]);
+  }, [selectedFragment, playingFragmentId, startPlay, stopPlay]);
 
   const handleReservedClick = useCallback((f: Fragment) => {
     if (selectedFragment?.fragment_id === f.fragment_id) {
@@ -148,10 +199,11 @@ const Index: React.FC = () => {
   const handleBackgroundClick = useCallback((e: React.MouseEvent) => {
     const target = e.target as HTMLElement;
     if (target.closest(".fragment-tile")) return;
+    stopPlay();
     setSelectedFragment(null);
     setHighlightedPanoramaFrag(null);
     setExpandedFragment(null);
-  }, []);
+  }, [stopPlay]);
 
   return (
     <div ref={containerRef} className="flex h-screen w-full overflow-hidden bg-background" onClick={handleBackgroundClick}>
@@ -191,9 +243,11 @@ const Index: React.FC = () => {
           fragments={editFragments}
           activeSource={activeSource}
           selectedFragmentId={selectedFragment?.fragment_id || null}
-          highlightedFragmentId={highlightedPanoramaFrag}
+          highlightedFragmentId={panoramaHighlightId}
           focusExpandedId={expandedFragment}
           intelligenceOn={intelligenceOn}
+          playingFragmentId={panoramaPlayingId}
+          playProgress={panoramaPlayingId ? playProgress : 0}
           fragmentOverrides={fragmentOverrides}
           onSourceChange={setActiveSource}
           onFragmentSelect={handlePanoramaFragmentClick}
@@ -207,9 +261,9 @@ const Index: React.FC = () => {
             pairSelectedFragmentIds={[]}
             focusExpandedId={expandedFragment}
             timeLensId={null}
-            playingFragmentId={null}
-            playProgress={0}
-            boundaryHighlightIds={[]}
+            playingFragmentId={editPlayingId}
+            playProgress={editPlayingId ? playProgress : 0}
+            boundaryHighlightIds={editHighlightIds}
             isBoundaryDragging={false}
             fragmentOverrides={fragmentOverrides}
             dragOrigin={null}
