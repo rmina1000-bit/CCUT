@@ -109,7 +109,28 @@ A/B 제안이 주인공.
 - 브랜치 생성 금지
 - npm run build 통과 확인 후 커밋
 
+## 현재 상태 (2026-03-23 기준)
+- 브랜치: main 단일 브랜치
+- 최신 커밋: 0f44636c
+- 빌드: 0 에러
+- git 히스토리: 초기화 완료
+- 이미지 에셋: ui/src/assets/thumbs/source-a~g.jpg 존재
+
 ## 현재 미해결 이슈
-- 로컬 화면: 구버전 CenterPanel 표시 중
-- 원인: main 브랜치가 최신 작업 미반영
-- 해결: main 강제 업데이트 완료 후 해소 예정
+- 로컬 화면이 Lovable 최신 디자인과 다름
+- 원본맵 탭 한글 깨짐 (A B C D E F G 영문이어야 함)
+- 조각맵 8개만 표시 (15개 전체 표시되어야 함)
+- 원인: OriginalPanorama.tsx, FragmentMap.tsx 수정 필요
+
+## Fragment 구조 (확정)
+- intelligence 필드: narrative, emotional, action, dialogue, hook, callback, confidence
+- 상태: UNDECIDED / SELECTED / HOLD / REJECTED
+- 이동 흐름: editFragments → reservedFragments → deletedFragments
+- 조각 표현: duration 비례 너비, 썸네일 + ID + 시간
+
+## 다음 작업 우선순위
+1. 로컬 화면 Lovable과 동일하게 맞추기
+   - OriginalPanorama.tsx: A~G 영문 탭, 전체 썸네일
+   - FragmentMap.tsx: 15개 전체 표시
+2. 실제 영상 업로드 → AI 조각화 파이프라인
+3. Fragment intelligence 필드 실제 데이터로 채우기
