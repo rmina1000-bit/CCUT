@@ -28,7 +28,7 @@ const Index: React.FC = () => {
   const [selectedFragment, setSelectedFragment] = useState<Fragment | null>(null);
   const [highlightedPanoramaFrag, setHighlightedPanoramaFrag] = useState<string | null>(null);
   const [expandedFragment, setExpandedFragment] = useState<string | null>(null);
-  const [intelligenceOn, setIntelligenceOn] = useState(false);
+
   const [editFragments, setEditFragments] = useState<Fragment[]>(initialEditFragments);
   const [reservedFragments, setReservedFragments] = useState<Fragment[]>(initialReservedFragments);
   const [holdPositions] = useState<Record<string, HoldPosition>>(initialHoldAreaPositions);
@@ -245,13 +245,11 @@ const Index: React.FC = () => {
           selectedFragmentId={selectedFragment?.fragment_id || null}
           highlightedFragmentId={panoramaHighlightId}
           focusExpandedId={expandedFragment}
-          intelligenceOn={intelligenceOn}
           playingFragmentId={panoramaPlayingId}
           playProgress={panoramaPlayingId ? playProgress : 0}
           fragmentOverrides={fragmentOverrides}
           onSourceChange={setActiveSource}
           onFragmentSelect={handlePanoramaFragmentClick}
-          onToggleIntelligence={() => setIntelligenceOn((p) => !p)}
         />
 
         <div className="flex-1 overflow-y-auto">
@@ -272,9 +270,6 @@ const Index: React.FC = () => {
             onFragmentSingleClick={handleEditFragmentClick}
             onFragmentDoubleClick={handleEditFragmentDoubleClick}
             onPairSelectionToggle={noopFrag}
-            onPlayToggle={noopFrag}
-            onExcludeToggle={handleExcludeFromEdit}
-            onMoveToHold={handleMoveToHold}
             onPrecisionEntryOpen={(_handle: PrecisionEntryHandle, _rect: DOMRect) => {}}
             onDragStart={noop as any}
             onDragTargetIndexChange={noop as any}
@@ -293,12 +288,8 @@ const Index: React.FC = () => {
           timeLensId={null}
           playingFragmentId={null}
           playProgress={0}
-          onPlayToggle={noopFrag}
-          onRestore={handleRestoreFromHold}
           onSelect={handleReservedClick}
           onRepositionStart={handleRepositionStart}
-          onReplaceDragStart={noop as any}
-          onReplaceDragEnd={noop}
         />
       </div>
     </div>

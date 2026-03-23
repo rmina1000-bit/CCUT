@@ -88,9 +88,6 @@ function SmokeApp() {
             playProgress={0}
             onSingleClick={() => undefined}
             onDoubleClick={() => undefined}
-            onPlayToggle={() => undefined}
-            onExcludeToggle={() => undefined}
-            onMoveToHold={() => undefined}
           />
         </MountProbe>
       </SmokeBoundary>
@@ -134,9 +131,6 @@ function SmokeApp() {
             onFragmentSingleClick={noopFragmentHandler}
             onFragmentDoubleClick={noopFragmentHandler}
             onPairSelectionToggle={noopFragmentHandler}
-            onPlayToggle={noopFragmentHandler}
-            onExcludeToggle={noopFragmentHandler}
-            onMoveToHold={noopFragmentHandler}
             onPrecisionEntryOpen={() => undefined}
             onDragStart={() => undefined}
             onDragTargetIndexChange={() => undefined}
@@ -158,12 +152,8 @@ function SmokeApp() {
             timeLensId={null}
             playingFragmentId={null}
             playProgress={0}
-            onPlayToggle={noopFragmentHandler}
-            onRestore={noopFragmentHandler}
             onSelect={noopFragmentHandler}
             onRepositionStart={() => undefined}
-            onReplaceDragStart={() => undefined}
-            onReplaceDragEnd={() => undefined}
           />
         </MountProbe>
       </SmokeBoundary>
@@ -180,7 +170,6 @@ function SmokeApp() {
             onPreviewChange={() => undefined}
             onPreviewClear={() => undefined}
             onSourceRecall={() => undefined}
-            onPlayToggle={noopFragmentHandler}
           />
         </MountProbe>
       </SmokeBoundary>

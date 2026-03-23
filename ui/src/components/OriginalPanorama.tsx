@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useRef } from 'react';
-import { Eye } from 'lucide-react';
 import { FragmentTile } from './FragmentTile';
 import type { Fragment, SourceVideo } from '../types/boundaryTypes';
 
@@ -10,13 +9,11 @@ interface OriginalPanoramaProps {
   selectedFragmentId: string | null;
   highlightedFragmentId: string | null;
   focusExpandedId: string | null;
-  intelligenceOn: boolean;
   playingFragmentId: string | null;
   playProgress: number;
   fragmentOverrides: Map<string, number>;
   onSourceChange: (sourceId: string) => void;
   onFragmentSelect: (fragment: Fragment) => void;
-  onToggleIntelligence: () => void;
   onThumbnailError?: (fragmentId: string) => void;
 }
 
@@ -27,13 +24,11 @@ export function OriginalPanorama({
   selectedFragmentId,
   highlightedFragmentId,
   focusExpandedId,
-  intelligenceOn,
   playingFragmentId,
   playProgress,
   fragmentOverrides,
   onSourceChange,
   onFragmentSelect,
-  onToggleIntelligence,
   onThumbnailError
 }: OriginalPanoramaProps) {
   const stripRef = useRef<HTMLDivElement | null>(null);
@@ -75,10 +70,6 @@ export function OriginalPanorama({
             </button>
           ))}
         </div>
-        <button type="button" className="panorama-header__info" onClick={onToggleIntelligence}>
-          <Eye size={13} />
-          <span>정보</span>
-        </button>
       </div>
       <div className="panorama-strip" ref={stripRef}>
         {sourceFragments.map((fragment) => {
@@ -95,7 +86,6 @@ export function OriginalPanorama({
               isDimmed={isDimmed}
               isPlaying={playingFragmentId === fragment.fragment_id}
               playProgress={playingFragmentId === fragment.fragment_id ? playProgress : 0}
-              intelligenceOn={intelligenceOn}
               durationOverride={fragmentOverrides.get(fragment.fragment_id)}
               highlighted={highlightedFragmentId === fragment.fragment_id}
               onSingleClick={() => onFragmentSelect(fragment)}

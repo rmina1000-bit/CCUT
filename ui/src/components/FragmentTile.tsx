@@ -12,14 +12,9 @@ interface FragmentTileProps {
   isDimmed: boolean;
   isPlaying: boolean;
   playProgress: number;
-  intelligenceOn?: boolean;
   durationOverride?: number;
   onSingleClick?: () => void;
   onDoubleClick?: () => void;
-  onPlayToggle?: () => void;
-  onExcludeToggle?: () => void;
-  onMoveToHold?: () => void;
-  onRestoreFromHold?: () => void;
   onThumbnailError?: (fragmentId: string) => void;
   draggable?: boolean;
   onDragStart?: (event: React.DragEvent<HTMLDivElement>) => void;
@@ -69,14 +64,9 @@ export function FragmentTile({
   isDimmed,
   isPlaying,
   playProgress,
-  intelligenceOn,
   durationOverride,
   onSingleClick,
   onDoubleClick,
-  onPlayToggle,
-  onExcludeToggle,
-  onMoveToHold,
-  onRestoreFromHold,
   onThumbnailError,
   draggable,
   onDragStart,
@@ -206,39 +196,6 @@ export function FragmentTile({
       <div className="fragment-tile__shade" />
       <span className="fragment-tile__id">{fragment.fragment_id}</span>
       <span className="fragment-tile__duration">{formatDuration(displayDuration)}</span>
-      {fragment.excluded && variant === 'edit' ? <span className="fragment-tile__status">Excluded</span> : null}
-      {intelligenceOn && fragment.intelligence ? (
-        <div className="fragment-tile__dots" aria-hidden="true">
-          {['narrative', 'emotional', 'action'].map((key) => (
-            <span
-              key={key}
-              style={{
-                opacity: fragment.intelligence?.[key as keyof typeof fragment.intelligence] as number
-              }}
-            />
-          ))}
-        </div>
-      ) : null}
-
-      {variant === 'edit' && fragment.intelligence ? (
-        <div className="fragment-tile__intel-bar" aria-hidden="true">
-          <div
-            className="fragment-tile__intel-segment"
-            style={{
-              flex: fragment.intelligence.hook,
-              background: `hsl(211 55% ${40 + fragment.intelligence.hook * 30}%)`
-            }}
-          />
-          <div
-            className="fragment-tile__intel-segment"
-            style={{
-              flex: fragment.intelligence.emotional,
-              background: `hsl(0 50% ${35 + fragment.intelligence.emotional * 30}%)`
-            }}
-          />
-        </div>
-      ) : null}
-
       {isPlaying ? (
         <>
           <div className="fragment-tile__progress-fill" style={{ width: `${playProgress}%` }} />
@@ -248,65 +205,6 @@ export function FragmentTile({
           </div>
         </>
       ) : null}
-
-      <div className="fragment-tile__actions">
-        {variant !== 'panorama' && onPlayToggle ? (
-          <button
-            type="button"
-            className="tile-action"
-            onClick={(event) => {
-              event.stopPropagation();
-              onPlayToggle();
-            }}
-            data-action-button="true"
-            aria-label={isPlaying ? `Stop ${fragment.fragment_id}` : `Play ${fragment.fragment_id}`}
-          >
-            {isPlaying ? 'Stop' : 'Play'}
-          </button>
-        ) : null}
-        {variant === 'edit' && onExcludeToggle ? (
-          <button
-            type="button"
-            className="tile-action"
-            onClick={(event) => {
-              event.stopPropagation();
-              onExcludeToggle();
-            }}
-            data-action-button="true"
-            aria-label={fragment.excluded ? `Restore ${fragment.fragment_id}` : `Exclude ${fragment.fragment_id}`}
-          >
-            {fragment.excluded ? 'Restore' : 'Exclude'}
-          </button>
-        ) : null}
-        {variant === 'edit' && onMoveToHold ? (
-          <button
-            type="button"
-            className="tile-action"
-            onClick={(event) => {
-              event.stopPropagation();
-              onMoveToHold();
-            }}
-            data-action-button="true"
-            aria-label={`Move ${fragment.fragment_id} to Hold Area`}
-          >
-            Hold
-          </button>
-        ) : null}
-        {variant === 'reserved' && onRestoreFromHold ? (
-          <button
-            type="button"
-            className="tile-action"
-            onClick={(event) => {
-              event.stopPropagation();
-              onRestoreFromHold();
-            }}
-            data-action-button="true"
-            aria-label={`Restore ${fragment.fragment_id} to edit structure`}
-          >
-            Restore
-          </button>
-        ) : null}
-      </div>
     </div>
   );
 }

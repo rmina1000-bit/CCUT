@@ -15,7 +15,6 @@ interface BoundaryPrecisionOverlayProps {
   onPreviewChange: (fragments: Fragment[]) => void;
   onPreviewClear: () => void;
   onSourceRecall: (fragmentIds: string[]) => void;
-  onPlayToggle: (fragment: Fragment) => void;
 }
 
 interface EditableBoundary {
@@ -82,8 +81,7 @@ export function BoundaryPrecisionOverlay({
   onCommit,
   onPreviewChange,
   onPreviewClear,
-  onSourceRecall,
-  onPlayToggle
+  onSourceRecall
 }: BoundaryPrecisionOverlayProps) {
   const baseChain = useMemo(() => buildChain(overlay, editFragments), [overlay, editFragments]);
   const [overlayFragments, setOverlayFragments] = useState<Fragment[]>(() => cloneFragments(baseChain));
@@ -340,7 +338,6 @@ export function BoundaryPrecisionOverlay({
                 isPlaying={playingFragmentId === fragment.fragment_id}
                 playProgress={playingFragmentId === fragment.fragment_id ? playProgress : 0}
                 durationOverride={durationOverrides.get(fragment.fragment_id)}
-                onPlayToggle={() => onPlayToggle(fragment)}
               />
               {boundary ? (
                 <button

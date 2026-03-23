@@ -60,9 +60,6 @@ interface FragmentMapProps {
   onFragmentSingleClick: (fragment: Fragment) => void;
   onFragmentDoubleClick: (fragment: Fragment) => void;
   onPairSelectionToggle: (fragment: Fragment) => void;
-  onPlayToggle: (fragment: Fragment) => void;
-  onExcludeToggle: (fragment: Fragment) => void;
-  onMoveToHold: (fragment: Fragment) => void;
   onPrecisionEntryOpen: (handle: PrecisionEntryHandle, anchorRect: DOMRect) => void;
   onThumbnailError?: (fragmentId: string) => void;
   onDragStart: (fragmentId: string, origin: 'edit' | 'reserved') => void;
@@ -90,9 +87,6 @@ export function FragmentMap({
   onFragmentSingleClick,
   onFragmentDoubleClick,
   onPairSelectionToggle,
-  onPlayToggle,
-  onExcludeToggle,
-  onMoveToHold,
   onPrecisionEntryOpen,
   onThumbnailError,
   onDragStart,
@@ -471,9 +465,6 @@ export function FragmentMap({
                   highlighted={boundaryHighlightIds.includes(item.fragment.fragment_id)}
                   onSingleClick={() => onFragmentSingleClick(item.fragment)}
                   onDoubleClick={() => onFragmentDoubleClick(item.fragment)}
-                  onPlayToggle={() => onPlayToggle(item.fragment)}
-                  onExcludeToggle={() => onExcludeToggle(item.fragment)}
-                  onMoveToHold={() => onMoveToHold(item.fragment)}
                   onThumbnailError={onThumbnailError}
                   draggable={false}
                   onPointerDown={(event) => handleEditPointerDown(item.fragment, event)}

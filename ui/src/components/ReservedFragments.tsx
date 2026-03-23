@@ -1,4 +1,3 @@
-import { Trash2 } from 'lucide-react';
 import { FragmentTile } from './FragmentTile';
 import type { Fragment, HoldPosition } from '../types/boundaryTypes';
 
@@ -10,12 +9,8 @@ interface ReservedFragmentsProps {
   timeLensId: string | null;
   playingFragmentId: string | null;
   playProgress: number;
-  onPlayToggle: (fragment: Fragment) => void;
-  onRestore: (fragment: Fragment) => void;
   onSelect: (fragment: Fragment) => void;
   onRepositionStart: (fragment: Fragment, event: React.MouseEvent<HTMLDivElement>) => void;
-  onReplaceDragStart: (fragmentId: string) => void;
-  onReplaceDragEnd: () => void;
   onThumbnailError?: (fragmentId: string) => void;
 }
 
@@ -27,12 +22,8 @@ export function ReservedFragments({
   timeLensId,
   playingFragmentId,
   playProgress,
-  onPlayToggle,
-  onRestore,
   onSelect,
   onRepositionStart,
-  onReplaceDragStart,
-  onReplaceDragEnd,
   onThumbnailError
 }: ReservedFragmentsProps) {
   return (
@@ -49,29 +40,6 @@ export function ReservedFragments({
             className="hold-board__item hold-board__item--inline"
             onMouseDown={(event) => onRepositionStart(fragment, event)}
           >
-            <button
-              type="button"
-              className="hold-board__replace-handle"
-              draggable
-              data-action-button="true"
-              aria-label={`Drag ${fragment.fragment_id} to replace an edit fragment`}
-              onClick={(event) => {
-                event.preventDefault();
-                event.stopPropagation();
-              }}
-              onMouseDown={(event) => {
-                event.stopPropagation();
-              }}
-              onDragStart={(event) => {
-                event.stopPropagation();
-                event.dataTransfer.effectAllowed = 'move';
-                event.dataTransfer.setData('text/plain', fragment.fragment_id);
-                onReplaceDragStart(fragment.fragment_id);
-              }}
-              onDragEnd={onReplaceDragEnd}
-            >
-              Replace
-            </button>
             <FragmentTile
               fragment={fragment}
               variant="reserved"
@@ -82,15 +50,10 @@ export function ReservedFragments({
               isPlaying={playingFragmentId === fragment.fragment_id}
               playProgress={playingFragmentId === fragment.fragment_id ? playProgress : 0}
               onSingleClick={() => onSelect(fragment)}
-              onPlayToggle={() => onPlayToggle(fragment)}
-              onRestoreFromHold={() => onRestore(fragment)}
               onThumbnailError={onThumbnailError}
             />
           </div>
         ))}
-        <div className="hold-board__trash-icon" aria-label="보류 구역">
-          <Trash2 size={18} />
-        </div>
       </div>
     </section>
   );
