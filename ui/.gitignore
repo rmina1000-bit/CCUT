@@ -1,0 +1,20 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+
+# QA artifacts
+.qa/
+
+# Screenshots and images (ui root only)
+*.png
+*.jpg
+ccut-localhost-shot*
+
+# Logs
+build_log.txt
+.vite-dev.*.log
+
+# Vite
+.vite/
