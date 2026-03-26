@@ -57,34 +57,43 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
   }, [appState]);
 
   const changeState = (state: AppState) => {
+    console.log('[D3] changeState:', state);
     setAppState(state);
     onStateChange(state);
   };
 
   const processFile = async (file: File) => {
+    console.log('[D2] processFile 진입:', file.name, file.size, 'bytes');
     setError(null);
     changeState('analyzing');
     onFileUpload(file);
 
     try {
+      console.log('[D4] uploadVideo 호출 시작');
       const fragments = await uploadVideo(file, (pct) => setUploadProgress(pct));
+      console.log('[D4] fragments 수신:', fragments.length, '개');
       const generatedProposals = await generateProposals(fragments);
+      console.log('[D5] proposals 수신:', generatedProposals.length, '개');
       setProposals(generatedProposals);
       setUploadProgress(100);
       setTimeout(() => changeState('proposal'), 400);
     } catch (err) {
+      console.error('[D4] 에러 발생:', err);
       setError(err instanceof Error ? err.message : String(err));
       changeState('empty');
     }
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    console.log('[D1] handleFileChange 진입');
     const file = e.target.files?.[0];
-    if (!file) return;
+    console.log('[D1] file:', file?.name, file?.size, file?.type);
+    if (!file) { console.log('[D1] file 없음 — return'); return; }
     processFile(file);
   };
 
   const handleUploadClick = () => {
+    console.log('[D1] 업로드 버튼 클릭됨, fileInputRef:', fileInputRef.current);
     fileInputRef.current?.click();
   };
 
@@ -97,6 +106,7 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
     const proposal = proposals.find(p => p.id === selectedProposalId);
     if (!proposal) return;
 
+    console.log('[D6] onProposalSelect 호출:', proposal.label);
     onProposalSelect(proposal, proposal.label);
 
     setMessages([{
@@ -132,6 +142,8 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
     }
   };
 
+  console.log('[D7] CenterPanel 렌더, appState:', appState, 'proposals:', proposals?.length ?? 0);
+
   // ── Empty ──
   if (appState === "empty") {
     return (
@@ -139,10 +151,11 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
         <div className="flex-1 flex items-center justify-center p-6">
           <div
             className="w-full max-w-[260px] border border-dashed border-border/30 rounded-xl p-6 flex flex-col items-center gap-3 hover:border-foreground/15 transition-colors cursor-pointer"
-            onClick={handleUploadClick}
+            onClick={(e) => { e.stopPropagation(); handleUploadClick(); }}
             onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); }}
             onDrop={(e) => {
               e.preventDefault();
+              e.stopPropagation();
               const file = e.dataTransfer.files[0];
               if (file) processFile(file);
             }}
@@ -163,16 +176,24 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
             >
               파일 선택
             </button>
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="video/*"
-              className="hidden"
-              onChange={handleFileChange}
-            />
           </div>
+          {/* File input outside the clickable div to avoid event conflicts */}
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="video/*"
+            style={{ position: 'absolute', width: 0, height: 0, overflow: 'hidden', opacity: 0 }}
+            onChange={handleFileChange}
+          />
         </div>
-        <ChatBar value={chatInput} onChange={setChatInput} onSend={handleSendMessage} onKeyDown={handleKeyDown} disabled />
+        <ChatBar
+          value={chatInput}
+          onChange={setChatInput}
+          onSend={handleSendMessage}
+          onKeyDown={handleKeyDown}
+          onFileSelect={processFile}
+          disabled
+        />
       </div>
     );
   }
@@ -301,7 +322,7 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
           <div ref={chatEndRef} />
         </div>
       </ScrollArea>
-      <ChatBar value={chatInput} onChange={setChatInput} onSend={handleSendMessage} onKeyDown={handleKeyDown} />
+      <ChatBar value={chatInput} onChange={setChatInput} onSend={handleSendMessage} onKeyDown={handleKeyDown} onFileSelect={processFile} />
     </div>
   );
 };
@@ -313,15 +334,29 @@ interface ChatBarProps {
   onChange: (v: string) => void;
   onSend: () => void;
   onKeyDown: (e: React.KeyboardEvent) => void;
+  onFileSelect?: (file: File) => void;
   disabled?: boolean;
 }
 
-const ChatBar: React.FC<ChatBarProps> = ({ value, onChange, onSend, onKeyDown, disabled }) => {
+const ChatBar: React.FC<ChatBarProps> = ({ value, onChange, onSend, onKeyDown, onFileSelect, disabled }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   return (
     <div className="px-3 py-2 border-t border-border/15">
       <div className="flex items-center gap-1.5 bg-secondary/50 rounded-xl px-2.5 py-1.5">
-        <input ref={fileInputRef} type="file" accept="video/*" className="hidden" onChange={(e) => { e.target.value = ""; }} />
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="video/*"
+          style={{ position: 'absolute', width: 0, height: 0, overflow: 'hidden', opacity: 0 }}
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            if (file && onFileSelect) {
+              console.log('[D1] ChatBar file selected:', file.name);
+              onFileSelect(file);
+            }
+            e.target.value = "";
+          }}
+        />
         <button
           onClick={() => fileInputRef.current?.click()}
           className="w-6 h-6 rounded-full flex items-center justify-center text-muted-foreground/40 hover:text-foreground/60 hover:bg-secondary/60 transition-all flex-shrink-0"
