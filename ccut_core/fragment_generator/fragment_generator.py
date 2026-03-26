@@ -17,8 +17,8 @@ from .scene_detector import detect_scenes
 from .audio_detector import detect_audio_changes
 from .boundary_merge import merge_boundaries
 
-MIN_FRAGMENT_LENGTH: float = 0.8
-SCENE_THRESHOLD: float = 0.45
+MIN_FRAGMENT_LENGTH: float = 2.0
+SCENE_THRESHOLD: float = 0.4
 AUDIO_ENERGY_THRESHOLD: float = 1.8
 
 

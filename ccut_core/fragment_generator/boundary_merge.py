@@ -13,7 +13,7 @@ Rules (in priority order):
 
 from typing import List, Tuple
 
-MIN_FRAGMENT_LENGTH: float = 0.8
+MIN_FRAGMENT_LENGTH: float = 2.0
 
 
 def merge_boundaries(

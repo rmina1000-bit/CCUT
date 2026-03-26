@@ -1,6 +1,7 @@
 import React, { useState, useCallback, useRef, useEffect, useMemo } from "react";
 import LeftNav from "@/components/LeftNav";
 import CenterPanel from "@/components/CenterPanel";
+import type { AppState } from "@/components/CenterPanel";
 import { OriginalPanorama } from "@/components/OriginalPanorama";
 import { FragmentMap } from "@/components/FragmentMap";
 import { ReservedFragments } from "@/components/ReservedFragments";
@@ -12,6 +13,11 @@ import {
   initialHoldAreaPositions,
 } from "@/data/fragmentData";
 import type { HoldPosition, PrecisionEntryHandle } from "@/types/boundaryTypes";
+import {
+  uploadAndGenerateFragments,
+  generateProposals,
+} from "@/services/proposalService";
+import type { Proposal } from "@/services/proposalService";
 
 const STORAGE_KEY = "ccut-center-width";
 const MIN_CENTER = 260;
@@ -33,13 +39,19 @@ const Index: React.FC = () => {
   const [reservedFragments, setReservedFragments] = useState<Fragment[]>(initialReservedFragments);
   const [holdPositions] = useState<Record<string, HoldPosition>>(initialHoldAreaPositions);
 
-  // Playing state: which fragment is playing and where the click originated
+  // ── Pipeline state ──
+  const [appState, setAppState] = useState<AppState>("empty");
+  const [proposals, setProposals] = useState<Proposal[]>([]);
+  const [analyzeProgress, setAnalyzeProgress] = useState(0);
+  const [generatedFragments, setGeneratedFragments] = useState<Fragment[]>([]);
+
+  // Playing state
   const [playingFragmentId, setPlayingFragmentId] = useState<string | null>(null);
   const [playOrigin, setPlayOrigin] = useState<'edit' | 'panorama' | null>(null);
   const [playProgress, setPlayProgress] = useState(0);
   const playTimerRef = useRef<number | null>(null);
 
-  // Fragment overrides — Map<string, number> (duration overrides for boundary drag)
+  // Fragment overrides
   const [fragmentOverrides, setFragmentOverrides] = useState<Map<string, number>>(new Map());
 
   // Splitter state
@@ -83,8 +95,6 @@ const Index: React.FC = () => {
     return () => { if (playTimerRef.current) clearInterval(playTimerRef.current); };
   }, []);
 
-  // Cross-highlight: when edit plays, panorama gets highlight border (not play)
-  // When panorama plays, edit gets highlight border (not play)
   const editPlayingId = playOrigin === 'edit' ? playingFragmentId : null;
   const panoramaPlayingId = playOrigin === 'panorama' ? playingFragmentId : null;
   const editHighlightIds = playOrigin === 'panorama' && playingFragmentId ? [playingFragmentId] : [];
@@ -118,7 +128,75 @@ const Index: React.FC = () => {
     };
   }, [isDragging]);
 
-  // Edit fragment click: select + switch source + auto-play + highlight panorama
+  // ── Pipeline: file upload → fragment generation → proposal generation ──
+  const handleFileUpload = useCallback(async (file: File) => {
+    console.log('[PIPELINE] Starting with file:', file.name);
+    setAppState("analyzing");
+    setAnalyzeProgress(0);
+    setProposals([]);
+
+    // Simulate progress while waiting for backend
+    const progressInterval = setInterval(() => {
+      setAnalyzeProgress(prev => {
+        if (prev >= 85) return prev; // Hold at 85% until backend responds
+        return prev + Math.random() * 6 + 1;
+      });
+    }, 300);
+
+    try {
+      // Step 1: Generate fragments
+      console.log('[PIPELINE] Step 1: Generating fragments...');
+      const fragments = await uploadAndGenerateFragments(file);
+      console.log('[PIPELINE] Got', fragments.length, 'fragments');
+      setGeneratedFragments(fragments);
+      setAnalyzeProgress(90);
+
+      // Step 2: Generate proposals from fragments
+      console.log('[PIPELINE] Step 2: Generating proposals...');
+      const props = await generateProposals(fragments);
+      console.log('[PIPELINE] Got proposals:', props.map(p => `${p.label}(${p.editSequence.length})`));
+      setProposals(props);
+
+      // Step 3: Update editFragments with generated fragments
+      setEditFragments(fragments);
+      setReservedFragments([]);
+
+      setAnalyzeProgress(100);
+      clearInterval(progressInterval);
+
+      // Transition to proposal view
+      setTimeout(() => setAppState("proposal"), 400);
+    } catch (err) {
+      console.error('[PIPELINE] Error:', err);
+      clearInterval(progressInterval);
+
+      // On error, fall back to empty state
+      setAppState("empty");
+      setAnalyzeProgress(0);
+    }
+  }, []);
+
+  // ── Proposal selection → FragmentMap update ──
+  const handleProposalSelect = useCallback((proposal: Proposal) => {
+    console.log('[SEL] Index received:', proposal.label, proposal.editSequence.length, 'fragments');
+
+    if (proposal.editSequence.length > 0) {
+      setEditFragments(proposal.editSequence);
+      console.log('[SEL] editFragments updated to', proposal.label, 'sequence:',
+        proposal.editSequence.map(f => f.fragment_id).join(', '));
+    } else {
+      console.warn('[SEL] editSequence is empty — FragmentMap not updated');
+    }
+
+    // Move fragments not in the proposal to reserved
+    const selectedIds = new Set(proposal.editSequence.map(f => f.fragment_id));
+    const leftover = generatedFragments.filter(f => !selectedIds.has(f.fragment_id));
+    if (leftover.length > 0) {
+      setReservedFragments(leftover);
+    }
+  }, [generatedFragments]);
+
+  // Edit fragment click
   const handleEditFragmentClick = useCallback((f: Fragment) => {
     if (selectedFragment?.fragment_id === f.fragment_id && playingFragmentId === f.fragment_id) {
       stopPlay();
@@ -134,7 +212,6 @@ const Index: React.FC = () => {
     }
   }, [selectedFragment, playingFragmentId, startPlay, stopPlay]);
 
-  // Double click enters Time Lens
   const handleEditFragmentDoubleClick = useCallback((f: Fragment) => {
     setSelectedFragment(f);
     setActiveSource(f.source_video);
@@ -142,7 +219,6 @@ const Index: React.FC = () => {
     setExpandedFragment((prev) => (prev === f.fragment_id ? null : f.fragment_id));
   }, []);
 
-  // Panorama fragment click: play panorama + highlight edit fragment border
   const handlePanoramaFragmentClick = useCallback((f: Fragment) => {
     if (selectedFragment?.fragment_id === f.fragment_id && playingFragmentId === f.fragment_id) {
       stopPlay();
@@ -166,7 +242,6 @@ const Index: React.FC = () => {
     }
   }, [selectedFragment]);
 
-  // Exclude from edit structure
   const handleExcludeFromEdit = useCallback((f: Fragment) => {
     setEditFragments((prev) =>
       prev.map((fr) =>
@@ -175,7 +250,6 @@ const Index: React.FC = () => {
     );
   }, []);
 
-  // Move to Hold Area
   const handleMoveToHold = useCallback((f: Fragment) => {
     setEditFragments((prev) => prev.filter((fr) => fr.fragment_id !== f.fragment_id));
     setReservedFragments((prev) => [...prev, { ...f, excluded: false }]);
@@ -184,18 +258,14 @@ const Index: React.FC = () => {
     }
   }, [selectedFragment]);
 
-  // Restore from Hold Area
   const handleRestoreFromHold = useCallback((f: Fragment) => {
     setReservedFragments((prev) => prev.filter((fr) => fr.fragment_id !== f.fragment_id));
     setEditFragments((prev) => [...prev, f]);
   }, []);
 
-  // Reposition hold item
   const handleRepositionStart = useCallback((_fragment: Fragment, _event: React.MouseEvent<HTMLDivElement>) => {
-    // Hold area reposition — stub for now
   }, []);
 
-  // Global click-to-dismiss
   const handleBackgroundClick = useCallback((e: React.MouseEvent) => {
     const target = e.target as HTMLElement;
     if (target.closest(".fragment-tile")) return;
@@ -214,6 +284,12 @@ const Index: React.FC = () => {
           selectedFragment={selectedFragment}
           selectedSource={activeSource}
           editSequence={editFragments}
+          appState={appState}
+          proposals={proposals}
+          analyzeProgress={analyzeProgress}
+          onFileUpload={handleFileUpload}
+          onProposalSelect={handleProposalSelect}
+          onStateChange={setAppState}
         />
       </div>
 

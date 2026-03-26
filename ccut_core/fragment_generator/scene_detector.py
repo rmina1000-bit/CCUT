@@ -16,8 +16,8 @@ import cv2
 import numpy as np
 from typing import List, Tuple
 
-MIN_INTERVAL: float = 0.8
-SCENE_THRESHOLD: float = 0.45
+MIN_INTERVAL: float = 2.0
+SCENE_THRESHOLD: float = 0.4
 
 _H_BINS = 50
 _S_BINS = 60
