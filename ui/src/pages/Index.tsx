@@ -11,7 +11,7 @@ import {
   sourceVideos,
   initialHoldAreaPositions,
 } from "@/data/fragmentData";
-import type { HoldPosition, PrecisionEntryHandle } from "@/types/boundaryTypes";
+import type { HoldPosition, PrecisionEntryHandle, Proposal, AppState } from "@/types/boundaryTypes";
 
 const STORAGE_KEY = "ccut-center-width";
 const MIN_CENTER = 260;
@@ -32,6 +32,11 @@ const Index: React.FC = () => {
   const [editFragments, setEditFragments] = useState<Fragment[]>(initialEditFragments);
   const [reservedFragments, setReservedFragments] = useState<Fragment[]>(initialReservedFragments);
   const [holdPositions] = useState<Record<string, HoldPosition>>(initialHoldAreaPositions);
+
+  // Workspace-level state — synced with CenterPanel via callbacks
+  const [workspaceState, setWorkspaceState] = useState<AppState>("empty");
+  const [selectedProposal, setSelectedProposal] = useState<Proposal | null>(null);
+  const [sourceFileName, setSourceFileName] = useState<string | null>(null);
 
   // Playing state: which fragment is playing and where the click originated
   const [playingFragmentId, setPlayingFragmentId] = useState<string | null>(null);
@@ -166,14 +171,14 @@ const Index: React.FC = () => {
     }
   }, [selectedFragment]);
 
-  // Exclude from edit structure
+  // Exclude from edit: physical move to reserved (정예 멤버 정책)
   const handleExcludeFromEdit = useCallback((f: Fragment) => {
-    setEditFragments((prev) =>
-      prev.map((fr) =>
-        fr.fragment_id === f.fragment_id ? { ...fr, excluded: !fr.excluded } : fr
-      )
-    );
-  }, []);
+    setEditFragments((prev) => prev.filter((fr) => fr.fragment_id !== f.fragment_id));
+    setReservedFragments((prev) => [...prev, { ...f, excluded: true }]);
+    if (selectedFragment?.fragment_id === f.fragment_id) {
+      setSelectedFragment(null);
+    }
+  }, [selectedFragment]);
 
   // Move to Hold Area
   const handleMoveToHold = useCallback((f: Fragment) => {
@@ -187,12 +192,29 @@ const Index: React.FC = () => {
   // Restore from Hold Area
   const handleRestoreFromHold = useCallback((f: Fragment) => {
     setReservedFragments((prev) => prev.filter((fr) => fr.fragment_id !== f.fragment_id));
-    setEditFragments((prev) => [...prev, f]);
+    setEditFragments((prev) => [...prev, { ...f, excluded: false }]);
   }, []);
 
   // Reposition hold item
   const handleRepositionStart = useCallback((_fragment: Fragment, _event: React.MouseEvent<HTMLDivElement>) => {
     // Hold area reposition — stub for now
+  }, []);
+
+  // ── CenterPanel SSOT Callbacks ──
+  const handleProposalSelect = useCallback((proposal: Proposal, _label: 'A' | 'B') => {
+    setSelectedProposal(proposal);
+    if (proposal.editSequence && proposal.editSequence.length > 0) {
+      setEditFragments(proposal.editSequence);
+      setReservedFragments([]);
+    }
+  }, []);
+
+  const handleStateChange = useCallback((state: AppState) => {
+    setWorkspaceState(state);
+  }, []);
+
+  const handleFileUpload = useCallback((file: File) => {
+    setSourceFileName(file.name);
   }, []);
 
   // Global click-to-dismiss
@@ -214,6 +236,9 @@ const Index: React.FC = () => {
           selectedFragment={selectedFragment}
           selectedSource={activeSource}
           editSequence={editFragments}
+          onProposalSelect={handleProposalSelect}
+          onStateChange={handleStateChange}
+          onFileUpload={handleFileUpload}
         />
       </div>
 
@@ -290,6 +315,7 @@ const Index: React.FC = () => {
           playProgress={0}
           onSelect={handleReservedClick}
           onRepositionStart={handleRepositionStart}
+          onRestoreToEdit={handleRestoreFromHold}
         />
       </div>
     </div>

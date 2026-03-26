@@ -1,51 +1,41 @@
 import React, { useState, useRef, useEffect } from "react";
 import { Upload, Send, Play, Loader2, Check, User, Bot, Plus } from "lucide-react";
-import type { Fragment } from "../types/boundaryTypes";
+import type { Fragment, Proposal, AppState } from "../types/boundaryTypes";
 import { ScrollArea } from "./ui/scroll-area";
-
-type AppState = "empty" | "analyzing" | "proposal" | "chat";
-
-interface ProposalOption {
-  id: string;
-  title: string;
-  description: string;
-  thumbnailHue: number;
-}
+import { uploadVideo } from "../services/videoService";
+import { generateProposals } from "../services/proposalService";
 
 interface ChatMessage {
   id: string;
   role: "user" | "ai";
   content: string;
-  proposal?: { a: ProposalOption; b: ProposalOption };
+  proposals?: [Proposal, Proposal];
 }
 
 interface CenterPanelProps {
   selectedFragment: Fragment | null;
   selectedSource: string;
-  editSequence?: Fragment[];
+  editSequence: Fragment[];
+  onProposalSelect: (proposal: Proposal, label: 'A' | 'B') => void;
+  onStateChange: (state: AppState) => void;
+  onFileUpload: (file: File) => void;
 }
 
-const mockProposals: { a: ProposalOption; b: ProposalOption } = {
-  a: {
-    id: "A",
-    title: "내러티브 중심",
-    description: "인터뷰 흐름을 따라 감정선을 강조한 편집",
-    thumbnailHue: 211,
-  },
-  b: {
-    id: "B",
-    title: "비주얼 중심",
-    description: "B-Roll과 액션 컷을 활용한 역동적인 편집",
-    thumbnailHue: 30,
-  },
-};
-
-const CenterPanel: React.FC<CenterPanelProps> = ({ selectedFragment, selectedSource, editSequence = [] }) => {
+const CenterPanel: React.FC<CenterPanelProps> = ({
+  selectedFragment,
+  selectedSource,
+  editSequence,
+  onProposalSelect,
+  onStateChange,
+  onFileUpload,
+}) => {
   const [appState, setAppState] = useState<AppState>("empty");
   const [chatInput, setChatInput] = useState("");
-  const [selectedProposal, setSelectedProposal] = useState<string | null>(null);
+  const [selectedProposalId, setSelectedProposalId] = useState<string | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [analyzeProgress, setAnalyzeProgress] = useState(0);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [proposals, setProposals] = useState<[Proposal, Proposal] | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -53,34 +43,65 @@ const CenterPanel: React.FC<CenterPanelProps> = ({ selectedFragment, selectedSou
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
+  // Simulated progress during upload (real progress requires XHR)
   useEffect(() => {
     if (appState !== "analyzing") return;
-    setAnalyzeProgress(0);
+    setUploadProgress(0);
     const interval = setInterval(() => {
-      setAnalyzeProgress(prev => {
-        if (prev >= 100) {
-          clearInterval(interval);
-          setTimeout(() => setAppState("proposal"), 400);
-          return 100;
-        }
+      setUploadProgress(prev => {
+        if (prev >= 90) { clearInterval(interval); return 90; }
         return prev + Math.random() * 8 + 2;
       });
     }, 200);
     return () => clearInterval(interval);
   }, [appState]);
 
-  const handleUpload = () => setAppState("analyzing");
+  const changeState = (state: AppState) => {
+    setAppState(state);
+    onStateChange(state);
+  };
 
-  const handleSelectProposal = (id: string) => setSelectedProposal(id);
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setError(null);
+    changeState('analyzing');
+    onFileUpload(file);
+
+    try {
+      const fragments = await uploadVideo(file, (pct) => setUploadProgress(pct));
+      const generatedProposals = await generateProposals(fragments);
+      setProposals(generatedProposals);
+      setUploadProgress(100);
+      setTimeout(() => changeState('proposal'), 400);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+      changeState('empty');
+    }
+  };
+
+  const handleUploadClick = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleSelectProposal = (proposal: Proposal) => {
+    setSelectedProposalId(proposal.id);
+  };
 
   const handleStartChat = () => {
-    const proposal = selectedProposal === "A" ? mockProposals.a : mockProposals.b;
+    if (!proposals || !selectedProposalId) return;
+    const proposal = proposals.find(p => p.id === selectedProposalId);
+    if (!proposal) return;
+
+    onProposalSelect(proposal, proposal.label);
+
     setMessages([{
       id: "1",
       role: "ai",
       content: `"${proposal.title}" 편집안을 선택하셨습니다. ${proposal.description}. 수정이 필요하시면 말씀해 주세요.`,
     }]);
-    setAppState("chat");
+    changeState('chat');
   };
 
   const handleSendMessage = () => {
@@ -88,12 +109,14 @@ const CenterPanel: React.FC<CenterPanelProps> = ({ selectedFragment, selectedSou
     const userMsg: ChatMessage = { id: Date.now().toString(), role: "user", content: chatInput };
     setMessages(prev => [...prev, userMsg]);
     setChatInput("");
+
+    // TODO: connect to backend chat/AI endpoint
     setTimeout(() => {
       const aiMsg: ChatMessage = {
         id: (Date.now() + 1).toString(),
         role: "ai",
         content: "네, 이해했습니다. 새로운 편집안을 준비하고 있어요.",
-        proposal: Math.random() > 0.5 ? mockProposals : undefined,
+        proposals: proposals ?? undefined,
       };
       setMessages(prev => [...prev, aiMsg]);
     }, 1200);
@@ -113,9 +136,23 @@ const CenterPanel: React.FC<CenterPanelProps> = ({ selectedFragment, selectedSou
         <div className="flex-1 flex items-center justify-center p-6">
           <div
             className="w-full max-w-[260px] border border-dashed border-border/30 rounded-xl p-6 flex flex-col items-center gap-3 hover:border-foreground/15 transition-colors cursor-pointer"
-            onClick={handleUpload}
+            onClick={handleUploadClick}
             onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); }}
-            onDrop={(e) => { e.preventDefault(); handleUpload(); }}
+            onDrop={(e) => {
+              e.preventDefault();
+              const file = e.dataTransfer.files[0];
+              if (file) {
+                onFileUpload(file);
+                changeState('analyzing');
+                // Trigger same flow as file input
+                const dt = new DataTransfer();
+                dt.items.add(file);
+                if (fileInputRef.current) {
+                  fileInputRef.current.files = dt.files;
+                  fileInputRef.current.dispatchEvent(new Event('change', { bubbles: true }));
+                }
+              }
+            }}
           >
             <div className="w-10 h-10 rounded-xl bg-secondary/60 flex items-center justify-center">
               <Upload size={17} className="text-muted-foreground/70" />
@@ -124,13 +161,22 @@ const CenterPanel: React.FC<CenterPanelProps> = ({ selectedFragment, selectedSou
               <p className="text-[12px] font-medium text-foreground/80">영상을 업로드하세요</p>
               <p className="text-[10px] text-muted-foreground/50">드래그하거나 클릭</p>
             </div>
+            {error && (
+              <p className="text-[10px] text-red-400 text-center">{error}</p>
+            )}
             <button
               className="px-4 py-1.5 rounded-lg border border-foreground/12 bg-transparent text-foreground/70 text-[11px] font-medium hover:bg-foreground/5 hover:border-foreground/20 transition-all"
-              onClick={(e) => { e.stopPropagation(); handleUpload(); }}
+              onClick={(e) => { e.stopPropagation(); handleUploadClick(); }}
             >
               파일 선택
             </button>
-            <input ref={fileInputRef} type="file" accept="video/*" className="hidden" />
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="video/*"
+              className="hidden"
+              onChange={handleFileChange}
+            />
           </div>
         </div>
         <ChatBar value={chatInput} onChange={setChatInput} onSend={handleSendMessage} onKeyDown={handleKeyDown} disabled />
@@ -154,10 +200,11 @@ const CenterPanel: React.FC<CenterPanelProps> = ({ selectedFragment, selectedSou
             <div className="w-full h-1 bg-secondary/60 rounded-full overflow-hidden">
               <div
                 className="h-full bg-primary/60 rounded-full transition-all duration-300 ease-out"
-                style={{ width: `${Math.min(analyzeProgress, 100)}%` }}
+                style={{ width: `${Math.min(uploadProgress, 100)}%` }}
               />
             </div>
-            <p className="text-[9px] text-muted-foreground/40">{Math.min(Math.round(analyzeProgress), 100)}%</p>
+            <p className="text-[9px] text-muted-foreground/40">{Math.min(Math.round(uploadProgress), 100)}%</p>
+            {error && <p className="text-[10px] text-red-400 text-center">{error}</p>}
           </div>
         </div>
         <ChatBar value="" onChange={() => {}} onSend={() => {}} onKeyDown={() => {}} disabled />
@@ -166,19 +213,19 @@ const CenterPanel: React.FC<CenterPanelProps> = ({ selectedFragment, selectedSou
   }
 
   // ── Proposal ──
-  if (appState === "proposal") {
+  if (appState === "proposal" && proposals) {
     return (
       <div className="flex flex-col bg-card/40 h-full w-full">
         <div className="flex-1 overflow-y-auto">
           <div className="px-4 py-3 space-y-2">
             <h3 className="text-[11px] font-medium text-foreground/70">편집안 선택</h3>
             <div className="grid grid-cols-2 gap-2">
-              {[mockProposals.a, mockProposals.b].map((p) => (
+              {proposals.map((p) => (
                 <ProposalCard
                   key={p.id}
                   proposal={p}
-                  isSelected={selectedProposal === p.id}
-                  onSelect={() => handleSelectProposal(p.id)}
+                  isSelected={selectedProposalId === p.id}
+                  onSelect={() => handleSelectProposal(p)}
                 />
               ))}
             </div>
@@ -188,7 +235,7 @@ const CenterPanel: React.FC<CenterPanelProps> = ({ selectedFragment, selectedSou
 
           <div className="px-4 py-3 space-y-2">
             <h4 className="text-[9px] font-medium text-muted-foreground/50 uppercase tracking-wider">Preview</h4>
-            {selectedProposal ? (
+            {selectedProposalId ? (
               <div className="space-y-2">
                 <div className="w-full h-24 rounded-lg border border-border/20 bg-secondary/20 flex items-center justify-center">
                   <Play size={16} className="text-muted-foreground/30" />
@@ -234,14 +281,17 @@ const CenterPanel: React.FC<CenterPanelProps> = ({ selectedFragment, selectedSou
                 >
                   {msg.content}
                 </div>
-                {msg.proposal && (
+                {msg.proposals && (
                   <div className="grid grid-cols-2 gap-1.5 pt-0.5">
-                    {[msg.proposal.a, msg.proposal.b].map((p) => (
+                    {msg.proposals.map((p) => (
                       <ProposalCard
                         key={p.id}
                         proposal={p}
-                        isSelected={selectedProposal === p.id}
-                        onSelect={() => setSelectedProposal(p.id)}
+                        isSelected={selectedProposalId === p.id}
+                        onSelect={() => {
+                          setSelectedProposalId(p.id);
+                          onProposalSelect(p, p.label);
+                        }}
                         compact
                       />
                     ))}
@@ -307,7 +357,7 @@ const ChatBar: React.FC<ChatBarProps> = ({ value, onChange, onSend, onKeyDown, d
 };
 
 interface ProposalCardProps {
-  proposal: ProposalOption;
+  proposal: Proposal;
   isSelected: boolean;
   onSelect: () => void;
   compact?: boolean;

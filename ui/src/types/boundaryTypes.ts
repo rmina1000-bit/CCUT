@@ -27,6 +27,18 @@ export interface Fragment {
   intelligence?: FragmentIntelligence;
 }
 
+export type AppState = 'empty' | 'analyzing' | 'proposal' | 'chat';
+
+export interface Proposal {
+  id: string;
+  label: 'A' | 'B';
+  title: string;
+  description: string;
+  thumbnailHue: number;
+  fragmentIds: string[];
+  editSequence: Fragment[];
+}
+
 export interface SourceVideo {
   id: string;
   label: string;
