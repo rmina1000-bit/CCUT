@@ -44,6 +44,7 @@ const Index: React.FC = () => {
   const [proposals, setProposals] = useState<Proposal[]>([]);
   const [analyzeProgress, setAnalyzeProgress] = useState(0);
   const [generatedFragments, setGeneratedFragments] = useState<Fragment[]>([]);
+  const [pipelineError, setPipelineError] = useState<string | null>(null);
 
   // Playing state
   const [playingFragmentId, setPlayingFragmentId] = useState<string | null>(null);
@@ -130,21 +131,23 @@ const Index: React.FC = () => {
 
   // ── Pipeline: file upload → fragment generation → proposal generation ──
   const handleFileUpload = useCallback(async (file: File) => {
-    console.log('[PIPELINE] Starting with file:', file.name);
+    console.log('[PIPELINE] Starting with file:', file.name, file.size, 'bytes');
+    setPipelineError(null);
     setAppState("analyzing");
-    setAnalyzeProgress(0);
+    setAnalyzeProgress(5);
     setProposals([]);
 
-    // Simulate progress while waiting for backend
+    // Step-based progress timer (2초마다 5%씩, 최대 85%까지)
     const progressInterval = setInterval(() => {
       setAnalyzeProgress(prev => {
-        if (prev >= 85) return prev; // Hold at 85% until backend responds
-        return prev + Math.random() * 6 + 1;
+        if (prev >= 85) return 85;
+        return prev + 5;
       });
-    }, 300);
+    }, 2000);
 
     try {
       // Step 1: Generate fragments
+      setAnalyzeProgress(10);
       console.log('[PIPELINE] Step 1: Generating fragments...');
       const fragments = await uploadAndGenerateFragments(file);
       console.log('[PIPELINE] Got', fragments.length, 'fragments');
@@ -161,17 +164,29 @@ const Index: React.FC = () => {
       setEditFragments(fragments);
       setReservedFragments([]);
 
-      setAnalyzeProgress(100);
       clearInterval(progressInterval);
+      setAnalyzeProgress(100);
 
       // Transition to proposal view
       setTimeout(() => setAppState("proposal"), 400);
     } catch (err) {
-      console.error('[PIPELINE] Error:', err);
       clearInterval(progressInterval);
+      const errMsg = err instanceof Error ? err.message : String(err);
+      console.error('[PIPELINE] Error:', errMsg);
 
-      // On error, fall back to empty state
-      setAppState("empty");
+      // Detect connection errors specifically
+      const isConnectionError =
+        errMsg.includes('Failed to fetch') ||
+        errMsg.includes('NetworkError') ||
+        errMsg.includes('ERR_CONNECTION_REFUSED') ||
+        errMsg.includes('Load failed');
+
+      if (isConnectionError) {
+        setPipelineError('백엔드 서버에 연결할 수 없습니다. 서버가 실행 중인지 확인하세요. (localhost:8000)');
+      } else {
+        setPipelineError(`분석 실패: ${errMsg}`);
+      }
+      setAppState("error");
       setAnalyzeProgress(0);
     }
   }, []);
@@ -287,6 +302,7 @@ const Index: React.FC = () => {
           appState={appState}
           proposals={proposals}
           analyzeProgress={analyzeProgress}
+          pipelineError={pipelineError}
           onFileUpload={handleFileUpload}
           onProposalSelect={handleProposalSelect}
           onStateChange={setAppState}

@@ -4,7 +4,7 @@ import type { Fragment } from "../types/boundaryTypes";
 import type { Proposal } from "../services/proposalService";
 import { ScrollArea } from "./ui/scroll-area";
 
-export type AppState = "empty" | "analyzing" | "proposal" | "chat";
+export type AppState = "empty" | "analyzing" | "proposal" | "chat" | "error";
 
 interface ChatMessage {
   id: string;
@@ -20,6 +20,7 @@ interface CenterPanelProps {
   appState: AppState;
   proposals: Proposal[];
   analyzeProgress: number;
+  pipelineError: string | null;
   onFileUpload: (file: File) => void;
   onProposalSelect: (proposal: Proposal) => void;
   onStateChange: (state: AppState) => void;
@@ -29,6 +30,7 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
   appState,
   proposals,
   analyzeProgress,
+  pipelineError,
   onFileUpload,
   onProposalSelect,
   onStateChange,
@@ -164,6 +166,34 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
           </div>
         </div>
         <ChatBar value="" onChange={() => {}} onSend={() => {}} onKeyDown={() => {}} onFileSelect={() => {}} disabled />
+      </div>
+    );
+  }
+
+  // ── Error ──
+  if (appState === "error") {
+    return (
+      <div className="flex flex-col bg-card/40 h-full w-full">
+        <div className="flex-1 flex items-center justify-center p-6">
+          <div className="flex flex-col items-center gap-4 w-full max-w-[260px]">
+            <div className="w-10 h-10 rounded-xl bg-destructive/10 flex items-center justify-center">
+              <span className="text-destructive text-lg">!</span>
+            </div>
+            <div className="text-center space-y-1">
+              <p className="text-[12px] font-medium text-foreground/80">분석에 실패했습니다</p>
+              <p className="text-[10px] text-muted-foreground/60 leading-relaxed px-2">
+                {pipelineError || '알 수 없는 오류가 발생했습니다.'}
+              </p>
+            </div>
+            <button
+              onClick={() => onStateChange("empty")}
+              className="px-4 py-1.5 rounded-lg border border-foreground/12 bg-transparent text-foreground/70 text-[11px] font-medium hover:bg-foreground/5 hover:border-foreground/20 transition-all"
+            >
+              다시 시도
+            </button>
+          </div>
+        </div>
+        <ChatBar value="" onChange={() => {}} onSend={() => {}} onKeyDown={() => {}} onFileSelect={onFileUpload} disabled />
       </div>
     );
   }
