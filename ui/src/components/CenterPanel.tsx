@@ -61,10 +61,7 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
     onStateChange(state);
   };
 
-  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
+  const processFile = async (file: File) => {
     setError(null);
     changeState('analyzing');
     onFileUpload(file);
@@ -79,6 +76,12 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
       setError(err instanceof Error ? err.message : String(err));
       changeState('empty');
     }
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    processFile(file);
   };
 
   const handleUploadClick = () => {
@@ -141,17 +144,7 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
             onDrop={(e) => {
               e.preventDefault();
               const file = e.dataTransfer.files[0];
-              if (file) {
-                onFileUpload(file);
-                changeState('analyzing');
-                // Trigger same flow as file input
-                const dt = new DataTransfer();
-                dt.items.add(file);
-                if (fileInputRef.current) {
-                  fileInputRef.current.files = dt.files;
-                  fileInputRef.current.dispatchEvent(new Event('change', { bubbles: true }));
-                }
-              }
+              if (file) processFile(file);
             }}
           >
             <div className="w-10 h-10 rounded-xl bg-secondary/60 flex items-center justify-center">
