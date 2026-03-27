@@ -1,6 +1,9 @@
+import logging
 import os
 import sys
 from pathlib import Path
+
+logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 
 _ROOT = Path(__file__).parent.parent.parent
 _CORE = _ROOT / "ccut_core"
