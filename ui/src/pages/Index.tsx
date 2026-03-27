@@ -17,7 +17,7 @@ import {
   uploadAndGenerateFragments,
   generateProposals,
 } from "@/services/proposalService";
-import type { Proposal } from "@/services/proposalService";
+import type { Proposal, UploadResult } from "@/services/proposalService";
 
 const STORAGE_KEY = "ccut-center-width";
 const MIN_CENTER = 260;
@@ -45,6 +45,8 @@ const Index: React.FC = () => {
   const [analyzeProgress, setAnalyzeProgress] = useState(0);
   const [generatedFragments, setGeneratedFragments] = useState<Fragment[]>([]);
   const [pipelineError, setPipelineError] = useState<string | null>(null);
+  const [videoUrl, setVideoUrl] = useState<string>("");
+  const videoRef = useRef<HTMLVideoElement>(null);
 
   // Playing state
   const [playingFragmentId, setPlayingFragmentId] = useState<string | null>(null);
@@ -64,25 +66,56 @@ const Index: React.FC = () => {
   const containerRef = useRef<HTMLDivElement>(null);
   const leftNavWidth = 220;
 
-  // Simulated playback progress
+  // Video playback — seek to fragment start, stop at fragment end
   const startPlay = useCallback((fragmentId: string, origin: 'edit' | 'panorama') => {
     if (playTimerRef.current) clearInterval(playTimerRef.current);
     setPlayingFragmentId(fragmentId);
     setPlayOrigin(origin);
     setPlayProgress(0);
-    playTimerRef.current = window.setInterval(() => {
-      setPlayProgress((prev) => {
-        if (prev >= 100) {
+
+    // Find fragment to get start/end times
+    const frag = editFragments.find(f => f.fragment_id === fragmentId);
+    const vid = videoRef.current;
+    if (frag && vid && videoUrl) {
+      const fps = 30;
+      const startSec = frag.start_frame / fps;
+      const endSec = frag.end_frame / fps;
+      const duration = endSec - startSec;
+
+      vid.currentTime = startSec;
+      vid.play().catch(() => {});
+
+      // Progress timer — tracks real playback position
+      playTimerRef.current = window.setInterval(() => {
+        const elapsed = vid.currentTime - startSec;
+        const pct = Math.min(100, (elapsed / duration) * 100);
+        setPlayProgress(pct);
+
+        if (vid.currentTime >= endSec || vid.paused) {
+          vid.pause();
           if (playTimerRef.current) clearInterval(playTimerRef.current);
           playTimerRef.current = null;
           setPlayingFragmentId(null);
           setPlayOrigin(null);
-          return 0;
+          setPlayProgress(0);
         }
-        return prev + 2;
-      });
-    }, 80);
-  }, []);
+      }, 100);
+    } else {
+      // Fallback: simulated progress (no video loaded)
+      playTimerRef.current = window.setInterval(() => {
+        setPlayProgress((prev) => {
+          if (prev >= 100) {
+            if (playTimerRef.current) clearInterval(playTimerRef.current);
+            playTimerRef.current = null;
+            setPlayingFragmentId(null);
+            setPlayOrigin(null);
+            return 0;
+          }
+          return prev + 2;
+        });
+      }, 80);
+    }
+  }, [editFragments, videoUrl]);
 
   const stopPlay = useCallback(() => {
     if (playTimerRef.current) clearInterval(playTimerRef.current);
@@ -149,9 +182,11 @@ const Index: React.FC = () => {
       // Step 1: Generate fragments
       setAnalyzeProgress(10);
       console.log('[PIPELINE] Step 1: Generating fragments...');
-      const fragments = await uploadAndGenerateFragments(file);
-      console.log('[PIPELINE] Got', fragments.length, 'fragments');
+      const result: UploadResult = await uploadAndGenerateFragments(file);
+      const fragments = result.fragments;
+      console.log('[PIPELINE] Got', fragments.length, 'fragments, videoUrl:', result.videoUrl);
       setGeneratedFragments(fragments);
+      setVideoUrl(result.videoUrl);
       setAnalyzeProgress(90);
 
       // Step 2: Generate proposals from fragments
@@ -292,6 +327,15 @@ const Index: React.FC = () => {
 
   return (
     <div ref={containerRef} className="flex h-screen w-full overflow-hidden bg-background" onClick={handleBackgroundClick}>
+      {/* Hidden video element for fragment playback */}
+      {videoUrl && (
+        <video
+          ref={videoRef}
+          src={videoUrl}
+          preload="auto"
+          style={{ position: 'absolute', width: 0, height: 0, opacity: 0, pointerEvents: 'none' }}
+        />
+      )}
       <LeftNav activeItem={activeNavItem} onItemClick={setActiveNavItem} />
 
       <div style={{ width: centerWidth, flexShrink: 0 }}>

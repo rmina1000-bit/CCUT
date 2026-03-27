@@ -26,11 +26,16 @@ export interface Proposal {
   description: string;
 }
 
+export interface UploadResult {
+  fragments: Fragment[];
+  videoUrl: string;
+}
+
 /* ── Fragment Generation ───────────────────────────────────── */
 
 export async function uploadAndGenerateFragments(
   file: File,
-): Promise<Fragment[]> {
+): Promise<UploadResult> {
   const formData = new FormData();
   formData.append('file', file);
 
@@ -47,10 +52,15 @@ export async function uploadAndGenerateFragments(
 
   const data = await res.json();
   const rawFragments: BackendFragment[] = data.fragments ?? [];
+  const videoId: string = data.video_id ?? '';
 
-  console.log('[FRAG] Backend returned', rawFragments.length, 'fragments');
+  console.log('[FRAG] Backend returned', rawFragments.length, 'fragments, video_id:', videoId);
 
-  return rawFragments.map((f, i) => toUIFragment(f, i));
+  const videoUrl = videoId ? `${API_BASE}/video/${videoId}` : '';
+  return {
+    fragments: rawFragments.map((f) => toUIFragment(f)),
+    videoUrl,
+  };
 }
 
 /* ── Proposal Generation ───────────────────────────────────── */
@@ -149,24 +159,14 @@ const SOURCE_HUES: Record<string, number> = {
   A: 30, B: 200, C: 120, D: 0, E: 280, F: 50, G: 320,
 };
 
-function toUIFragment(bf: BackendFragment, index: number): Fragment {
-  const sourceKey = String.fromCharCode(65 + (index % 7)); // A~G rotation
+function toUIFragment(bf: BackendFragment): Fragment {
   const fps = 30;
   return {
     fragment_id: bf.id,
-    source_video: sourceKey,
+    source_video: 'A',  // single video — all fragments share one source
     start_frame: Math.round(bf.start * fps),
     end_frame: Math.round(bf.end * fps),
     duration: Math.round(bf.duration * fps),
-    thumbnail_hue: SOURCE_HUES[sourceKey] ?? 200,
-    intelligence: {
-      narrative: 0.6 + Math.random() * 0.2,
-      emotional: 0.5 + Math.random() * 0.2,
-      action: 0.4 + Math.random() * 0.2,
-      dialogue: 0.5 + Math.random() * 0.15,
-      hook: 0.4 + Math.random() * 0.2,
-      callback: 0.3 + Math.random() * 0.2,
-      confidence: 0.7 + Math.random() * 0.15,
-    },
+    thumbnail_hue: SOURCE_HUES['A'],
   };
 }
