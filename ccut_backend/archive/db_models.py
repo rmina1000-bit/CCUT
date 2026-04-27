@@ -140,3 +140,19 @@ class ExportInputTable(Base):
     total_duration = Column(Float)
     status = Column(String, default="EXPORT_INPUT_READY")
     created_at = Column(DateTime, default=datetime.datetime.now)
+
+class ExportResultTable(Base):
+    __tablename__ = "export_results"
+    id = Column(String, primary_key=True, index=True) # RND_xxx
+    export_input_id = Column(String, ForeignKey("export_input.export_id"), index=True)
+    proposal_id = Column(String, index=True)
+    source_id = Column(String, index=True)
+    output_path_internal = Column(String)
+    output_url = Column(String)
+    status = Column(String) # RENDER_SUCCESS / RENDER_FAILED
+    file_size = Column(Float, nullable=True)
+    duration = Column(Float, nullable=True)
+    codec = Column(String, nullable=True)
+    ffmpeg_command_summary = Column(String, nullable=True)
+    ffmpeg_stderr = Column(String, nullable=True)
+    created_at = Column(DateTime, default=datetime.datetime.now)

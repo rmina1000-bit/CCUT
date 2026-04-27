@@ -123,6 +123,18 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
   const [isExporting, setIsExporting] = useState(false);
   const [exportUrl, setExportUrl] = useState<string | null>(null);
   const [exportError, setExportError] = useState<string | null>(null);
+  const [renderStatus, setRenderStatus] = useState<string>("");
+  const [renderResult, setRenderResult] = useState<{
+    file_size?: number;
+    duration?: number;
+    status?: string;
+  } | null>(null);
+
+  const normalizeMediaUrl = useCallback((url?: string | null) => {
+    if (!url) return "";
+    if (url.startsWith("http")) return url;
+    return `http://localhost:8000${url}`;
+  }, []);
 
   const allSourceFragments = useMemo(
     () =>
@@ -504,37 +516,58 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
     setIsExporting(true);
     setExportError(null);
     setExportUrl(null);
+    setRenderResult(null);
+    setRenderStatus("ExportInput 생성 중...");
 
     try {
-      const programId = `PG_${committedProposalId}_${Date.now()}`;
-      const p = proposals?.[committedProposalId];
-      const fragIds = p?.key_fragments ?? p?.sequence ?? [];
+      const proposal = proposals?.[committedProposalId];
+      const backendId = proposal?.proposal_id || proposal?.id || committedProposalId;
 
-      await fetch(`${videoService.API_BASE_URL}/programs`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          program_id: programId,
-          name: `${committedProposalId}안 편집본`,
-          fragments_sequence: fragIds,
-          source_id: sourceId || "",
-        }),
+      // [STEP 9] 1. ExportInput 생성 (POST /export-input/{proposal_id})
+      const exportInputRes = await fetch(`${videoService.API_BASE_URL}/export-input/${backendId}`, {
+        method: "POST"
       });
+      if (!exportInputRes.ok) throw new Error(`ExportInput 생성 실패 (${exportInputRes.status})`);
+      const exportInputData = await exportInputRes.json();
 
-      const exportRes = await fetch(
-        `${videoService.API_BASE_URL}/export/${programId}?platform=YOUTUBE`,
-        { method: "POST" }
-      );
-      const exportData = await exportRes.json();
+      const exportInputId = exportInputData.export_input_id || exportInputData.export_id || exportInputData.id;
+      if (!exportInputId) throw new Error("응답에서 ExportInput ID를 찾을 수 없습니다.");
 
-      if (exportData.status === "SUCCESS" && exportData.download_url) {
-        setExportUrl(exportData.download_url);
-        setExportedProgramId(programId);
-      } else {
-        setExportError(exportData.message || "렌더링에 실패했습니다.");
+      setRenderStatus("Render 실행 중...");
+
+      // [STEP 9] 2. Render 실행 (POST /render/{export_input_id})
+      const renderRes = await fetch(`${videoService.API_BASE_URL}/render/${exportInputId}`, {
+        method: "POST"
+      });
+      if (!renderRes.ok) throw new Error(`Render 시작 실패 (${renderRes.status})`);
+      const renderData = await renderRes.json();
+
+      if (!renderData.success) {
+        throw new Error(renderData.message || "Render 엔진 실행 중 대기 혹은 실패");
       }
+
+      // [STEP 9] 3. Render 결과 조회 (GET /render-result/{export_input_id})
+      const resultRes = await fetch(`${videoService.API_BASE_URL}/render-result/${exportInputId}`);
+      if (!resultRes.ok) throw new Error(`Render 결과 조회 실패 (${resultRes.status})`);
+      const resultData = await resultRes.json();
+
+      // [STEP 9] 결과 상태 매핑
+      if (resultData.status === "RENDER_SUCCESS") {
+        setRenderStatus("완료");
+        setExportUrl(resultData.output_url);
+        setRenderResult({
+          file_size: resultData.file_size,
+          duration: resultData.duration,
+          status: resultData.status
+        });
+      } else {
+        throw new Error(`렌더링 상태 확인 필요: ${resultData.status}`);
+      }
+
     } catch (e: any) {
-      setExportError("서버 연결 오류: " + e.message);
+      console.error("[STEP 9] Export Flow Error:", e);
+      setRenderStatus("실패");
+      setExportError(e.message || "서버 연결 오류가 발생했습니다.");
     } finally {
       setIsExporting(false);
     }
@@ -888,7 +921,7 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
               {isExporting ? (
                 <>
                   <Loader2 size={16} className="animate-spin" />
-                  렌더링 중...
+                  {renderStatus || "처리 중..."}
                 </>
               ) : (
                 <>
@@ -901,15 +934,37 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
             </button>
 
             {exportUrl && (
-              <a
-                href={exportUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center gap-2 px-6 py-2.5 rounded-lg border border-primary/30 text-primary text-[12px] font-bold hover:bg-primary/10 transition-all"
-              >
-                <CheckCircle2 size={14} />
-                완성된 영상 다운로드
-              </a>
+              <div className="flex flex-col items-center gap-4 mt-2 p-6 rounded-2xl bg-white/5 border border-white/10 w-full animate-in fade-in zoom-in duration-300">
+                <div className="relative w-full aspect-video rounded-xl overflow-hidden bg-black shadow-2xl">
+                  <video
+                    src={normalizeMediaUrl(exportUrl)}
+                    controls
+                    className="w-full h-full"
+                  />
+                </div>
+
+                <div className="flex flex-col items-center gap-2">
+                  <div className="flex items-center gap-6 text-[11px] text-muted-foreground/60 font-medium">
+                    <span className="flex items-center gap-1.5">
+                      <CheckCircle2 size={12} className="text-primary" />
+                      상태: {renderResult?.status}
+                    </span>
+                    <span>크기: {renderResult?.file_size?.toLocaleString() || 0} bytes</span>
+                    <span>길이: {renderResult?.duration || 0}초</span>
+                  </div>
+
+                  <a
+                    href={normalizeMediaUrl(exportUrl)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    download
+                    className="flex items-center gap-2 px-8 py-2.5 rounded-lg bg-primary/10 text-primary text-[12px] font-bold hover:bg-primary/20 transition-all"
+                  >
+                    <Send size={14} />
+                    최종 영상 다운로드
+                  </a>
+                </div>
+              </div>
             )}
 
             {exportError && <p className="text-[11px] text-red-400/80">{exportError}</p>}

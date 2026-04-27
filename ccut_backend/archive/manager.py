@@ -506,4 +506,48 @@ class BAMSManager:
             "status": r.status
         }
 
+    # [STEP 8] Render Result Persistence
+    def save_render_result(self, data: dict):
+        """[STEP 8] Render 결과 저장"""
+        with SessionLocal() as db:
+            from archive.db_models import ExportResultTable
+            # Upsert
+            db.query(ExportResultTable).filter_by(export_input_id=data["export_input_id"]).delete()
+            
+            db_res = ExportResultTable(
+                id=data["id"],
+                export_input_id=data["export_input_id"],
+                proposal_id=data["proposal_id"],
+                source_id=data["source_id"],
+                output_path_internal=data["output_path_internal"],
+                output_url=data["output_url"],
+                status=data["status"],
+                file_size=data.get("file_size"),
+                duration=data.get("duration"),
+                codec=data.get("codec"),
+                ffmpeg_command_summary=data.get("ffmpeg_command_summary"),
+                ffmpeg_stderr=data.get("ffmpeg_stderr")
+            )
+            db.add(db_res)
+            db.commit()
+            return db_res
+
+    def get_render_result(self, export_input_id: str):
+        """[STEP 8] Render 결과 조회"""
+        with SessionLocal() as db:
+            from archive.db_models import ExportResultTable
+            r = db.query(ExportResultTable).filter_by(export_input_id=export_input_id).first()
+            if not r: return None
+            return {
+                "id": r.id,
+                "export_input_id": r.export_input_id,
+                "proposal_id": r.proposal_id,
+                "source_id": r.source_id,
+                "output_url": r.output_url,
+                "status": r.status,
+                "file_size": r.file_size,
+                "duration": r.duration,
+                "created_at": str(r.created_at)
+            }
+
 bams = BAMSManager()

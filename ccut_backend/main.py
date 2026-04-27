@@ -686,6 +686,28 @@ async def get_export_input_proposal(proposal_id: str):
         return {"status": "NOT_FOUND", "proposal_id": proposal_id}
     return data
 
+# ═══════════════════════════════════════════════════════════════════
+#   [STEP 8] Render Engine API
+# ═══════════════════════════════════════════════════════════════════
+
+@app.post("/render/{export_input_id}")
+async def post_render(export_input_id: str):
+    """
+    [STEP 8] Render 실행
+    ExportInput ID를 받아 실제 mp4 영상을 생성합니다.
+    """
+    from engine.render_engine import render_engine
+    result = render_engine.render_from_export_input(export_input_id)
+    return result
+
+@app.get("/render-result/{export_input_id}")
+async def get_render_result(export_input_id: str):
+    """[STEP 8] Render 결과 조회"""
+    result = bams.get_render_result(export_input_id)
+    if not result:
+        return {"status": "NOT_FOUND", "export_input_id": export_input_id}
+    return result
+
 @app.get("/generate-fragments/status/{source_id}")
 async def get_fragment_status_legacy(source_id: str):
     # 하위 호환성 유지용 (필요 시)

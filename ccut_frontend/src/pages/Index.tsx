@@ -1,13 +1,9 @@
-import React, { useState, useCallback, useRef, useEffect, useMemo } from "react";
+﻿import React, { useState, useCallback, useRef, useEffect, useMemo } from "react";
 import LeftNav from "@/components/LeftNav";
 import CenterPanel from "@/components/CenterPanel";
 import OriginalPanorama from "@/components/OriginalPanorama";
 import FragmentMap from "@/components/FragmentMap";
 import ReservedFragments from "@/components/ReservedFragments";
-import PrecisionBoundaryEditor, {
-  BoundaryEditorTarget,
-} from "@/features/pbe/PrecisionBoundaryEditor";
-import { buildPbeWindow } from "@/features/pbe/pbeWindow";
 
 import {
   Fragment,
@@ -17,8 +13,7 @@ import {
   initialReservedFragments,
 } from "@/data/fragmentData";
 
-import { getUid, recalcDisplayIds } from "@/lib/pbeEngine";
-import { assignShortDisplayIds } from "@/lib/fragmentIdentity";
+import { assignShortDisplayIds, getUid, recalcDisplayIds } from "@/lib/fragmentIdentity";
 import { videoService } from "@/services/videoService";
 
 import { Direction, DirectionSnapshot, Proposal } from "@/proposal/proposalTypes";
@@ -32,22 +27,31 @@ const MIN_CENTER = 420;
 const MIN_RIGHT = 400;
 const LEFT_NAV_WIDTH = 220;
 
+type QuickScanData = {
+  source_id?: string;
+  status?: string;
+  summary?: any;
+  hypothesis?: any;
+  questions?: any[];
+  default_intent_seed?: any;
+};
+
+type SemanticFragmentData = {
+  fragment_id: string;
+  source_id?: string;
+  start: number;
+  end: number;
+  semantic?: any;
+  structural?: any;
+  continuity?: any;
+  confidence?: number;
+  fallback_reason?: string | null;
+};
+
 const Index: React.FC = () => {
   const [activeNavItem, setActiveNavItem] = useState("projects");
   const [navCollapsed, setNavCollapsed] = useState(false);
-
-  const [projects, setProjects] = useState<{ id: string; name: string; date: string; count: number }[]>(() => {
-    try {
-      const saved = localStorage.getItem("ccut_projects");
-      return saved ? JSON.parse(saved) : [];
-    } catch {
-      return [];
-    }
-  });
-
-  useEffect(() => {
-    localStorage.setItem("ccut_projects", JSON.stringify(projects));
-  }, [projects]);
+  const [projects, setProjects] = useState<{ id: string; name: string; date: string; count: number }[]>([]);
 
   const [activeSource, setActiveSource] = useState("A");
 
@@ -59,13 +63,6 @@ const Index: React.FC = () => {
   const [reservedFragments, setReservedFragments] = useState<Fragment[]>(initialReservedFragments);
   const [holdPositions, setHoldPositions] = useState<Record<string, { x: number; y: number }>>({});
   const [deletedFragments, setDeletedFragments] = useState<Fragment[]>([]);
-
-  const [boundaryHighlightIds, setBoundaryHighlightIds] = useState<string[]>([]);
-  const [fragmentOverrides, setFragmentOverrides] = useState<Map<string, Fragment>>(new Map());
-
-  const [editorOpen, setEditorOpen] = useState(false);
-  const [editorTarget, setEditorTarget] = useState<BoundaryEditorTarget | null>(null);
-  const [pbeWindow, setPbeWindow] = useState<Fragment[]>([]);
 
   const [selectedProposalId, setSelectedProposalId] = useState<string | null>(null);
   const [committedProposalId, setCommittedProposalId] = useState<string | null>(null);
@@ -81,6 +78,8 @@ const Index: React.FC = () => {
   const [sourceFragments, setSourceFragments] = useState<Fragment[]>([]);
   const [currentSourceId, setCurrentSourceId] = useState<string | null>(null);
   const [currentVideoUrl, setCurrentVideoUrl] = useState<string | null>(null);
+  const [quickScanData, setQuickScanData] = useState<QuickScanData | null>(null);
+  const [semanticFragments, setSemanticFragments] = useState<SemanticFragmentData[]>([]);
 
   type SourceEntry = {
     source_id: string;
@@ -147,6 +146,8 @@ const Index: React.FC = () => {
     setCurrentSourceId(null);
     setCurrentVideoUrl(null);
     setSourceEntries([]);
+    setQuickScanData(null);
+    setSemanticFragments([]);
   }, []);
 
   const handleStartAnalysis = useCallback(
@@ -251,8 +252,8 @@ const Index: React.FC = () => {
         setProjects((prev) => {
           const newProject = {
             id: projectId,
-            name: `${dateStrYYMMDD}-${String(prev.length + 1).padStart(3, "0")}`,
-            date: `${today.getMonth() + 1}월 ${today.getDate()}일`,
+            name: dateStrYYMMDD + "-" + String(prev.length + 1).padStart(3, "0"),
+            date: String(today.getMonth() + 1) + "/" + String(today.getDate()),
             count: fileCount,
           };
           return [newProject, ...prev];
@@ -299,9 +300,8 @@ const Index: React.FC = () => {
               ];
 
               console.log(
-                `[multi-source] 편집 합산: ${combinedForEditing.length}개 조각`,
-                `(A: ${finalMappedA.length}개`,
-                `+ 기타: ${combinedForEditing.length - finalMappedA.length}개)`
+                "[multi-source] merged fragments: " + combinedForEditing.length,
+                "(A: " + finalMappedA.length + ", others: " + (combinedForEditing.length - finalMappedA.length) + ")"
               );
 
               const hooks = combinedForEditing.map(
@@ -321,44 +321,121 @@ const Index: React.FC = () => {
                 uniqueRoles
               );
 
-              let generatedProposals: Record<"A" | "B", any>;
-              if (canProceed) {
-                const initialSnapshot = createInitialSnapshot();
-                generatedProposals = generateProposals(combinedForEditing, initialSnapshot);
-                setDirectionSnapshot(initialSnapshot);
-              } else {
-                console.warn("[proposal-gate] 의미 데이터 분산 부족 — fallback 사용");
-                const allFragIds = combinedForEditing.map((f) => f.fragment_id);
-                const timeOrdered = [...combinedForEditing]
-                  .sort((a, b) => (a.start_frame ?? 0) - (b.start_frame ?? 0))
-                  .map((f) => f.fragment_id);
+              let generatedProposals: Record<"A" | "B", any> = {} as any;
+              let semanticReady = false;
 
-                generatedProposals = {
-                  A: {
-                    id: "A",
-                    mode: "market",
-                    title: "시장형 편집",
-                    desc: "분석 완료 후 더 정교한 제안이 생성됩니다.",
-                    score: "50%",
-                    key_fragments: allFragIds,
-                    direction: {},
-                    snapshot_id: "R0",
-                    template_id: "fallback",
-                    slot_trace: [],
-                  },
-                  B: {
-                    id: "B",
-                    mode: "user",
-                    title: "사용자친화형 편집",
-                    desc: "원본 시간 순서를 유지한 편집안입니다.",
-                    score: "50%",
-                    key_fragments: timeOrdered,
-                    direction: {},
-                    snapshot_id: "R0",
-                    template_id: "fallback_time",
-                    slot_trace: [],
-                  },
-                };
+              try {
+                setAnalyzeMessage("편집 제안 생성 중...");
+                // [STEP 9] 2. Backend Proposal 생성 (POST /proposals/{source_id})
+                try {
+                  const quickScanRes = await fetch(
+                    `${videoService.API_BASE_URL}/quick-scan/${firstSourceId}`
+                  );
+                  if (!quickScanRes.ok) {
+                    throw new Error(`Quick Scan 조회 실패 (${quickScanRes.status})`);
+                  }
+                  const quickScan = await quickScanRes.json();
+                  setQuickScanData(quickScan);
+                  setAnalyzeMessage("Quick Scan 완료");
+                } catch (quickScanErr) {
+                  console.warn("[Index] Quick Scan Error:", quickScanErr);
+                  setAnalyzeMessage("Quick Scan 조회 실패 - 계속 진행");
+                }
+
+                setAnalyzeMessage("Semantic Fragment 생성 중...");
+                const semanticRes = await fetch(
+                  `${videoService.API_BASE_URL}/semantic-fragments/${firstSourceId}`,
+                  { method: "POST" }
+                );
+                if (!semanticRes.ok) {
+                  throw new Error(`Semantic Fragment 생성 실패 (${semanticRes.status})`);
+                }
+                const semanticData = await semanticRes.json();
+                const semanticRows = semanticData.fragments || [];
+                if (semanticRows.length === 0) {
+                  throw new Error("Semantic Fragment 결과가 비어 있습니다.");
+                }
+                semanticReady = true;
+                setSemanticFragments(semanticRows);
+                setAnalyzeMessage("Semantic Fragment 생성 완료");
+
+                setAnalyzeMessage("편집 제안 생성 중...");
+                const proposalRes = await fetch(`${videoService.API_BASE_URL}/proposals/${firstSourceId}`, {
+                  method: "POST"
+                });
+                if (!proposalRes.ok) throw new Error("백엔드 제안 생성 실패");
+                const proposalData = await proposalRes.json();
+
+                const backendProposals = proposalData.proposals || [];
+                if (backendProposals.length > 0) {
+                  backendProposals.forEach((p: any) => {
+                    const mode = p.mode === "A" ? "A" : "B"; // 'A' or 'B' expected from backend v3.2.1
+                    generatedProposals[mode] = {
+                      id: mode,
+                      proposal_id: p.proposal_id,
+                      mode: p.mode === "A" ? "market" : "user",
+                      title: p.mode === "A" ? "시장형 편집 (A)" : "사용자친화형 편집 (B)",
+                      desc: p.proposal_reason?.mode_reason || "諛깆뿏??遺꾩꽍 湲곕컲 異붿쿇 ?몄쭛?덉엯?덈떎.",
+                      score: String(Math.round(p.confidence * 100)) + "%",
+                      key_fragments: p.sequence.map((s: any) => s.fragment_id),
+                      direction: {},
+                      snapshot_id: "R1",
+                      template_id: p.mode,
+                      slot_trace: []
+                    };
+                  });
+                }
+              } catch (err) {
+                if (!semanticReady) {
+                  console.error("[Index] Semantic pipeline error:", err);
+                  setAnalyzeMessage("Semantic Fragment 조회 실패");
+                  setAnalyzeProgress(100);
+                  setAppState("complete");
+                  return;
+                }
+                console.error("[Index] Backend Proposal Error, fallback to client-side:", err);
+              }
+
+              // Fallback if backend failed or returned nothing
+              if (Object.keys(generatedProposals).length === 0) {
+                if (canProceed) {
+                  const initialSnapshot = createInitialSnapshot();
+                  generatedProposals = generateProposals(combinedForEditing, initialSnapshot);
+                  setDirectionSnapshot(initialSnapshot);
+                } else {
+                  console.warn("[proposal-gate] ?섎? ?곗씠??遺꾩궛 遺議???fallback ?ъ슜");
+                  const allFragIds = combinedForEditing.map((f) => f.fragment_id);
+                  const timeOrdered = [...combinedForEditing]
+                    .sort((a, b) => (a.start_frame ?? 0) - (b.start_frame ?? 0))
+                    .map((f) => f.fragment_id);
+
+                  generatedProposals = {
+                    A: {
+                      id: "A",
+                      mode: "market",
+                      title: "시장형 편집",
+                      desc: "분석 완료 후 더 정교한 제안이 생성됩니다.",
+                      score: "50%",
+                      key_fragments: allFragIds,
+                      direction: {},
+                      snapshot_id: "R0",
+                      template_id: "fallback",
+                      slot_trace: [],
+                    },
+                    B: {
+                      id: "B",
+                      mode: "user",
+                      title: "사용자친화형 편집",
+                      desc: "원본 시간 순서를 유지한 편집안입니다.",
+                      score: "50%",
+                      key_fragments: timeOrdered,
+                      direction: {},
+                      snapshot_id: "R0",
+                      template_id: "fallback_time",
+                      slot_trace: [],
+                    },
+                  };
+                }
               }
 
               logProposalPair(generatedProposals, "INITIAL");
@@ -371,14 +448,14 @@ const Index: React.FC = () => {
               setAnalyzeMessage("분석 완료!");
               setAppState("complete");
 
-              console.log(`[N-01] 분석 완료 및 제안 생성: ${combinedForEditing.length}개 조각`);
+              console.log("[N-01] analysis complete, proposal count fragments:", combinedForEditing.length);
             } else if (statusData.status === "FAILED") {
               clearInterval(pollInterval);
-              setAnalyzeMessage(`분석 실패: ${statusData.error}`);
+              setAnalyzeMessage("분석 실패: " + statusData.error);
               setAppState("complete");
             } else if (pollCount >= MAX_POLLS) {
               clearInterval(pollInterval);
-              setAnalyzeMessage("분석 시간 초과 (백그라운드에서 계속 진행될 수 있습니다)");
+              setAnalyzeMessage("분석 시간 초과 (백엔드에서 계속 진행될 수 있습니다)");
               setAppState("complete");
             }
           } catch (err) {
@@ -390,7 +467,7 @@ const Index: React.FC = () => {
         return true;
       } catch (e) {
         console.error("[N-01] 분석 실패:", e);
-        setAnalyzeMessage("분석 중 오류가 발생했습니다. 콘솔을 확인해 주세요.");
+        setAnalyzeMessage("遺꾩꽍 以??ㅻ쪟媛 諛쒖깮?덉뒿?덈떎. 肄섏넄???뺤씤??二쇱꽭??");
         setAnalyzeProgress(0);
         setAppState("analyzing");
         return false;
@@ -413,7 +490,7 @@ const Index: React.FC = () => {
   const handleReproposal = useCallback(
     (nextDirection: Direction) => {
       if (!sourceFragments.length) {
-        console.warn("[Reproposal] sourceFragments가 없어 재제안을 건너뜁니다.");
+        console.warn("[Reproposal] sourceFragments媛 ?놁뼱 ?ъ젣?덉쓣 嫄대꼫?곷땲??");
         return;
       }
 
@@ -436,12 +513,12 @@ const Index: React.FC = () => {
   const handleExport = useCallback(async (projectId: string) => {
     try {
       const res = await fetch(
-        `${videoService.API_BASE_URL}/export/final?project_id=${projectId}`,
+        videoService.API_BASE_URL + "/export/final?project_id=" + projectId,
         { method: "POST" }
       );
       return await res.json();
     } catch (e) {
-      console.error("수출 실패:", e);
+      console.error("내보내기 실패:", e);
       return { status: "ERROR", message: "서버 연결 오류" };
     }
   }, []);
@@ -651,7 +728,7 @@ const Index: React.FC = () => {
     (f: Fragment, insertAt?: number) => {
       if (!committedProposalId || !proposals) return;
 
-      // 새 고유 ID 부여 — 원본과 구분되는 복사본
+      // ??怨좎쑀 ID 遺?????먮낯怨?援щ텇?섎뒗 蹂듭궗蹂?
       const copyId = `${f.fragment_id}_copy_${Date.now()}`;
       const newFrag: Fragment = {
         ...f,
@@ -734,37 +811,6 @@ const Index: React.FC = () => {
     [removeByUid, committedProposalId, proposals]
   );
 
-  const handleEmptyTrash = useCallback(() => {
-    setDeletedFragments([]);
-  }, []);
-
-  const handleBoundaryDragChange = useCallback(
-    (leftFrag: Fragment | null, rightFrag: Fragment | null) => {
-      if (!leftFrag || !rightFrag) {
-        setBoundaryHighlightIds([]);
-        setFragmentOverrides(new Map());
-        return;
-      }
-
-      setActiveSource(leftFrag.source_video);
-      setBoundaryHighlightIds([getUid(leftFrag), getUid(rightFrag)]);
-    },
-    []
-  );
-
-  useEffect(() => {
-    if (boundaryHighlightIds.length === 0) return;
-
-    const overrides = new Map<string, Fragment>();
-
-    for (const fid of boundaryHighlightIds) {
-      const frag = editFragments.find((f) => getUid(f) === fid);
-      if (frag) overrides.set(fid, frag);
-    }
-
-    setFragmentOverrides(overrides);
-  }, [boundaryHighlightIds, editFragments]);
-
   const filteredFragments = useMemo(() => {
     if (!committedProposalId || !proposals) return [];
 
@@ -792,104 +838,11 @@ const Index: React.FC = () => {
       )
       .filter(Boolean) as Fragment[];
 
-    if (result.length > 0) {
-      console.log("[filteredFragments] 첫 조각 thumbnail:", JSON.stringify(result[0]?.thumbnail));
-    }
-
     return result;
   }, [committedProposalId, editFragments, proposals]);
 
-  const handleOpenBoundaryEditor = useCallback(
-    (leftRealIndex: number, rightRealIndex: number, clickSide?: "left" | "right" | "center") => {
-      const windowFrags: Fragment[] = [];
-
-      // 1. editFragments에서 leftRealIndex ~ rightRealIndex (Filtered fragments in the map)
-      for (let i = leftRealIndex; i <= rightRealIndex; i++) {
-        const frag = filteredFragments[i];
-        if (frag) windowFrags.push({ ...frag, selection_state: "S" });
-      }
-
-      // 2. Build sourcePool to find 'N' fragments (Rail fragments)
-      const editUids = new Set(filteredFragments.map(f => getUid(f)));
-      const sourcePool = sourceEntries.flatMap(e => e.fragments).map(f => ({
-        ...f,
-        selection_state: (editUids.has(getUid(f)) ? "S" : "N") as SelectionState
-      }));
-
-      // 3. center 클릭인 경우: railFragments에서 사이 조각 추가
-      if (clickSide === 'center') {
-        const leftFrag = filteredFragments[leftRealIndex];
-        const rightFrag = filteredFragments[rightRealIndex];
-
-        const leftEndFrame = leftFrag?.end_frame || 0;
-        const rightStartFrame = rightFrag?.start_frame || Infinity;
-
-        const railInWindow = sourcePool.filter(frag => {
-          // Same source check if needed, but §6 implies any source between frames?
-          // Usually gaps are same‑source.
-          return frag.selection_state === 'N' &&
-            frag.start_frame >= leftEndFrame &&
-            frag.start_frame < rightStartFrame;
-        });
-
-        console.log('[Index] Center click - adding rail fragments:', railInWindow.length);
-
-        // start_frame 순서로 정렬하여 삽입
-        railInWindow.forEach(railFrag => {
-          const insertIndex = windowFrags.findIndex(f => f.start_frame > railFrag.start_frame);
-          if (insertIndex === -1) {
-            windowFrags.push({ ...railFrag, selection_state: "N" });
-          } else {
-            windowFrags.splice(insertIndex, 0, { ...railFrag, selection_state: "N" });
-          }
-        });
-      }
-
-      // Optional: If clickSide is left/right, we might still want buildPbeWindow §6 logic?
-      // But user's instruction is to replace with THIS specific logic.
-      // I'll stick to their logic but ensure it's robust.
-
-      console.log('[Index] Opening PBE with fragments:', windowFrags.map(f => ({ id: f.fragment_id, state: f.selection_state })));
-
-      setPbeWindow(windowFrags);
-      setEditorTarget({
-        leftRealIndex: windowFrags.findIndex(f => filteredFragments[leftRealIndex] && getUid(f) === getUid(filteredFragments[leftRealIndex])),
-        rightRealIndex: windowFrags.findIndex(f => filteredFragments[rightRealIndex] && getUid(f) === getUid(filteredFragments[rightRealIndex])),
-        clickSide,
-      });
-      setEditorOpen(true);
-    },
-    [filteredFragments, sourceEntries]
-  );
-
-  // DEBUG TRIGGER for M1
-  useEffect(() => {
-    const handler = (e: any) => {
-      const { lIdx, rIdx, side } = e.detail;
-      handleOpenBoundaryEditor(lIdx, rIdx, side);
-    };
-    window.addEventListener('pbe-test-trigger' as any, handler);
-    return () => window.removeEventListener('pbe-test-trigger' as any, handler);
-  }, [handleOpenBoundaryEditor]);
-
-  const handleEditorApply = useCallback(async (result: { updatedFragments: Fragment[] }) => {
-    const { updatedFragments } = result;
-    setEditFragments(updatedFragments);
-    setPbeWindow([]);
-    setEditorOpen(false);
-
-    try {
-      await fetch(`${videoService.API_BASE_URL}/save_edit`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          fragments: updatedFragments,
-          timestamp: Date.now(),
-        }),
-      });
-    } catch (e) {
-      console.error("편집 저장 실패:", e);
-    }
+  const handleEmptyTrash = useCallback(() => {
+    setDeletedFragments([]);
   }, []);
 
   const handleBackgroundClick = useCallback((e: React.MouseEvent) => {
@@ -924,86 +877,6 @@ const Index: React.FC = () => {
       </div>
 
       <div style={{ width: centerWidth, flexShrink: 0 }}>
-        {/* PBE-M1 Verification Debug Button */}
-        <button
-          onClick={() => {
-            const mockA: any[] = [1, 2, 3, 4, 5].map(i => ({
-              fragment_id: `VF${i}_A`,
-              fragment_uid: `VF${i}_A`,
-              display_id: `A-${i}`,
-              source_video: "A",
-              start_frame: (i - 1) * 300,
-              end_frame: i * 300,
-              duration: 300,
-              selection_state: "S",
-              status: "committed",
-              thumbnail: { thumbnail_url: "" }
-            }));
-
-            const mockB: any[] = [1, 2, 3, 4, 5].map(i => ({
-              fragment_id: `VF${i}_B`,
-              fragment_uid: `VF${i}_B`,
-              display_id: `B-${i}`,
-              source_video: "B",
-              start_frame: (i - 1) * 300,
-              end_frame: i * 300,
-              duration: 300,
-              selection_state: "S",
-              status: "committed",
-              thumbnail: { thumbnail_url: "" }
-            }));
-
-            const sourcePool = [...mockA, ...mockB].map(f => ({
-              ...f,
-              selection_state: "N" // baseline
-            }));
-
-            // Test logic directly
-            const test = (l: any, r: any, side: any) => {
-              const windowFs = buildPbeWindow({
-                leftFragment: l ? { ...l, selection_state: "S" } : null,
-                rightFragment: r ? { ...r, selection_state: "S" } : null,
-                sourcePool
-              });
-              console.log(`[PBE-M1-WINDOW] Unit Test - Case: ${side}`);
-              console.log(`[PBE-M1-WINDOW] Result (S/N):`, windowFs.map(f => `${f.display_id}(${f.selection_state})`));
-              return windowFs;
-            };
-
-            console.log("--- START M1 LOG VERIFICATION ---");
-            test(mockA[1], mockA[3], "same-source (A2|A4)"); // A1(N), A2(S), A4(S), A5(N)
-            test(mockA[3], mockB[1], "cross-source (A4|B2)"); // A4(S), A5(N), B1(N), B2(S)
-            test(mockA[1], null, "single-left (A2)");         // A1(N), A2(S)
-            test(null, mockB[1], "single-right (B2)");        // B2(S), B3(N)
-
-            setSourceEntries([
-              { source_id: "A", label: "A", video_url: "", fragments: mockA as any },
-              { source_id: "B", label: "B", video_url: "", fragments: mockB as any }
-            ]);
-
-            // Timeline: [A-2, A-4, B-2]
-            const initialTimeline = [mockA[1], mockA[3], mockB[1]];
-
-            const dummyProposals: any = {
-              A: {
-                id: "A", mode: "market", title: "Mock Proposal", desc: "", key_fragments: initialTimeline.map(f => f.fragment_id)
-              },
-              B: {
-                id: "B", mode: "user", title: "Mock B", desc: "", key_fragments: []
-              }
-            };
-
-            setEditFragments(initialTimeline);
-            setProposals(dummyProposals);
-            setCommittedProposalId("A");
-            setAppState("complete");
-            setIntelligenceOn(true);
-            console.log("[PBE-DEBUG] Mock UI state applied.");
-          }}
-          className="fixed top-4 right-4 z-[9999] bg-red-600 text-white p-2 rounded text-xs"
-        >
-          Verify M1 Logs
-        </button>
         <CenterPanel
           selectedFragment={selectedFragment}
           selectedSource={activeSource}
@@ -1021,6 +894,13 @@ const Index: React.FC = () => {
           onCommitProposal={handleProposalCommit}
           onExport={handleExport}
           onReproposal={handleReproposal}
+          guidanceMessage={
+            semanticFragments.length > 0
+              ? "Semantic " + semanticFragments.length + " / Quick Scan " + (quickScanData?.status ?? "READY")
+              : quickScanData?.status
+                ? "Quick Scan " + quickScanData.status
+                : undefined
+          }
           sourceEntries={sourceEntries}
         />
       </div>
@@ -1051,8 +931,10 @@ const Index: React.FC = () => {
           onFragmentClick={handlePanoramaFragmentClick}
           intelligenceOn={intelligenceOn}
           onToggleIntelligence={() => setIntelligenceOn((p) => !p)}
-          fragmentOverrides={fragmentOverrides}
-          boundaryHighlightIds={boundaryHighlightIds}
+
+          fragmentOverrides={new Map()}
+
+          boundaryHighlightIds={[]}
           sourceFragments={
             sourceEntries.length > 0
               ? sourceEntries.find((e) => e.label === activeSource)?.fragments ?? []
@@ -1083,7 +965,7 @@ const Index: React.FC = () => {
             onSourceRestore={handleAddFromSource}
             onMoveToHold={handleMoveToHold}
             onTrashRestore={handleRestoreToEdit}
-            onBoundaryClick={handleOpenBoundaryEditor}
+
           />
         </div>
 
@@ -1103,16 +985,10 @@ const Index: React.FC = () => {
         />
       </div>
 
-      <PrecisionBoundaryEditor
-        open={editorOpen}
-        onOpenChange={setEditorOpen}
-        fragments={pbeWindow}
-        editFragments={editFragments}
-        target={editorTarget}
-        onApply={handleEditorApply}
-      />
     </div>
   );
 };
 
 export default Index;
+
+
