@@ -1,0 +1,43 @@
+{
+  "source_id": "SRC_729CF723",
+  "timestamp": "2026-04-13T20:28:00.618120",
+  "count": 17,
+  "hook_scores": [
+    0.249,
+    0.047,
+    0.053,
+    0.046,
+    0.052,
+    0.045,
+    0.051,
+    0.045,
+    0.086,
+    0.048,
+    0.048,
+    0.061,
+    0.052,
+    0.052,
+    0.058,
+    0.199,
+    0.329
+  ],
+  "roles": [
+    "Intro",
+    "Intro",
+    "Intro",
+    "Intro",
+    "Main",
+    "Main",
+    "Main",
+    "Main",
+    "Main",
+    "Main",
+    "Main",
+    "Main",
+    "Main",
+    "Main",
+    "Main",
+    "Closing",
+    "Closing"
+  ]
+}

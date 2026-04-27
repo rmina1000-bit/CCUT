@@ -1,0 +1,21 @@
+# CCUT 1.0.3 Git 관리 최적화 (7GB Dieters)
+# UI Aliases
+ui/
+ccut_frontend/.qa/
+ccut_frontend/node_modules/
+ccut_frontend/dist/
+lovable_extracted/   # ⚠️ Ignore redundant extracted files
+
+# Backend & Environment
+.venv/
+**/__pycache__/
+.mypy_cache/
+*.db
+**/storage/
+**/ai_models/
+**/node_modules/
+ccut-lovable.zip
+
+# System & OS
+.DS_Store
+Thumbs.db

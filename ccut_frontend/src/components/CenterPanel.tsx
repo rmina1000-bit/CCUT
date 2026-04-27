@@ -1,0 +1,964 @@
+import React, { useRef, useEffect, useState, useCallback, useMemo } from "react";
+import { Upload, Play, Loader2, Send, CheckCircle2, Package } from "lucide-react";
+import { Fragment } from "@/data/fragmentData";
+import { videoService } from "@/services/videoService";
+import { Direction } from "@/proposal/proposalTypes";
+
+type AppState = "empty" | "analyzing" | "complete";
+
+type SourceEntry = {
+  source_id: string;
+  label: string;
+  video_url: string;
+  fragments: Fragment[];
+};
+
+interface CenterPanelProps {
+  selectedFragment: Fragment | null;
+  selectedSource: string;
+  onAnalyze?: (file?: File, extraFiles?: File[]) => Promise<boolean>;
+  onExport?: (
+    projectId: string
+  ) => Promise<{ status: string; file_url?: string; ai_msg?: string; message?: string }>;
+  onFileSelect?: (file: File) => void;
+  onReproposal?: (direction: Direction) => void;
+  appState: AppState;
+  onAppStateChange: (state: AppState) => void;
+  analyzeProgress: number;
+  analyzeMessage?: string;
+  videoUrl?: string | null;
+  sources?: any[];
+  proposals?: any;
+  committedProposalId?: string | null;
+  onPreviewProposal?: (key: string) => void;
+  onCommitProposal?: (key: string) => void;
+  onPreviewNext?: () => void;
+  guidanceMessage?: string;
+  onNextProposals?: () => void;
+  sourceFragments?: Fragment[];
+  sourceId?: string | null;
+  sourceEntries?: SourceEntry[];
+}
+
+function parseDirectionFromText(text: string): Direction | null {
+  const direction: Direction = {};
+  const n = text.trim().toLowerCase();
+
+  if (n.includes("감성") || n.includes("감정") || n.includes("부드럽")) {
+    direction.tone = "emotional";
+  } else if (n.includes("자연") || n.includes("편안") || n.includes("부담없")) {
+    direction.tone = "natural";
+  }
+
+  if (n.includes("빠르게") || n.includes("속도") || n.includes("템포") || n.includes("짧게")) {
+    direction.pace = "fast";
+  } else if (n.includes("천천히") || n.includes("여유") || n.includes("느리게")) {
+    direction.pace = "slow";
+  }
+
+  if (
+    n.includes("시장형") ||
+    n.includes("임팩트") ||
+    n.includes("후킹") ||
+    n.includes("강하게")
+  ) {
+    direction.structure = "hook-priority";
+  } else if (
+    n.includes("사용자형") ||
+    n.includes("자연 흐름") ||
+    n.includes("스토리") ||
+    n.includes("순서대로")
+  ) {
+    direction.structure = "chronological";
+  }
+
+  if (n.includes("웃긴")) direction.highlight = "웃긴";
+  else if (n.includes("설명")) direction.highlight = "설명";
+
+  return Object.keys(direction).length > 0 ? direction : null;
+}
+
+const CenterPanel: React.FC<CenterPanelProps> = ({
+  selectedFragment,
+  selectedSource,
+  sourceFragments,
+  onPreviewNext,
+  guidanceMessage,
+  onNextProposals,
+  onAnalyze,
+  onExport,
+  onFileSelect,
+  onReproposal,
+  appState,
+  analyzeProgress,
+  analyzeMessage,
+  videoUrl,
+  proposals,
+  committedProposalId,
+  onPreviewProposal,
+  onCommitProposal,
+  sourceId,
+  sourceEntries = [],
+}) => {
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const videoRefA = useRef<HTMLVideoElement>(null);
+  const videoRefB = useRef<HTMLVideoElement>(null);
+
+  const [activePlayer, setActivePlayer] = useState<"A" | "B" | null>(null);
+  const activePlayerRef = useRef<"A" | "B" | null>(null);
+
+  const setActivePlayerSafe = useCallback((player: "A" | "B" | null) => {
+    activePlayerRef.current = player;
+    setActivePlayer(player);
+  }, []);
+
+  const [isPlayingA, setIsPlayingA] = useState(false);
+  const [isPlayingB, setIsPlayingB] = useState(false);
+  const [chatValue, setChatValue] = useState("");
+  const [progressA, setProgressA] = useState(0);
+  const [progressB, setProgressB] = useState(0);
+  const [, setDurationA] = useState(0);
+  const [, setDurationB] = useState(0);
+  const [, setExportedProgramId] = useState<string | null>(null);
+  const [isExporting, setIsExporting] = useState(false);
+  const [exportUrl, setExportUrl] = useState<string | null>(null);
+  const [exportError, setExportError] = useState<string | null>(null);
+
+  const allSourceFragments = useMemo(
+    () =>
+      sourceEntries.length > 0
+        ? sourceEntries.flatMap((e) => e.fragments)
+        : (sourceFragments ?? []),
+    [sourceEntries, sourceFragments]
+  );
+
+  const pendingLoadHandlerARef = useRef<(() => void) | null>(null);
+  const pendingLoadHandlerBRef = useRef<(() => void) | null>(null);
+
+  const seqFragsARef = useRef<Fragment[]>([]);
+  const seqIdxARef = useRef<number>(-1);
+  const seqEndARef = useRef<number>(-1);
+  const isSeqARef = useRef<boolean>(false);
+
+  const seqFragsBRef = useRef<Fragment[]>([]);
+  const seqIdxBRef = useRef<number>(-1);
+  const seqEndBRef = useRef<number>(-1);
+  const isSeqBRef = useRef<boolean>(false);
+
+  const seqTotalSecARef = useRef<number>(0);
+  const seqElapsedSecARef = useRef<number>(0);
+  const seqTotalSecBRef = useRef<number>(0);
+  const seqElapsedSecBRef = useRef<number>(0);
+
+  const isSeekingARef = useRef<boolean>(false);
+  const isSeekingBRef = useRef<boolean>(false);
+
+  const cleanupPendingLoadHandler = useCallback((player: "A" | "B") => {
+    const ref = player === "A" ? videoRefA : videoRefB;
+    const pending = player === "A" ? pendingLoadHandlerARef : pendingLoadHandlerBRef;
+
+    if (ref.current && pending.current) {
+      ref.current.removeEventListener("loadeddata", pending.current);
+      pending.current = null;
+    }
+  }, []);
+
+  const sameVideoSource = useCallback((currentSrc?: string | null, nextSrc?: string | null) => {
+    if (!nextSrc) return true;
+    if (!currentSrc) return false;
+
+    try {
+      const cur = new URL(currentSrc, window.location.origin);
+      const next = new URL(nextSrc, window.location.origin);
+      return cur.pathname.split("/").pop() === next.pathname.split("/").pop();
+    } catch {
+      return currentSrc.split("/").pop() === nextSrc.split("/").pop();
+    }
+  }, []);
+
+  const getVideoUrlForFrag = useCallback(
+    (fragId: string): string | null => {
+      if (sourceEntries.length === 0) return videoUrl ?? null;
+
+      for (const entry of sourceEntries) {
+        if (entry.fragments.some((f) => f.fragment_id === fragId)) {
+          return entry.video_url || videoUrl || null;
+        }
+      }
+
+      return videoUrl ?? null;
+    },
+    [sourceEntries, videoUrl]
+  );
+
+  const getVideoUrlForProposal = useCallback(
+    (proposalKey: "A" | "B"): string | null => {
+      const p = proposals?.[proposalKey];
+      const firstFragId = p?.key_fragments?.[0] ?? p?.sequence?.[0];
+      if (!firstFragId) return videoUrl ?? null;
+      return getVideoUrlForFrag(firstFragId);
+    },
+    [proposals, getVideoUrlForFrag, videoUrl]
+  );
+
+  const playerVideoUrlA = getVideoUrlForProposal("A") ?? videoUrl ?? null;
+  const playerVideoUrlB = getVideoUrlForProposal("B") ?? videoUrl ?? null;
+
+  const buildSeqFrags = useCallback(
+    (proposalKey: "A" | "B"): Fragment[] => {
+      const p = proposals?.[proposalKey];
+      const ids: string[] = p?.key_fragments ?? p?.sequence ?? [];
+      return ids
+        .map((id) => allSourceFragments.find((f) => f.fragment_id === id))
+        .filter(Boolean) as Fragment[];
+    },
+    [proposals, allSourceFragments]
+  );
+
+  const playFrag = useCallback(
+    (
+      player: "A" | "B",
+      frag: Fragment,
+      endSecRef: React.MutableRefObject<number>
+    ) => {
+      const ref = player === "A" ? videoRefA : videoRefB;
+      if (!ref.current) return;
+
+      const fragUrl = getVideoUrlForFrag(frag.fragment_id) ?? videoUrl ?? undefined;
+      const startSec = (frag.start_frame ?? 0) / 30;
+      const rawEndSec = (frag.end_frame ?? 0) / 30;
+      const endSec = rawEndSec > startSec ? rawEndSec : startSec + 1;
+
+      endSecRef.current = endSec;
+
+      const doSeekPlay = () => {
+        if (!ref.current) return;
+        ref.current.currentTime = startSec;
+        ref.current.play().catch(() => { });
+      };
+
+      cleanupPendingLoadHandler(player);
+
+      if (fragUrl && !sameVideoSource(ref.current.currentSrc || ref.current.src, fragUrl)) {
+        ref.current.pause();
+        ref.current.src = fragUrl;
+
+        const onLoaded = () => {
+          cleanupPendingLoadHandler(player);
+          doSeekPlay();
+        };
+
+        if (player === "A") pendingLoadHandlerARef.current = onLoaded;
+        else pendingLoadHandlerBRef.current = onLoaded;
+
+        ref.current.addEventListener("loadeddata", onLoaded);
+        ref.current.load();
+      } else {
+        doSeekPlay();
+      }
+    },
+    [cleanupPendingLoadHandler, getVideoUrlForFrag, sameVideoSource, videoUrl]
+  );
+
+  const stopSeq = useCallback(
+    (player: "A" | "B") => {
+      cleanupPendingLoadHandler(player);
+
+      if (player === "A") {
+        isSeqARef.current = false;
+        seqIdxARef.current = -1;
+        seqEndARef.current = -1;
+        videoRefA.current?.pause();
+        setIsPlayingA(false);
+      } else {
+        isSeqBRef.current = false;
+        seqIdxBRef.current = -1;
+        seqEndBRef.current = -1;
+        videoRefB.current?.pause();
+        setIsPlayingB(false);
+      }
+    },
+    [cleanupPendingLoadHandler]
+  );
+
+  const startSeq = useCallback((player: "A" | "B") => {
+    const isA = player === "A";
+    const ref = isA ? videoRefA : videoRefB;
+    const frags = buildSeqFrags(player);
+    if (frags.length === 0) return;
+
+    // 전체 시퀀스 길이 계산
+    const totalSec = frags.reduce((acc, f) => {
+      const s = (f.start_frame ?? 0) / 30;
+      const e = (f.end_frame ?? 0) / 30;
+      return acc + Math.max(e - s, 1);
+    }, 0);
+
+    if (isA) {
+      stopSeq("B");
+      seqTotalSecARef.current = totalSec;
+      seqElapsedSecARef.current = 0;
+      seqFragsARef.current = frags;
+      seqIdxARef.current = 0;
+      isSeqARef.current = true;
+      setActivePlayerSafe("A");
+      setIsPlayingA(true);
+      setProgressA(0);
+      playFrag("A", frags[0], seqEndARef);
+    } else {
+      stopSeq("A");
+      seqTotalSecBRef.current = totalSec;
+      seqElapsedSecBRef.current = 0;
+      seqFragsBRef.current = frags;
+      seqIdxBRef.current = 0;
+      isSeqBRef.current = true;
+      setActivePlayerSafe("B");
+      setIsPlayingB(true);
+      setProgressB(0);
+      playFrag("B", frags[0], seqEndBRef);
+    }
+  }, [buildSeqFrags, playFrag, setActivePlayerSafe, stopSeq]);
+
+  useEffect(() => {
+    if (appState !== "complete") return;
+
+    stopSeq("A");
+    stopSeq("B");
+
+    if (videoRefA.current) {
+      videoRefA.current.load();
+      videoRefA.current.currentTime = 0;
+    }
+
+    if (videoRefB.current) {
+      videoRefB.current.load();
+      videoRefB.current.currentTime = 0;
+    }
+  }, [appState, playerVideoUrlA, playerVideoUrlB, stopSeq]);
+
+  useEffect(() => {
+    if (appState !== "complete" || !proposals) return;
+
+    const setThumbnailPosition = (
+      ref: React.RefObject<HTMLVideoElement>,
+      player: "A" | "B"
+    ) => {
+      const p = proposals[player];
+      const firstFragId = p?.key_fragments?.[0] ?? p?.sequence?.[0];
+      if (!ref.current || !firstFragId) return;
+
+      const firstFrag = allSourceFragments.find((f: any) => f.fragment_id === firstFragId);
+      if (!firstFrag) return;
+
+      const targetUrl = getVideoUrlForProposal(player);
+      const seekTime = (firstFrag.start_frame ?? 0) / 30;
+      const isA = player === "A";
+
+      const performSeek = () => {
+        if (!ref.current) return;
+        if (isA) isSeekingARef.current = true; else isSeekingBRef.current = true;
+        if (isA) setProgressA(0); else setProgressB(0);
+
+        ref.current.currentTime = seekTime;
+        console.log(`[seek-sync] ${player} seek to ${seekTime}`);
+
+        const timer1 = setTimeout(() => {
+          if (isA) setProgressA(0); else setProgressB(0);
+          const timer2 = setTimeout(() => {
+            if (isA) {
+              setProgressA(0);
+              isSeekingARef.current = false;
+            } else {
+              setProgressB(0);
+              isSeekingBRef.current = false;
+            }
+            console.log(`[seek-sync] ${player} unlocked`);
+          }, 100);
+        }, 50);
+      };
+
+      if (targetUrl && !sameVideoSource(ref.current.currentSrc || ref.current.src, targetUrl)) {
+        ref.current.src = targetUrl;
+        ref.current.load();
+        const onLoaded = () => {
+          performSeek();
+          ref.current?.removeEventListener("loadeddata", onLoaded);
+        };
+        ref.current.addEventListener("loadeddata", onLoaded);
+      } else {
+        performSeek();
+      }
+    };
+
+    const t = setTimeout(() => {
+      setThumbnailPosition(videoRefA, "A");
+      setThumbnailPosition(videoRefB, "B");
+      // thumbnail seek로 인한 progress bar 오염 방지
+      setTimeout(() => {
+        setProgressA(0);
+        setProgressB(0);
+      }, 100);
+    }, 300);
+
+    return () => clearTimeout(t);
+  }, [appState, proposals, allSourceFragments, getVideoUrlForProposal, sameVideoSource]);
+
+  useEffect(() => {
+    if (!selectedFragment) return;
+
+    if (isSeqARef.current) stopSeq("A");
+    if (isSeqBRef.current) stopSeq("B");
+
+    const player = activePlayerRef.current === "B" ? "B" : "A";
+    const endRef = player === "B" ? seqEndBRef : seqEndARef;
+
+    setActivePlayerSafe(player);
+    playFrag(player, selectedFragment, endRef);
+
+    if (player === "B") {
+      setIsPlayingB(true);
+    } else {
+      setIsPlayingA(true);
+    }
+  }, [selectedFragment, playFrag, setActivePlayerSafe, stopSeq]);
+
+  const handleUpload = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files.length > 0) {
+      const files = Array.from(e.target.files);
+      setExportUrl(null);
+      setExportError(null);
+      setProgressA(0);
+      setProgressB(0);
+
+      if (onFileSelect) onFileSelect(files[0]);
+      if (onAnalyze) await onAnalyze(files[0], files.slice(1));
+    }
+  };
+
+  const handleSendFull = useCallback(async () => {
+    if (!chatValue.trim()) return;
+
+    const raw = chatValue.trim();
+    const cmd = raw.toLowerCase();
+    setChatValue("");
+
+    if (cmd === "start") {
+      if (onAnalyze) await onAnalyze();
+      return;
+    }
+
+    const parsedDirection = parseDirectionFromText(raw);
+    if (parsedDirection) {
+      onReproposal?.(parsedDirection);
+    }
+  }, [chatValue, onAnalyze, onReproposal]);
+
+  const getProposalPoster = useCallback(
+    (key: "A" | "B") => {
+      const p = proposals?.[key];
+      const firstFragId = p?.key_fragments?.[0] ?? p?.sequence?.[0];
+      if (!firstFragId) return undefined;
+
+      const frag = allSourceFragments.find((f: any) => f.fragment_id === firstFragId);
+      if (!frag) return undefined;
+
+      // 1차: thumbnail.thumbnail_url
+      if (frag.thumbnail?.thumbnail_url) return frag.thumbnail.thumbnail_url;
+
+      // 2차: 직접 thumbnail_url 필드 (있는 경우)
+      if ((frag as any).thumbnail_url) return (frag as any).thumbnail_url;
+
+      // 3차: 없으면 undefined — 브라우저 첫 프레임 자동 표시
+      return undefined;
+    },
+    [proposals, allSourceFragments]
+  );
+
+  const handleProposalPreview = useCallback(
+    (key: string) => {
+      onPreviewProposal?.(key);
+    },
+    [onPreviewProposal]
+  );
+
+  const handleProposalCommit = useCallback(
+    (key: string) => {
+      if (key !== committedProposalId) {
+        setExportUrl(null);
+        setExportError(null);
+      }
+
+      handleProposalPreview(key);
+      onCommitProposal?.(key);
+    },
+    [committedProposalId, handleProposalPreview, onCommitProposal]
+  );
+
+  const handleExportClick = async () => {
+    if (!committedProposalId) return;
+
+    setIsExporting(true);
+    setExportError(null);
+    setExportUrl(null);
+
+    try {
+      const programId = `PG_${committedProposalId}_${Date.now()}`;
+      const p = proposals?.[committedProposalId];
+      const fragIds = p?.key_fragments ?? p?.sequence ?? [];
+
+      await fetch(`${videoService.API_BASE_URL}/programs`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          program_id: programId,
+          name: `${committedProposalId}안 편집본`,
+          fragments_sequence: fragIds,
+          source_id: sourceId || "",
+        }),
+      });
+
+      const exportRes = await fetch(
+        `${videoService.API_BASE_URL}/export/${programId}?platform=YOUTUBE`,
+        { method: "POST" }
+      );
+      const exportData = await exportRes.json();
+
+      if (exportData.status === "SUCCESS" && exportData.download_url) {
+        setExportUrl(exportData.download_url);
+        setExportedProgramId(programId);
+      } else {
+        setExportError(exportData.message || "렌더링에 실패했습니다.");
+      }
+    } catch (e: any) {
+      setExportError("서버 연결 오류: " + e.message);
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
+  const renderContent = () => {
+    if (appState === "empty") {
+      return (
+        <div className="flex-1 flex items-center justify-center p-6 text-center">
+          <div
+            className="w-full max-w-[320px] border-2 border-dashed border-primary/20 rounded-3xl p-12 flex flex-col items-center gap-5 hover:border-primary/40 hover:bg-primary/5 transition-all cursor-pointer group shadow-2xl shadow-primary/5"
+            onClick={handleUpload}
+          >
+            <div className="w-16 h-16 rounded-2xl bg-primary/10 flex items-center justify-center group-hover:scale-110 group-hover:rotate-3 transition-all duration-300">
+              <Upload size={24} className="text-primary" />
+            </div>
+
+            <div className="space-y-2">
+              <h2 className="text-[15px] font-bold text-foreground">새 프로젝트 시작</h2>
+              <p className="text-[12px] text-muted-foreground/60 leading-relaxed">
+                원본 영상들을 이곳에 끌어다 놓으세요.
+                <br />
+                AI가 인지 분할하고 편집 제안을 생성합니다.
+              </p>
+            </div>
+
+            <button
+              className="mt-4 px-8 py-2.5 rounded-xl bg-primary text-primary-foreground text-[12px] font-bold hover:opacity-90 hover:translate-y-[-2px] transition-all shadow-xl shadow-primary/20"
+              onClick={(e) => {
+                e.stopPropagation();
+                handleUpload();
+              }}
+            >
+              파일 업로드
+            </button>
+
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="video/*"
+              multiple
+              className="hidden"
+              onChange={handleFileChange}
+            />
+          </div>
+        </div>
+      );
+    }
+
+    if (appState === "analyzing") {
+      return (
+        <div className="flex-1 flex items-center justify-center p-6">
+          <div className="flex flex-col items-center gap-6 w-full max-w-[280px]">
+            <div className="relative">
+              <div className="w-16 h-16 rounded-2xl bg-secondary/60 flex items-center justify-center animate-pulse">
+                <Loader2 size={24} className="text-primary animate-spin" />
+              </div>
+              <div className="absolute -top-1 -right-1 w-4 h-4 bg-primary rounded-full animate-ping opacity-20" />
+            </div>
+
+            <div className="text-center space-y-1.5">
+              <p className="text-[14px] font-bold text-foreground/90 tracking-tight">
+                AI 인지 분석 시퀀스 가동
+              </p>
+              <p className="text-[11px] text-muted-foreground/60">
+                {analyzeMessage || "장면의 맥락과 감정 선을 분석하는 중입니다."}
+              </p>
+            </div>
+
+            <div className="w-full h-1.5 bg-secondary/40 rounded-full overflow-hidden shadow-inner">
+              <div
+                className="h-full bg-primary rounded-full transition-all duration-500 ease-out shadow-[0_0_10px_rgba(var(--primary),0.5)]"
+                style={{ width: `${Math.min(analyzeProgress, 100)}%` }}
+              />
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    return (
+      <div className="flex-1 w-full px-4 pt-4 flex flex-col items-center space-y-4 overflow-y-auto no-scrollbar pb-20">
+        <div className="grid grid-cols-2 gap-4 w-full">
+          <div className="flex flex-col items-center space-y-4">
+            <div
+              className="relative w-full aspect-[16/8] rounded-2xl bg-black overflow-hidden border border-white/8 cursor-pointer group/player"
+              onClick={() => {
+                if (!videoRefA.current) return;
+
+                if (!isSeqARef.current || videoRefA.current.paused) {
+                  startSeq("A");
+                  handleProposalPreview("A");
+                } else {
+                  stopSeq("A");
+                }
+              }}
+            >
+              {(playerVideoUrlA ?? videoUrl) ? (
+                <>
+                  <video
+                    ref={videoRefA}
+                    src={playerVideoUrlA ?? videoUrl ?? undefined}
+                    poster={getProposalPoster("A")}
+                    className="w-full h-full object-contain bg-black"
+                    onPlay={() => {
+                      setActivePlayerSafe("A");
+                      setIsPlayingA(true);
+                    }}
+                    onPause={() => setIsPlayingA(false)}
+                    onTimeUpdate={(e) => {
+                      if (isSeekingARef.current) return;
+                      const v = e.currentTarget;
+                      if (isSeqARef.current && seqTotalSecARef.current > 0) {
+                        const fragStart = (seqFragsARef.current[seqIdxARef.current]?.start_frame ?? 0) / 30;
+                        const elapsed = seqElapsedSecARef.current + Math.max(0, v.currentTime - fragStart);
+                        setProgressA((elapsed / seqTotalSecARef.current) * 100);
+                      } else if (v.duration) {
+                        setProgressA((v.currentTime / v.duration) * 100);
+                      }
+
+                      const near =
+                        seqEndARef.current > 0 && v.currentTime >= seqEndARef.current - 0.08;
+                      if (!near) return;
+
+                      if (isSeqARef.current) {
+                        const nextIdx = seqIdxARef.current + 1;
+                        const frags = seqFragsARef.current;
+
+                        if (nextIdx < frags.length) {
+                          const curFragA = seqFragsARef.current[seqIdxARef.current];
+                          const csA = (curFragA?.start_frame ?? 0) / 30;
+                          const ceA = (curFragA?.end_frame ?? 0) / 30;
+                          seqElapsedSecARef.current += Math.max(ceA - csA, 1);
+                          seqIdxARef.current = nextIdx;
+                          playFrag("A", frags[nextIdx], seqEndARef);
+                        } else {
+                          isSeqARef.current = false;
+                          seqIdxARef.current = -1;
+                          seqEndARef.current = -1;
+                          v.pause();
+                          setIsPlayingA(false);
+                        }
+                      } else {
+                        v.pause();
+                        setIsPlayingA(false);
+                        seqEndARef.current = -1;
+                      }
+                    }}
+                    onLoadedMetadata={(e) => setDurationA(e.currentTarget.duration)}
+                    preload="auto"
+                    playsInline
+                  />
+
+                  {!isPlayingA && (
+                    <div className="absolute inset-0 flex items-center justify-center bg-black/15 pointer-events-none group-hover/player:bg-black/5 transition-all">
+                      <Play
+                        size={40}
+                        className="text-white fill-white opacity-40 drop-shadow-2xl transition-all group-hover/player:scale-110 group-hover/player:opacity-60"
+                      />
+                    </div>
+                  )}
+                </>
+              ) : (
+                <div className="flex flex-col items-center justify-center h-full opacity-10">
+                  <Play size={40} className="text-muted-foreground" />
+                </div>
+              )}
+
+              <div className="absolute top-4 left-6 pointer-events-none">
+                <span className="text-[10px] font-black tracking-widest text-primary/60 uppercase">
+                  Draft A
+                </span>
+              </div>
+
+              <div className="absolute bottom-0 left-0 right-0 h-1 bg-white/10 z-30">
+                <div
+                  className="h-full bg-primary/70 transition-all duration-100"
+                  style={{ width: `${progressA}%` }}
+                />
+              </div>
+            </div>
+
+            <button
+              onClick={() => handleProposalCommit("A")}
+              className={`text-[14px] font-black tracking-[0.5em] transition-all uppercase group relative py-2 ${committedProposalId === "A"
+                ? "text-primary"
+                : "text-muted-foreground/40 hover:text-primary"
+                }`}
+            >
+              {committedProposalId === "A" ? "✓ A안 확정됨" : "A안 선택"}
+              <div
+                className={`absolute bottom-0 left-0 h-[2px] bg-primary transition-all duration-300 ${committedProposalId === "A" ? "w-full" : "w-0 group-hover:w-full"
+                  }`}
+              />
+            </button>
+          </div>
+
+          <div className="flex flex-col items-center space-y-4">
+            <div
+              className="relative w-full aspect-[16/8] rounded-2xl bg-black overflow-hidden border border-white/8 cursor-pointer group/player"
+              onClick={() => {
+                if (!videoRefB.current) return;
+
+                if (!isSeqBRef.current || videoRefB.current.paused) {
+                  startSeq("B");
+                  handleProposalPreview("B");
+                } else {
+                  stopSeq("B");
+                }
+              }}
+            >
+              {(playerVideoUrlB ?? videoUrl) ? (
+                <>
+                  <video
+                    ref={videoRefB}
+                    src={playerVideoUrlB ?? videoUrl ?? undefined}
+                    poster={getProposalPoster("B")}
+                    className="w-full h-full object-contain bg-black"
+                    onPlay={() => {
+                      setActivePlayerSafe("B");
+                      setIsPlayingB(true);
+                    }}
+                    onPause={() => setIsPlayingB(false)}
+                    onTimeUpdate={(e) => {
+                      if (isSeekingBRef.current) return;
+                      const v = e.currentTarget;
+                      if (isSeqBRef.current && seqTotalSecBRef.current > 0) {
+                        const fragStart = (seqFragsBRef.current[seqIdxBRef.current]?.start_frame ?? 0) / 30;
+                        const elapsed = seqElapsedSecBRef.current + Math.max(0, v.currentTime - fragStart);
+                        setProgressB((elapsed / seqTotalSecBRef.current) * 100);
+                      } else if (v.duration) {
+                        setProgressB((v.currentTime / v.duration) * 100);
+                      }
+
+                      const near =
+                        seqEndBRef.current > 0 && v.currentTime >= seqEndBRef.current - 0.08;
+                      if (!near) return;
+
+                      if (isSeqBRef.current) {
+                        const nextIdx = seqIdxBRef.current + 1;
+                        const frags = seqFragsBRef.current;
+
+                        if (nextIdx < frags.length) {
+                          const curFragB = seqFragsBRef.current[seqIdxBRef.current];
+                          const csB = (curFragB?.start_frame ?? 0) / 30;
+                          const ceB = (curFragB?.end_frame ?? 0) / 30;
+                          seqElapsedSecBRef.current += Math.max(ceB - csB, 1);
+                          seqIdxBRef.current = nextIdx;
+                          playFrag("B", frags[nextIdx], seqEndBRef);
+                        } else {
+                          isSeqBRef.current = false;
+                          seqIdxBRef.current = -1;
+                          seqEndBRef.current = -1;
+                          v.pause();
+                          setIsPlayingB(false);
+                        }
+                      } else {
+                        v.pause();
+                        setIsPlayingB(false);
+                        seqEndBRef.current = -1;
+                      }
+                    }}
+                    onLoadedMetadata={(e) => setDurationB(e.currentTarget.duration)}
+                    preload="auto"
+                    playsInline
+                  />
+
+                  {!isPlayingB && (
+                    <div className="absolute inset-0 flex items-center justify-center bg-black/15 pointer-events-none group-hover/player:bg-black/5 transition-all">
+                      <Play
+                        size={40}
+                        className="text-white fill-white opacity-40 drop-shadow-2xl transition-all group-hover/player:scale-110 group-hover/player:opacity-60"
+                      />
+                    </div>
+                  )}
+                </>
+              ) : (
+                <div className="flex flex-col items-center justify-center h-full opacity-10">
+                  <Play size={40} className="text-muted-foreground" />
+                </div>
+              )}
+
+              <div className="absolute top-4 left-6 pointer-events-none">
+                <span className="text-[10px] font-black tracking-widest text-ccut-indigo/60 uppercase">
+                  Draft B
+                </span>
+              </div>
+
+              <div className="absolute bottom-0 left-0 right-0 h-1 bg-white/10 z-30">
+                <div
+                  className="h-full bg-ccut-indigo/70 transition-all duration-100"
+                  style={{ width: `${progressB}%` }}
+                />
+              </div>
+            </div>
+
+            <button
+              onClick={() => handleProposalCommit("B")}
+              className={`text-[14px] font-black tracking-[0.5em] transition-all uppercase group relative py-2 ${committedProposalId === "B"
+                ? "text-ccut-indigo"
+                : "text-muted-foreground/40 hover:text-ccut-indigo"
+                }`}
+            >
+              {committedProposalId === "B" ? "✓ B안 확정됨" : "B안 선택"}
+              <div
+                className={`absolute bottom-0 left-0 h-[2px] bg-ccut-indigo transition-all duration-300 ${committedProposalId === "B" ? "w-full" : "w-0 group-hover:w-full"
+                  }`}
+              />
+            </button>
+          </div>
+        </div>
+
+        <div className="w-full grid grid-cols-2 gap-4">
+          {proposals &&
+            Object.entries(proposals).map(([key, p]: [string, any]) => (
+              <div
+                key={key}
+                className="p-5 rounded-2xl bg-white/[0.01] border border-white/5 space-y-2"
+              >
+                <div className="flex items-center justify-between opacity-30 transition-opacity">
+                  <span
+                    className={`text-[11px] font-black tracking-widest uppercase ${key === "A" ? "text-primary" : "text-ccut-indigo"
+                      }`}
+                  >
+                    제안 상세
+                  </span>
+                  <span className="text-[10px] font-bold text-muted-foreground/40">
+                    {p.score}
+                  </span>
+                </div>
+
+                <div className="space-y-3">
+                  <h4 className="text-[16px] font-bold text-foreground/80 transition-colors">
+                    {p.title}
+                  </h4>
+                  <p className="text-[13px] text-muted-foreground/30 leading-relaxed font-medium transition-colors">
+                    {p.desc}
+                  </p>
+                </div>
+              </div>
+            ))}
+        </div>
+
+        {committedProposalId && (
+          <div className="flex flex-col items-center gap-4 animate-in fade-in slide-in-from-bottom-2 duration-500">
+            <button
+              onClick={handleExportClick}
+              disabled={isExporting}
+              className="px-10 py-3 rounded-xl bg-primary text-primary-foreground text-[13px] font-bold hover:opacity-90 disabled:opacity-40 transition-all shadow-xl shadow-primary/20 flex items-center gap-2"
+            >
+              {isExporting ? (
+                <>
+                  <Loader2 size={16} className="animate-spin" />
+                  렌더링 중...
+                </>
+              ) : (
+                <>
+                  <Package size={16} />
+                  {exportUrl
+                    ? `${committedProposalId}안 다시 내보내기`
+                    : `${committedProposalId}안 내보내기`}
+                </>
+              )}
+            </button>
+
+            {exportUrl && (
+              <a
+                href={exportUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-2 px-6 py-2.5 rounded-lg border border-primary/30 text-primary text-[12px] font-bold hover:bg-primary/10 transition-all"
+              >
+                <CheckCircle2 size={14} />
+                완성된 영상 다운로드
+              </a>
+            )}
+
+            {exportError && <p className="text-[11px] text-red-400/80">{exportError}</p>}
+          </div>
+        )}
+
+        {guidanceMessage && (
+          <div className="animate-in fade-in slide-in-from-bottom-2 duration-500">
+            <p className="text-[11px] font-bold text-primary/60 border-l border-primary/20 pl-4 uppercase tracking-widest">
+              {guidanceMessage}
+            </p>
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  return (
+    <div className="flex flex-col h-full w-full bg-[#0a0a0b] items-center overflow-hidden relative">
+      {renderContent()}
+
+      <div className="absolute bottom-10 w-full max-w-3xl px-8 pointer-events-none z-50">
+        <div className="relative flex items-center pointer-events-auto">
+          <input
+            type="text"
+            value={chatValue}
+            onChange={(e) => setChatValue(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") handleSendFull();
+            }}
+            disabled={appState === "analyzing"}
+            placeholder={
+              appState === "analyzing"
+                ? "AI 인지 분석 중에는 명령을 입력할 수 없습니다..."
+                : "예: 더 감성적으로 / 더 빠르게 / 웃긴 장면 살려 / 시장형으로 다시"
+            }
+            className={`w-full bg-[#121214]/80 backdrop-blur-xl border border-white/5 rounded-full px-10 py-5 text-[14px] focus:outline-none focus:border-white/10 shadow-2xl transition-all ${appState === "analyzing" ? "opacity-40" : "placeholder:text-muted-foreground/10"
+              }`}
+          />
+          <button
+            onClick={handleSendFull}
+            className="absolute right-3 p-2.5 rounded-full bg-primary/20 text-primary hover:bg-primary hover:text-primary-foreground transition-all"
+          >
+            <Send size={20} />
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default CenterPanel;

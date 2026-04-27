@@ -1,0 +1,19 @@
+{
+  "source_id": "SRC_CAED95A3",
+  "timestamp": "2026-04-12T16:52:38.386544",
+  "count": 5,
+  "hook_scores": [
+    0.19,
+    0.196,
+    0.193,
+    0.196,
+    0.191
+  ],
+  "roles": [
+    "Intro",
+    "Intro",
+    "Main",
+    "Main",
+    "Closing"
+  ]
+}

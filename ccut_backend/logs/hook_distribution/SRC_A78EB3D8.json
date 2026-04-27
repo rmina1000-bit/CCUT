@@ -1,0 +1,19 @@
+{
+  "source_id": "SRC_A78EB3D8",
+  "timestamp": "2026-04-12T12:00:11.502236",
+  "count": 5,
+  "hook_scores": [
+    0.19,
+    0.196,
+    0.194,
+    0.198,
+    0.193
+  ],
+  "roles": [
+    "Intro",
+    "Intro",
+    "Main",
+    "Main",
+    "Closing"
+  ]
+}

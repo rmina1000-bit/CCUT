@@ -1,0 +1,24 @@
+{
+    "fragments": [
+        {
+            "id": "F1_SRC_0ce4",
+            "fragment_id": "F1_SRC_0ce4",
+            "source_id": "SRC_0ce4",
+            "start": 0.0,
+            "start_time": 0.0,
+            "end_time": 10.0,
+            "duration": 10.0,
+            "intelligence": {
+                "transcript": "",
+                "visual_description": "Big Buck Bunny enjoying nature",
+                "combined_context": "Nature scene",
+                "hook_score": 0.85,
+                "tags": [
+                    "Nature",
+                    "Intro"
+                ]
+            },
+            "status": "AVAILABLE"
+        }
+    ]
+}

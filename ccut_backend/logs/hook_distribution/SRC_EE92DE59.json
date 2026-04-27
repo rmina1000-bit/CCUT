@@ -1,0 +1,43 @@
+{
+  "source_id": "SRC_EE92DE59",
+  "timestamp": "2026-04-19T13:30:14.240747",
+  "count": 17,
+  "hook_scores": [
+    0.325,
+    0.283,
+    0.265,
+    0.364,
+    0.172,
+    0.154,
+    0.172,
+    0.174,
+    0.328,
+    0.177,
+    0.083,
+    0.394,
+    0.159,
+    0.184,
+    0.247,
+    0.29,
+    0.558
+  ],
+  "roles": [
+    "Intro",
+    "Intro",
+    "Intro",
+    "Main",
+    "Main",
+    "Bridge",
+    "Main",
+    "Main",
+    "Main",
+    "Bridge",
+    "Main",
+    "Main",
+    "Main",
+    "Main",
+    "Main",
+    "Closing",
+    "Closing"
+  ]
+}

@@ -1,0 +1,17 @@
+{
+  "source_id": "SRC_CDBE23E6",
+  "timestamp": "2026-04-12T12:00:18.267069",
+  "count": 4,
+  "hook_scores": [
+    0.19,
+    0.197,
+    0.196,
+    0.203
+  ],
+  "roles": [
+    "Intro",
+    "Intro",
+    "Main",
+    "Closing"
+  ]
+}

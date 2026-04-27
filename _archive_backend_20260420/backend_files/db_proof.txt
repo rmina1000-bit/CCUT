@@ -1,0 +1,14 @@
+Latest source_id: SRC_E0A3BB5B
+VF10_SRC_E0A3BB5B | language None<asr_text>
+VF11_SRC_E0A3BB5B | 
+VF12_SRC_E0A3BB5B | language None<asr_text>
+VF13_SRC_E0A3BB5B | language Korean<asr_text>아 나도 이제 먹자 고맙지 고맙다 고맙다
+VF1_SRC_E0A3BB5B | 
+VF2_SRC_E0A3BB5B | language Korean<asr_text>얘기를 오늘 시작. 너무 좋아요.
+VF3_SRC_E0A3BB5B | 
+VF4_SRC_E0A3BB5B | language None<asr_text>
+VF5_SRC_E0A3BB5B | language Korean<asr_text>얼른 먹어야 돼.
+VF6_SRC_E0A3BB5B | 
+VF7_SRC_E0A3BB5B | 
+VF8_SRC_E0A3BB5B | language Korean<asr_text>삼겹살 먹어봤지.
+VF9_SRC_E0A3BB5B | language None<asr_text>

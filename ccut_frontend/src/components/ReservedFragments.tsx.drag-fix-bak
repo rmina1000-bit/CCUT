@@ -1,0 +1,286 @@
+import React, { useState, useRef, useEffect, useCallback } from "react";
+import { Fragment } from "@/data/fragmentData";
+import FragmentTile from "./FragmentTile";
+import TrashBin from "./TrashBin";
+import { getUid } from "@/lib/pbeEngine";
+
+interface Position {
+  x: number;
+  y: number;
+}
+
+interface ReservedFragmentsProps {
+  fragments: Fragment[];
+  selectedFragmentId: string | null;
+  onFragmentClick: (f: Fragment) => void;
+  onRestoreFragment: (f: Fragment) => void;
+  onDeleteFragment?: (f: Fragment) => void;
+  deletedFragments: Fragment[];
+  onRestoreToHold: (f: Fragment) => void;
+  onRestoreToEdit: (f: Fragment) => void;
+  onEmptyTrash: () => void;
+  holdPositions?: Record<string, { x: number; y: number }>;
+  onHoldPositionsChange?: (positions: Record<string, { x: number; y: number }>) => void;
+  onDropToHold?: (fid: string, position?: { x: number; y: number }) => void;
+}
+
+const CARD_WIDTH = 120;
+const CARD_HEIGHT = 100;
+
+const ReservedFragments: React.FC<ReservedFragmentsProps> = ({
+  fragments,
+  selectedFragmentId,
+  onFragmentClick,
+  onDeleteFragment,
+  deletedFragments,
+  onRestoreToHold,
+  onRestoreToEdit,
+  onEmptyTrash,
+  holdPositions = {},
+  onHoldPositionsChange,
+  onDropToHold,
+}) => {
+  const boardRef = useRef<HTMLDivElement>(null);
+  const [dragging, setDragging] = useState<string | null>(null);
+  const [trashHover, setTrashHover] = useState(false);
+  const trashHoverRef = useRef(false);
+  const dragOffset = useRef<Position>({ x: 0, y: 0 });
+  const trashZoneRef = useRef<HTMLDivElement>(null);
+
+  const getPosition = useCallback(
+    (fragId: string): Position => {
+      return holdPositions[fragId] ?? { x: 12, y: 8 };
+    },
+    [holdPositions]
+  );
+
+
+
+  const isOverTrashZone = useCallback((clientX: number, clientY: number) => {
+    if (!trashZoneRef.current) return false;
+    const rect = trashZoneRef.current.getBoundingClientRect();
+    const pad = 60;
+    return (
+      clientX >= rect.left - pad &&
+      clientX <= rect.right + pad &&
+      clientY >= rect.top - pad &&
+      clientY <= rect.bottom + pad
+    );
+  }, []);
+
+  const handleMouseDown = useCallback(
+    (e: React.MouseEvent, fragId: string) => {
+      const boardRect = boardRef.current?.getBoundingClientRect();
+      if (!boardRect) return;
+
+      const pos = holdPositions[fragId] || getPosition(fragId);
+      dragOffset.current = {
+        x: e.clientX - boardRect.left - pos.x,
+        y: e.clientY - boardRect.top - pos.y,
+      };
+      setDragging(fragId);
+    },
+    [getPosition, holdPositions]
+  );
+
+  useEffect(() => {
+    if (!dragging) return;
+
+    const onMove = (e: MouseEvent) => {
+      if (!boardRef.current) return;
+
+      const boardRect = boardRef.current.getBoundingClientRect();
+      const rawX = e.clientX - boardRect.left - dragOffset.current.x;
+      const rawY = e.clientY - boardRect.top - dragOffset.current.y;
+
+      const x = Math.max(0, Math.min(boardRect.width - CARD_WIDTH, rawX));
+      const y = Math.max(0, Math.min(Math.max(boardRect.height - CARD_HEIGHT, 0), rawY));
+
+      onHoldPositionsChange?.({ ...holdPositions, [dragging]: { x, y } });
+
+      const over = isOverTrashZone(e.clientX, e.clientY);
+      trashHoverRef.current = over;
+      setTrashHover(over);
+    };
+
+    const onUp = () => {
+      if (trashHoverRef.current) {
+        const frag = fragments.find((f) => getUid(f) === dragging);
+        if (frag) {
+          const next = { ...holdPositions };
+          delete next[dragging];
+          onHoldPositionsChange?.(next);
+          onDeleteFragment?.(frag);
+        }
+      }
+
+      setDragging(null);
+      trashHoverRef.current = false;
+      setTrashHover(false);
+    };
+
+    document.addEventListener("mousemove", onMove);
+    document.addEventListener("mouseup", onUp);
+
+    return () => {
+      document.removeEventListener("mousemove", onMove);
+      document.removeEventListener("mouseup", onUp);
+    };
+  }, [dragging, fragments, isOverTrashZone, onDeleteFragment, holdPositions, onHoldPositionsChange]);
+
+  const handleDragOverHold = useCallback((e: React.DragEvent) => {
+    if (e.dataTransfer.types.includes("application/ccut-reserve-restore")) {
+      return;
+    }
+    if (
+      e.dataTransfer.types.includes("application/ccut-trash-restore") ||
+      e.dataTransfer.types.includes("application/ccut-fragment-hold") ||
+      e.dataTransfer.types.includes("application/ccut-edit-fragment")
+    ) {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = "move";
+    }
+  }, []);
+
+  const handleTrashDrop = useCallback(
+    (e: React.DragEvent) => {
+      const data = e.dataTransfer.getData("application/ccut-trash-restore");
+      if (!data) return;
+      e.preventDefault();
+      const frag = JSON.parse(data) as Fragment;
+      const uid = getUid(frag);
+      const boardRect = boardRef.current?.getBoundingClientRect();
+      if (boardRect) {
+        const x = Math.max(0, e.clientX - boardRect.left - CARD_WIDTH / 2);
+        const y = Math.max(0, e.clientY - boardRect.top - CARD_HEIGHT / 2);
+        onHoldPositionsChange?.({ ...holdPositions, [uid]: { x, y } });
+      }
+      onRestoreToHold(frag);
+    },
+    [onRestoreToHold, holdPositions, onHoldPositionsChange]
+  );
+
+  return (
+    <div
+      className="relative bg-card/50 rounded-lg overflow-hidden border border-border/20"
+      onDragOver={handleDragOverHold}
+      onDrop={(e) => {
+        if (e.dataTransfer.types.includes("application/ccut-reserve-restore")) {
+          return;
+        }
+
+        if (e.dataTransfer.types.includes("application/ccut-trash-restore")) {
+          handleTrashDrop(e);
+          return;
+        }
+
+        if (e.dataTransfer.types.includes("application/ccut-fragment-hold")) {
+          e.preventDefault();
+          try {
+            const frag = JSON.parse(e.dataTransfer.getData("application/ccut-fragment-hold")) as Fragment;
+            const boardRect = boardRef.current?.getBoundingClientRect();
+            if (boardRect) {
+              const x = Math.max(0, e.clientX - boardRect.left - CARD_WIDTH / 2);
+              const y = Math.max(0, e.clientY - boardRect.top - CARD_HEIGHT / 2);
+              onHoldPositionsChange?.({ ...holdPositions, [getUid(frag)]: { x, y } });
+            }
+            onDropToHold?.(getUid(frag));
+          } catch (err) { }
+          return;
+        }
+
+        const editData = e.dataTransfer.getData("application/ccut-edit-fragment");
+        if (editData && onDropToHold) {
+          e.preventDefault();
+          try {
+            const frag = JSON.parse(editData) as Fragment;
+            const uid = getUid(frag);
+            const boardRect = boardRef.current?.getBoundingClientRect();
+            const x = boardRect ? Math.max(0, e.clientX - boardRect.left - CARD_WIDTH / 2) : 12;
+            const y = boardRect ? Math.max(0, e.clientY - boardRect.top - CARD_HEIGHT / 2) : 8;
+
+            onHoldPositionsChange?.({ ...holdPositions, [uid]: { x, y } });
+            onDropToHold(uid, { x, y });
+          } catch { }
+        }
+      }}
+    >
+      <div className="absolute top-0 left-0 right-0 z-50 flex items-center justify-between px-3 py-1 pointer-events-none">
+        <div className="flex items-center gap-1.5">
+          <h3 className="text-[11px] font-semibold text-foreground/80 uppercase tracking-widest">
+            보류맵
+          </h3>
+          {fragments.length > 0 && (
+            <span className="text-[9px] text-muted-foreground/40">{fragments.length}</span>
+          )}
+        </div>
+      </div>
+
+      <div
+        ref={boardRef}
+        className="relative min-h-[220px] h-full select-none overflow-visible"
+        style={{ cursor: dragging ? "grabbing" : "default" }}
+      >
+        {fragments.map((f) => {
+          const fid = getUid(f);
+          const pos = getPosition(fid);
+
+          return (
+            <div
+              key={fid}
+              className="absolute group"
+              draggable={true}
+              onDragStart={(e) => {
+                e.dataTransfer.setData("application/ccut-reserve-restore", JSON.stringify(f));
+                e.dataTransfer.effectAllowed = "move";
+                setDragging(null);
+              }}
+              style={{
+                left: pos.x,
+                top: pos.y,
+                zIndex: dragging === fid ? 100 : selectedFragmentId === fid ? 20 : 1,
+                cursor: dragging === fid ? "grabbing" : "grab",
+                transform: dragging === fid && trashHover ? "scale(0.4) rotate(10deg)" : "scale(1)",
+                opacity: dragging === fid && trashHover ? 0.4 : 1,
+                filter: dragging === fid && trashHover ? "blur(2px) saturate(0)" : "none",
+                transition: dragging === fid ? "none" : "box-shadow 120ms ease",
+              }}
+              onMouseDown={(e) => {
+                if (e.button !== 0) return;
+                handleMouseDown(e, fid);
+              }}
+            >
+
+              <FragmentTile
+                fragment={f}
+                isSelected={selectedFragmentId === fid}
+                isHighlighted={false}
+                hasActiveSelection={!!selectedFragmentId}
+                onClick={() => onFragmentClick(f)}
+                widthScale={0.5}
+                variant="reserved"
+              />
+            </div>
+          );
+        })}
+
+
+
+        <div ref={trashZoneRef} className="absolute bottom-2 right-2 z-40">
+          <div className={`transition-transform duration-150 ${trashHover ? "scale-110" : ""}`}>
+            <TrashBin
+              deletedFragments={deletedFragments}
+              onRestoreToHold={onRestoreToHold}
+              onRestoreToEdit={onRestoreToEdit}
+              onEmptyTrash={onEmptyTrash}
+              onTrashDrop={(f) => onDeleteFragment?.(f)}
+              isMagnetic={trashHover}
+            />
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default ReservedFragments;

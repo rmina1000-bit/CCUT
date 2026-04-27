@@ -1,0 +1,1118 @@
+import React, { useState, useCallback, useRef, useEffect, useMemo } from "react";
+import LeftNav from "@/components/LeftNav";
+import CenterPanel from "@/components/CenterPanel";
+import OriginalPanorama from "@/components/OriginalPanorama";
+import FragmentMap from "@/components/FragmentMap";
+import ReservedFragments from "@/components/ReservedFragments";
+import PrecisionBoundaryEditor, {
+  BoundaryEditorTarget,
+} from "@/features/pbe/PrecisionBoundaryEditor";
+import { buildPbeWindow } from "@/features/pbe/pbeWindow";
+
+import {
+  Fragment,
+  SelectionState,
+  FragmentStatus,
+  initialEditFragments,
+  initialReservedFragments,
+} from "@/data/fragmentData";
+
+import { getUid, recalcDisplayIds } from "@/lib/pbeEngine";
+import { assignShortDisplayIds } from "@/lib/fragmentIdentity";
+import { videoService } from "@/services/videoService";
+
+import { Direction, DirectionSnapshot, Proposal } from "@/proposal/proposalTypes";
+import {
+  createInitialSnapshot,
+  createNextSnapshot,
+} from "@/proposal/directionSnapshot";
+import { generateProposals } from "@/proposal/proposalOrchestrator";
+
+const MIN_CENTER = 420;
+const MIN_RIGHT = 400;
+const LEFT_NAV_WIDTH = 220;
+
+const Index: React.FC = () => {
+  const [activeNavItem, setActiveNavItem] = useState("projects");
+  const [navCollapsed, setNavCollapsed] = useState(false);
+
+  const [projects, setProjects] = useState<{ id: string; name: string; date: string; count: number }[]>(() => {
+    try {
+      const saved = localStorage.getItem("ccut_projects");
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  useEffect(() => {
+    localStorage.setItem("ccut_projects", JSON.stringify(projects));
+  }, [projects]);
+
+  const [activeSource, setActiveSource] = useState("A");
+
+  const [selectedFragment, setSelectedFragment] = useState<Fragment | null>(null);
+  const [highlightedPanoramaFrag, setHighlightedPanoramaFrag] = useState<string | null>(null);
+  const [expandedFragment, setExpandedFragment] = useState<string | null>(null);
+
+  const [editFragments, setEditFragments] = useState<Fragment[]>(initialEditFragments);
+  const [reservedFragments, setReservedFragments] = useState<Fragment[]>(initialReservedFragments);
+  const [holdPositions, setHoldPositions] = useState<Record<string, { x: number; y: number }>>({});
+  const [deletedFragments, setDeletedFragments] = useState<Fragment[]>([]);
+
+  const [boundaryHighlightIds, setBoundaryHighlightIds] = useState<string[]>([]);
+  const [fragmentOverrides, setFragmentOverrides] = useState<Map<string, Fragment>>(new Map());
+
+  const [editorOpen, setEditorOpen] = useState(false);
+  const [editorTarget, setEditorTarget] = useState<BoundaryEditorTarget | null>(null);
+  const [pbeWindow, setPbeWindow] = useState<Fragment[]>([]);
+
+  const [selectedProposalId, setSelectedProposalId] = useState<string | null>(null);
+  const [committedProposalId, setCommittedProposalId] = useState<string | null>(null);
+
+  const [appState, setAppState] = useState<"empty" | "analyzing" | "complete">("empty");
+  const [analyzeProgress, setAnalyzeProgress] = useState(0);
+  const [analyzeMessage, setAnalyzeMessage] = useState("");
+  const [intelligenceOn, setIntelligenceOn] = useState(false);
+
+  const [proposals, setProposals] = useState<Record<"A" | "B", Proposal> | null>(null);
+  const [directionSnapshot, setDirectionSnapshot] = useState<DirectionSnapshot | null>(null);
+
+  const [sourceFragments, setSourceFragments] = useState<Fragment[]>([]);
+  const [currentSourceId, setCurrentSourceId] = useState<string | null>(null);
+  const [currentVideoUrl, setCurrentVideoUrl] = useState<string | null>(null);
+
+  type SourceEntry = {
+    source_id: string;
+    label: string;
+    video_url: string;
+    fragments: Fragment[];
+  };
+  const [sourceEntries, setSourceEntries] = useState<SourceEntry[]>([]);
+
+  const [centerWidth, setCenterWidth] = useState<number>(() => {
+    const vw = typeof window !== "undefined" ? window.innerWidth : 1200;
+    return Math.max(MIN_CENTER, Math.floor(vw * 0.55));
+  });
+
+  const [isDragging, setIsDragging] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  const toFullUrl = useCallback((path?: string | null) => {
+    if (!path) return null;
+    if (path.startsWith("http://") || path.startsWith("https://")) return path;
+    return `${videoService.API_BASE_URL}${path.startsWith("/") ? "" : "/"}${path}`;
+  }, []);
+
+  const appendUniqueByUid = useCallback((prev: Fragment[], nextFrag: Fragment) => {
+    if (prev.some((f) => getUid(f) === getUid(nextFrag))) return prev;
+    return [...prev, nextFrag];
+  }, []);
+
+  const removeByUid = useCallback((prev: Fragment[], target: Fragment) => {
+    return prev.filter((f) => getUid(f) !== getUid(target));
+  }, []);
+
+  const logProposalPair = useCallback(
+    (pair: Record<"A" | "B", Proposal>, label: string) => {
+      const keyA = pair.A.key_fragments;
+      const keyB = pair.B.key_fragments;
+      const firstA = keyA[0] ?? "없음";
+      const firstB = keyB[0] ?? "없음";
+      const isFirstDiff = firstA !== firstB;
+
+      console.log(`[strategyEngine] A안 순서:`, keyA);
+      console.log(`[strategyEngine] B안 순서:`, keyB);
+      console.log(`[strategyEngine] A/B 첫 조각 다름: ${isFirstDiff}`);
+      console.log(`[PROPOSAL][${label}] snapshot=${pair.A.snapshot_id} (A:${firstA}, B:${firstB})`);
+    },
+    []
+  );
+
+  const resetAnalysisState = useCallback(() => {
+    setSelectedProposalId(null);
+    setCommittedProposalId(null);
+    setProposals(null);
+    setDirectionSnapshot(null);
+
+    setSourceFragments([]);
+    setEditFragments([]);
+    setReservedFragments([]);
+    setDeletedFragments([]);
+
+    setSelectedFragment(null);
+    setHighlightedPanoramaFrag(null);
+    setExpandedFragment(null);
+
+    setCurrentSourceId(null);
+    setCurrentVideoUrl(null);
+    setSourceEntries([]);
+  }, []);
+
+  const handleStartAnalysis = useCallback(
+    async (file?: File, extraFiles?: File[]) => {
+      resetAnalysisState();
+
+      setAppState("analyzing");
+      setAnalyzeProgress(10);
+      setAnalyzeMessage("영상을 업로드하는 중입니다...");
+
+      try {
+        const allFiles = [file, ...(extraFiles ?? [])].filter(Boolean) as File[];
+        if (allFiles.length === 0) {
+          throw new Error("선택된 파일이 없습니다.");
+        }
+
+        const labelFromIndex = (idx: number) => String.fromCharCode(65 + idx);
+
+        const mapFragments = (frags: any[], label: string) => {
+          const mapped: Fragment[] = frags.map((f: any, idx: number) => {
+            const fps = 30;
+            const durationSec = f.duration ?? 5;
+            const startFrame = Math.round(f.start_frame ?? ((f.start_time ?? 0) * fps));
+            const endFrame = Math.round(
+              f.end_frame ?? ((f.end_time ?? ((f.start_time ?? 0) + durationSec)) * fps)
+            );
+            const durationFrames = Math.max(1, endFrame - startFrame);
+            const rawThumb = f.intelligence?.thumb_url || f.thumb;
+
+            return {
+              fragment_id: f.fragment_id,
+              fragment_uid: f.fragment_id,
+              root_fragment_uid: f.fragment_id,
+              display_id: f.fragment_id,
+              selection_state: "S" as SelectionState,
+              status: "committed" as FragmentStatus,
+              source_video: label,
+              start_frame: startFrame,
+              end_frame: endFrame,
+              duration: durationFrames,
+              thumbnail_hue: idx % 2 === 0 ? 211 : 30,
+              thumbnail: {
+                thumbnail_url:
+                  toFullUrl(rawThumb) ??
+                  `http://localhost:8000/static/thumbnails/${f.fragment_id}.jpg`,
+              },
+              intelligence: {
+                hook_score: f.intelligence?.hook_score ?? 0.5,
+                role: f.intelligence?.role ?? "Main",
+                description: f.intelligence?.description || f.intelligence?.visual_description || "",
+              },
+            } as any;
+          });
+
+          if (mapped.length > 0) {
+            console.log(`[mapFragments] ${label} 첫 조각 thumb:`, mapped[0].thumbnail?.thumbnail_url);
+          }
+          return assignShortDisplayIds(recalcDisplayIds(mapped as any));
+        };
+
+        const collectedEntries: SourceEntry[] = [];
+        let firstSourceId: string | null = null;
+
+        for (let i = 0; i < allFiles.length; i++) {
+          const label = labelFromIndex(i);
+          setAnalyzeMessage(
+            allFiles.length === 1
+              ? "영상 파일을 서버에 전송하는 중입니다..."
+              : `영상 ${label} 업로드 중... (${i + 1}/${allFiles.length})`
+          );
+
+          const uploadData = await videoService.uploadVideo(allFiles[i]);
+          const sid = uploadData.source_id;
+          const vurl = toFullUrl(uploadData.static_url) ?? "";
+
+          if (i === 0) {
+            firstSourceId = sid;
+            setCurrentSourceId(sid);
+            setCurrentVideoUrl(vurl);
+          }
+
+          console.log(`[UPLOAD] ${label}: source_id=${sid}`);
+
+          const data = await videoService.generateFragments(sid);
+          const initialFrags = mapFragments(data.fragments || [], label);
+
+          collectedEntries.push({
+            source_id: sid,
+            label,
+            video_url: vurl,
+            fragments: initialFrags,
+          });
+
+          console.log(`[N-01] ${label}: ${initialFrags.length}개 초벌 조각 완료`);
+        }
+
+        const today = new Date();
+        const dateStrYYMMDD = `${today.getFullYear().toString().slice(2)}${String(today.getMonth() + 1).padStart(2, "0")}${String(today.getDate()).padStart(2, "0")}`;
+        const projectId = `proj_${Date.now()}`;
+        const fileCount = allFiles.length;
+
+        setProjects((prev) => {
+          const newProject = {
+            id: projectId,
+            name: `${dateStrYYMMDD}-${String(prev.length + 1).padStart(3, "0")}`,
+            date: `${today.getMonth() + 1}월 ${today.getDate()}일`,
+            count: fileCount,
+          };
+          return [newProject, ...prev];
+        });
+
+        setSourceEntries(collectedEntries);
+        setActiveSource("A");
+
+        const firstEntry = collectedEntries[0];
+        if (!firstEntry) throw new Error("첫 번째 원본 처리 실패");
+
+        setEditFragments(firstEntry.fragments);
+        setSourceFragments(firstEntry.fragments);
+        setAnalyzeProgress(80);
+        setAnalyzeMessage("의미분석(Whisper) 진행 중입니다...");
+        setAppState("analyzing");
+
+        if (!firstSourceId) throw new Error("source_id 확인 실패");
+
+        let pollCount = 0;
+        const MAX_POLLS = 100;
+
+        const pollInterval = setInterval(async () => {
+          try {
+            pollCount++;
+            const statusData = await videoService.getFragmentStatus(firstSourceId!);
+            console.log(`[analysis-status] (${pollCount})`, statusData.status);
+
+            if (statusData.status === "ANALYSIS_COMPLETE") {
+              clearInterval(pollInterval);
+
+              const freshData = await videoService.getFragmentsBySource(firstSourceId!);
+              const finalMappedA = mapFragments(freshData.fragments || [], "A");
+
+              setSourceEntries((prev) =>
+                prev.map((e) => (e.label === "A" ? { ...e, fragments: finalMappedA } : e))
+              );
+
+              const combinedForEditing: Fragment[] = [
+                ...finalMappedA,
+                ...collectedEntries
+                  .filter((e) => e.label !== "A")
+                  .flatMap((e) => e.fragments),
+              ];
+
+              console.log(
+                `[multi-source] 편집 합산: ${combinedForEditing.length}개 조각`,
+                `(A: ${finalMappedA.length}개`,
+                `+ 기타: ${combinedForEditing.length - finalMappedA.length}개)`
+              );
+
+              const hooks = combinedForEditing.map(
+                (f) => (f.intelligence as any)?.hook_score ?? 0.5
+              );
+              const uniqueHooks = new Set(hooks).size;
+              const roles = combinedForEditing.map((f) => (f.intelligence as any)?.role);
+              const uniqueRoles = new Set(roles.filter(Boolean)).size;
+              const canProceed = uniqueHooks > 1 && uniqueRoles > 1;
+
+              console.log(
+                "[proposal-gate] canProceed:",
+                canProceed,
+                "| uniqueHooks:",
+                uniqueHooks,
+                "| uniqueRoles:",
+                uniqueRoles
+              );
+
+              let generatedProposals: Record<"A" | "B", any>;
+              if (canProceed) {
+                const initialSnapshot = createInitialSnapshot();
+                generatedProposals = generateProposals(combinedForEditing, initialSnapshot);
+                setDirectionSnapshot(initialSnapshot);
+              } else {
+                console.warn("[proposal-gate] 의미 데이터 분산 부족 — fallback 사용");
+                const allFragIds = combinedForEditing.map((f) => f.fragment_id);
+                const timeOrdered = [...combinedForEditing]
+                  .sort((a, b) => (a.start_frame ?? 0) - (b.start_frame ?? 0))
+                  .map((f) => f.fragment_id);
+
+                generatedProposals = {
+                  A: {
+                    id: "A",
+                    mode: "market",
+                    title: "시장형 편집",
+                    desc: "분석 완료 후 더 정교한 제안이 생성됩니다.",
+                    score: "50%",
+                    key_fragments: allFragIds,
+                    direction: {},
+                    snapshot_id: "R0",
+                    template_id: "fallback",
+                    slot_trace: [],
+                  },
+                  B: {
+                    id: "B",
+                    mode: "user",
+                    title: "사용자친화형 편집",
+                    desc: "원본 시간 순서를 유지한 편집안입니다.",
+                    score: "50%",
+                    key_fragments: timeOrdered,
+                    direction: {},
+                    snapshot_id: "R0",
+                    template_id: "fallback_time",
+                    slot_trace: [],
+                  },
+                };
+              }
+
+              logProposalPair(generatedProposals, "INITIAL");
+
+              setEditFragments(combinedForEditing);
+              setSourceFragments(finalMappedA);
+
+              setProposals(generatedProposals);
+              setAnalyzeProgress(100);
+              setAnalyzeMessage("분석 완료!");
+              setAppState("complete");
+
+              console.log(`[N-01] 분석 완료 및 제안 생성: ${combinedForEditing.length}개 조각`);
+            } else if (statusData.status === "FAILED") {
+              clearInterval(pollInterval);
+              setAnalyzeMessage(`분석 실패: ${statusData.error}`);
+              setAppState("complete");
+            } else if (pollCount >= MAX_POLLS) {
+              clearInterval(pollInterval);
+              setAnalyzeMessage("분석 시간 초과 (백그라운드에서 계속 진행될 수 있습니다)");
+              setAppState("complete");
+            }
+          } catch (err) {
+            console.error("[Index] Polling error:", err);
+            if (pollCount >= MAX_POLLS) clearInterval(pollInterval);
+          }
+        }, 2000);
+
+        return true;
+      } catch (e) {
+        console.error("[N-01] 분석 실패:", e);
+        setAnalyzeMessage("분석 중 오류가 발생했습니다. 콘솔을 확인해 주세요.");
+        setAnalyzeProgress(0);
+        setAppState("analyzing");
+        return false;
+      }
+    },
+    [logProposalPair, resetAnalysisState, toFullUrl]
+  );
+
+  const handleProposalPreview = useCallback((id: string) => {
+    console.log(`[STEP5] Proposal previewed: ${id}`);
+    setSelectedProposalId(id);
+  }, []);
+
+  const handleProposalCommit = useCallback((id: string) => {
+    console.log(`[STEP5] Proposal committed: ${id}`);
+    setSelectedProposalId(id);
+    setCommittedProposalId(id);
+  }, []);
+
+  const handleReproposal = useCallback(
+    (nextDirection: Direction) => {
+      if (!sourceFragments.length) {
+        console.warn("[Reproposal] sourceFragments가 없어 재제안을 건너뜁니다.");
+        return;
+      }
+
+      const nextSnapshot = createNextSnapshot(directionSnapshot, nextDirection);
+      const nextProposals = generateProposals(sourceFragments, nextSnapshot);
+
+      logProposalPair(nextProposals, "REPROPOSAL");
+
+      setSelectedProposalId(null);
+      setCommittedProposalId(null);
+      setProposals(nextProposals);
+      setDirectionSnapshot(nextSnapshot);
+
+      console.log("[Reproposal] active_direction:", nextSnapshot.active_direction);
+      console.log("[Reproposal] snapshot_id:", nextSnapshot.snapshot_id);
+    },
+    [directionSnapshot, logProposalPair, sourceFragments]
+  );
+
+  const handleExport = useCallback(async (projectId: string) => {
+    try {
+      const res = await fetch(
+        `${videoService.API_BASE_URL}/export/final?project_id=${projectId}`,
+        { method: "POST" }
+      );
+      return await res.json();
+    } catch (e) {
+      console.error("수출 실패:", e);
+      return { status: "ERROR", message: "서버 연결 오류" };
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!isDragging) return;
+
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!containerRef.current) return;
+
+      const containerRect = containerRef.current.getBoundingClientRect();
+      const totalWidth = containerRect.width;
+      const relativeX = e.clientX - containerRect.left - LEFT_NAV_WIDTH;
+      const maxCenter = totalWidth - LEFT_NAV_WIDTH - MIN_RIGHT;
+      const clamped = Math.max(MIN_CENTER, Math.min(maxCenter, relativeX));
+
+      setCenterWidth(clamped);
+    };
+
+    const handleMouseUp = () => setIsDragging(false);
+
+    document.addEventListener("mousemove", handleMouseMove);
+    document.addEventListener("mouseup", handleMouseUp);
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+
+    return () => {
+      document.removeEventListener("mousemove", handleMouseMove);
+      document.removeEventListener("mouseup", handleMouseUp);
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+    };
+  }, [isDragging]);
+
+  const handleEditFragmentClick = useCallback(
+    (f: Fragment) => {
+      if (selectedFragment && getUid(selectedFragment) === getUid(f)) {
+        setSelectedFragment(null);
+        setHighlightedPanoramaFrag(null);
+        setExpandedFragment(null);
+      } else {
+        setSelectedFragment(f);
+        setActiveSource(f.source_video);
+        setHighlightedPanoramaFrag(getUid(f));
+        setExpandedFragment(null);
+      }
+    },
+    [selectedFragment]
+  );
+
+  const handleEditFragmentDoubleClick = useCallback((f: Fragment) => {
+    setSelectedFragment(f);
+    setActiveSource(f.source_video);
+    setHighlightedPanoramaFrag(f.fragment_id);
+    setExpandedFragment((prev) => (prev === f.fragment_id ? null : f.fragment_id));
+  }, []);
+
+  const handlePanoramaFragmentClick = useCallback(
+    (f: Fragment) => {
+      if (selectedFragment && getUid(selectedFragment) === getUid(f)) {
+        setSelectedFragment(null);
+        setHighlightedPanoramaFrag(null);
+      } else {
+        setSelectedFragment(f);
+      }
+    },
+    [selectedFragment]
+  );
+
+  const handleReservedClick = useCallback(
+    (f: Fragment) => {
+      if (selectedFragment && getUid(selectedFragment) === getUid(f)) {
+        setSelectedFragment(null);
+        setHighlightedPanoramaFrag(null);
+      } else {
+        setSelectedFragment(f);
+        setActiveSource(f.source_video);
+        setHighlightedPanoramaFrag(getUid(f));
+      }
+    },
+    [selectedFragment]
+  );
+
+  const handleExcludeFromEdit = useCallback((f: Fragment) => {
+    setEditFragments((prev) =>
+      prev.map((fr) => (getUid(fr) === getUid(f) ? { ...fr, excluded: true } : fr))
+    );
+  }, []);
+
+  const handleRestoreFragment = useCallback((f: Fragment) => {
+    setEditFragments((prev) =>
+      prev.map((fr) => (getUid(fr) === getUid(f) ? { ...fr, excluded: false } : fr))
+    );
+  }, []);
+
+  const handleMoveToHold = useCallback(
+    (f: Fragment) => {
+      setReservedFragments((prev) => appendUniqueByUid(prev, { ...f, excluded: false }));
+      setEditFragments((prev) => removeByUid(prev, f));
+
+      if (committedProposalId && proposals) {
+        setProposals((prev) => {
+          if (!prev) return prev;
+          const proposal = prev[committedProposalId as "A" | "B"];
+          if (!proposal) return prev;
+          return {
+            ...prev,
+            [committedProposalId]: {
+              ...proposal,
+              key_fragments: proposal.key_fragments.filter((k) => k !== getUid(f)),
+            },
+          };
+        });
+      }
+
+      if (selectedFragment && getUid(selectedFragment) === getUid(f)) {
+        setSelectedFragment(null);
+      }
+    },
+    [appendUniqueByUid, removeByUid, selectedFragment, committedProposalId, proposals]
+  );
+
+  const handleDropToHold = useCallback(
+    (fragId: string, position?: { x: number; y: number }) => {
+      const frag = editFragments.find((f) => getUid(f) === fragId);
+      if (!frag) return;
+      if (position) {
+        setHoldPositions((prev) => ({ ...prev, [fragId]: position }));
+      }
+      handleMoveToHold(frag);
+    },
+    [editFragments, handleMoveToHold]
+  );
+
+  const handleDeleteById = useCallback(
+    (fid: string) => {
+      const fromReserved = reservedFragments.find((f) => getUid(f) === fid);
+      if (fromReserved) {
+        setReservedFragments((prev) => prev.filter((f) => getUid(f) !== fid));
+        setDeletedFragments((prev) => appendUniqueByUid(prev, fromReserved));
+        return;
+      }
+
+      const fromEdit = editFragments.find((f) => getUid(f) === fid);
+      if (fromEdit) {
+        setEditFragments((prev) => prev.filter((f) => getUid(f) !== fid));
+        setDeletedFragments((prev) => appendUniqueByUid(prev, fromEdit));
+      }
+    },
+    [appendUniqueByUid, editFragments, reservedFragments]
+  );
+
+  const handleFragmentsReorder = useCallback(
+    (reorderedFrags: Fragment[]) => {
+      const newKeyOrder = reorderedFrags.map((f) => f.fragment_id);
+
+      if (!committedProposalId || !proposals) return;
+
+      setProposals((prev) => {
+        if (!prev) return prev;
+        const target = committedProposalId as "A" | "B";
+        return {
+          ...prev,
+          [target]: {
+            ...prev[target],
+            key_fragments: newKeyOrder,
+          },
+        };
+      });
+    },
+    [committedProposalId, proposals]
+  );
+
+  const handleRestoreFromHold = useCallback(
+    (f: Fragment, insertAt?: number) => {
+      setReservedFragments((prev) => removeByUid(prev, f));
+
+      setEditFragments((prev) => {
+        const already = prev.some((x) => getUid(x) === getUid(f));
+        if (already) return prev;
+        const newFrag = { ...f, excluded: false };
+        if (insertAt === undefined) return [...prev, newFrag];
+        const arr = [...prev];
+        arr.splice(insertAt, 0, newFrag);
+        return arr;
+      });
+
+      if (committedProposalId && proposals) {
+        setProposals((prev) => {
+          if (!prev) return prev;
+          const proposal = prev[committedProposalId as "A" | "B"];
+          if (!proposal) return prev;
+          const keys = proposal.key_fragments.filter((k) => k !== getUid(f));
+          const idx = insertAt !== undefined ? Math.min(insertAt, keys.length) : keys.length;
+          const newKeys = [...keys.slice(0, idx), getUid(f), ...keys.slice(idx)];
+          return {
+            ...prev,
+            [committedProposalId]: { ...proposal, key_fragments: newKeys },
+          };
+        });
+      }
+    },
+    [removeByUid, committedProposalId, proposals]
+  );
+
+  const handleAddFromSource = useCallback(
+    (f: Fragment, insertAt?: number) => {
+      if (!committedProposalId || !proposals) return;
+
+      // 새 고유 ID 부여 — 원본과 구분되는 복사본
+      const copyId = `${f.fragment_id}_copy_${Date.now()}`;
+      const newFrag: Fragment = {
+        ...f,
+        fragment_id: copyId,
+        fragment_uid: copyId,
+        display_id: f.display_id ? `${f.display_id}+` : `${f.fragment_id}+`,
+        excluded: false,
+      };
+
+      setEditFragments((prev) => [...prev, newFrag]);
+
+      setProposals((prev) => {
+        if (!prev) return prev;
+        const proposal = prev[committedProposalId as "A" | "B"];
+        if (!proposal) return prev;
+        const keys = [...proposal.key_fragments];
+        const idx = insertAt !== undefined ? Math.min(insertAt, keys.length) : keys.length;
+        keys.splice(idx, 0, copyId);
+        return {
+          ...prev,
+          [committedProposalId]: {
+            ...proposal,
+            key_fragments: keys,
+          },
+        };
+      });
+    },
+    [committedProposalId, proposals]
+  );
+
+  const handleDeleteFromHold = useCallback(
+    (f: Fragment) => {
+      setReservedFragments((prev) => removeByUid(prev, f));
+      setDeletedFragments((prev) => appendUniqueByUid(prev, f));
+
+      if (selectedFragment && getUid(selectedFragment) === getUid(f)) {
+        setSelectedFragment(null);
+      }
+    },
+    [appendUniqueByUid, removeByUid, selectedFragment]
+  );
+
+  const handleRestoreToHold = useCallback(
+    (f: Fragment) => {
+      setDeletedFragments((prev) => removeByUid(prev, f));
+      setReservedFragments((prev) => appendUniqueByUid(prev, { ...f, excluded: false }));
+    },
+    [appendUniqueByUid, removeByUid]
+  );
+
+  const handleRestoreToEdit = useCallback(
+    (f: Fragment, insertAt?: number) => {
+      setDeletedFragments((prev) => removeByUid(prev, f));
+
+      setEditFragments((prev) => {
+        const already = prev.some((x) => getUid(x) === getUid(f));
+        if (already) return prev;
+        const newFrag = { ...f, excluded: false };
+        if (insertAt === undefined) return [...prev, newFrag];
+        const arr = [...prev];
+        arr.splice(insertAt, 0, newFrag);
+        return arr;
+      });
+
+      if (committedProposalId && proposals) {
+        setProposals((prev) => {
+          if (!prev) return prev;
+          const proposal = prev[committedProposalId as "A" | "B"];
+          if (!proposal) return prev;
+          const keys = proposal.key_fragments.filter((k) => k !== getUid(f));
+          const idx = insertAt !== undefined ? Math.min(insertAt, keys.length) : keys.length;
+          const newKeys = [...keys.slice(0, idx), getUid(f), ...keys.slice(idx)];
+          return {
+            ...prev,
+            [committedProposalId]: { ...proposal, key_fragments: newKeys },
+          };
+        });
+      }
+    },
+    [removeByUid, committedProposalId, proposals]
+  );
+
+  const handleEmptyTrash = useCallback(() => {
+    setDeletedFragments([]);
+  }, []);
+
+  const handleBoundaryDragChange = useCallback(
+    (leftFrag: Fragment | null, rightFrag: Fragment | null) => {
+      if (!leftFrag || !rightFrag) {
+        setBoundaryHighlightIds([]);
+        setFragmentOverrides(new Map());
+        return;
+      }
+
+      setActiveSource(leftFrag.source_video);
+      setBoundaryHighlightIds([getUid(leftFrag), getUid(rightFrag)]);
+    },
+    []
+  );
+
+  useEffect(() => {
+    if (boundaryHighlightIds.length === 0) return;
+
+    const overrides = new Map<string, Fragment>();
+
+    for (const fid of boundaryHighlightIds) {
+      const frag = editFragments.find((f) => getUid(f) === fid);
+      if (frag) overrides.set(fid, frag);
+    }
+
+    setFragmentOverrides(overrides);
+  }, [boundaryHighlightIds, editFragments]);
+
+  const filteredFragments = useMemo(() => {
+    if (!committedProposalId || !proposals) return [];
+
+    const proposal = proposals[committedProposalId as "A" | "B"];
+    const proposalFragIds = proposal?.key_fragments || [];
+    if (proposalFragIds.length === 0) return [];
+
+    const matched = editFragments.filter((f) => {
+      if (proposalFragIds.includes(f.fragment_id)) return true;
+      if (f.root_fragment_uid && proposalFragIds.includes(f.root_fragment_uid)) return true;
+      if (f.parent_fragment_uid && proposalFragIds.includes(f.parent_fragment_uid)) return true;
+      if (f.derivedFrom && proposalFragIds.includes(f.derivedFrom)) return true;
+      return false;
+    });
+
+    const result = proposalFragIds
+      .map((id) =>
+        matched.find(
+          (f) =>
+            f.fragment_id === id ||
+            f.root_fragment_uid === id ||
+            f.parent_fragment_uid === id ||
+            f.derivedFrom === id
+        )
+      )
+      .filter(Boolean) as Fragment[];
+
+    if (result.length > 0) {
+      console.log("[filteredFragments] 첫 조각 thumbnail:", JSON.stringify(result[0]?.thumbnail));
+    }
+
+    return result;
+  }, [committedProposalId, editFragments, proposals]);
+
+  const handleOpenBoundaryEditor = useCallback(
+    (leftRealIndex: number, rightRealIndex: number, clickSide?: "left" | "right" | "center") => {
+      const windowFrags: Fragment[] = [];
+
+      // 1. editFragments에서 leftRealIndex ~ rightRealIndex (Filtered fragments in the map)
+      for (let i = leftRealIndex; i <= rightRealIndex; i++) {
+        const frag = filteredFragments[i];
+        if (frag) windowFrags.push({ ...frag, selection_state: "S" });
+      }
+
+      // 2. Build sourcePool to find 'N' fragments (Rail fragments)
+      const editUids = new Set(filteredFragments.map(f => getUid(f)));
+      const sourcePool = sourceEntries.flatMap(e => e.fragments).map(f => ({
+        ...f,
+        selection_state: (editUids.has(getUid(f)) ? "S" : "N") as SelectionState
+      }));
+
+      // 3. center 클릭인 경우: railFragments에서 사이 조각 추가
+      if (clickSide === 'center') {
+        const leftFrag = filteredFragments[leftRealIndex];
+        const rightFrag = filteredFragments[rightRealIndex];
+
+        const leftEndFrame = leftFrag?.end_frame || 0;
+        const rightStartFrame = rightFrag?.start_frame || Infinity;
+
+        const railInWindow = sourcePool.filter(frag => {
+          // Same source check if needed, but §6 implies any source between frames?
+          // Usually gaps are same‑source.
+          return frag.selection_state === 'N' &&
+            frag.start_frame >= leftEndFrame &&
+            frag.start_frame < rightStartFrame;
+        });
+
+        console.log('[Index] Center click - adding rail fragments:', railInWindow.length);
+
+        // start_frame 순서로 정렬하여 삽입
+        railInWindow.forEach(railFrag => {
+          const insertIndex = windowFrags.findIndex(f => f.start_frame > railFrag.start_frame);
+          if (insertIndex === -1) {
+            windowFrags.push({ ...railFrag, selection_state: "N" });
+          } else {
+            windowFrags.splice(insertIndex, 0, { ...railFrag, selection_state: "N" });
+          }
+        });
+      }
+
+      // Optional: If clickSide is left/right, we might still want buildPbeWindow §6 logic?
+      // But user's instruction is to replace with THIS specific logic.
+      // I'll stick to their logic but ensure it's robust.
+
+      console.log('[Index] Opening PBE with fragments:', windowFrags.map(f => ({ id: f.fragment_id, state: f.selection_state })));
+
+      setPbeWindow(windowFrags);
+      setEditorTarget({
+        leftRealIndex: windowFrags.findIndex(f => filteredFragments[leftRealIndex] && getUid(f) === getUid(filteredFragments[leftRealIndex])),
+        rightRealIndex: windowFrags.findIndex(f => filteredFragments[rightRealIndex] && getUid(f) === getUid(filteredFragments[rightRealIndex])),
+        clickSide,
+      });
+      setEditorOpen(true);
+    },
+    [filteredFragments, sourceEntries]
+  );
+
+  // DEBUG TRIGGER for M1
+  useEffect(() => {
+    const handler = (e: any) => {
+      const { lIdx, rIdx, side } = e.detail;
+      handleOpenBoundaryEditor(lIdx, rIdx, side);
+    };
+    window.addEventListener('pbe-test-trigger' as any, handler);
+    return () => window.removeEventListener('pbe-test-trigger' as any, handler);
+  }, [handleOpenBoundaryEditor]);
+
+  const handleEditorApply = useCallback(async (result: { updatedFragments: Fragment[] }) => {
+    const { updatedFragments } = result;
+    setEditFragments(updatedFragments);
+    setPbeWindow([]);
+    setEditorOpen(false);
+
+    try {
+      await fetch(`${videoService.API_BASE_URL}/save_edit`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          fragments: updatedFragments,
+          timestamp: Date.now(),
+        }),
+      });
+    } catch (e) {
+      console.error("편집 저장 실패:", e);
+    }
+  }, []);
+
+  const handleBackgroundClick = useCallback((e: React.MouseEvent) => {
+    const target = e.target as HTMLElement;
+    if (target.closest(".fragment-tile")) return;
+
+    setSelectedFragment(null);
+    setHighlightedPanoramaFrag(null);
+    setExpandedFragment(null);
+  }, []);
+
+  return (
+    <div
+      ref={containerRef}
+      className="flex h-screen w-full overflow-hidden bg-background"
+      onClick={handleBackgroundClick}
+    >
+      <div className="relative flex-shrink-0" style={{ width: navCollapsed ? 48 : 320 }}>
+        <LeftNav
+          activeItem={activeNavItem}
+          onItemClick={setActiveNavItem}
+          projects={projects}
+          collapsed={navCollapsed}
+          onToggleCollapse={() => setNavCollapsed((prev) => !prev)}
+          onRenameProject={(id, newName) => {
+            setProjects((prev) => prev.map((p) => (p.id === id ? { ...p, name: newName } : p)));
+          }}
+          onDeleteProject={(id) => {
+            setProjects((prev) => prev.filter((p) => p.id !== id));
+          }}
+        />
+      </div>
+
+      <div style={{ width: centerWidth, flexShrink: 0 }}>
+        {/* PBE-M1 Verification Debug Button */}
+        <button
+          onClick={() => {
+            const mockA: any[] = [1, 2, 3, 4, 5].map(i => ({
+              fragment_id: `VF${i}_A`,
+              fragment_uid: `VF${i}_A`,
+              display_id: `A-${i}`,
+              source_video: "A",
+              start_frame: (i - 1) * 300,
+              end_frame: i * 300,
+              duration: 300,
+              selection_state: "S",
+              status: "committed",
+              thumbnail: { thumbnail_url: "" }
+            }));
+
+            const mockB: any[] = [1, 2, 3, 4, 5].map(i => ({
+              fragment_id: `VF${i}_B`,
+              fragment_uid: `VF${i}_B`,
+              display_id: `B-${i}`,
+              source_video: "B",
+              start_frame: (i - 1) * 300,
+              end_frame: i * 300,
+              duration: 300,
+              selection_state: "S",
+              status: "committed",
+              thumbnail: { thumbnail_url: "" }
+            }));
+
+            const sourcePool = [...mockA, ...mockB].map(f => ({
+              ...f,
+              selection_state: "N" // baseline
+            }));
+
+            // Test logic directly
+            const test = (l: any, r: any, side: any) => {
+              const windowFs = buildPbeWindow({
+                leftFragment: l ? { ...l, selection_state: "S" } : null,
+                rightFragment: r ? { ...r, selection_state: "S" } : null,
+                sourcePool
+              });
+              console.log(`[PBE-M1-WINDOW] Unit Test - Case: ${side}`);
+              console.log(`[PBE-M1-WINDOW] Result (S/N):`, windowFs.map(f => `${f.display_id}(${f.selection_state})`));
+              return windowFs;
+            };
+
+            console.log("--- START M1 LOG VERIFICATION ---");
+            test(mockA[1], mockA[3], "same-source (A2|A4)"); // A1(N), A2(S), A4(S), A5(N)
+            test(mockA[3], mockB[1], "cross-source (A4|B2)"); // A4(S), A5(N), B1(N), B2(S)
+            test(mockA[1], null, "single-left (A2)");         // A1(N), A2(S)
+            test(null, mockB[1], "single-right (B2)");        // B2(S), B3(N)
+
+            setSourceEntries([
+              { source_id: "A", label: "A", video_url: "", fragments: mockA as any },
+              { source_id: "B", label: "B", video_url: "", fragments: mockB as any }
+            ]);
+
+            // Timeline: [A-2, A-4, B-2]
+            const initialTimeline = [mockA[1], mockA[3], mockB[1]];
+
+            const dummyProposals: any = {
+              A: {
+                id: "A", mode: "market", title: "Mock Proposal", desc: "", key_fragments: initialTimeline.map(f => f.fragment_id)
+              },
+              B: {
+                id: "B", mode: "user", title: "Mock B", desc: "", key_fragments: []
+              }
+            };
+
+            setEditFragments(initialTimeline);
+            setProposals(dummyProposals);
+            setCommittedProposalId("A");
+            setAppState("complete");
+            setIntelligenceOn(true);
+            console.log("[PBE-DEBUG] Mock UI state applied.");
+          }}
+          className="fixed top-4 right-4 z-[9999] bg-red-600 text-white p-2 rounded text-xs"
+        >
+          Verify M1 Logs
+        </button>
+        <CenterPanel
+          selectedFragment={selectedFragment}
+          selectedSource={activeSource}
+          appState={appState}
+          onAppStateChange={setAppState}
+          analyzeProgress={analyzeProgress}
+          analyzeMessage={analyzeMessage}
+          proposals={proposals}
+          sourceFragments={sourceFragments}
+          sourceId={currentSourceId}
+          videoUrl={currentVideoUrl}
+          onAnalyze={handleStartAnalysis}
+          committedProposalId={committedProposalId}
+          onPreviewProposal={handleProposalPreview}
+          onCommitProposal={handleProposalCommit}
+          onExport={handleExport}
+          onReproposal={handleReproposal}
+          sourceEntries={sourceEntries}
+        />
+      </div>
+
+      <div
+        className={`flex-shrink-0 flex items-center justify-center cursor-col-resize group transition-colors ${isDragging ? "bg-primary/15" : "hover:bg-primary/8"
+          }`}
+        style={{ width: 6 }}
+        onMouseDown={(e) => {
+          e.preventDefault();
+          setIsDragging(true);
+        }}
+      >
+        <div
+          className={`w-[2px] h-10 rounded-full transition-all duration-150 ${isDragging
+            ? "bg-primary/60 h-16"
+            : "bg-border/40 group-hover:bg-primary/40 group-hover:h-14"
+            }`}
+        />
+      </div>
+
+      <div className="flex-1 flex flex-col gap-2 p-2 overflow-hidden min-w-0">
+        <OriginalPanorama
+          activeSource={activeSource}
+          onSourceChange={setActiveSource}
+          highlightedFragmentId={highlightedPanoramaFrag}
+          selectedFragmentId={selectedFragment?.fragment_id || null}
+          onFragmentClick={handlePanoramaFragmentClick}
+          intelligenceOn={intelligenceOn}
+          onToggleIntelligence={() => setIntelligenceOn((p) => !p)}
+          fragmentOverrides={fragmentOverrides}
+          boundaryHighlightIds={boundaryHighlightIds}
+          sourceFragments={
+            sourceEntries.length > 0
+              ? sourceEntries.find((e) => e.label === activeSource)?.fragments ?? []
+              : sourceFragments
+          }
+          sources={
+            sourceEntries.length > 0
+              ? sourceEntries.map((e) => ({
+                source_id: e.label,
+                video_url: e.video_url,
+              }))
+              : currentSourceId
+                ? [{ source_id: "A", video_url: currentVideoUrl || undefined }]
+                : []
+          }
+        />
+
+        <div className="flex-1 overflow-y-auto">
+          <FragmentMap
+            fragments={filteredFragments}
+            onFragmentsChange={handleFragmentsReorder}
+            selectedFragmentId={selectedFragment ? getUid(selectedFragment) : null}
+            expandedFragmentId={expandedFragment}
+            onFragmentClick={handleEditFragmentClick}
+            onFragmentDoubleClick={handleEditFragmentDoubleClick}
+            onExcludeFragment={handleExcludeFromEdit}
+            onRestoreFragment={handleRestoreFromHold}
+            onSourceRestore={handleAddFromSource}
+            onMoveToHold={handleMoveToHold}
+            onTrashRestore={handleRestoreToEdit}
+            onBoundaryClick={handleOpenBoundaryEditor}
+          />
+        </div>
+
+        <ReservedFragments
+          fragments={reservedFragments}
+          selectedFragmentId={selectedFragment ? getUid(selectedFragment) : null}
+          onFragmentClick={handleReservedClick}
+          onRestoreFragment={handleRestoreFromHold}
+          onDeleteFragment={handleDeleteFromHold}
+          deletedFragments={deletedFragments}
+          onRestoreToHold={handleRestoreToHold}
+          onRestoreToEdit={handleRestoreToEdit}
+          onEmptyTrash={handleEmptyTrash}
+          holdPositions={holdPositions}
+          onHoldPositionsChange={setHoldPositions}
+          onDropToHold={handleDropToHold}
+        />
+      </div>
+
+      <PrecisionBoundaryEditor
+        open={editorOpen}
+        onOpenChange={setEditorOpen}
+        fragments={pbeWindow}
+        editFragments={editFragments}
+        target={editorTarget}
+        onApply={handleEditorApply}
+      />
+    </div>
+  );
+};
+
+export default Index;

@@ -1,0 +1,55 @@
+﻿{
+    "source_id":  "SRC_02BEF830",
+    "status":  "QUICK_SCAN_READY",
+    "partial":  false,
+    "evidence_progress":  1.0,
+    "representative_images":  [
+                                  {
+                                      "time":  0.0,
+                                      "keyframe":  "http://localhost:8000/static/thumbnails/VF1_SRC_02BEF830.jpg",
+                                      "reason":  "Opening"
+                                  },
+                                  {
+                                      "time":  29.5,
+                                      "keyframe":  "http://localhost:8000/static/thumbnails/VF2_SRC_02BEF830.jpg",
+                                      "reason":  "Ending"
+                                  }
+                              ],
+    "summary":  {
+                    "text":  "ìì ì í¸ ë¶ì ê²°ê³¼ 2ê°ì ìë¯¸ ë¨ìê° íì¸ëë©°, ì¤ë°ë¶ ì¥ë©´ ì íì´ íë°í©ëë¤.",
+                    "confidence":  0.48,
+                    "fallback_reason":  "Low text density"
+                },
+    "hypothesis":  {
+                       "video_type":  "shorts",
+                       "core_elements":  [
+                                             "ì¥ë©´ ì í",
+                                             "ì¸ë¬¼ ëí"
+                                         ],
+                       "recommended_direction":  "ì¼ì¸ í",
+                       "reason":  "ìì ê¸¸ì´(54s) ë° ë°í ë°ë ë¶ì ê²°ê³¼ shorts ì±ê²©ì´ ê°í¨",
+                       "confidence":  0.68,
+                       "fallback_reason":  null
+                   },
+    "questions":  [
+                      "ì´ ììì íµì¬ì´ ë§ìµëê¹?",
+                      "ê¼­ ì´ë¦´ ì¥ë©´ì ë¬´ìì\u0085ëê¹?",
+                      "ì­ì í  ì¥ë©´ì ë¬´ìì\u0085ëê¹?",
+                      "í¤ì ê°ì±í / ì ë³´í / ì¼ì¸ í ì¤ ë¬´ìì\u0085ëê¹?"
+                  ],
+    "default_intent_seed":  {
+                                "must_keep":  [
+
+                                              ],
+                                "avoid":  [
+
+                                          ],
+                                "tone":  "ì¼ì¸ í",
+                                "target_length":  null,
+                                "priority_axis":  {
+                                                      "visual":  1.0,
+                                                      "speech":  0.8,
+                                                      "emotion":  1.1
+                                                  }
+                            }
+}

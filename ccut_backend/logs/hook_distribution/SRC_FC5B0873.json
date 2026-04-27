@@ -1,0 +1,35 @@
+{
+  "source_id": "SRC_FC5B0873",
+  "timestamp": "2026-04-19T15:12:28.637324",
+  "count": 13,
+  "hook_scores": [
+    0.079,
+    0.488,
+    0.321,
+    0.402,
+    0.501,
+    0.34,
+    0.34,
+    0.466,
+    0.389,
+    0.364,
+    0.34,
+    0.388,
+    0.613
+  ],
+  "roles": [
+    "Intro",
+    "Intro",
+    "Intro",
+    "Bridge",
+    "Main",
+    "Main",
+    "Main",
+    "Main",
+    "Main",
+    "Main",
+    "Main",
+    "Closing",
+    "Closing"
+  ]
+}

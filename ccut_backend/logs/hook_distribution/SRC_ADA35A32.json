@@ -1,0 +1,19 @@
+{
+  "source_id": "SRC_ADA35A32",
+  "timestamp": "2026-04-12T17:50:23.205872",
+  "count": 5,
+  "hook_scores": [
+    0.19,
+    0.196,
+    0.193,
+    0.196,
+    0.19
+  ],
+  "roles": [
+    "Intro",
+    "Intro",
+    "Main",
+    "Main",
+    "Closing"
+  ]
+}

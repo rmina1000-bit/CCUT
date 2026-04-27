@@ -1,0 +1,13 @@
+{
+  "source_id": "SRC_1FACF022",
+  "timestamp": "2026-04-26T15:27:01.641204",
+  "count": 2,
+  "hook_scores": [
+    0.342,
+    0.45
+  ],
+  "roles": [
+    "Payoff",
+    "Hook"
+  ]
+}

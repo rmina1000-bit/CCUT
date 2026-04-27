@@ -1,0 +1,43 @@
+{
+  "source_id": "SRC_CFA7C84D",
+  "timestamp": "2026-04-13T20:06:45.266351",
+  "count": 17,
+  "hook_scores": [
+    0.228,
+    0.047,
+    0.053,
+    0.046,
+    0.052,
+    0.045,
+    0.051,
+    0.045,
+    0.141,
+    0.092,
+    0.048,
+    0.061,
+    0.052,
+    0.052,
+    0.058,
+    0.199,
+    0.329
+  ],
+  "roles": [
+    "Intro",
+    "Intro",
+    "Intro",
+    "Intro",
+    "Main",
+    "Main",
+    "Main",
+    "Main",
+    "Main",
+    "Main",
+    "Main",
+    "Main",
+    "Main",
+    "Main",
+    "Main",
+    "Closing",
+    "Closing"
+  ]
+}

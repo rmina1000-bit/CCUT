@@ -1,0 +1,19 @@
+{
+  "source_id": "SRC_1995A92C",
+  "timestamp": "2026-04-17T20:39:58.764266",
+  "count": 5,
+  "hook_scores": [
+    0.19,
+    0.19,
+    0.19,
+    0.19,
+    0.19
+  ],
+  "roles": [
+    "Hook",
+    "Payoff",
+    "Context",
+    "Main",
+    "Closing"
+  ]
+}

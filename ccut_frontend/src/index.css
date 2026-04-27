@@ -1,0 +1,187 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 228 12% 10%;
+    --foreground: 220 10% 88%;
+
+    --card: 228 10% 13%;
+    --card-foreground: 220 10% 88%;
+
+    --popover: 228 10% 13%;
+    --popover-foreground: 220 10% 88%;
+
+    --primary: 211 55% 58%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 228 8% 17%;
+    --secondary-foreground: 220 8% 78%;
+
+    --muted: 228 6% 21%;
+    --muted-foreground: 220 6% 50%;
+
+    --accent: 228 8% 17%;
+    --accent-foreground: 220 8% 78%;
+
+    --destructive: 0 50% 55%;
+    --destructive-foreground: 0 0% 95%;
+
+    --border: 228 6% 18%;
+    --input: 228 6% 22%;
+    --ring: 211 55% 58%;
+
+    --radius: 0.5rem;
+
+    /* CCUT custom tokens */
+    --ccut-bg-deep: 228 12% 10%;
+    --ccut-bg-panel: 228 10% 13%;
+    --ccut-bg-elevated: 228 8% 16%;
+    --ccut-gold: 211 55% 58%;
+    --ccut-gold-dim: 211 35% 40%;
+    --ccut-text-primary: 220 10% 88%;
+    --ccut-text-secondary: 220 6% 50%;
+    --ccut-stroke: 228 5% 20%;
+    --ccut-indigo: 220 35% 52%;
+    --ccut-amber: 30 50% 55%;
+    --ccut-intelligence-start: 220 35% 52%;
+    --ccut-intelligence-end: 30 50% 55%;
+
+    --sidebar-background: 228 12% 11%;
+    --sidebar-foreground: 220 10% 88%;
+    --sidebar-primary: 211 55% 58%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 228 8% 16%;
+    --sidebar-accent-foreground: 220 8% 78%;
+    --sidebar-border: 228 5% 18%;
+    --sidebar-ring: 211 55% 58%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground font-sans;
+    font-family: 'Inter', sans-serif;
+  }
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+
+::-webkit-scrollbar-track {
+  background: hsl(225 14% 10%);
+}
+
+::-webkit-scrollbar-thumb {
+  background: hsl(225 8% 24%);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: hsl(225 8% 32%);
+}
+
+/* Fragment glow effect */
+.fragment-glow {
+  box-shadow: 0 0 6px 1px hsl(211 55% 58% / 0.18), inset 0 0 4px hsl(211 55% 58% / 0.04);
+}
+
+.fragment-tile {
+  transition: border-color 0.12s ease-out, box-shadow 0.12s ease-out, opacity 0.12s ease-out, filter 0.12s ease-out;
+}
+
+/* Intelligence layer heat */
+.intelligence-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+/* Preview sweep animation for fragment playback */
+@keyframes preview-sweep {
+  0% {
+    transform: translateX(-100%);
+  }
+
+  100% {
+    transform: translateX(200%);
+  }
+}
+
+/* Panorama scroll */
+.panorama-scroll {
+  scroll-behavior: smooth;
+}
+
+/* Boundary handle — shared boundary between adjacent fragments */
+.boundary-handle {
+  width: 3px;
+  background: hsl(228 5% 22%);
+  cursor: col-resize;
+  transition: background 0.15s, width 0.15s;
+  flex-shrink: 0;
+}
+
+.boundary-handle:hover {
+  background: hsl(211 55% 58%);
+  width: 4px;
+}
+
+.boundary-handle-active {
+  background: hsl(var(--primary)) !important;
+  width: 4px !important;
+}
+
+.boundary-handle-precision {
+  background: hsl(var(--ccut-amber) / 0.5);
+}
+
+.boundary-handle-precision:hover {
+  background: hsl(var(--ccut-amber));
+  width: 4px;
+}
+
+/* Boundary link — click-to-open entry point (replaces drag handles) */
+.boundary-link {
+  background: hsl(228 5% 22%);
+  transition: background 0.15s, width 0.15s, box-shadow 0.15s;
+  flex-shrink: 0;
+}
+
+.boundary-link:hover,
+.boundary-link-hover {
+  background: hsl(211 55% 58% / 0.5);
+  box-shadow: 0 0 4px hsl(211 55% 58% / 0.15);
+}
+
+/* Excluded fragment — structurally present but excluded from render */
+.excluded-fragment {
+  filter: grayscale(0.6);
+  transition: opacity 0.2s, filter 0.2s;
+}
+
+.excluded-fragment:hover {
+  opacity: 0.55 !important;
+  filter: grayscale(0.3);
+}
+
+/* Synthetic collapsed seam — indicates hidden excluded structure */
+.synthetic-seam {
+  transition: background 0.1s ease-out;
+}
+
+.synthetic-seam:hover,
+.synthetic-seam-hover {
+  background: hsl(var(--ccut-amber) / 0.06);
+}

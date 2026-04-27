@@ -1,0 +1,56 @@
+/**
+ * CCUT Video Intelligence Service
+ */
+
+import { fetcher, API_BASE_URL } from "./api";
+
+export const videoService = {
+    API_BASE_URL,
+    uploadVideo: async (file: File): Promise<{
+        status: string;
+        file_name: string;
+        source_id: string;
+        static_url: string;
+    }> => {
+        const formData = new FormData();
+        formData.append("file", file);
+
+        const response = await fetch(`${API_BASE_URL}/upload`, {
+            method: "POST",
+            body: formData,
+        });
+        if (!response.ok) throw new Error("업로드 실패: 서버 연결을 확인하세요.");
+        return await response.json();
+    },
+
+    generateFragments: async (sourceId: string) => {
+        const response = await fetch(
+            `${API_BASE_URL}/generate-fragments?source_id=${encodeURIComponent(sourceId)}`,
+            { method: "POST" }
+        );
+        if (!response.ok) throw new Error(`조각 분석 실패: ${response.status}`);
+        return await response.json();
+    },
+
+    getThumb: (fragId: string) => `${API_BASE_URL}/static/thumbnails/${fragId}.jpg`,
+    getThumbnailUrl: (fragId: string) => `${API_BASE_URL}/static/thumbnails/${fragId}.jpg`,
+
+    getFragmentsFromDB: async (sourceId: string) => {
+        return await fetcher(`/fragments/${encodeURIComponent(sourceId)}`);
+    },
+
+    getFragmentStatus: async (sourceId: string) => {
+        return await fetcher(`/generate-fragments/status/${encodeURIComponent(sourceId)}`);
+    },
+
+    getFragmentsBySource: async (sourceId: string) => {
+        return await fetcher(`/fragments/${encodeURIComponent(sourceId)}`);
+    },
+
+    logDecisionToDB: async (fragId: string, action: string, reason: string = "") => {
+        return await fetcher("/decisions", {
+            method: "POST",
+            body: JSON.stringify({ target_id: fragId, action, user_reason: reason })
+        });
+    }
+};

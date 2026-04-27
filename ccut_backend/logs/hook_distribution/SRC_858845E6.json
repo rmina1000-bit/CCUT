@@ -1,0 +1,31 @@
+{
+  "source_id": "SRC_858845E6",
+  "timestamp": "2026-04-19T15:40:06.820785",
+  "count": 11,
+  "hook_scores": [
+    0.153,
+    0.134,
+    0.181,
+    0.175,
+    0.34,
+    0.18,
+    0.153,
+    0.204,
+    0.144,
+    0.093,
+    0.081
+  ],
+  "roles": [
+    "Intro",
+    "Intro",
+    "Intro",
+    "Main",
+    "Main",
+    "Main",
+    "Main",
+    "Main",
+    "Main",
+    "Main",
+    "Closing"
+  ]
+}

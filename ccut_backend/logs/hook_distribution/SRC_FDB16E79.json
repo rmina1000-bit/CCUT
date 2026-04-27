@@ -1,0 +1,13 @@
+{
+  "source_id": "SRC_FDB16E79",
+  "timestamp": "2026-04-26T18:16:22.906842",
+  "count": 2,
+  "hook_scores": [
+    0.342,
+    0.45
+  ],
+  "roles": [
+    "Payoff",
+    "Hook"
+  ]
+}

@@ -1,0 +1,41 @@
+{
+  "source_id": "SRC_8FCBF54D",
+  "timestamp": "2026-04-12T09:09:52.990808",
+  "count": 16,
+  "hook_scores": [
+    0.605,
+    0.643,
+    0.512,
+    0.525,
+    0.516,
+    0.344,
+    0.193,
+    0.198,
+    0.197,
+    0.202,
+    0.2,
+    0.191,
+    0.202,
+    0.193,
+    0.204,
+    0.194
+  ],
+  "roles": [
+    "Reaction",
+    "Hook",
+    "Context",
+    "Context",
+    "Context",
+    "Intro",
+    "Intro",
+    "Main",
+    "Main",
+    "Main",
+    "Main",
+    "Main",
+    "Main",
+    "Main",
+    "Closing",
+    "Closing"
+  ]
+}

@@ -1,0 +1,35 @@
+{
+  "source_id": "SRC_DBCE3EE4",
+  "timestamp": "2026-04-19T15:51:06.258801",
+  "count": 13,
+  "hook_scores": [
+    0.079,
+    0.475,
+    0.321,
+    0.34,
+    0.429,
+    0.34,
+    0.34,
+    0.391,
+    0.339,
+    0.313,
+    0.34,
+    0.34,
+    0.587
+  ],
+  "roles": [
+    "Intro",
+    "Intro",
+    "Intro",
+    "Bridge",
+    "Bridge",
+    "Main",
+    "Main",
+    "Main",
+    "Main",
+    "Main",
+    "Main",
+    "Closing",
+    "Closing"
+  ]
+}

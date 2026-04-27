@@ -1,0 +1,32 @@
+active:
+  asr: whisper         # B1에서는 여전히 whisper 사용
+  vl: null
+  intent: null
+
+providers:
+  whisper:
+    adapter: WhisperAdapter
+    config:
+      model_size: tiny
+      device: cpu
+
+  qwen3_asr:
+    adapter: Qwen3ASRAdapter
+    config:
+      server_binary: D:/tools/llama.cpp/llama-server.exe
+      model_path: D:/CCUT_1.0.3/ccut_backend/ai_models/qwen3-asr-0.6b/Qwen3-ASR-0.6B-Q8_0.gguf
+      mmproj_path: D:/CCUT_1.0.3/ccut_backend/ai_models/qwen3-asr-0.6b/mmproj-Qwen3-ASR-0.6B-Q8_0.gguf
+      port: 8091
+      ctx_size: 4096
+      n_gpu_layers: 0
+
+fallback:
+  asr: whisper
+  vl: null
+
+network_policy:
+  allow_external_ai: false
+  allow_model_download: true
+  trusted_endpoints: []
+
+health_check_interval_sec: 300

@@ -1,0 +1,17 @@
+{
+  "source_id": "SRC_E2F3AB6C",
+  "timestamp": "2026-04-22T00:37:40.155643",
+  "count": 4,
+  "hook_scores": [
+    0.04,
+    0.04,
+    0.04,
+    0.04
+  ],
+  "roles": [
+    "Hook",
+    "Payoff",
+    "Context",
+    "Closing"
+  ]
+}
