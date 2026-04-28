@@ -15,7 +15,7 @@
 
 반드시 아래 문서를 기준으로 검수한다.
 
-docs/01_PROJECT_NAVIGATION_v3_2_1.md
+docs/PROJECT_NAVIGATION.md
 
 ---
 
