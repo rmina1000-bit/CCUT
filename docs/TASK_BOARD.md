@@ -19,6 +19,8 @@
 | STEP 10-A | Structure Reinforcement Documentation |
 | STEP 10-B | Virtual Fragment Factory Simulation v0 |
 | STEP 10-C | Factory Simulation 구조 보정 |
+| STEP 10-D | Resource Governor Simulation v0 |
+
 
 
 
@@ -27,7 +29,10 @@
 
 ## CURRENT 🔄
 
-- STEP 10-C 구조 보정 완료
+## CURRENT 🔄
+
+- STEP 10-D 시뮬레이션 완료 및 문서 갱신 중
+
 
 
 
@@ -35,8 +40,9 @@
 
 ## NEXT 📋
 
-- STEP 10-D Resource Governor Simulation v0 설계
-- STEP 10-E Factory Pipeline Integration 검토
+- STEP 10-F External Proposal Service Simulation v0 설계
+- STEP 10-G Factory Simulation 보정 (필요 시)
+
 
 
 

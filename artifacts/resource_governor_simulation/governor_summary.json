@@ -1,0 +1,29 @@
+{
+  "simulation_id": "GOV_SIM_20260429_010404",
+  "source_id": "SRC_SIM_001",
+  "input_factory_simulation_id": "SIM_20260429_005919",
+  "total_task_count": 300,
+  "assigned_task_count": 100,
+  "delayed_task_count": 100,
+  "throttled_task_count": 100,
+  "worker_slot_count_initial": 8,
+  "worker_slot_count_effective": 8,
+  "resource_scenario_count": 3,
+  "decision_action_distribution": {
+    "ASSIGN": 100,
+    "DELAY": 100,
+    "THROTTLE": 100
+  },
+  "decision_reason_distribution": {
+    "resource_within_policy": 100,
+    "approaching_cpu_limit": 100,
+    "cpu_threshold_exceeded": 100
+  },
+  "policy_check": "PASS",
+  "task_link_check": "PASS",
+  "worker_slot_limit_check": "PASS",
+  "throttle_check": "PASS",
+  "decision_log_check": "PASS",
+  "pipeline_isolation_check": "PASS",
+  "status": "PASS"
+}

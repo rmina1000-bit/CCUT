@@ -25,6 +25,8 @@
 | STEP 10-A | Structure Reinforcement Documentation | PASS |
 | STEP 10-B | Virtual Fragment Factory Simulation v0 | PASS |
 | STEP 10-C | Factory Simulation 구조 보정 | PASS |
+| STEP 10-D | Resource Governor Simulation v0 | PASS |
+
 
 
 
@@ -74,6 +76,16 @@
 - **Source/Room/Task/Worker/Evidence 최소 계약 필드 확정 및 반영**
 - **시뮬레이션 스크립트 내 ID 연결성 및 Time Range 검증 로직 추가**
 - **factory_summary.json 내 상세 검증 필드(PASS/FAIL) 추가**
+
+---
+
+## Latest Revision (2026-04-29 01:20)
+
+- **STEP 10-D Resource Governor Simulation v0 완료**
+- **Resource Policy v0 정의 및 Mock Scenario(NORMAL/PRESSURE/OVERLOAD) 적용**
+- **Governor Decision 로직 및 로그 생성 시뮬레이션 완료**
+- **OVERLOAD 상태에서 THROTTLE/DELAY 발생 확인 및 검증 PASS**
+
 
 
 
