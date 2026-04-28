@@ -3,7 +3,7 @@
 > 기준: CCUT 1.0.4 PROJECT NAVIGATION v3.2.1  
 > 핵심: 영상 → Proxy/Segment → Evidence Board → Semantic Fragment → Proposal(JSON) → ExportInput → Render  
 > 절대 원칙: Evidence 없이 Semantic 금지 / Semantic 없이 Proposal 금지 / Proposal 없이 Export 금지  
-> **현재 기준 SHA:** `9bb6faf2be16c4d5d8ea2ef456a06d3853f1aabf`
+> **현재 기준 SHA:** `ddbd6e2779e51bf9e45b9d832830ee14b3716340`
 
 ## STEP 0. 기준선 확보 ✅ PASS
 
@@ -80,7 +80,16 @@
 - Mojibake 수정 완료 (Index.tsx)
 - localhost 하드코딩 제거 완료 (CenterPanel.tsx)
 
+## STEP 10-A. Structure Reinforcement Documentation ✅ PASS
+
+- Common Core v1 문서화
+- Virtual Fragment Factory 기준 문서화
+- Web AI Contract v0.1 문서화
+- External Proposal Service 방향 문서화
+- 코드 적용 범위 확정
+
 ## STEP 10. 최종 안정화 / 회귀 테스트 (예정)
+
 
 - E2E: upload → evidence → semantic → proposal → export PASS
 - Resource Governor 연동 (설계 단계)

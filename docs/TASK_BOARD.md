@@ -19,7 +19,11 @@
 
 ## CURRENT 🔄
 
-- 문서 정리 및 `finalize_session.ps1` 구축 (진행 중)
+- Common Core v1 문서화 ✅
+- Virtual Fragment Factory 문서화 ✅
+- Web AI Contract v0.1 문서화 ✅
+- External Proposal Service 방향 문서화 ✅
+
 
 ## NEXT 📋
 
@@ -34,7 +38,14 @@
 - PBE(Precision Boundary Editor) 재연결
 - SNS 업로드 연동
 
+## DO NOT 🚫
+
+- 실제 Web AI API 호출 구현
+- Resource Governor 본구현
+- Render/ExportInput/UI 파이프라인 변경
+
 ## 운영 원칙
+
 
 ```text
 새 인계 파일을 계속 만들지 않는다.

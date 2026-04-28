@@ -3,7 +3,7 @@
 ## Latest Baseline
 
 - **Branch:** `ccut-1.0.4-step9`
-- **SHA:** `9657df9882329cd3106a75c96926157226a26c48`
+- **SHA:** `ddbd6e2779e51bf9e45b9d832830ee14b3716340`
 - **Date:** 2026-04-28
 
 ---
@@ -39,6 +39,18 @@
   - `"[Reproposal] sourceFragments가 없어 재제안을 건너뜁니다."`
 - **main.py**: `D:/test_video.mp4` 하드코딩 제거 → `video_path: str = ""`
 - **CenterPanel.tsx**: `http://localhost:8000` 하드코딩 → `videoService.API_BASE_URL`
+
+---
+
+## Latest Revision (2026-04-29)
+
+- **Common Core v1 문서 추가**
+- **Virtual Fragment Factory 문서 추가**
+- **Web AI Contract v0.1 문서 추가**
+- **External Proposal Service 방향 문서 추가**
+- **PROJECT_NAVIGATION / EXECUTION_PLAN / TASK_BOARD / HANDOFF / SESSION_HANDOFF 갱신**
+- **기준 SHA 일괄 정정 (`ddbd6e2779e51bf9e45b9d832830ee14b3716340`)**
+
 
 ---
 

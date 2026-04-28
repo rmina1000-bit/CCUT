@@ -1,10 +1,20 @@
 # CCUT 1.0.4 PROJECT NAVIGATION v3.2.1
 
-> **현재 기준 SHA:** `9657df9882329cd3106a75c96926157226a26c48`  
+> **현재 기준 SHA:** `ddbd6e2779e51bf9e45b9d832830ee14b3716340`  
 > **Branch:** `ccut-1.0.4-step9`  
 > **완료 단계:** STEP 0 ~ STEP 9 모두 PASS  
 > **핵심 흐름:** 영상 → Quick Scan → Semantic Fragment → Proposal(JSON) → ExportInput → Render → UI mp4 표시  
 > **절대 원칙:** Evidence 없이 Semantic 금지 / Semantic 없이 Proposal 금지 / Proposal 없이 Export 금지
+
+CCUT 1.0.4 장기 구조 보강축:
+1. Common Core v1
+2. Virtual Fragment Factory
+3. Web AI Contract v0.1
+4. External Proposal Service
+
+이 4개는 STEP 10 이후 구조 보강 후보이며,
+STEP 0~9 PASS 파이프라인을 깨지 않는다.
+
 
 
 ## 0. 프로젝트 정의
