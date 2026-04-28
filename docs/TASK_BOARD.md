@@ -16,19 +16,20 @@
 | STEP 9 | UI 최소연동 / 통합 확인 |
 | -      | GitHub 위생 정리 + 로컬 동기화 |
 | -      | 문서 구조 고정 + 방이전 자동화 체계 구축 |
+| STEP 10-A | Structure Reinforcement Documentation |
+
 
 ## CURRENT 🔄
 
-- Common Core v1 문서화 ✅
-- Virtual Fragment Factory 문서화 ✅
-- Web AI Contract v0.1 문서화 ✅
-- External Proposal Service 방향 문서화 ✅
+- (비어 있음)
+
 
 
 ## NEXT 📋
 
-- STEP 10 최종 안정화 / 회귀 테스트
-- 전체 파이프라인 End-to-End 검증
+- STEP 10 Regression Test Plan 수립
+- Virtual Fragment Factory Simulation v0 설계
+
 
 ## HOLD ⏸
 
