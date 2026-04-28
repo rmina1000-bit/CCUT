@@ -1,0 +1,6016 @@
+{
+  "simulation_id": "SIM_20260429_005159",
+  "source": {
+    "source_id": "SRC_SIM_001",
+    "duration": 600
+  },
+  "rooms": [
+    {
+      "room_id": "ROOM_SIM_000001",
+      "room_type": "audio_slice_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000002",
+      "room_type": "motion_signal_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000003",
+      "room_type": "scene_signal_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000004",
+      "room_type": "text_density_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000005",
+      "room_type": "pattern_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000006",
+      "room_type": "boundary_candidate_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000007",
+      "room_type": "semantic_candidate_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000008",
+      "room_type": "frame_slice_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000009",
+      "room_type": "audio_slice_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000010",
+      "room_type": "motion_signal_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000011",
+      "room_type": "scene_signal_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000012",
+      "room_type": "text_density_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000013",
+      "room_type": "pattern_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000014",
+      "room_type": "boundary_candidate_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000015",
+      "room_type": "semantic_candidate_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000016",
+      "room_type": "frame_slice_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000017",
+      "room_type": "audio_slice_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000018",
+      "room_type": "motion_signal_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000019",
+      "room_type": "scene_signal_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000020",
+      "room_type": "text_density_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000021",
+      "room_type": "pattern_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000022",
+      "room_type": "boundary_candidate_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000023",
+      "room_type": "semantic_candidate_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000024",
+      "room_type": "frame_slice_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000025",
+      "room_type": "audio_slice_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000026",
+      "room_type": "motion_signal_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000027",
+      "room_type": "scene_signal_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000028",
+      "room_type": "text_density_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000029",
+      "room_type": "pattern_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000030",
+      "room_type": "boundary_candidate_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000031",
+      "room_type": "semantic_candidate_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000032",
+      "room_type": "frame_slice_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000033",
+      "room_type": "audio_slice_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000034",
+      "room_type": "motion_signal_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000035",
+      "room_type": "scene_signal_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000036",
+      "room_type": "text_density_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000037",
+      "room_type": "pattern_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000038",
+      "room_type": "boundary_candidate_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000039",
+      "room_type": "semantic_candidate_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000040",
+      "room_type": "frame_slice_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000041",
+      "room_type": "audio_slice_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000042",
+      "room_type": "motion_signal_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000043",
+      "room_type": "scene_signal_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000044",
+      "room_type": "text_density_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000045",
+      "room_type": "pattern_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000046",
+      "room_type": "boundary_candidate_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000047",
+      "room_type": "semantic_candidate_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000048",
+      "room_type": "frame_slice_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000049",
+      "room_type": "audio_slice_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000050",
+      "room_type": "motion_signal_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000051",
+      "room_type": "scene_signal_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000052",
+      "room_type": "text_density_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000053",
+      "room_type": "pattern_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000054",
+      "room_type": "boundary_candidate_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000055",
+      "room_type": "semantic_candidate_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000056",
+      "room_type": "frame_slice_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000057",
+      "room_type": "audio_slice_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000058",
+      "room_type": "motion_signal_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000059",
+      "room_type": "scene_signal_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000060",
+      "room_type": "text_density_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000061",
+      "room_type": "pattern_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000062",
+      "room_type": "boundary_candidate_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000063",
+      "room_type": "semantic_candidate_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000064",
+      "room_type": "frame_slice_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000065",
+      "room_type": "audio_slice_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000066",
+      "room_type": "motion_signal_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000067",
+      "room_type": "scene_signal_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000068",
+      "room_type": "text_density_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000069",
+      "room_type": "pattern_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000070",
+      "room_type": "boundary_candidate_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000071",
+      "room_type": "semantic_candidate_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000072",
+      "room_type": "frame_slice_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000073",
+      "room_type": "audio_slice_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000074",
+      "room_type": "motion_signal_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000075",
+      "room_type": "scene_signal_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000076",
+      "room_type": "text_density_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000077",
+      "room_type": "pattern_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000078",
+      "room_type": "boundary_candidate_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000079",
+      "room_type": "semantic_candidate_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000080",
+      "room_type": "frame_slice_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000081",
+      "room_type": "audio_slice_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000082",
+      "room_type": "motion_signal_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000083",
+      "room_type": "scene_signal_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000084",
+      "room_type": "text_density_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000085",
+      "room_type": "pattern_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000086",
+      "room_type": "boundary_candidate_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000087",
+      "room_type": "semantic_candidate_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000088",
+      "room_type": "frame_slice_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000089",
+      "room_type": "audio_slice_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000090",
+      "room_type": "motion_signal_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000091",
+      "room_type": "scene_signal_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000092",
+      "room_type": "text_density_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000093",
+      "room_type": "pattern_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000094",
+      "room_type": "boundary_candidate_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000095",
+      "room_type": "semantic_candidate_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000096",
+      "room_type": "frame_slice_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000097",
+      "room_type": "audio_slice_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000098",
+      "room_type": "motion_signal_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000099",
+      "room_type": "scene_signal_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000100",
+      "room_type": "text_density_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000101",
+      "room_type": "pattern_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000102",
+      "room_type": "boundary_candidate_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000103",
+      "room_type": "semantic_candidate_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000104",
+      "room_type": "frame_slice_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000105",
+      "room_type": "audio_slice_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000106",
+      "room_type": "motion_signal_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000107",
+      "room_type": "scene_signal_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000108",
+      "room_type": "text_density_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000109",
+      "room_type": "pattern_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000110",
+      "room_type": "boundary_candidate_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000111",
+      "room_type": "semantic_candidate_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000112",
+      "room_type": "frame_slice_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000113",
+      "room_type": "audio_slice_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000114",
+      "room_type": "motion_signal_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000115",
+      "room_type": "scene_signal_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000116",
+      "room_type": "text_density_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000117",
+      "room_type": "pattern_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000118",
+      "room_type": "boundary_candidate_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000119",
+      "room_type": "semantic_candidate_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000120",
+      "room_type": "frame_slice_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000121",
+      "room_type": "audio_slice_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000122",
+      "room_type": "motion_signal_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000123",
+      "room_type": "scene_signal_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000124",
+      "room_type": "text_density_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000125",
+      "room_type": "pattern_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000126",
+      "room_type": "boundary_candidate_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000127",
+      "room_type": "semantic_candidate_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000128",
+      "room_type": "frame_slice_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000129",
+      "room_type": "audio_slice_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000130",
+      "room_type": "motion_signal_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000131",
+      "room_type": "scene_signal_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000132",
+      "room_type": "text_density_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000133",
+      "room_type": "pattern_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000134",
+      "room_type": "boundary_candidate_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000135",
+      "room_type": "semantic_candidate_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000136",
+      "room_type": "frame_slice_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000137",
+      "room_type": "audio_slice_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000138",
+      "room_type": "motion_signal_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000139",
+      "room_type": "scene_signal_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000140",
+      "room_type": "text_density_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000141",
+      "room_type": "pattern_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000142",
+      "room_type": "boundary_candidate_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000143",
+      "room_type": "semantic_candidate_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000144",
+      "room_type": "frame_slice_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000145",
+      "room_type": "audio_slice_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000146",
+      "room_type": "motion_signal_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000147",
+      "room_type": "scene_signal_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000148",
+      "room_type": "text_density_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000149",
+      "room_type": "pattern_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000150",
+      "room_type": "boundary_candidate_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000151",
+      "room_type": "semantic_candidate_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000152",
+      "room_type": "frame_slice_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000153",
+      "room_type": "audio_slice_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000154",
+      "room_type": "motion_signal_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000155",
+      "room_type": "scene_signal_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000156",
+      "room_type": "text_density_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000157",
+      "room_type": "pattern_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000158",
+      "room_type": "boundary_candidate_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000159",
+      "room_type": "semantic_candidate_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000160",
+      "room_type": "frame_slice_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000161",
+      "room_type": "audio_slice_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000162",
+      "room_type": "motion_signal_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000163",
+      "room_type": "scene_signal_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000164",
+      "room_type": "text_density_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000165",
+      "room_type": "pattern_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000166",
+      "room_type": "boundary_candidate_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000167",
+      "room_type": "semantic_candidate_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000168",
+      "room_type": "frame_slice_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000169",
+      "room_type": "audio_slice_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000170",
+      "room_type": "motion_signal_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000171",
+      "room_type": "scene_signal_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000172",
+      "room_type": "text_density_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000173",
+      "room_type": "pattern_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000174",
+      "room_type": "boundary_candidate_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000175",
+      "room_type": "semantic_candidate_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000176",
+      "room_type": "frame_slice_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000177",
+      "room_type": "audio_slice_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000178",
+      "room_type": "motion_signal_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000179",
+      "room_type": "scene_signal_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000180",
+      "room_type": "text_density_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000181",
+      "room_type": "pattern_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000182",
+      "room_type": "boundary_candidate_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000183",
+      "room_type": "semantic_candidate_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000184",
+      "room_type": "frame_slice_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000185",
+      "room_type": "audio_slice_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000186",
+      "room_type": "motion_signal_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000187",
+      "room_type": "scene_signal_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000188",
+      "room_type": "text_density_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000189",
+      "room_type": "pattern_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000190",
+      "room_type": "boundary_candidate_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000191",
+      "room_type": "semantic_candidate_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000192",
+      "room_type": "frame_slice_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000193",
+      "room_type": "audio_slice_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000194",
+      "room_type": "motion_signal_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000195",
+      "room_type": "scene_signal_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000196",
+      "room_type": "text_density_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000197",
+      "room_type": "pattern_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000198",
+      "room_type": "boundary_candidate_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000199",
+      "room_type": "semantic_candidate_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000200",
+      "room_type": "frame_slice_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000201",
+      "room_type": "audio_slice_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000202",
+      "room_type": "motion_signal_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000203",
+      "room_type": "scene_signal_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000204",
+      "room_type": "text_density_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000205",
+      "room_type": "pattern_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000206",
+      "room_type": "boundary_candidate_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000207",
+      "room_type": "semantic_candidate_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000208",
+      "room_type": "frame_slice_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000209",
+      "room_type": "audio_slice_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000210",
+      "room_type": "motion_signal_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000211",
+      "room_type": "scene_signal_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000212",
+      "room_type": "text_density_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000213",
+      "room_type": "pattern_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000214",
+      "room_type": "boundary_candidate_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000215",
+      "room_type": "semantic_candidate_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000216",
+      "room_type": "frame_slice_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000217",
+      "room_type": "audio_slice_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000218",
+      "room_type": "motion_signal_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000219",
+      "room_type": "scene_signal_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000220",
+      "room_type": "text_density_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000221",
+      "room_type": "pattern_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000222",
+      "room_type": "boundary_candidate_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000223",
+      "room_type": "semantic_candidate_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000224",
+      "room_type": "frame_slice_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000225",
+      "room_type": "audio_slice_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000226",
+      "room_type": "motion_signal_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000227",
+      "room_type": "scene_signal_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000228",
+      "room_type": "text_density_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000229",
+      "room_type": "pattern_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000230",
+      "room_type": "boundary_candidate_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000231",
+      "room_type": "semantic_candidate_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000232",
+      "room_type": "frame_slice_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000233",
+      "room_type": "audio_slice_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000234",
+      "room_type": "motion_signal_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000235",
+      "room_type": "scene_signal_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000236",
+      "room_type": "text_density_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000237",
+      "room_type": "pattern_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000238",
+      "room_type": "boundary_candidate_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000239",
+      "room_type": "semantic_candidate_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000240",
+      "room_type": "frame_slice_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000241",
+      "room_type": "audio_slice_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000242",
+      "room_type": "motion_signal_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000243",
+      "room_type": "scene_signal_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000244",
+      "room_type": "text_density_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000245",
+      "room_type": "pattern_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000246",
+      "room_type": "boundary_candidate_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000247",
+      "room_type": "semantic_candidate_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000248",
+      "room_type": "frame_slice_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000249",
+      "room_type": "audio_slice_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000250",
+      "room_type": "motion_signal_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000251",
+      "room_type": "scene_signal_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000252",
+      "room_type": "text_density_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000253",
+      "room_type": "pattern_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000254",
+      "room_type": "boundary_candidate_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000255",
+      "room_type": "semantic_candidate_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000256",
+      "room_type": "frame_slice_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000257",
+      "room_type": "audio_slice_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000258",
+      "room_type": "motion_signal_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000259",
+      "room_type": "scene_signal_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000260",
+      "room_type": "text_density_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000261",
+      "room_type": "pattern_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000262",
+      "room_type": "boundary_candidate_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000263",
+      "room_type": "semantic_candidate_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000264",
+      "room_type": "frame_slice_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000265",
+      "room_type": "audio_slice_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000266",
+      "room_type": "motion_signal_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000267",
+      "room_type": "scene_signal_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000268",
+      "room_type": "text_density_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000269",
+      "room_type": "pattern_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000270",
+      "room_type": "boundary_candidate_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000271",
+      "room_type": "semantic_candidate_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000272",
+      "room_type": "frame_slice_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000273",
+      "room_type": "audio_slice_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000274",
+      "room_type": "motion_signal_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000275",
+      "room_type": "scene_signal_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000276",
+      "room_type": "text_density_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000277",
+      "room_type": "pattern_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000278",
+      "room_type": "boundary_candidate_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000279",
+      "room_type": "semantic_candidate_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000280",
+      "room_type": "frame_slice_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000281",
+      "room_type": "audio_slice_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000282",
+      "room_type": "motion_signal_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000283",
+      "room_type": "scene_signal_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000284",
+      "room_type": "text_density_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000285",
+      "room_type": "pattern_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000286",
+      "room_type": "boundary_candidate_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000287",
+      "room_type": "semantic_candidate_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000288",
+      "room_type": "frame_slice_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000289",
+      "room_type": "audio_slice_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000290",
+      "room_type": "motion_signal_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000291",
+      "room_type": "scene_signal_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000292",
+      "room_type": "text_density_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000293",
+      "room_type": "pattern_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000294",
+      "room_type": "boundary_candidate_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000295",
+      "room_type": "semantic_candidate_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000296",
+      "room_type": "frame_slice_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000297",
+      "room_type": "audio_slice_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000298",
+      "room_type": "motion_signal_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000299",
+      "room_type": "scene_signal_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    },
+    {
+      "room_id": "ROOM_SIM_000300",
+      "room_type": "text_density_room",
+      "status": "DONE",
+      "source_id": "SRC_SIM_001"
+    }
+  ],
+  "tasks": [
+    {
+      "task_id": "TASK_SIM_000001",
+      "room_id": "ROOM_SIM_000001",
+      "status": "DONE",
+      "worker_slot": "SLOT_02"
+    },
+    {
+      "task_id": "TASK_SIM_000002",
+      "room_id": "ROOM_SIM_000002",
+      "status": "DONE",
+      "worker_slot": "SLOT_03"
+    },
+    {
+      "task_id": "TASK_SIM_000003",
+      "room_id": "ROOM_SIM_000003",
+      "status": "DONE",
+      "worker_slot": "SLOT_04"
+    },
+    {
+      "task_id": "TASK_SIM_000004",
+      "room_id": "ROOM_SIM_000004",
+      "status": "DONE",
+      "worker_slot": "SLOT_05"
+    },
+    {
+      "task_id": "TASK_SIM_000005",
+      "room_id": "ROOM_SIM_000005",
+      "status": "DONE",
+      "worker_slot": "SLOT_06"
+    },
+    {
+      "task_id": "TASK_SIM_000006",
+      "room_id": "ROOM_SIM_000006",
+      "status": "DONE",
+      "worker_slot": "SLOT_07"
+    },
+    {
+      "task_id": "TASK_SIM_000007",
+      "room_id": "ROOM_SIM_000007",
+      "status": "DONE",
+      "worker_slot": "SLOT_08"
+    },
+    {
+      "task_id": "TASK_SIM_000008",
+      "room_id": "ROOM_SIM_000008",
+      "status": "DONE",
+      "worker_slot": "SLOT_01"
+    },
+    {
+      "task_id": "TASK_SIM_000009",
+      "room_id": "ROOM_SIM_000009",
+      "status": "DONE",
+      "worker_slot": "SLOT_02"
+    },
+    {
+      "task_id": "TASK_SIM_000010",
+      "room_id": "ROOM_SIM_000010",
+      "status": "DONE",
+      "worker_slot": "SLOT_03"
+    },
+    {
+      "task_id": "TASK_SIM_000011",
+      "room_id": "ROOM_SIM_000011",
+      "status": "DONE",
+      "worker_slot": "SLOT_04"
+    },
+    {
+      "task_id": "TASK_SIM_000012",
+      "room_id": "ROOM_SIM_000012",
+      "status": "DONE",
+      "worker_slot": "SLOT_05"
+    },
+    {
+      "task_id": "TASK_SIM_000013",
+      "room_id": "ROOM_SIM_000013",
+      "status": "DONE",
+      "worker_slot": "SLOT_06"
+    },
+    {
+      "task_id": "TASK_SIM_000014",
+      "room_id": "ROOM_SIM_000014",
+      "status": "DONE",
+      "worker_slot": "SLOT_07"
+    },
+    {
+      "task_id": "TASK_SIM_000015",
+      "room_id": "ROOM_SIM_000015",
+      "status": "DONE",
+      "worker_slot": "SLOT_08"
+    },
+    {
+      "task_id": "TASK_SIM_000016",
+      "room_id": "ROOM_SIM_000016",
+      "status": "DONE",
+      "worker_slot": "SLOT_01"
+    },
+    {
+      "task_id": "TASK_SIM_000017",
+      "room_id": "ROOM_SIM_000017",
+      "status": "DONE",
+      "worker_slot": "SLOT_02"
+    },
+    {
+      "task_id": "TASK_SIM_000018",
+      "room_id": "ROOM_SIM_000018",
+      "status": "DONE",
+      "worker_slot": "SLOT_03"
+    },
+    {
+      "task_id": "TASK_SIM_000019",
+      "room_id": "ROOM_SIM_000019",
+      "status": "DONE",
+      "worker_slot": "SLOT_04"
+    },
+    {
+      "task_id": "TASK_SIM_000020",
+      "room_id": "ROOM_SIM_000020",
+      "status": "DONE",
+      "worker_slot": "SLOT_05"
+    },
+    {
+      "task_id": "TASK_SIM_000021",
+      "room_id": "ROOM_SIM_000021",
+      "status": "DONE",
+      "worker_slot": "SLOT_06"
+    },
+    {
+      "task_id": "TASK_SIM_000022",
+      "room_id": "ROOM_SIM_000022",
+      "status": "DONE",
+      "worker_slot": "SLOT_07"
+    },
+    {
+      "task_id": "TASK_SIM_000023",
+      "room_id": "ROOM_SIM_000023",
+      "status": "DONE",
+      "worker_slot": "SLOT_08"
+    },
+    {
+      "task_id": "TASK_SIM_000024",
+      "room_id": "ROOM_SIM_000024",
+      "status": "DONE",
+      "worker_slot": "SLOT_01"
+    },
+    {
+      "task_id": "TASK_SIM_000025",
+      "room_id": "ROOM_SIM_000025",
+      "status": "DONE",
+      "worker_slot": "SLOT_02"
+    },
+    {
+      "task_id": "TASK_SIM_000026",
+      "room_id": "ROOM_SIM_000026",
+      "status": "DONE",
+      "worker_slot": "SLOT_03"
+    },
+    {
+      "task_id": "TASK_SIM_000027",
+      "room_id": "ROOM_SIM_000027",
+      "status": "DONE",
+      "worker_slot": "SLOT_04"
+    },
+    {
+      "task_id": "TASK_SIM_000028",
+      "room_id": "ROOM_SIM_000028",
+      "status": "DONE",
+      "worker_slot": "SLOT_05"
+    },
+    {
+      "task_id": "TASK_SIM_000029",
+      "room_id": "ROOM_SIM_000029",
+      "status": "DONE",
+      "worker_slot": "SLOT_06"
+    },
+    {
+      "task_id": "TASK_SIM_000030",
+      "room_id": "ROOM_SIM_000030",
+      "status": "DONE",
+      "worker_slot": "SLOT_07"
+    },
+    {
+      "task_id": "TASK_SIM_000031",
+      "room_id": "ROOM_SIM_000031",
+      "status": "DONE",
+      "worker_slot": "SLOT_08"
+    },
+    {
+      "task_id": "TASK_SIM_000032",
+      "room_id": "ROOM_SIM_000032",
+      "status": "DONE",
+      "worker_slot": "SLOT_01"
+    },
+    {
+      "task_id": "TASK_SIM_000033",
+      "room_id": "ROOM_SIM_000033",
+      "status": "DONE",
+      "worker_slot": "SLOT_02"
+    },
+    {
+      "task_id": "TASK_SIM_000034",
+      "room_id": "ROOM_SIM_000034",
+      "status": "DONE",
+      "worker_slot": "SLOT_03"
+    },
+    {
+      "task_id": "TASK_SIM_000035",
+      "room_id": "ROOM_SIM_000035",
+      "status": "DONE",
+      "worker_slot": "SLOT_04"
+    },
+    {
+      "task_id": "TASK_SIM_000036",
+      "room_id": "ROOM_SIM_000036",
+      "status": "DONE",
+      "worker_slot": "SLOT_05"
+    },
+    {
+      "task_id": "TASK_SIM_000037",
+      "room_id": "ROOM_SIM_000037",
+      "status": "DONE",
+      "worker_slot": "SLOT_06"
+    },
+    {
+      "task_id": "TASK_SIM_000038",
+      "room_id": "ROOM_SIM_000038",
+      "status": "DONE",
+      "worker_slot": "SLOT_07"
+    },
+    {
+      "task_id": "TASK_SIM_000039",
+      "room_id": "ROOM_SIM_000039",
+      "status": "DONE",
+      "worker_slot": "SLOT_08"
+    },
+    {
+      "task_id": "TASK_SIM_000040",
+      "room_id": "ROOM_SIM_000040",
+      "status": "DONE",
+      "worker_slot": "SLOT_01"
+    },
+    {
+      "task_id": "TASK_SIM_000041",
+      "room_id": "ROOM_SIM_000041",
+      "status": "DONE",
+      "worker_slot": "SLOT_02"
+    },
+    {
+      "task_id": "TASK_SIM_000042",
+      "room_id": "ROOM_SIM_000042",
+      "status": "DONE",
+      "worker_slot": "SLOT_03"
+    },
+    {
+      "task_id": "TASK_SIM_000043",
+      "room_id": "ROOM_SIM_000043",
+      "status": "DONE",
+      "worker_slot": "SLOT_04"
+    },
+    {
+      "task_id": "TASK_SIM_000044",
+      "room_id": "ROOM_SIM_000044",
+      "status": "DONE",
+      "worker_slot": "SLOT_05"
+    },
+    {
+      "task_id": "TASK_SIM_000045",
+      "room_id": "ROOM_SIM_000045",
+      "status": "DONE",
+      "worker_slot": "SLOT_06"
+    },
+    {
+      "task_id": "TASK_SIM_000046",
+      "room_id": "ROOM_SIM_000046",
+      "status": "DONE",
+      "worker_slot": "SLOT_07"
+    },
+    {
+      "task_id": "TASK_SIM_000047",
+      "room_id": "ROOM_SIM_000047",
+      "status": "DONE",
+      "worker_slot": "SLOT_08"
+    },
+    {
+      "task_id": "TASK_SIM_000048",
+      "room_id": "ROOM_SIM_000048",
+      "status": "DONE",
+      "worker_slot": "SLOT_01"
+    },
+    {
+      "task_id": "TASK_SIM_000049",
+      "room_id": "ROOM_SIM_000049",
+      "status": "DONE",
+      "worker_slot": "SLOT_02"
+    },
+    {
+      "task_id": "TASK_SIM_000050",
+      "room_id": "ROOM_SIM_000050",
+      "status": "DONE",
+      "worker_slot": "SLOT_03"
+    },
+    {
+      "task_id": "TASK_SIM_000051",
+      "room_id": "ROOM_SIM_000051",
+      "status": "DONE",
+      "worker_slot": "SLOT_04"
+    },
+    {
+      "task_id": "TASK_SIM_000052",
+      "room_id": "ROOM_SIM_000052",
+      "status": "DONE",
+      "worker_slot": "SLOT_05"
+    },
+    {
+      "task_id": "TASK_SIM_000053",
+      "room_id": "ROOM_SIM_000053",
+      "status": "DONE",
+      "worker_slot": "SLOT_06"
+    },
+    {
+      "task_id": "TASK_SIM_000054",
+      "room_id": "ROOM_SIM_000054",
+      "status": "DONE",
+      "worker_slot": "SLOT_07"
+    },
+    {
+      "task_id": "TASK_SIM_000055",
+      "room_id": "ROOM_SIM_000055",
+      "status": "DONE",
+      "worker_slot": "SLOT_08"
+    },
+    {
+      "task_id": "TASK_SIM_000056",
+      "room_id": "ROOM_SIM_000056",
+      "status": "DONE",
+      "worker_slot": "SLOT_01"
+    },
+    {
+      "task_id": "TASK_SIM_000057",
+      "room_id": "ROOM_SIM_000057",
+      "status": "DONE",
+      "worker_slot": "SLOT_02"
+    },
+    {
+      "task_id": "TASK_SIM_000058",
+      "room_id": "ROOM_SIM_000058",
+      "status": "DONE",
+      "worker_slot": "SLOT_03"
+    },
+    {
+      "task_id": "TASK_SIM_000059",
+      "room_id": "ROOM_SIM_000059",
+      "status": "DONE",
+      "worker_slot": "SLOT_04"
+    },
+    {
+      "task_id": "TASK_SIM_000060",
+      "room_id": "ROOM_SIM_000060",
+      "status": "DONE",
+      "worker_slot": "SLOT_05"
+    },
+    {
+      "task_id": "TASK_SIM_000061",
+      "room_id": "ROOM_SIM_000061",
+      "status": "DONE",
+      "worker_slot": "SLOT_06"
+    },
+    {
+      "task_id": "TASK_SIM_000062",
+      "room_id": "ROOM_SIM_000062",
+      "status": "DONE",
+      "worker_slot": "SLOT_07"
+    },
+    {
+      "task_id": "TASK_SIM_000063",
+      "room_id": "ROOM_SIM_000063",
+      "status": "DONE",
+      "worker_slot": "SLOT_08"
+    },
+    {
+      "task_id": "TASK_SIM_000064",
+      "room_id": "ROOM_SIM_000064",
+      "status": "DONE",
+      "worker_slot": "SLOT_01"
+    },
+    {
+      "task_id": "TASK_SIM_000065",
+      "room_id": "ROOM_SIM_000065",
+      "status": "DONE",
+      "worker_slot": "SLOT_02"
+    },
+    {
+      "task_id": "TASK_SIM_000066",
+      "room_id": "ROOM_SIM_000066",
+      "status": "DONE",
+      "worker_slot": "SLOT_03"
+    },
+    {
+      "task_id": "TASK_SIM_000067",
+      "room_id": "ROOM_SIM_000067",
+      "status": "DONE",
+      "worker_slot": "SLOT_04"
+    },
+    {
+      "task_id": "TASK_SIM_000068",
+      "room_id": "ROOM_SIM_000068",
+      "status": "DONE",
+      "worker_slot": "SLOT_05"
+    },
+    {
+      "task_id": "TASK_SIM_000069",
+      "room_id": "ROOM_SIM_000069",
+      "status": "DONE",
+      "worker_slot": "SLOT_06"
+    },
+    {
+      "task_id": "TASK_SIM_000070",
+      "room_id": "ROOM_SIM_000070",
+      "status": "DONE",
+      "worker_slot": "SLOT_07"
+    },
+    {
+      "task_id": "TASK_SIM_000071",
+      "room_id": "ROOM_SIM_000071",
+      "status": "DONE",
+      "worker_slot": "SLOT_08"
+    },
+    {
+      "task_id": "TASK_SIM_000072",
+      "room_id": "ROOM_SIM_000072",
+      "status": "DONE",
+      "worker_slot": "SLOT_01"
+    },
+    {
+      "task_id": "TASK_SIM_000073",
+      "room_id": "ROOM_SIM_000073",
+      "status": "DONE",
+      "worker_slot": "SLOT_02"
+    },
+    {
+      "task_id": "TASK_SIM_000074",
+      "room_id": "ROOM_SIM_000074",
+      "status": "DONE",
+      "worker_slot": "SLOT_03"
+    },
+    {
+      "task_id": "TASK_SIM_000075",
+      "room_id": "ROOM_SIM_000075",
+      "status": "DONE",
+      "worker_slot": "SLOT_04"
+    },
+    {
+      "task_id": "TASK_SIM_000076",
+      "room_id": "ROOM_SIM_000076",
+      "status": "DONE",
+      "worker_slot": "SLOT_05"
+    },
+    {
+      "task_id": "TASK_SIM_000077",
+      "room_id": "ROOM_SIM_000077",
+      "status": "DONE",
+      "worker_slot": "SLOT_06"
+    },
+    {
+      "task_id": "TASK_SIM_000078",
+      "room_id": "ROOM_SIM_000078",
+      "status": "DONE",
+      "worker_slot": "SLOT_07"
+    },
+    {
+      "task_id": "TASK_SIM_000079",
+      "room_id": "ROOM_SIM_000079",
+      "status": "DONE",
+      "worker_slot": "SLOT_08"
+    },
+    {
+      "task_id": "TASK_SIM_000080",
+      "room_id": "ROOM_SIM_000080",
+      "status": "DONE",
+      "worker_slot": "SLOT_01"
+    },
+    {
+      "task_id": "TASK_SIM_000081",
+      "room_id": "ROOM_SIM_000081",
+      "status": "DONE",
+      "worker_slot": "SLOT_02"
+    },
+    {
+      "task_id": "TASK_SIM_000082",
+      "room_id": "ROOM_SIM_000082",
+      "status": "DONE",
+      "worker_slot": "SLOT_03"
+    },
+    {
+      "task_id": "TASK_SIM_000083",
+      "room_id": "ROOM_SIM_000083",
+      "status": "DONE",
+      "worker_slot": "SLOT_04"
+    },
+    {
+      "task_id": "TASK_SIM_000084",
+      "room_id": "ROOM_SIM_000084",
+      "status": "DONE",
+      "worker_slot": "SLOT_05"
+    },
+    {
+      "task_id": "TASK_SIM_000085",
+      "room_id": "ROOM_SIM_000085",
+      "status": "DONE",
+      "worker_slot": "SLOT_06"
+    },
+    {
+      "task_id": "TASK_SIM_000086",
+      "room_id": "ROOM_SIM_000086",
+      "status": "DONE",
+      "worker_slot": "SLOT_07"
+    },
+    {
+      "task_id": "TASK_SIM_000087",
+      "room_id": "ROOM_SIM_000087",
+      "status": "DONE",
+      "worker_slot": "SLOT_08"
+    },
+    {
+      "task_id": "TASK_SIM_000088",
+      "room_id": "ROOM_SIM_000088",
+      "status": "DONE",
+      "worker_slot": "SLOT_01"
+    },
+    {
+      "task_id": "TASK_SIM_000089",
+      "room_id": "ROOM_SIM_000089",
+      "status": "DONE",
+      "worker_slot": "SLOT_02"
+    },
+    {
+      "task_id": "TASK_SIM_000090",
+      "room_id": "ROOM_SIM_000090",
+      "status": "DONE",
+      "worker_slot": "SLOT_03"
+    },
+    {
+      "task_id": "TASK_SIM_000091",
+      "room_id": "ROOM_SIM_000091",
+      "status": "DONE",
+      "worker_slot": "SLOT_04"
+    },
+    {
+      "task_id": "TASK_SIM_000092",
+      "room_id": "ROOM_SIM_000092",
+      "status": "DONE",
+      "worker_slot": "SLOT_05"
+    },
+    {
+      "task_id": "TASK_SIM_000093",
+      "room_id": "ROOM_SIM_000093",
+      "status": "DONE",
+      "worker_slot": "SLOT_06"
+    },
+    {
+      "task_id": "TASK_SIM_000094",
+      "room_id": "ROOM_SIM_000094",
+      "status": "DONE",
+      "worker_slot": "SLOT_07"
+    },
+    {
+      "task_id": "TASK_SIM_000095",
+      "room_id": "ROOM_SIM_000095",
+      "status": "DONE",
+      "worker_slot": "SLOT_08"
+    },
+    {
+      "task_id": "TASK_SIM_000096",
+      "room_id": "ROOM_SIM_000096",
+      "status": "DONE",
+      "worker_slot": "SLOT_01"
+    },
+    {
+      "task_id": "TASK_SIM_000097",
+      "room_id": "ROOM_SIM_000097",
+      "status": "DONE",
+      "worker_slot": "SLOT_02"
+    },
+    {
+      "task_id": "TASK_SIM_000098",
+      "room_id": "ROOM_SIM_000098",
+      "status": "DONE",
+      "worker_slot": "SLOT_03"
+    },
+    {
+      "task_id": "TASK_SIM_000099",
+      "room_id": "ROOM_SIM_000099",
+      "status": "DONE",
+      "worker_slot": "SLOT_04"
+    },
+    {
+      "task_id": "TASK_SIM_000100",
+      "room_id": "ROOM_SIM_000100",
+      "status": "DONE",
+      "worker_slot": "SLOT_05"
+    },
+    {
+      "task_id": "TASK_SIM_000101",
+      "room_id": "ROOM_SIM_000101",
+      "status": "DONE",
+      "worker_slot": "SLOT_06"
+    },
+    {
+      "task_id": "TASK_SIM_000102",
+      "room_id": "ROOM_SIM_000102",
+      "status": "DONE",
+      "worker_slot": "SLOT_07"
+    },
+    {
+      "task_id": "TASK_SIM_000103",
+      "room_id": "ROOM_SIM_000103",
+      "status": "DONE",
+      "worker_slot": "SLOT_08"
+    },
+    {
+      "task_id": "TASK_SIM_000104",
+      "room_id": "ROOM_SIM_000104",
+      "status": "DONE",
+      "worker_slot": "SLOT_01"
+    },
+    {
+      "task_id": "TASK_SIM_000105",
+      "room_id": "ROOM_SIM_000105",
+      "status": "DONE",
+      "worker_slot": "SLOT_02"
+    },
+    {
+      "task_id": "TASK_SIM_000106",
+      "room_id": "ROOM_SIM_000106",
+      "status": "DONE",
+      "worker_slot": "SLOT_03"
+    },
+    {
+      "task_id": "TASK_SIM_000107",
+      "room_id": "ROOM_SIM_000107",
+      "status": "DONE",
+      "worker_slot": "SLOT_04"
+    },
+    {
+      "task_id": "TASK_SIM_000108",
+      "room_id": "ROOM_SIM_000108",
+      "status": "DONE",
+      "worker_slot": "SLOT_05"
+    },
+    {
+      "task_id": "TASK_SIM_000109",
+      "room_id": "ROOM_SIM_000109",
+      "status": "DONE",
+      "worker_slot": "SLOT_06"
+    },
+    {
+      "task_id": "TASK_SIM_000110",
+      "room_id": "ROOM_SIM_000110",
+      "status": "DONE",
+      "worker_slot": "SLOT_07"
+    },
+    {
+      "task_id": "TASK_SIM_000111",
+      "room_id": "ROOM_SIM_000111",
+      "status": "DONE",
+      "worker_slot": "SLOT_08"
+    },
+    {
+      "task_id": "TASK_SIM_000112",
+      "room_id": "ROOM_SIM_000112",
+      "status": "DONE",
+      "worker_slot": "SLOT_01"
+    },
+    {
+      "task_id": "TASK_SIM_000113",
+      "room_id": "ROOM_SIM_000113",
+      "status": "DONE",
+      "worker_slot": "SLOT_02"
+    },
+    {
+      "task_id": "TASK_SIM_000114",
+      "room_id": "ROOM_SIM_000114",
+      "status": "DONE",
+      "worker_slot": "SLOT_03"
+    },
+    {
+      "task_id": "TASK_SIM_000115",
+      "room_id": "ROOM_SIM_000115",
+      "status": "DONE",
+      "worker_slot": "SLOT_04"
+    },
+    {
+      "task_id": "TASK_SIM_000116",
+      "room_id": "ROOM_SIM_000116",
+      "status": "DONE",
+      "worker_slot": "SLOT_05"
+    },
+    {
+      "task_id": "TASK_SIM_000117",
+      "room_id": "ROOM_SIM_000117",
+      "status": "DONE",
+      "worker_slot": "SLOT_06"
+    },
+    {
+      "task_id": "TASK_SIM_000118",
+      "room_id": "ROOM_SIM_000118",
+      "status": "DONE",
+      "worker_slot": "SLOT_07"
+    },
+    {
+      "task_id": "TASK_SIM_000119",
+      "room_id": "ROOM_SIM_000119",
+      "status": "DONE",
+      "worker_slot": "SLOT_08"
+    },
+    {
+      "task_id": "TASK_SIM_000120",
+      "room_id": "ROOM_SIM_000120",
+      "status": "DONE",
+      "worker_slot": "SLOT_01"
+    },
+    {
+      "task_id": "TASK_SIM_000121",
+      "room_id": "ROOM_SIM_000121",
+      "status": "DONE",
+      "worker_slot": "SLOT_02"
+    },
+    {
+      "task_id": "TASK_SIM_000122",
+      "room_id": "ROOM_SIM_000122",
+      "status": "DONE",
+      "worker_slot": "SLOT_03"
+    },
+    {
+      "task_id": "TASK_SIM_000123",
+      "room_id": "ROOM_SIM_000123",
+      "status": "DONE",
+      "worker_slot": "SLOT_04"
+    },
+    {
+      "task_id": "TASK_SIM_000124",
+      "room_id": "ROOM_SIM_000124",
+      "status": "DONE",
+      "worker_slot": "SLOT_05"
+    },
+    {
+      "task_id": "TASK_SIM_000125",
+      "room_id": "ROOM_SIM_000125",
+      "status": "DONE",
+      "worker_slot": "SLOT_06"
+    },
+    {
+      "task_id": "TASK_SIM_000126",
+      "room_id": "ROOM_SIM_000126",
+      "status": "DONE",
+      "worker_slot": "SLOT_07"
+    },
+    {
+      "task_id": "TASK_SIM_000127",
+      "room_id": "ROOM_SIM_000127",
+      "status": "DONE",
+      "worker_slot": "SLOT_08"
+    },
+    {
+      "task_id": "TASK_SIM_000128",
+      "room_id": "ROOM_SIM_000128",
+      "status": "DONE",
+      "worker_slot": "SLOT_01"
+    },
+    {
+      "task_id": "TASK_SIM_000129",
+      "room_id": "ROOM_SIM_000129",
+      "status": "DONE",
+      "worker_slot": "SLOT_02"
+    },
+    {
+      "task_id": "TASK_SIM_000130",
+      "room_id": "ROOM_SIM_000130",
+      "status": "DONE",
+      "worker_slot": "SLOT_03"
+    },
+    {
+      "task_id": "TASK_SIM_000131",
+      "room_id": "ROOM_SIM_000131",
+      "status": "DONE",
+      "worker_slot": "SLOT_04"
+    },
+    {
+      "task_id": "TASK_SIM_000132",
+      "room_id": "ROOM_SIM_000132",
+      "status": "DONE",
+      "worker_slot": "SLOT_05"
+    },
+    {
+      "task_id": "TASK_SIM_000133",
+      "room_id": "ROOM_SIM_000133",
+      "status": "DONE",
+      "worker_slot": "SLOT_06"
+    },
+    {
+      "task_id": "TASK_SIM_000134",
+      "room_id": "ROOM_SIM_000134",
+      "status": "DONE",
+      "worker_slot": "SLOT_07"
+    },
+    {
+      "task_id": "TASK_SIM_000135",
+      "room_id": "ROOM_SIM_000135",
+      "status": "DONE",
+      "worker_slot": "SLOT_08"
+    },
+    {
+      "task_id": "TASK_SIM_000136",
+      "room_id": "ROOM_SIM_000136",
+      "status": "DONE",
+      "worker_slot": "SLOT_01"
+    },
+    {
+      "task_id": "TASK_SIM_000137",
+      "room_id": "ROOM_SIM_000137",
+      "status": "DONE",
+      "worker_slot": "SLOT_02"
+    },
+    {
+      "task_id": "TASK_SIM_000138",
+      "room_id": "ROOM_SIM_000138",
+      "status": "DONE",
+      "worker_slot": "SLOT_03"
+    },
+    {
+      "task_id": "TASK_SIM_000139",
+      "room_id": "ROOM_SIM_000139",
+      "status": "DONE",
+      "worker_slot": "SLOT_04"
+    },
+    {
+      "task_id": "TASK_SIM_000140",
+      "room_id": "ROOM_SIM_000140",
+      "status": "DONE",
+      "worker_slot": "SLOT_05"
+    },
+    {
+      "task_id": "TASK_SIM_000141",
+      "room_id": "ROOM_SIM_000141",
+      "status": "DONE",
+      "worker_slot": "SLOT_06"
+    },
+    {
+      "task_id": "TASK_SIM_000142",
+      "room_id": "ROOM_SIM_000142",
+      "status": "DONE",
+      "worker_slot": "SLOT_07"
+    },
+    {
+      "task_id": "TASK_SIM_000143",
+      "room_id": "ROOM_SIM_000143",
+      "status": "DONE",
+      "worker_slot": "SLOT_08"
+    },
+    {
+      "task_id": "TASK_SIM_000144",
+      "room_id": "ROOM_SIM_000144",
+      "status": "DONE",
+      "worker_slot": "SLOT_01"
+    },
+    {
+      "task_id": "TASK_SIM_000145",
+      "room_id": "ROOM_SIM_000145",
+      "status": "DONE",
+      "worker_slot": "SLOT_02"
+    },
+    {
+      "task_id": "TASK_SIM_000146",
+      "room_id": "ROOM_SIM_000146",
+      "status": "DONE",
+      "worker_slot": "SLOT_03"
+    },
+    {
+      "task_id": "TASK_SIM_000147",
+      "room_id": "ROOM_SIM_000147",
+      "status": "DONE",
+      "worker_slot": "SLOT_04"
+    },
+    {
+      "task_id": "TASK_SIM_000148",
+      "room_id": "ROOM_SIM_000148",
+      "status": "DONE",
+      "worker_slot": "SLOT_05"
+    },
+    {
+      "task_id": "TASK_SIM_000149",
+      "room_id": "ROOM_SIM_000149",
+      "status": "DONE",
+      "worker_slot": "SLOT_06"
+    },
+    {
+      "task_id": "TASK_SIM_000150",
+      "room_id": "ROOM_SIM_000150",
+      "status": "DONE",
+      "worker_slot": "SLOT_07"
+    },
+    {
+      "task_id": "TASK_SIM_000151",
+      "room_id": "ROOM_SIM_000151",
+      "status": "DONE",
+      "worker_slot": "SLOT_08"
+    },
+    {
+      "task_id": "TASK_SIM_000152",
+      "room_id": "ROOM_SIM_000152",
+      "status": "DONE",
+      "worker_slot": "SLOT_01"
+    },
+    {
+      "task_id": "TASK_SIM_000153",
+      "room_id": "ROOM_SIM_000153",
+      "status": "DONE",
+      "worker_slot": "SLOT_02"
+    },
+    {
+      "task_id": "TASK_SIM_000154",
+      "room_id": "ROOM_SIM_000154",
+      "status": "DONE",
+      "worker_slot": "SLOT_03"
+    },
+    {
+      "task_id": "TASK_SIM_000155",
+      "room_id": "ROOM_SIM_000155",
+      "status": "DONE",
+      "worker_slot": "SLOT_04"
+    },
+    {
+      "task_id": "TASK_SIM_000156",
+      "room_id": "ROOM_SIM_000156",
+      "status": "DONE",
+      "worker_slot": "SLOT_05"
+    },
+    {
+      "task_id": "TASK_SIM_000157",
+      "room_id": "ROOM_SIM_000157",
+      "status": "DONE",
+      "worker_slot": "SLOT_06"
+    },
+    {
+      "task_id": "TASK_SIM_000158",
+      "room_id": "ROOM_SIM_000158",
+      "status": "DONE",
+      "worker_slot": "SLOT_07"
+    },
+    {
+      "task_id": "TASK_SIM_000159",
+      "room_id": "ROOM_SIM_000159",
+      "status": "DONE",
+      "worker_slot": "SLOT_08"
+    },
+    {
+      "task_id": "TASK_SIM_000160",
+      "room_id": "ROOM_SIM_000160",
+      "status": "DONE",
+      "worker_slot": "SLOT_01"
+    },
+    {
+      "task_id": "TASK_SIM_000161",
+      "room_id": "ROOM_SIM_000161",
+      "status": "DONE",
+      "worker_slot": "SLOT_02"
+    },
+    {
+      "task_id": "TASK_SIM_000162",
+      "room_id": "ROOM_SIM_000162",
+      "status": "DONE",
+      "worker_slot": "SLOT_03"
+    },
+    {
+      "task_id": "TASK_SIM_000163",
+      "room_id": "ROOM_SIM_000163",
+      "status": "DONE",
+      "worker_slot": "SLOT_04"
+    },
+    {
+      "task_id": "TASK_SIM_000164",
+      "room_id": "ROOM_SIM_000164",
+      "status": "DONE",
+      "worker_slot": "SLOT_05"
+    },
+    {
+      "task_id": "TASK_SIM_000165",
+      "room_id": "ROOM_SIM_000165",
+      "status": "DONE",
+      "worker_slot": "SLOT_06"
+    },
+    {
+      "task_id": "TASK_SIM_000166",
+      "room_id": "ROOM_SIM_000166",
+      "status": "DONE",
+      "worker_slot": "SLOT_07"
+    },
+    {
+      "task_id": "TASK_SIM_000167",
+      "room_id": "ROOM_SIM_000167",
+      "status": "DONE",
+      "worker_slot": "SLOT_08"
+    },
+    {
+      "task_id": "TASK_SIM_000168",
+      "room_id": "ROOM_SIM_000168",
+      "status": "DONE",
+      "worker_slot": "SLOT_01"
+    },
+    {
+      "task_id": "TASK_SIM_000169",
+      "room_id": "ROOM_SIM_000169",
+      "status": "DONE",
+      "worker_slot": "SLOT_02"
+    },
+    {
+      "task_id": "TASK_SIM_000170",
+      "room_id": "ROOM_SIM_000170",
+      "status": "DONE",
+      "worker_slot": "SLOT_03"
+    },
+    {
+      "task_id": "TASK_SIM_000171",
+      "room_id": "ROOM_SIM_000171",
+      "status": "DONE",
+      "worker_slot": "SLOT_04"
+    },
+    {
+      "task_id": "TASK_SIM_000172",
+      "room_id": "ROOM_SIM_000172",
+      "status": "DONE",
+      "worker_slot": "SLOT_05"
+    },
+    {
+      "task_id": "TASK_SIM_000173",
+      "room_id": "ROOM_SIM_000173",
+      "status": "DONE",
+      "worker_slot": "SLOT_06"
+    },
+    {
+      "task_id": "TASK_SIM_000174",
+      "room_id": "ROOM_SIM_000174",
+      "status": "DONE",
+      "worker_slot": "SLOT_07"
+    },
+    {
+      "task_id": "TASK_SIM_000175",
+      "room_id": "ROOM_SIM_000175",
+      "status": "DONE",
+      "worker_slot": "SLOT_08"
+    },
+    {
+      "task_id": "TASK_SIM_000176",
+      "room_id": "ROOM_SIM_000176",
+      "status": "DONE",
+      "worker_slot": "SLOT_01"
+    },
+    {
+      "task_id": "TASK_SIM_000177",
+      "room_id": "ROOM_SIM_000177",
+      "status": "DONE",
+      "worker_slot": "SLOT_02"
+    },
+    {
+      "task_id": "TASK_SIM_000178",
+      "room_id": "ROOM_SIM_000178",
+      "status": "DONE",
+      "worker_slot": "SLOT_03"
+    },
+    {
+      "task_id": "TASK_SIM_000179",
+      "room_id": "ROOM_SIM_000179",
+      "status": "DONE",
+      "worker_slot": "SLOT_04"
+    },
+    {
+      "task_id": "TASK_SIM_000180",
+      "room_id": "ROOM_SIM_000180",
+      "status": "DONE",
+      "worker_slot": "SLOT_05"
+    },
+    {
+      "task_id": "TASK_SIM_000181",
+      "room_id": "ROOM_SIM_000181",
+      "status": "DONE",
+      "worker_slot": "SLOT_06"
+    },
+    {
+      "task_id": "TASK_SIM_000182",
+      "room_id": "ROOM_SIM_000182",
+      "status": "DONE",
+      "worker_slot": "SLOT_07"
+    },
+    {
+      "task_id": "TASK_SIM_000183",
+      "room_id": "ROOM_SIM_000183",
+      "status": "DONE",
+      "worker_slot": "SLOT_08"
+    },
+    {
+      "task_id": "TASK_SIM_000184",
+      "room_id": "ROOM_SIM_000184",
+      "status": "DONE",
+      "worker_slot": "SLOT_01"
+    },
+    {
+      "task_id": "TASK_SIM_000185",
+      "room_id": "ROOM_SIM_000185",
+      "status": "DONE",
+      "worker_slot": "SLOT_02"
+    },
+    {
+      "task_id": "TASK_SIM_000186",
+      "room_id": "ROOM_SIM_000186",
+      "status": "DONE",
+      "worker_slot": "SLOT_03"
+    },
+    {
+      "task_id": "TASK_SIM_000187",
+      "room_id": "ROOM_SIM_000187",
+      "status": "DONE",
+      "worker_slot": "SLOT_04"
+    },
+    {
+      "task_id": "TASK_SIM_000188",
+      "room_id": "ROOM_SIM_000188",
+      "status": "DONE",
+      "worker_slot": "SLOT_05"
+    },
+    {
+      "task_id": "TASK_SIM_000189",
+      "room_id": "ROOM_SIM_000189",
+      "status": "DONE",
+      "worker_slot": "SLOT_06"
+    },
+    {
+      "task_id": "TASK_SIM_000190",
+      "room_id": "ROOM_SIM_000190",
+      "status": "DONE",
+      "worker_slot": "SLOT_07"
+    },
+    {
+      "task_id": "TASK_SIM_000191",
+      "room_id": "ROOM_SIM_000191",
+      "status": "DONE",
+      "worker_slot": "SLOT_08"
+    },
+    {
+      "task_id": "TASK_SIM_000192",
+      "room_id": "ROOM_SIM_000192",
+      "status": "DONE",
+      "worker_slot": "SLOT_01"
+    },
+    {
+      "task_id": "TASK_SIM_000193",
+      "room_id": "ROOM_SIM_000193",
+      "status": "DONE",
+      "worker_slot": "SLOT_02"
+    },
+    {
+      "task_id": "TASK_SIM_000194",
+      "room_id": "ROOM_SIM_000194",
+      "status": "DONE",
+      "worker_slot": "SLOT_03"
+    },
+    {
+      "task_id": "TASK_SIM_000195",
+      "room_id": "ROOM_SIM_000195",
+      "status": "DONE",
+      "worker_slot": "SLOT_04"
+    },
+    {
+      "task_id": "TASK_SIM_000196",
+      "room_id": "ROOM_SIM_000196",
+      "status": "DONE",
+      "worker_slot": "SLOT_05"
+    },
+    {
+      "task_id": "TASK_SIM_000197",
+      "room_id": "ROOM_SIM_000197",
+      "status": "DONE",
+      "worker_slot": "SLOT_06"
+    },
+    {
+      "task_id": "TASK_SIM_000198",
+      "room_id": "ROOM_SIM_000198",
+      "status": "DONE",
+      "worker_slot": "SLOT_07"
+    },
+    {
+      "task_id": "TASK_SIM_000199",
+      "room_id": "ROOM_SIM_000199",
+      "status": "DONE",
+      "worker_slot": "SLOT_08"
+    },
+    {
+      "task_id": "TASK_SIM_000200",
+      "room_id": "ROOM_SIM_000200",
+      "status": "DONE",
+      "worker_slot": "SLOT_01"
+    },
+    {
+      "task_id": "TASK_SIM_000201",
+      "room_id": "ROOM_SIM_000201",
+      "status": "DONE",
+      "worker_slot": "SLOT_02"
+    },
+    {
+      "task_id": "TASK_SIM_000202",
+      "room_id": "ROOM_SIM_000202",
+      "status": "DONE",
+      "worker_slot": "SLOT_03"
+    },
+    {
+      "task_id": "TASK_SIM_000203",
+      "room_id": "ROOM_SIM_000203",
+      "status": "DONE",
+      "worker_slot": "SLOT_04"
+    },
+    {
+      "task_id": "TASK_SIM_000204",
+      "room_id": "ROOM_SIM_000204",
+      "status": "DONE",
+      "worker_slot": "SLOT_05"
+    },
+    {
+      "task_id": "TASK_SIM_000205",
+      "room_id": "ROOM_SIM_000205",
+      "status": "DONE",
+      "worker_slot": "SLOT_06"
+    },
+    {
+      "task_id": "TASK_SIM_000206",
+      "room_id": "ROOM_SIM_000206",
+      "status": "DONE",
+      "worker_slot": "SLOT_07"
+    },
+    {
+      "task_id": "TASK_SIM_000207",
+      "room_id": "ROOM_SIM_000207",
+      "status": "DONE",
+      "worker_slot": "SLOT_08"
+    },
+    {
+      "task_id": "TASK_SIM_000208",
+      "room_id": "ROOM_SIM_000208",
+      "status": "DONE",
+      "worker_slot": "SLOT_01"
+    },
+    {
+      "task_id": "TASK_SIM_000209",
+      "room_id": "ROOM_SIM_000209",
+      "status": "DONE",
+      "worker_slot": "SLOT_02"
+    },
+    {
+      "task_id": "TASK_SIM_000210",
+      "room_id": "ROOM_SIM_000210",
+      "status": "DONE",
+      "worker_slot": "SLOT_03"
+    },
+    {
+      "task_id": "TASK_SIM_000211",
+      "room_id": "ROOM_SIM_000211",
+      "status": "DONE",
+      "worker_slot": "SLOT_04"
+    },
+    {
+      "task_id": "TASK_SIM_000212",
+      "room_id": "ROOM_SIM_000212",
+      "status": "DONE",
+      "worker_slot": "SLOT_05"
+    },
+    {
+      "task_id": "TASK_SIM_000213",
+      "room_id": "ROOM_SIM_000213",
+      "status": "DONE",
+      "worker_slot": "SLOT_06"
+    },
+    {
+      "task_id": "TASK_SIM_000214",
+      "room_id": "ROOM_SIM_000214",
+      "status": "DONE",
+      "worker_slot": "SLOT_07"
+    },
+    {
+      "task_id": "TASK_SIM_000215",
+      "room_id": "ROOM_SIM_000215",
+      "status": "DONE",
+      "worker_slot": "SLOT_08"
+    },
+    {
+      "task_id": "TASK_SIM_000216",
+      "room_id": "ROOM_SIM_000216",
+      "status": "DONE",
+      "worker_slot": "SLOT_01"
+    },
+    {
+      "task_id": "TASK_SIM_000217",
+      "room_id": "ROOM_SIM_000217",
+      "status": "DONE",
+      "worker_slot": "SLOT_02"
+    },
+    {
+      "task_id": "TASK_SIM_000218",
+      "room_id": "ROOM_SIM_000218",
+      "status": "DONE",
+      "worker_slot": "SLOT_03"
+    },
+    {
+      "task_id": "TASK_SIM_000219",
+      "room_id": "ROOM_SIM_000219",
+      "status": "DONE",
+      "worker_slot": "SLOT_04"
+    },
+    {
+      "task_id": "TASK_SIM_000220",
+      "room_id": "ROOM_SIM_000220",
+      "status": "DONE",
+      "worker_slot": "SLOT_05"
+    },
+    {
+      "task_id": "TASK_SIM_000221",
+      "room_id": "ROOM_SIM_000221",
+      "status": "DONE",
+      "worker_slot": "SLOT_06"
+    },
+    {
+      "task_id": "TASK_SIM_000222",
+      "room_id": "ROOM_SIM_000222",
+      "status": "DONE",
+      "worker_slot": "SLOT_07"
+    },
+    {
+      "task_id": "TASK_SIM_000223",
+      "room_id": "ROOM_SIM_000223",
+      "status": "DONE",
+      "worker_slot": "SLOT_08"
+    },
+    {
+      "task_id": "TASK_SIM_000224",
+      "room_id": "ROOM_SIM_000224",
+      "status": "DONE",
+      "worker_slot": "SLOT_01"
+    },
+    {
+      "task_id": "TASK_SIM_000225",
+      "room_id": "ROOM_SIM_000225",
+      "status": "DONE",
+      "worker_slot": "SLOT_02"
+    },
+    {
+      "task_id": "TASK_SIM_000226",
+      "room_id": "ROOM_SIM_000226",
+      "status": "DONE",
+      "worker_slot": "SLOT_03"
+    },
+    {
+      "task_id": "TASK_SIM_000227",
+      "room_id": "ROOM_SIM_000227",
+      "status": "DONE",
+      "worker_slot": "SLOT_04"
+    },
+    {
+      "task_id": "TASK_SIM_000228",
+      "room_id": "ROOM_SIM_000228",
+      "status": "DONE",
+      "worker_slot": "SLOT_05"
+    },
+    {
+      "task_id": "TASK_SIM_000229",
+      "room_id": "ROOM_SIM_000229",
+      "status": "DONE",
+      "worker_slot": "SLOT_06"
+    },
+    {
+      "task_id": "TASK_SIM_000230",
+      "room_id": "ROOM_SIM_000230",
+      "status": "DONE",
+      "worker_slot": "SLOT_07"
+    },
+    {
+      "task_id": "TASK_SIM_000231",
+      "room_id": "ROOM_SIM_000231",
+      "status": "DONE",
+      "worker_slot": "SLOT_08"
+    },
+    {
+      "task_id": "TASK_SIM_000232",
+      "room_id": "ROOM_SIM_000232",
+      "status": "DONE",
+      "worker_slot": "SLOT_01"
+    },
+    {
+      "task_id": "TASK_SIM_000233",
+      "room_id": "ROOM_SIM_000233",
+      "status": "DONE",
+      "worker_slot": "SLOT_02"
+    },
+    {
+      "task_id": "TASK_SIM_000234",
+      "room_id": "ROOM_SIM_000234",
+      "status": "DONE",
+      "worker_slot": "SLOT_03"
+    },
+    {
+      "task_id": "TASK_SIM_000235",
+      "room_id": "ROOM_SIM_000235",
+      "status": "DONE",
+      "worker_slot": "SLOT_04"
+    },
+    {
+      "task_id": "TASK_SIM_000236",
+      "room_id": "ROOM_SIM_000236",
+      "status": "DONE",
+      "worker_slot": "SLOT_05"
+    },
+    {
+      "task_id": "TASK_SIM_000237",
+      "room_id": "ROOM_SIM_000237",
+      "status": "DONE",
+      "worker_slot": "SLOT_06"
+    },
+    {
+      "task_id": "TASK_SIM_000238",
+      "room_id": "ROOM_SIM_000238",
+      "status": "DONE",
+      "worker_slot": "SLOT_07"
+    },
+    {
+      "task_id": "TASK_SIM_000239",
+      "room_id": "ROOM_SIM_000239",
+      "status": "DONE",
+      "worker_slot": "SLOT_08"
+    },
+    {
+      "task_id": "TASK_SIM_000240",
+      "room_id": "ROOM_SIM_000240",
+      "status": "DONE",
+      "worker_slot": "SLOT_01"
+    },
+    {
+      "task_id": "TASK_SIM_000241",
+      "room_id": "ROOM_SIM_000241",
+      "status": "DONE",
+      "worker_slot": "SLOT_02"
+    },
+    {
+      "task_id": "TASK_SIM_000242",
+      "room_id": "ROOM_SIM_000242",
+      "status": "DONE",
+      "worker_slot": "SLOT_03"
+    },
+    {
+      "task_id": "TASK_SIM_000243",
+      "room_id": "ROOM_SIM_000243",
+      "status": "DONE",
+      "worker_slot": "SLOT_04"
+    },
+    {
+      "task_id": "TASK_SIM_000244",
+      "room_id": "ROOM_SIM_000244",
+      "status": "DONE",
+      "worker_slot": "SLOT_05"
+    },
+    {
+      "task_id": "TASK_SIM_000245",
+      "room_id": "ROOM_SIM_000245",
+      "status": "DONE",
+      "worker_slot": "SLOT_06"
+    },
+    {
+      "task_id": "TASK_SIM_000246",
+      "room_id": "ROOM_SIM_000246",
+      "status": "DONE",
+      "worker_slot": "SLOT_07"
+    },
+    {
+      "task_id": "TASK_SIM_000247",
+      "room_id": "ROOM_SIM_000247",
+      "status": "DONE",
+      "worker_slot": "SLOT_08"
+    },
+    {
+      "task_id": "TASK_SIM_000248",
+      "room_id": "ROOM_SIM_000248",
+      "status": "DONE",
+      "worker_slot": "SLOT_01"
+    },
+    {
+      "task_id": "TASK_SIM_000249",
+      "room_id": "ROOM_SIM_000249",
+      "status": "DONE",
+      "worker_slot": "SLOT_02"
+    },
+    {
+      "task_id": "TASK_SIM_000250",
+      "room_id": "ROOM_SIM_000250",
+      "status": "DONE",
+      "worker_slot": "SLOT_03"
+    },
+    {
+      "task_id": "TASK_SIM_000251",
+      "room_id": "ROOM_SIM_000251",
+      "status": "DONE",
+      "worker_slot": "SLOT_04"
+    },
+    {
+      "task_id": "TASK_SIM_000252",
+      "room_id": "ROOM_SIM_000252",
+      "status": "DONE",
+      "worker_slot": "SLOT_05"
+    },
+    {
+      "task_id": "TASK_SIM_000253",
+      "room_id": "ROOM_SIM_000253",
+      "status": "DONE",
+      "worker_slot": "SLOT_06"
+    },
+    {
+      "task_id": "TASK_SIM_000254",
+      "room_id": "ROOM_SIM_000254",
+      "status": "DONE",
+      "worker_slot": "SLOT_07"
+    },
+    {
+      "task_id": "TASK_SIM_000255",
+      "room_id": "ROOM_SIM_000255",
+      "status": "DONE",
+      "worker_slot": "SLOT_08"
+    },
+    {
+      "task_id": "TASK_SIM_000256",
+      "room_id": "ROOM_SIM_000256",
+      "status": "DONE",
+      "worker_slot": "SLOT_01"
+    },
+    {
+      "task_id": "TASK_SIM_000257",
+      "room_id": "ROOM_SIM_000257",
+      "status": "DONE",
+      "worker_slot": "SLOT_02"
+    },
+    {
+      "task_id": "TASK_SIM_000258",
+      "room_id": "ROOM_SIM_000258",
+      "status": "DONE",
+      "worker_slot": "SLOT_03"
+    },
+    {
+      "task_id": "TASK_SIM_000259",
+      "room_id": "ROOM_SIM_000259",
+      "status": "DONE",
+      "worker_slot": "SLOT_04"
+    },
+    {
+      "task_id": "TASK_SIM_000260",
+      "room_id": "ROOM_SIM_000260",
+      "status": "DONE",
+      "worker_slot": "SLOT_05"
+    },
+    {
+      "task_id": "TASK_SIM_000261",
+      "room_id": "ROOM_SIM_000261",
+      "status": "DONE",
+      "worker_slot": "SLOT_06"
+    },
+    {
+      "task_id": "TASK_SIM_000262",
+      "room_id": "ROOM_SIM_000262",
+      "status": "DONE",
+      "worker_slot": "SLOT_07"
+    },
+    {
+      "task_id": "TASK_SIM_000263",
+      "room_id": "ROOM_SIM_000263",
+      "status": "DONE",
+      "worker_slot": "SLOT_08"
+    },
+    {
+      "task_id": "TASK_SIM_000264",
+      "room_id": "ROOM_SIM_000264",
+      "status": "DONE",
+      "worker_slot": "SLOT_01"
+    },
+    {
+      "task_id": "TASK_SIM_000265",
+      "room_id": "ROOM_SIM_000265",
+      "status": "DONE",
+      "worker_slot": "SLOT_02"
+    },
+    {
+      "task_id": "TASK_SIM_000266",
+      "room_id": "ROOM_SIM_000266",
+      "status": "DONE",
+      "worker_slot": "SLOT_03"
+    },
+    {
+      "task_id": "TASK_SIM_000267",
+      "room_id": "ROOM_SIM_000267",
+      "status": "DONE",
+      "worker_slot": "SLOT_04"
+    },
+    {
+      "task_id": "TASK_SIM_000268",
+      "room_id": "ROOM_SIM_000268",
+      "status": "DONE",
+      "worker_slot": "SLOT_05"
+    },
+    {
+      "task_id": "TASK_SIM_000269",
+      "room_id": "ROOM_SIM_000269",
+      "status": "DONE",
+      "worker_slot": "SLOT_06"
+    },
+    {
+      "task_id": "TASK_SIM_000270",
+      "room_id": "ROOM_SIM_000270",
+      "status": "DONE",
+      "worker_slot": "SLOT_07"
+    },
+    {
+      "task_id": "TASK_SIM_000271",
+      "room_id": "ROOM_SIM_000271",
+      "status": "DONE",
+      "worker_slot": "SLOT_08"
+    },
+    {
+      "task_id": "TASK_SIM_000272",
+      "room_id": "ROOM_SIM_000272",
+      "status": "DONE",
+      "worker_slot": "SLOT_01"
+    },
+    {
+      "task_id": "TASK_SIM_000273",
+      "room_id": "ROOM_SIM_000273",
+      "status": "DONE",
+      "worker_slot": "SLOT_02"
+    },
+    {
+      "task_id": "TASK_SIM_000274",
+      "room_id": "ROOM_SIM_000274",
+      "status": "DONE",
+      "worker_slot": "SLOT_03"
+    },
+    {
+      "task_id": "TASK_SIM_000275",
+      "room_id": "ROOM_SIM_000275",
+      "status": "DONE",
+      "worker_slot": "SLOT_04"
+    },
+    {
+      "task_id": "TASK_SIM_000276",
+      "room_id": "ROOM_SIM_000276",
+      "status": "DONE",
+      "worker_slot": "SLOT_05"
+    },
+    {
+      "task_id": "TASK_SIM_000277",
+      "room_id": "ROOM_SIM_000277",
+      "status": "DONE",
+      "worker_slot": "SLOT_06"
+    },
+    {
+      "task_id": "TASK_SIM_000278",
+      "room_id": "ROOM_SIM_000278",
+      "status": "DONE",
+      "worker_slot": "SLOT_07"
+    },
+    {
+      "task_id": "TASK_SIM_000279",
+      "room_id": "ROOM_SIM_000279",
+      "status": "DONE",
+      "worker_slot": "SLOT_08"
+    },
+    {
+      "task_id": "TASK_SIM_000280",
+      "room_id": "ROOM_SIM_000280",
+      "status": "DONE",
+      "worker_slot": "SLOT_01"
+    },
+    {
+      "task_id": "TASK_SIM_000281",
+      "room_id": "ROOM_SIM_000281",
+      "status": "DONE",
+      "worker_slot": "SLOT_02"
+    },
+    {
+      "task_id": "TASK_SIM_000282",
+      "room_id": "ROOM_SIM_000282",
+      "status": "DONE",
+      "worker_slot": "SLOT_03"
+    },
+    {
+      "task_id": "TASK_SIM_000283",
+      "room_id": "ROOM_SIM_000283",
+      "status": "DONE",
+      "worker_slot": "SLOT_04"
+    },
+    {
+      "task_id": "TASK_SIM_000284",
+      "room_id": "ROOM_SIM_000284",
+      "status": "DONE",
+      "worker_slot": "SLOT_05"
+    },
+    {
+      "task_id": "TASK_SIM_000285",
+      "room_id": "ROOM_SIM_000285",
+      "status": "DONE",
+      "worker_slot": "SLOT_06"
+    },
+    {
+      "task_id": "TASK_SIM_000286",
+      "room_id": "ROOM_SIM_000286",
+      "status": "DONE",
+      "worker_slot": "SLOT_07"
+    },
+    {
+      "task_id": "TASK_SIM_000287",
+      "room_id": "ROOM_SIM_000287",
+      "status": "DONE",
+      "worker_slot": "SLOT_08"
+    },
+    {
+      "task_id": "TASK_SIM_000288",
+      "room_id": "ROOM_SIM_000288",
+      "status": "DONE",
+      "worker_slot": "SLOT_01"
+    },
+    {
+      "task_id": "TASK_SIM_000289",
+      "room_id": "ROOM_SIM_000289",
+      "status": "DONE",
+      "worker_slot": "SLOT_02"
+    },
+    {
+      "task_id": "TASK_SIM_000290",
+      "room_id": "ROOM_SIM_000290",
+      "status": "DONE",
+      "worker_slot": "SLOT_03"
+    },
+    {
+      "task_id": "TASK_SIM_000291",
+      "room_id": "ROOM_SIM_000291",
+      "status": "DONE",
+      "worker_slot": "SLOT_04"
+    },
+    {
+      "task_id": "TASK_SIM_000292",
+      "room_id": "ROOM_SIM_000292",
+      "status": "DONE",
+      "worker_slot": "SLOT_05"
+    },
+    {
+      "task_id": "TASK_SIM_000293",
+      "room_id": "ROOM_SIM_000293",
+      "status": "DONE",
+      "worker_slot": "SLOT_06"
+    },
+    {
+      "task_id": "TASK_SIM_000294",
+      "room_id": "ROOM_SIM_000294",
+      "status": "DONE",
+      "worker_slot": "SLOT_07"
+    },
+    {
+      "task_id": "TASK_SIM_000295",
+      "room_id": "ROOM_SIM_000295",
+      "status": "DONE",
+      "worker_slot": "SLOT_08"
+    },
+    {
+      "task_id": "TASK_SIM_000296",
+      "room_id": "ROOM_SIM_000296",
+      "status": "DONE",
+      "worker_slot": "SLOT_01"
+    },
+    {
+      "task_id": "TASK_SIM_000297",
+      "room_id": "ROOM_SIM_000297",
+      "status": "DONE",
+      "worker_slot": "SLOT_02"
+    },
+    {
+      "task_id": "TASK_SIM_000298",
+      "room_id": "ROOM_SIM_000298",
+      "status": "DONE",
+      "worker_slot": "SLOT_03"
+    },
+    {
+      "task_id": "TASK_SIM_000299",
+      "room_id": "ROOM_SIM_000299",
+      "status": "DONE",
+      "worker_slot": "SLOT_04"
+    },
+    {
+      "task_id": "TASK_SIM_000300",
+      "room_id": "ROOM_SIM_000300",
+      "status": "DONE",
+      "worker_slot": "SLOT_05"
+    }
+  ],
+  "worker_slots": 8,
+  "evidence": [
+    {
+      "evidence_id": "EV_SIM_000001",
+      "task_id": "TASK_SIM_000001",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_audio_rms",
+      "confidence": 0.86,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000002",
+      "task_id": "TASK_SIM_000002",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_motion_score",
+      "confidence": 0.87,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000003",
+      "task_id": "TASK_SIM_000003",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_scene_change",
+      "confidence": 0.88,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000004",
+      "task_id": "TASK_SIM_000004",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_text_density",
+      "confidence": 0.89,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000005",
+      "task_id": "TASK_SIM_000005",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_boundary_candidate",
+      "confidence": 0.9,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000006",
+      "task_id": "TASK_SIM_000006",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_semantic_hint",
+      "confidence": 0.9099999999999999,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000007",
+      "task_id": "TASK_SIM_000007",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_keyframe_signal",
+      "confidence": 0.9199999999999999,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000008",
+      "task_id": "TASK_SIM_000008",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_audio_rms",
+      "confidence": 0.9299999999999999,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000009",
+      "task_id": "TASK_SIM_000009",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_motion_score",
+      "confidence": 0.94,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000010",
+      "task_id": "TASK_SIM_000010",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_scene_change",
+      "confidence": 0.95,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000011",
+      "task_id": "TASK_SIM_000011",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_text_density",
+      "confidence": 0.96,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000012",
+      "task_id": "TASK_SIM_000012",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_boundary_candidate",
+      "confidence": 0.97,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000013",
+      "task_id": "TASK_SIM_000013",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_semantic_hint",
+      "confidence": 0.98,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000014",
+      "task_id": "TASK_SIM_000014",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_keyframe_signal",
+      "confidence": 0.99,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000015",
+      "task_id": "TASK_SIM_000015",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_audio_rms",
+      "confidence": 0.85,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000016",
+      "task_id": "TASK_SIM_000016",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_motion_score",
+      "confidence": 0.86,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000017",
+      "task_id": "TASK_SIM_000017",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_scene_change",
+      "confidence": 0.87,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000018",
+      "task_id": "TASK_SIM_000018",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_text_density",
+      "confidence": 0.88,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000019",
+      "task_id": "TASK_SIM_000019",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_boundary_candidate",
+      "confidence": 0.89,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000020",
+      "task_id": "TASK_SIM_000020",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_semantic_hint",
+      "confidence": 0.9,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000021",
+      "task_id": "TASK_SIM_000021",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_keyframe_signal",
+      "confidence": 0.9099999999999999,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000022",
+      "task_id": "TASK_SIM_000022",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_audio_rms",
+      "confidence": 0.9199999999999999,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000023",
+      "task_id": "TASK_SIM_000023",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_motion_score",
+      "confidence": 0.9299999999999999,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000024",
+      "task_id": "TASK_SIM_000024",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_scene_change",
+      "confidence": 0.94,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000025",
+      "task_id": "TASK_SIM_000025",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_text_density",
+      "confidence": 0.95,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000026",
+      "task_id": "TASK_SIM_000026",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_boundary_candidate",
+      "confidence": 0.96,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000027",
+      "task_id": "TASK_SIM_000027",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_semantic_hint",
+      "confidence": 0.97,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000028",
+      "task_id": "TASK_SIM_000028",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_keyframe_signal",
+      "confidence": 0.98,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000029",
+      "task_id": "TASK_SIM_000029",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_audio_rms",
+      "confidence": 0.99,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000030",
+      "task_id": "TASK_SIM_000030",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_motion_score",
+      "confidence": 0.85,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000031",
+      "task_id": "TASK_SIM_000031",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_scene_change",
+      "confidence": 0.86,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000032",
+      "task_id": "TASK_SIM_000032",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_text_density",
+      "confidence": 0.87,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000033",
+      "task_id": "TASK_SIM_000033",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_boundary_candidate",
+      "confidence": 0.88,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000034",
+      "task_id": "TASK_SIM_000034",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_semantic_hint",
+      "confidence": 0.89,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000035",
+      "task_id": "TASK_SIM_000035",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_keyframe_signal",
+      "confidence": 0.9,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000036",
+      "task_id": "TASK_SIM_000036",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_audio_rms",
+      "confidence": 0.9099999999999999,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000037",
+      "task_id": "TASK_SIM_000037",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_motion_score",
+      "confidence": 0.9199999999999999,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000038",
+      "task_id": "TASK_SIM_000038",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_scene_change",
+      "confidence": 0.9299999999999999,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000039",
+      "task_id": "TASK_SIM_000039",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_text_density",
+      "confidence": 0.94,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000040",
+      "task_id": "TASK_SIM_000040",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_boundary_candidate",
+      "confidence": 0.95,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000041",
+      "task_id": "TASK_SIM_000041",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_semantic_hint",
+      "confidence": 0.96,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000042",
+      "task_id": "TASK_SIM_000042",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_keyframe_signal",
+      "confidence": 0.97,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000043",
+      "task_id": "TASK_SIM_000043",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_audio_rms",
+      "confidence": 0.98,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000044",
+      "task_id": "TASK_SIM_000044",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_motion_score",
+      "confidence": 0.99,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000045",
+      "task_id": "TASK_SIM_000045",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_scene_change",
+      "confidence": 0.85,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000046",
+      "task_id": "TASK_SIM_000046",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_text_density",
+      "confidence": 0.86,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000047",
+      "task_id": "TASK_SIM_000047",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_boundary_candidate",
+      "confidence": 0.87,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000048",
+      "task_id": "TASK_SIM_000048",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_semantic_hint",
+      "confidence": 0.88,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000049",
+      "task_id": "TASK_SIM_000049",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_keyframe_signal",
+      "confidence": 0.89,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000050",
+      "task_id": "TASK_SIM_000050",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_audio_rms",
+      "confidence": 0.9,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000051",
+      "task_id": "TASK_SIM_000051",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_motion_score",
+      "confidence": 0.9099999999999999,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000052",
+      "task_id": "TASK_SIM_000052",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_scene_change",
+      "confidence": 0.9199999999999999,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000053",
+      "task_id": "TASK_SIM_000053",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_text_density",
+      "confidence": 0.9299999999999999,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000054",
+      "task_id": "TASK_SIM_000054",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_boundary_candidate",
+      "confidence": 0.94,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000055",
+      "task_id": "TASK_SIM_000055",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_semantic_hint",
+      "confidence": 0.95,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000056",
+      "task_id": "TASK_SIM_000056",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_keyframe_signal",
+      "confidence": 0.96,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000057",
+      "task_id": "TASK_SIM_000057",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_audio_rms",
+      "confidence": 0.97,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000058",
+      "task_id": "TASK_SIM_000058",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_motion_score",
+      "confidence": 0.98,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000059",
+      "task_id": "TASK_SIM_000059",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_scene_change",
+      "confidence": 0.99,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000060",
+      "task_id": "TASK_SIM_000060",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_text_density",
+      "confidence": 0.85,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000061",
+      "task_id": "TASK_SIM_000061",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_boundary_candidate",
+      "confidence": 0.86,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000062",
+      "task_id": "TASK_SIM_000062",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_semantic_hint",
+      "confidence": 0.87,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000063",
+      "task_id": "TASK_SIM_000063",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_keyframe_signal",
+      "confidence": 0.88,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000064",
+      "task_id": "TASK_SIM_000064",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_audio_rms",
+      "confidence": 0.89,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000065",
+      "task_id": "TASK_SIM_000065",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_motion_score",
+      "confidence": 0.9,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000066",
+      "task_id": "TASK_SIM_000066",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_scene_change",
+      "confidence": 0.9099999999999999,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000067",
+      "task_id": "TASK_SIM_000067",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_text_density",
+      "confidence": 0.9199999999999999,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000068",
+      "task_id": "TASK_SIM_000068",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_boundary_candidate",
+      "confidence": 0.9299999999999999,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000069",
+      "task_id": "TASK_SIM_000069",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_semantic_hint",
+      "confidence": 0.94,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000070",
+      "task_id": "TASK_SIM_000070",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_keyframe_signal",
+      "confidence": 0.95,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000071",
+      "task_id": "TASK_SIM_000071",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_audio_rms",
+      "confidence": 0.96,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000072",
+      "task_id": "TASK_SIM_000072",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_motion_score",
+      "confidence": 0.97,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000073",
+      "task_id": "TASK_SIM_000073",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_scene_change",
+      "confidence": 0.98,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000074",
+      "task_id": "TASK_SIM_000074",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_text_density",
+      "confidence": 0.99,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000075",
+      "task_id": "TASK_SIM_000075",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_boundary_candidate",
+      "confidence": 0.85,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000076",
+      "task_id": "TASK_SIM_000076",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_semantic_hint",
+      "confidence": 0.86,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000077",
+      "task_id": "TASK_SIM_000077",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_keyframe_signal",
+      "confidence": 0.87,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000078",
+      "task_id": "TASK_SIM_000078",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_audio_rms",
+      "confidence": 0.88,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000079",
+      "task_id": "TASK_SIM_000079",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_motion_score",
+      "confidence": 0.89,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000080",
+      "task_id": "TASK_SIM_000080",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_scene_change",
+      "confidence": 0.9,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000081",
+      "task_id": "TASK_SIM_000081",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_text_density",
+      "confidence": 0.9099999999999999,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000082",
+      "task_id": "TASK_SIM_000082",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_boundary_candidate",
+      "confidence": 0.9199999999999999,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000083",
+      "task_id": "TASK_SIM_000083",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_semantic_hint",
+      "confidence": 0.9299999999999999,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000084",
+      "task_id": "TASK_SIM_000084",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_keyframe_signal",
+      "confidence": 0.94,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000085",
+      "task_id": "TASK_SIM_000085",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_audio_rms",
+      "confidence": 0.95,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000086",
+      "task_id": "TASK_SIM_000086",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_motion_score",
+      "confidence": 0.96,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000087",
+      "task_id": "TASK_SIM_000087",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_scene_change",
+      "confidence": 0.97,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000088",
+      "task_id": "TASK_SIM_000088",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_text_density",
+      "confidence": 0.98,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000089",
+      "task_id": "TASK_SIM_000089",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_boundary_candidate",
+      "confidence": 0.99,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000090",
+      "task_id": "TASK_SIM_000090",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_semantic_hint",
+      "confidence": 0.85,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000091",
+      "task_id": "TASK_SIM_000091",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_keyframe_signal",
+      "confidence": 0.86,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000092",
+      "task_id": "TASK_SIM_000092",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_audio_rms",
+      "confidence": 0.87,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000093",
+      "task_id": "TASK_SIM_000093",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_motion_score",
+      "confidence": 0.88,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000094",
+      "task_id": "TASK_SIM_000094",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_scene_change",
+      "confidence": 0.89,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000095",
+      "task_id": "TASK_SIM_000095",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_text_density",
+      "confidence": 0.9,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000096",
+      "task_id": "TASK_SIM_000096",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_boundary_candidate",
+      "confidence": 0.9099999999999999,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000097",
+      "task_id": "TASK_SIM_000097",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_semantic_hint",
+      "confidence": 0.9199999999999999,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000098",
+      "task_id": "TASK_SIM_000098",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_keyframe_signal",
+      "confidence": 0.9299999999999999,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000099",
+      "task_id": "TASK_SIM_000099",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_audio_rms",
+      "confidence": 0.94,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000100",
+      "task_id": "TASK_SIM_000100",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_motion_score",
+      "confidence": 0.95,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000101",
+      "task_id": "TASK_SIM_000101",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_scene_change",
+      "confidence": 0.96,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000102",
+      "task_id": "TASK_SIM_000102",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_text_density",
+      "confidence": 0.97,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000103",
+      "task_id": "TASK_SIM_000103",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_boundary_candidate",
+      "confidence": 0.98,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000104",
+      "task_id": "TASK_SIM_000104",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_semantic_hint",
+      "confidence": 0.99,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000105",
+      "task_id": "TASK_SIM_000105",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_keyframe_signal",
+      "confidence": 0.85,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000106",
+      "task_id": "TASK_SIM_000106",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_audio_rms",
+      "confidence": 0.86,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000107",
+      "task_id": "TASK_SIM_000107",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_motion_score",
+      "confidence": 0.87,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000108",
+      "task_id": "TASK_SIM_000108",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_scene_change",
+      "confidence": 0.88,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000109",
+      "task_id": "TASK_SIM_000109",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_text_density",
+      "confidence": 0.89,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000110",
+      "task_id": "TASK_SIM_000110",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_boundary_candidate",
+      "confidence": 0.9,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000111",
+      "task_id": "TASK_SIM_000111",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_semantic_hint",
+      "confidence": 0.9099999999999999,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000112",
+      "task_id": "TASK_SIM_000112",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_keyframe_signal",
+      "confidence": 0.9199999999999999,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000113",
+      "task_id": "TASK_SIM_000113",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_audio_rms",
+      "confidence": 0.9299999999999999,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000114",
+      "task_id": "TASK_SIM_000114",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_motion_score",
+      "confidence": 0.94,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000115",
+      "task_id": "TASK_SIM_000115",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_scene_change",
+      "confidence": 0.95,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000116",
+      "task_id": "TASK_SIM_000116",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_text_density",
+      "confidence": 0.96,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000117",
+      "task_id": "TASK_SIM_000117",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_boundary_candidate",
+      "confidence": 0.97,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000118",
+      "task_id": "TASK_SIM_000118",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_semantic_hint",
+      "confidence": 0.98,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000119",
+      "task_id": "TASK_SIM_000119",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_keyframe_signal",
+      "confidence": 0.99,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000120",
+      "task_id": "TASK_SIM_000120",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_audio_rms",
+      "confidence": 0.85,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000121",
+      "task_id": "TASK_SIM_000121",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_motion_score",
+      "confidence": 0.86,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000122",
+      "task_id": "TASK_SIM_000122",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_scene_change",
+      "confidence": 0.87,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000123",
+      "task_id": "TASK_SIM_000123",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_text_density",
+      "confidence": 0.88,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000124",
+      "task_id": "TASK_SIM_000124",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_boundary_candidate",
+      "confidence": 0.89,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000125",
+      "task_id": "TASK_SIM_000125",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_semantic_hint",
+      "confidence": 0.9,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000126",
+      "task_id": "TASK_SIM_000126",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_keyframe_signal",
+      "confidence": 0.9099999999999999,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000127",
+      "task_id": "TASK_SIM_000127",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_audio_rms",
+      "confidence": 0.9199999999999999,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000128",
+      "task_id": "TASK_SIM_000128",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_motion_score",
+      "confidence": 0.9299999999999999,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000129",
+      "task_id": "TASK_SIM_000129",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_scene_change",
+      "confidence": 0.94,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000130",
+      "task_id": "TASK_SIM_000130",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_text_density",
+      "confidence": 0.95,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000131",
+      "task_id": "TASK_SIM_000131",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_boundary_candidate",
+      "confidence": 0.96,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000132",
+      "task_id": "TASK_SIM_000132",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_semantic_hint",
+      "confidence": 0.97,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000133",
+      "task_id": "TASK_SIM_000133",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_keyframe_signal",
+      "confidence": 0.98,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000134",
+      "task_id": "TASK_SIM_000134",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_audio_rms",
+      "confidence": 0.99,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000135",
+      "task_id": "TASK_SIM_000135",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_motion_score",
+      "confidence": 0.85,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000136",
+      "task_id": "TASK_SIM_000136",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_scene_change",
+      "confidence": 0.86,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000137",
+      "task_id": "TASK_SIM_000137",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_text_density",
+      "confidence": 0.87,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000138",
+      "task_id": "TASK_SIM_000138",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_boundary_candidate",
+      "confidence": 0.88,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000139",
+      "task_id": "TASK_SIM_000139",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_semantic_hint",
+      "confidence": 0.89,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000140",
+      "task_id": "TASK_SIM_000140",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_keyframe_signal",
+      "confidence": 0.9,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000141",
+      "task_id": "TASK_SIM_000141",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_audio_rms",
+      "confidence": 0.9099999999999999,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000142",
+      "task_id": "TASK_SIM_000142",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_motion_score",
+      "confidence": 0.9199999999999999,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000143",
+      "task_id": "TASK_SIM_000143",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_scene_change",
+      "confidence": 0.9299999999999999,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000144",
+      "task_id": "TASK_SIM_000144",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_text_density",
+      "confidence": 0.94,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000145",
+      "task_id": "TASK_SIM_000145",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_boundary_candidate",
+      "confidence": 0.95,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000146",
+      "task_id": "TASK_SIM_000146",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_semantic_hint",
+      "confidence": 0.96,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000147",
+      "task_id": "TASK_SIM_000147",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_keyframe_signal",
+      "confidence": 0.97,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000148",
+      "task_id": "TASK_SIM_000148",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_audio_rms",
+      "confidence": 0.98,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000149",
+      "task_id": "TASK_SIM_000149",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_motion_score",
+      "confidence": 0.99,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000150",
+      "task_id": "TASK_SIM_000150",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_scene_change",
+      "confidence": 0.85,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000151",
+      "task_id": "TASK_SIM_000151",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_text_density",
+      "confidence": 0.86,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000152",
+      "task_id": "TASK_SIM_000152",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_boundary_candidate",
+      "confidence": 0.87,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000153",
+      "task_id": "TASK_SIM_000153",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_semantic_hint",
+      "confidence": 0.88,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000154",
+      "task_id": "TASK_SIM_000154",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_keyframe_signal",
+      "confidence": 0.89,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000155",
+      "task_id": "TASK_SIM_000155",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_audio_rms",
+      "confidence": 0.9,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000156",
+      "task_id": "TASK_SIM_000156",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_motion_score",
+      "confidence": 0.9099999999999999,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000157",
+      "task_id": "TASK_SIM_000157",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_scene_change",
+      "confidence": 0.9199999999999999,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000158",
+      "task_id": "TASK_SIM_000158",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_text_density",
+      "confidence": 0.9299999999999999,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000159",
+      "task_id": "TASK_SIM_000159",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_boundary_candidate",
+      "confidence": 0.94,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000160",
+      "task_id": "TASK_SIM_000160",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_semantic_hint",
+      "confidence": 0.95,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000161",
+      "task_id": "TASK_SIM_000161",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_keyframe_signal",
+      "confidence": 0.96,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000162",
+      "task_id": "TASK_SIM_000162",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_audio_rms",
+      "confidence": 0.97,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000163",
+      "task_id": "TASK_SIM_000163",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_motion_score",
+      "confidence": 0.98,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000164",
+      "task_id": "TASK_SIM_000164",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_scene_change",
+      "confidence": 0.99,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000165",
+      "task_id": "TASK_SIM_000165",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_text_density",
+      "confidence": 0.85,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000166",
+      "task_id": "TASK_SIM_000166",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_boundary_candidate",
+      "confidence": 0.86,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000167",
+      "task_id": "TASK_SIM_000167",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_semantic_hint",
+      "confidence": 0.87,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000168",
+      "task_id": "TASK_SIM_000168",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_keyframe_signal",
+      "confidence": 0.88,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000169",
+      "task_id": "TASK_SIM_000169",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_audio_rms",
+      "confidence": 0.89,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000170",
+      "task_id": "TASK_SIM_000170",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_motion_score",
+      "confidence": 0.9,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000171",
+      "task_id": "TASK_SIM_000171",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_scene_change",
+      "confidence": 0.9099999999999999,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000172",
+      "task_id": "TASK_SIM_000172",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_text_density",
+      "confidence": 0.9199999999999999,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000173",
+      "task_id": "TASK_SIM_000173",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_boundary_candidate",
+      "confidence": 0.9299999999999999,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000174",
+      "task_id": "TASK_SIM_000174",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_semantic_hint",
+      "confidence": 0.94,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000175",
+      "task_id": "TASK_SIM_000175",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_keyframe_signal",
+      "confidence": 0.95,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000176",
+      "task_id": "TASK_SIM_000176",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_audio_rms",
+      "confidence": 0.96,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000177",
+      "task_id": "TASK_SIM_000177",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_motion_score",
+      "confidence": 0.97,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000178",
+      "task_id": "TASK_SIM_000178",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_scene_change",
+      "confidence": 0.98,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000179",
+      "task_id": "TASK_SIM_000179",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_text_density",
+      "confidence": 0.99,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000180",
+      "task_id": "TASK_SIM_000180",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_boundary_candidate",
+      "confidence": 0.85,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000181",
+      "task_id": "TASK_SIM_000181",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_semantic_hint",
+      "confidence": 0.86,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000182",
+      "task_id": "TASK_SIM_000182",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_keyframe_signal",
+      "confidence": 0.87,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000183",
+      "task_id": "TASK_SIM_000183",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_audio_rms",
+      "confidence": 0.88,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000184",
+      "task_id": "TASK_SIM_000184",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_motion_score",
+      "confidence": 0.89,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000185",
+      "task_id": "TASK_SIM_000185",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_scene_change",
+      "confidence": 0.9,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000186",
+      "task_id": "TASK_SIM_000186",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_text_density",
+      "confidence": 0.9099999999999999,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000187",
+      "task_id": "TASK_SIM_000187",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_boundary_candidate",
+      "confidence": 0.9199999999999999,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000188",
+      "task_id": "TASK_SIM_000188",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_semantic_hint",
+      "confidence": 0.9299999999999999,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000189",
+      "task_id": "TASK_SIM_000189",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_keyframe_signal",
+      "confidence": 0.94,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000190",
+      "task_id": "TASK_SIM_000190",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_audio_rms",
+      "confidence": 0.95,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000191",
+      "task_id": "TASK_SIM_000191",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_motion_score",
+      "confidence": 0.96,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000192",
+      "task_id": "TASK_SIM_000192",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_scene_change",
+      "confidence": 0.97,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000193",
+      "task_id": "TASK_SIM_000193",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_text_density",
+      "confidence": 0.98,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000194",
+      "task_id": "TASK_SIM_000194",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_boundary_candidate",
+      "confidence": 0.99,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000195",
+      "task_id": "TASK_SIM_000195",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_semantic_hint",
+      "confidence": 0.85,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000196",
+      "task_id": "TASK_SIM_000196",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_keyframe_signal",
+      "confidence": 0.86,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000197",
+      "task_id": "TASK_SIM_000197",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_audio_rms",
+      "confidence": 0.87,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000198",
+      "task_id": "TASK_SIM_000198",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_motion_score",
+      "confidence": 0.88,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000199",
+      "task_id": "TASK_SIM_000199",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_scene_change",
+      "confidence": 0.89,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000200",
+      "task_id": "TASK_SIM_000200",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_text_density",
+      "confidence": 0.9,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000201",
+      "task_id": "TASK_SIM_000201",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_boundary_candidate",
+      "confidence": 0.9099999999999999,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000202",
+      "task_id": "TASK_SIM_000202",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_semantic_hint",
+      "confidence": 0.9199999999999999,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000203",
+      "task_id": "TASK_SIM_000203",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_keyframe_signal",
+      "confidence": 0.9299999999999999,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000204",
+      "task_id": "TASK_SIM_000204",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_audio_rms",
+      "confidence": 0.94,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000205",
+      "task_id": "TASK_SIM_000205",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_motion_score",
+      "confidence": 0.95,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000206",
+      "task_id": "TASK_SIM_000206",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_scene_change",
+      "confidence": 0.96,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000207",
+      "task_id": "TASK_SIM_000207",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_text_density",
+      "confidence": 0.97,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000208",
+      "task_id": "TASK_SIM_000208",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_boundary_candidate",
+      "confidence": 0.98,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000209",
+      "task_id": "TASK_SIM_000209",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_semantic_hint",
+      "confidence": 0.99,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000210",
+      "task_id": "TASK_SIM_000210",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_keyframe_signal",
+      "confidence": 0.85,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000211",
+      "task_id": "TASK_SIM_000211",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_audio_rms",
+      "confidence": 0.86,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000212",
+      "task_id": "TASK_SIM_000212",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_motion_score",
+      "confidence": 0.87,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000213",
+      "task_id": "TASK_SIM_000213",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_scene_change",
+      "confidence": 0.88,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000214",
+      "task_id": "TASK_SIM_000214",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_text_density",
+      "confidence": 0.89,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000215",
+      "task_id": "TASK_SIM_000215",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_boundary_candidate",
+      "confidence": 0.9,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000216",
+      "task_id": "TASK_SIM_000216",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_semantic_hint",
+      "confidence": 0.9099999999999999,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000217",
+      "task_id": "TASK_SIM_000217",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_keyframe_signal",
+      "confidence": 0.9199999999999999,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000218",
+      "task_id": "TASK_SIM_000218",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_audio_rms",
+      "confidence": 0.9299999999999999,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000219",
+      "task_id": "TASK_SIM_000219",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_motion_score",
+      "confidence": 0.94,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000220",
+      "task_id": "TASK_SIM_000220",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_scene_change",
+      "confidence": 0.95,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000221",
+      "task_id": "TASK_SIM_000221",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_text_density",
+      "confidence": 0.96,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000222",
+      "task_id": "TASK_SIM_000222",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_boundary_candidate",
+      "confidence": 0.97,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000223",
+      "task_id": "TASK_SIM_000223",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_semantic_hint",
+      "confidence": 0.98,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000224",
+      "task_id": "TASK_SIM_000224",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_keyframe_signal",
+      "confidence": 0.99,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000225",
+      "task_id": "TASK_SIM_000225",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_audio_rms",
+      "confidence": 0.85,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000226",
+      "task_id": "TASK_SIM_000226",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_motion_score",
+      "confidence": 0.86,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000227",
+      "task_id": "TASK_SIM_000227",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_scene_change",
+      "confidence": 0.87,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000228",
+      "task_id": "TASK_SIM_000228",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_text_density",
+      "confidence": 0.88,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000229",
+      "task_id": "TASK_SIM_000229",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_boundary_candidate",
+      "confidence": 0.89,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000230",
+      "task_id": "TASK_SIM_000230",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_semantic_hint",
+      "confidence": 0.9,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000231",
+      "task_id": "TASK_SIM_000231",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_keyframe_signal",
+      "confidence": 0.9099999999999999,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000232",
+      "task_id": "TASK_SIM_000232",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_audio_rms",
+      "confidence": 0.9199999999999999,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000233",
+      "task_id": "TASK_SIM_000233",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_motion_score",
+      "confidence": 0.9299999999999999,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000234",
+      "task_id": "TASK_SIM_000234",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_scene_change",
+      "confidence": 0.94,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000235",
+      "task_id": "TASK_SIM_000235",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_text_density",
+      "confidence": 0.95,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000236",
+      "task_id": "TASK_SIM_000236",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_boundary_candidate",
+      "confidence": 0.96,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000237",
+      "task_id": "TASK_SIM_000237",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_semantic_hint",
+      "confidence": 0.97,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000238",
+      "task_id": "TASK_SIM_000238",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_keyframe_signal",
+      "confidence": 0.98,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000239",
+      "task_id": "TASK_SIM_000239",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_audio_rms",
+      "confidence": 0.99,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000240",
+      "task_id": "TASK_SIM_000240",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_motion_score",
+      "confidence": 0.85,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000241",
+      "task_id": "TASK_SIM_000241",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_scene_change",
+      "confidence": 0.86,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000242",
+      "task_id": "TASK_SIM_000242",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_text_density",
+      "confidence": 0.87,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000243",
+      "task_id": "TASK_SIM_000243",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_boundary_candidate",
+      "confidence": 0.88,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000244",
+      "task_id": "TASK_SIM_000244",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_semantic_hint",
+      "confidence": 0.89,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000245",
+      "task_id": "TASK_SIM_000245",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_keyframe_signal",
+      "confidence": 0.9,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000246",
+      "task_id": "TASK_SIM_000246",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_audio_rms",
+      "confidence": 0.9099999999999999,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000247",
+      "task_id": "TASK_SIM_000247",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_motion_score",
+      "confidence": 0.9199999999999999,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000248",
+      "task_id": "TASK_SIM_000248",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_scene_change",
+      "confidence": 0.9299999999999999,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000249",
+      "task_id": "TASK_SIM_000249",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_text_density",
+      "confidence": 0.94,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000250",
+      "task_id": "TASK_SIM_000250",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_boundary_candidate",
+      "confidence": 0.95,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000251",
+      "task_id": "TASK_SIM_000251",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_semantic_hint",
+      "confidence": 0.96,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000252",
+      "task_id": "TASK_SIM_000252",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_keyframe_signal",
+      "confidence": 0.97,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000253",
+      "task_id": "TASK_SIM_000253",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_audio_rms",
+      "confidence": 0.98,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000254",
+      "task_id": "TASK_SIM_000254",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_motion_score",
+      "confidence": 0.99,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000255",
+      "task_id": "TASK_SIM_000255",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_scene_change",
+      "confidence": 0.85,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000256",
+      "task_id": "TASK_SIM_000256",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_text_density",
+      "confidence": 0.86,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000257",
+      "task_id": "TASK_SIM_000257",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_boundary_candidate",
+      "confidence": 0.87,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000258",
+      "task_id": "TASK_SIM_000258",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_semantic_hint",
+      "confidence": 0.88,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000259",
+      "task_id": "TASK_SIM_000259",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_keyframe_signal",
+      "confidence": 0.89,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000260",
+      "task_id": "TASK_SIM_000260",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_audio_rms",
+      "confidence": 0.9,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000261",
+      "task_id": "TASK_SIM_000261",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_motion_score",
+      "confidence": 0.9099999999999999,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000262",
+      "task_id": "TASK_SIM_000262",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_scene_change",
+      "confidence": 0.9199999999999999,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000263",
+      "task_id": "TASK_SIM_000263",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_text_density",
+      "confidence": 0.9299999999999999,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000264",
+      "task_id": "TASK_SIM_000264",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_boundary_candidate",
+      "confidence": 0.94,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000265",
+      "task_id": "TASK_SIM_000265",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_semantic_hint",
+      "confidence": 0.95,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000266",
+      "task_id": "TASK_SIM_000266",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_keyframe_signal",
+      "confidence": 0.96,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000267",
+      "task_id": "TASK_SIM_000267",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_audio_rms",
+      "confidence": 0.97,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000268",
+      "task_id": "TASK_SIM_000268",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_motion_score",
+      "confidence": 0.98,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000269",
+      "task_id": "TASK_SIM_000269",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_scene_change",
+      "confidence": 0.99,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000270",
+      "task_id": "TASK_SIM_000270",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_text_density",
+      "confidence": 0.85,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000271",
+      "task_id": "TASK_SIM_000271",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_boundary_candidate",
+      "confidence": 0.86,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000272",
+      "task_id": "TASK_SIM_000272",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_semantic_hint",
+      "confidence": 0.87,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000273",
+      "task_id": "TASK_SIM_000273",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_keyframe_signal",
+      "confidence": 0.88,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000274",
+      "task_id": "TASK_SIM_000274",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_audio_rms",
+      "confidence": 0.89,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000275",
+      "task_id": "TASK_SIM_000275",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_motion_score",
+      "confidence": 0.9,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000276",
+      "task_id": "TASK_SIM_000276",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_scene_change",
+      "confidence": 0.9099999999999999,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000277",
+      "task_id": "TASK_SIM_000277",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_text_density",
+      "confidence": 0.9199999999999999,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000278",
+      "task_id": "TASK_SIM_000278",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_boundary_candidate",
+      "confidence": 0.9299999999999999,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000279",
+      "task_id": "TASK_SIM_000279",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_semantic_hint",
+      "confidence": 0.94,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000280",
+      "task_id": "TASK_SIM_000280",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_keyframe_signal",
+      "confidence": 0.95,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000281",
+      "task_id": "TASK_SIM_000281",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_audio_rms",
+      "confidence": 0.96,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000282",
+      "task_id": "TASK_SIM_000282",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_motion_score",
+      "confidence": 0.97,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000283",
+      "task_id": "TASK_SIM_000283",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_scene_change",
+      "confidence": 0.98,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000284",
+      "task_id": "TASK_SIM_000284",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_text_density",
+      "confidence": 0.99,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000285",
+      "task_id": "TASK_SIM_000285",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_boundary_candidate",
+      "confidence": 0.85,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000286",
+      "task_id": "TASK_SIM_000286",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_semantic_hint",
+      "confidence": 0.86,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000287",
+      "task_id": "TASK_SIM_000287",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_keyframe_signal",
+      "confidence": 0.87,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000288",
+      "task_id": "TASK_SIM_000288",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_audio_rms",
+      "confidence": 0.88,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000289",
+      "task_id": "TASK_SIM_000289",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_motion_score",
+      "confidence": 0.89,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000290",
+      "task_id": "TASK_SIM_000290",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_scene_change",
+      "confidence": 0.9,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000291",
+      "task_id": "TASK_SIM_000291",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_text_density",
+      "confidence": 0.9099999999999999,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000292",
+      "task_id": "TASK_SIM_000292",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_boundary_candidate",
+      "confidence": 0.9199999999999999,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000293",
+      "task_id": "TASK_SIM_000293",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_semantic_hint",
+      "confidence": 0.9299999999999999,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000294",
+      "task_id": "TASK_SIM_000294",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_keyframe_signal",
+      "confidence": 0.94,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000295",
+      "task_id": "TASK_SIM_000295",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_audio_rms",
+      "confidence": 0.95,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000296",
+      "task_id": "TASK_SIM_000296",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_motion_score",
+      "confidence": 0.96,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000297",
+      "task_id": "TASK_SIM_000297",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_scene_change",
+      "confidence": 0.97,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000298",
+      "task_id": "TASK_SIM_000298",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_text_density",
+      "confidence": 0.98,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000299",
+      "task_id": "TASK_SIM_000299",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_boundary_candidate",
+      "confidence": 0.99,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    },
+    {
+      "evidence_id": "EV_SIM_000300",
+      "task_id": "TASK_SIM_000300",
+      "source_id": "SRC_SIM_001",
+      "type": "mock_semantic_hint",
+      "confidence": 0.85,
+      "timestamp": "2026-04-29T00:51:59.797671"
+    }
+  ],
+  "created_at": "2026-04-29T00:51:59.797671",
+  "status": "SUCCESS"
+}

@@ -17,18 +17,22 @@
 | -      | GitHub 위생 정리 + 로컬 동기화 |
 | -      | 문서 구조 고정 + 방이전 자동화 체계 구축 |
 | STEP 10-A | Structure Reinforcement Documentation |
+| STEP 10-B | Virtual Fragment Factory Simulation v0 |
+
 
 
 ## CURRENT 🔄
 
-- (비어 있음)
+- STEP 10-B 검증 완료 및 문서 갱신 중
+
 
 
 
 ## NEXT 📋
 
-- STEP 10 Regression Test Plan 수립
-- Virtual Fragment Factory Simulation v0 설계
+- STEP 10-C Factory Simulation 구조 보정
+- STEP 10-D Resource Governor Simulation v0 설계
+
 
 
 ## HOLD ⏸

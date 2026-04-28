@@ -1,0 +1,33 @@
+{
+  "simulation_id": "SIM_20260429_005159",
+  "source_id": "SRC_SIM_001",
+  "logical_room_count": 300,
+  "task_count": 300,
+  "worker_slot_count": 8,
+  "evidence_count": 300,
+  "room_type_distribution": {
+    "frame_slice_room": 37,
+    "audio_slice_room": 38,
+    "motion_signal_room": 38,
+    "scene_signal_room": 38,
+    "text_density_room": 38,
+    "pattern_room": 37,
+    "boundary_candidate_room": 37,
+    "semantic_candidate_room": 37
+  },
+  "task_status_distribution": {
+    "DONE": 300
+  },
+  "evidence_type_distribution": {
+    "mock_keyframe_signal": 42,
+    "mock_audio_rms": 43,
+    "mock_motion_score": 43,
+    "mock_scene_change": 43,
+    "mock_text_density": 43,
+    "mock_boundary_candidate": 43,
+    "mock_semantic_hint": 43
+  },
+  "common_core_id_check": "PASS",
+  "pipeline_isolation_check": "PASS",
+  "status": "SUCCESS"
+}
