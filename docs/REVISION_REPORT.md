@@ -24,6 +24,8 @@
 | STEP 9 | UI 최소연동 / 통합 확인 | PASS |
 | STEP 10-A | Structure Reinforcement Documentation | PASS |
 | STEP 10-B | Virtual Fragment Factory Simulation v0 | PASS |
+| STEP 10-C | Factory Simulation 구조 보정 | PASS |
+
 
 
 
@@ -63,6 +65,16 @@
 - **시뮬레이션 문서 및 스크립트 추가**
 - **factory_result.json / factory_summary.json 생성 및 검증 완료**
 - **기존 핵심 파이프라인(Render/Export) 영향 없음 확인**
+
+---
+
+## Latest Revision (2026-04-29 01:10)
+
+- **STEP 10-C Factory Simulation 구조 보정 완료**
+- **Source/Room/Task/Worker/Evidence 최소 계약 필드 확정 및 반영**
+- **시뮬레이션 스크립트 내 ID 연결성 및 Time Range 검증 로직 추가**
+- **factory_summary.json 내 상세 검증 필드(PASS/FAIL) 추가**
+
 
 
 

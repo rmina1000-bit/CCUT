@@ -1,5 +1,5 @@
 {
-  "simulation_id": "SIM_20260429_005159",
+  "simulation_id": "SIM_20260429_005919",
   "source_id": "SRC_SIM_001",
   "logical_room_count": 300,
   "task_count": 300,
@@ -27,7 +27,23 @@
     "mock_boundary_candidate": 43,
     "mock_semantic_hint": 43
   },
+  "worker_slot_distribution": {
+    "WORKER_SLOT_01": 37,
+    "WORKER_SLOT_02": 38,
+    "WORKER_SLOT_03": 38,
+    "WORKER_SLOT_04": 38,
+    "WORKER_SLOT_05": 38,
+    "WORKER_SLOT_06": 37,
+    "WORKER_SLOT_07": 37,
+    "WORKER_SLOT_08": 37
+  },
   "common_core_id_check": "PASS",
   "pipeline_isolation_check": "PASS",
-  "status": "SUCCESS"
+  "contract_check": "PASS",
+  "source_room_link_check": "PASS",
+  "room_task_link_check": "PASS",
+  "task_evidence_link_check": "PASS",
+  "worker_task_link_check": "PASS",
+  "time_range_check": "PASS",
+  "status": "PASS"
 }

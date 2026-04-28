@@ -17,23 +17,82 @@ Virtual Fragment Factory의 논리 구조(Room, Task, Slot, Queue)가 Common Cor
 - 기존 CCUT 파이프라인(Upload -> Render) 연결
 - 프론트엔드 UI 연동
 
-## 구조 정의
+## 구조 정의 (STEP 10-C 보정 완료)
 
-### Logical Room 구조
-- `room_id`: ROOM_SIM_xxxxxx
-- `room_type`: frame_slice_room, audio_slice_room 등
-- `status`: PENDING, RUNNING, DONE, FAILED
-- `tasks`: 해당 Room에 할당된 Task 목록
+### 1. source 계약
+```json
+{
+  "source_id": "SRC_SIM_001",
+  "duration_sec": 600,
+  "segment_unit_sec": 2,
+  "source_type": "mock_video",
+  "status": "READY"
+}
+```
 
-### Task Queue 구조
-- 선입선출(FIFO) 기반의 논리 큐
-- `worker_slot_count`에 의해 동시 실행 Task 수 제한 (시뮬레이션상)
+### 2. room 계약
+```json
+{
+  "room_id": "ROOM_SIM_000001",
+  "source_id": "SRC_SIM_001",
+  "room_type": "frame_slice_room",
+  "time_range": {
+    "start_sec": 0,
+    "end_sec": 2
+  },
+  "status": "READY"
+}
+```
 
-### Common Core ID 계약
-- `source_id`: SRC_SIM_xxx
-- `room_id`: ROOM_SIM_xxx
-- `task_id`: TASK_SIM_xxx
-- `evidence_id`: EV_SIM_xxx
+### 3. task 계약
+```json
+{
+  "task_id": "TASK_SIM_000001",
+  "room_id": "ROOM_SIM_000001",
+  "source_id": "SRC_SIM_001",
+  "task_type": "extract_mock_frame_signal",
+  "assigned_worker_slot": "WORKER_SLOT_01",
+  "status": "DONE"
+}
+```
+
+### 4. worker_slot 계약
+```json
+{
+  "worker_slot_id": "WORKER_SLOT_01",
+  "slot_index": 1,
+  "worker_type": "mock_worker",
+  "status": "IDLE",
+  "processed_task_count": 38
+}
+```
+
+### 5. evidence 계약
+```json
+{
+  "evidence_id": "EV_SIM_000001",
+  "source_id": "SRC_SIM_001",
+  "room_id": "ROOM_SIM_000001",
+  "task_id": "TASK_SIM_000001",
+  "evidence_type": "mock_keyframe_signal",
+  "time_range": {
+    "start_sec": 0,
+    "end_sec": 2
+  },
+  "value": {
+    "score": 0.72
+  },
+  "status": "READY"
+}
+```
+
+### 6. summary 계약 (검증 필드)
+- `contract_check`: PASS/FAIL
+- `source_room_link_check`: PASS/FAIL
+- `room_task_link_check`: PASS/FAIL
+- `task_evidence_link_check`: PASS/FAIL
+- `worker_task_link_check`: PASS/FAIL
+- `time_range_check`: PASS/FAIL
 
 ## 검증 기준
 - 모든 Room이 최종적으로 DONE 상태가 되는가?
