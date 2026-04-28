@@ -1,32 +1,68 @@
-# REVISION REPORT — STEP 7 ExportInput
+# CCUT Revision Report
 
-## 변경 요약
-STEP 7에서 Proposal JSON을 Render Engine 입력으로 변환하는 ExportInput 계층을 추가했다.
+## Latest Baseline
 
-## 신규/수정 범위
-- ExportInput 데이터 구조
-- ExportInput 생성 로직
-- ExportInput 저장 구조
-- ExportInput API 3종
+- **Branch:** `ccut-1.0.4-step9`
+- **SHA:** `9657df9882329cd3106a75c96926157226a26c48`
+- **Date:** 2026-04-28
 
-## 주요 API
-- POST /export-input/{proposal_id}
-- GET /export-input/{source_id}
-- GET /export-input/by-proposal/{proposal_id}
+---
 
-## 검증 결과
-PASS.
+## Completed Steps
 
-## 검증 증거
-- Swagger UI endpoint 노출
-- export_engine.py 변환 로직 확인
-- Browser 200 응답
-- Backend Docs 200 응답
+| STEP | 내용 | 상태 |
+|------|------|------|
+| STEP 0 | 기준선 확보 | PASS |
+| STEP 1 | Proxy / Segment / Fingerprint | PASS |
+| STEP 2 | Evidence Board | PASS |
+| STEP 3 | Quick Scan + Hypothesis | PASS |
+| STEP 4 | Semantic Fragment | PASS |
+| STEP 5 | User Intent 최종 반영 | PASS |
+| STEP 6 | Proposal Engine | PASS |
+| STEP 7 | ExportInput 생성 | PASS |
+| STEP 8 | Render Engine / Export 실행 | PASS |
+| STEP 9 | UI 최소연동 / 통합 확인 | PASS |
 
-## 영향 범위
-- Render Engine 전 단계 입력 구조 확보
-- Proposal / Semantic Fragment / User Intent 구조 변경 없음
-- 실제 ffmpeg 렌더링 없음
+---
 
-## 다음 변경 예정
-STEP 8 Render Engine / Export 실행.
+## Important Fixes (2026-04-28)
+
+### GitHub 위생 정리
+- 임시 파일 13종 삭제 (`check_db.py`, `fix_mojibake*.py`, `_archive_backend_20260420/`, `ccut_backend/logs/hook_distribution/` 300+ JSON 등)
+- 정리 스크립트 `clean_step89.ps1` 삭제
+- `.gitignore` 보강 (`*.log`, `*.bak`, `**/logs/` 등)
+
+### 코드 수정
+- **Index.tsx**: Mojibake 한글 문자열 3종 정상화
+  - `"백엔드 분석 기반 추천 편집안입니다."`
+  - `"분석 중 오류가 발생했습니다. 콘솔을 확인해 주세요."`
+  - `"[Reproposal] sourceFragments가 없어 재제안을 건너뜁니다."`
+- **main.py**: `D:/test_video.mp4` 하드코딩 제거 → `video_path: str = ""`
+- **CenterPanel.tsx**: `http://localhost:8000` 하드코딩 → `videoService.API_BASE_URL`
+
+---
+
+## Validation Summary
+
+| 항목 | 결과 |
+|------|------|
+| RenderEngine 구현 (`render_from_export_input`) | PASS |
+| UI 통합 (export-input → render → render-result) | PASS |
+| GitHub 위생 | PASS |
+| 로컬 ↔ GitHub 동기화 | PASS |
+| Working tree | Clean |
+
+---
+
+## Open Issues
+
+- Resource Governor 미연동 (향후 STEP 10)
+- PBE(Precision Boundary Editor) 비활성화 상태 유지 중
+- 병렬 렌더링 미구현 (설계 단계)
+
+---
+
+## Next
+
+- STEP 10 최종 안정화 / 회귀 테스트
+- 문서 구조 고정 및 방이전 자동화 체계 운영 시작

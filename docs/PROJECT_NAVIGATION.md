@@ -1,7 +1,11 @@
 # CCUT 1.0.4 PROJECT NAVIGATION v3.2.1
-> 기준: CCUT 1.0.4 PROJECT NAVIGATION v3.2.1  
-> 핵심: 영상 → Proxy/Segment → Evidence Board → Semantic Fragment → Proposal(JSON) → ExportInput → Render  
-> 절대 원칙: Evidence 없이 Semantic 금지 / Semantic 없이 Proposal 금지 / Proposal 없이 Export 금지
+
+> **현재 기준 SHA:** `9657df9882329cd3106a75c96926157226a26c48`  
+> **Branch:** `ccut-1.0.4-step9`  
+> **완료 단계:** STEP 0 ~ STEP 9 모두 PASS  
+> **핵심 흐름:** 영상 → Quick Scan → Semantic Fragment → Proposal(JSON) → ExportInput → Render → UI mp4 표시  
+> **절대 원칙:** Evidence 없이 Semantic 금지 / Semantic 없이 Proposal 금지 / Proposal 없이 Export 금지
+
 
 ## 0. 프로젝트 정의
 CCUT 1.0.4는 **영상 데이터를 의미 데이터로 변환하는 로컬 AI 시스템**이다. 기존 Fragment-first 구조를 Evidence/Semantic-first 구조로 전환한다.

@@ -1,45 +1,83 @@
-# CCUT 1.0.4 v3.2.1 SESSION HANDOFF — STEP 7 → STEP 8
+# CCUT 1.0.4 Session Handoff
 
-## 현재 기준 흐름
-영상 → Proxy/Segment → Evidence Board → Semantic Fragment → User Intent → Proposal(JSON) → ExportInput → Render
+## 1. 현재 기준선
 
-## 완료 상태
-- STEP 0 기준선 확보: PASS
-- STEP 1 Proxy / Segment / Fingerprint: PASS
-- STEP 2 Evidence Board: PASS
-- STEP 3 Quick Scan + Hypothesis: PASS
-- STEP 4 Semantic Fragment: PASS
-- STEP 5 User Intent 최종 반영: PASS
-- STEP 6 Proposal Engine: PASS
-- STEP 7 ExportInput 생성: PASS
+- **Branch:** `ccut-1.0.4-step9`
+- **SHA:** `9657df9882329cd3106a75c96926157226a26c48`
+- **Local path:** `D:\CCUT1.0.4`
+- **Repo:** `https://github.com/rmina1000-bit/CCUT.git`
+- **Last updated:** 2026-04-28
 
-## 최신 완료 작업
-STEP 7 ExportInput 생성 완료.
+## 2. 완료 단계
 
-Proposal JSON을 Render 입력으로 변환하는 ExportInput 구조가 만들어졌고, clips, total_duration, status=EXPORT_INPUT_READY가 저장된다.
+- STEP 0 기준선 확보: **PASS**
+- STEP 1 Proxy / Segment / Fingerprint: **PASS**
+- STEP 2 Evidence Board: **PASS**
+- STEP 3 Quick Scan + Hypothesis: **PASS**
+- STEP 4 Semantic Fragment: **PASS**
+- STEP 5 User Intent 최종 반영: **PASS**
+- STEP 6 Proposal Engine: **PASS**
+- STEP 7 ExportInput 생성: **PASS**
+- STEP 8 Render Engine / Export 실행: **PASS**
+- STEP 9 UI 최소연동 / 통합 확인: **PASS**
 
-## 확인된 API
-- POST /export-input/{proposal_id}
-- GET /export-input/{source_id}
-- GET /export-input/by-proposal/{proposal_id}
+## 3. 현재 완성 흐름
 
-## 다음 작업
-STEP 8 Render Engine / Export 실행.
+```text
+영상 업로드
+→ Quick Scan (POST /quick-scan/{source_id})
+→ Semantic Fragment (POST /generate-fragments/{source_id})
+→ Proposal 생성 (POST /proposals/{source_id})
+→ ExportInput 생성 (POST /export-input/{proposal_id})
+→ Render 실행 (POST /render/{export_input_id})
+→ 결과 조회 (GET /render-result/{export_input_id})
+→ UI mp4 표시 / 다운로드
+```
 
-## STEP 8 목적
-ExportInput을 기반으로 실제 영상 파일을 생성한다.
+## 4. 최신 변경 요약 (2026-04-28)
 
-## STEP 8 절대 기준
-- ExportInput 없이 Render 금지
-- Proposal 직접 Render 금지
-- Semantic Fragment 직접 Render 금지
-- ffmpeg 입력은 ExportInput 기준
-- 렌더 결과는 별도 export 파일로 저장
-- 원본 파일 훼손 금지
+- **GitHub 위생 정리 완료:**
+  - 임시 파일 13종 삭제 (`check_db.py`, `fix_mojibake*.py`, `_archive_backend_20260420/`, `ccut_backend/logs/hook_distribution/` 등)
+  - 정리 스크립트 `clean_step89.ps1` 삭제
+- **코드 수정:**
+  - `Index.tsx`: Mojibake 한글 문자열 3종 정상화
+  - `main.py`: `D:/test_video.mp4` 하드코딩 제거 (`str = ""` 로 교체)
+  - `CenterPanel.tsx`: `localhost:8000` 하드코딩 → `videoService.API_BASE_URL` 정규화
+- **`.gitignore` 보강:** `*.log`, `*.bak`, `**/logs/`, `diff_*.txt` 등 추가
 
-## STEP 8 전 확인
-- export_input 저장 구조 확인
-- clips 배열의 start/end/duration/order 확인
-- source_path 내부 참조 가능 여부 확인
-- total_duration 정합성 확인
-- 기존 render_engine 자산 확인
+## 5. 다음 작업 후보
+
+- STEP 10 최종 안정화 / 회귀 테스트
+- Resource Governor 연동 검토
+- 이전 PBE(Precision Boundary Editor) 재연결 검토
+- CCUT 1.0.4 STEP 0~9 종합 문서화
+
+## 6. 금지사항
+
+```text
+- localStorage / PBE 재활성화 금지
+- 병렬화 (parallel render) 금지
+- 원본 영상 반복 분석 금지
+- Evidence 없이 Semantic 생성 금지
+- Semantic 없이 Proposal 생성 금지
+- Proposal 없이 Export 직접 연결 금지
+- main/master 브랜치 push 금지
+- 새 SESSION_HANDOFF 파일 생성 금지 (이 파일만 업데이트)
+```
+
+## 7. 다음 작업 전 확인 명령
+
+```powershell
+git branch --show-current
+git rev-parse HEAD
+git rev-parse origin/ccut-1.0.4-step9
+git status --short
+```
+
+기대값:
+```
+ccut-1.0.4-step9
+9657df9882329cd3106a75c96926157226a26c48
+9657df9882329cd3106a75c96926157226a26c48
+(출력 없음 = working tree clean)
+```
