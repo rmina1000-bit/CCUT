@@ -132,8 +132,8 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
 
   const normalizeMediaUrl = useCallback((url?: string | null) => {
     if (!url) return "";
-    if (url.startsWith("http")) return url;
-    return `http://localhost:8000${url}`;
+    if (url.startsWith("http://") || url.startsWith("https://")) return url;
+    return `${videoService.API_BASE_URL}${url.startsWith("/") ? "" : "/"}${url}`;
   }, []);
 
   const allSourceFragments = useMemo(

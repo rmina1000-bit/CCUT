@@ -1194,7 +1194,7 @@ from engine.ai_pipeline import ai_pipeline
 
 
 @app.post("/analyze")
-async def analyze_video(video_path: str = "D:/test_video.mp4"):
+async def analyze_video(video_path: str | None = None):
     """
     [레거시] CCUT 1.0.5 통합 분석. 물리 클립 생성 방식.
     신규 작업은 /generate-fragments 를 사용하세요.
@@ -1263,7 +1263,7 @@ async def analyze_video(video_path: str = "D:/test_video.mp4"):
 # ── 스마트 분석 /smart-analyze (레거시, 물리 클립 방식) ──────────────
 
 @app.post("/smart-analyze")
-async def smart_analyze_video(video_path: str = "D:/test_video.mp4"):
+async def smart_analyze_video(video_path: str | None = None):
     """
     [레거시] 1.0.5 스마트 파이프라인. 물리 클립 생성 방식.
     신규 작업은 /generate-fragments 를 사용하세요.

@@ -375,7 +375,7 @@ const Index: React.FC = () => {
                       proposal_id: p.proposal_id,
                       mode: p.mode === "A" ? "market" : "user",
                       title: p.mode === "A" ? "시장형 편집 (A)" : "사용자친화형 편집 (B)",
-                      desc: p.proposal_reason?.mode_reason || "諛깆뿏??遺꾩꽍 湲곕컲 異붿쿇 ?몄쭛?덉엯?덈떎.",
+                      desc: p.proposal_reason?.mode_reason || "백엔드 분석 기반 추천 편집안입니다.",
                       score: String(Math.round(p.confidence * 100)) + "%",
                       key_fragments: p.sequence.map((s: any) => s.fragment_id),
                       direction: {},
@@ -403,7 +403,7 @@ const Index: React.FC = () => {
                   generatedProposals = generateProposals(combinedForEditing, initialSnapshot);
                   setDirectionSnapshot(initialSnapshot);
                 } else {
-                  console.warn("[proposal-gate] ?섎? ?곗씠??遺꾩궛 遺議???fallback ?ъ슜");
+                  console.warn("[proposal-gate] 의미 데이터 분산 부족 - fallback 사용");
                   const allFragIds = combinedForEditing.map((f) => f.fragment_id);
                   const timeOrdered = [...combinedForEditing]
                     .sort((a, b) => (a.start_frame ?? 0) - (b.start_frame ?? 0))
@@ -467,7 +467,7 @@ const Index: React.FC = () => {
         return true;
       } catch (e) {
         console.error("[N-01] 분석 실패:", e);
-        setAnalyzeMessage("遺꾩꽍 以??ㅻ쪟媛 諛쒖깮?덉뒿?덈떎. 肄섏넄???뺤씤??二쇱꽭??");
+        setAnalyzeMessage("분석 중 오류가 발생했습니다. 콘솔을 확인해 주세요.");
         setAnalyzeProgress(0);
         setAppState("analyzing");
         return false;
@@ -490,7 +490,7 @@ const Index: React.FC = () => {
   const handleReproposal = useCallback(
     (nextDirection: Direction) => {
       if (!sourceFragments.length) {
-        console.warn("[Reproposal] sourceFragments媛 ?놁뼱 ?ъ젣?덉쓣 嫄대꼫?곷땲??");
+        console.warn("[Reproposal] sourceFragments가 없어 재제안을 건너뜁니다.");
         return;
       }
 
@@ -728,7 +728,7 @@ const Index: React.FC = () => {
     (f: Fragment, insertAt?: number) => {
       if (!committedProposalId || !proposals) return;
 
-      // ??怨좎쑀 ID 遺?????먮낯怨?援щ텇?섎뒗 蹂듭궗蹂?
+      // 새 고유 ID 부여 — 원본과 구분되는 복사본
       const copyId = `${f.fragment_id}_copy_${Date.now()}`;
       const newFrag: Fragment = {
         ...f,
