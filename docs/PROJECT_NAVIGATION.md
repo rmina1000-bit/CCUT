@@ -24,7 +24,13 @@ CCUT 1.0.4 장기 구조 보강축:
    - [Render QA Rules](file:///d:/CCUT1.0.4/docs/RENDER_QA_RULES.md)
    - [Adapter Policy](file:///d:/CCUT1.0.4/docs/VIDEO_USE_ADAPTER_POLICY.md)
 
-이 6개는 STEP 10 이후 구조 보강 핵심이며,
+7. Free User Edit Form (Design)
+   - [Form Spec](file:///d:/CCUT1.0.4/docs/FREE_EDIT_FORM_SPEC.md)
+   - [Instruction Contract](file:///d:/CCUT1.0.4/docs/FORM_TO_EDIT_INSTRUCTION_CONTRACT.md)
+   - [Presets](file:///d:/CCUT1.0.4/docs/FREE_EDIT_FORM_PRESETS.md)
+   - [User Flow](file:///d:/CCUT1.0.4/docs/FREE_EDIT_USER_FLOW.md)
+
+이 7개는 STEP 10 이후 구조 보강 핵심이며,
 STEP 0~9 PASS 파이프라인을 깨지 않는다.
 
 

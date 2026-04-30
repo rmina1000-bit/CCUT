@@ -27,6 +27,7 @@
 - STEP 10-E1 Cognitive Signal Matrix Micro Simulation: **PASS**
 - STEP 10-E1.5 Cognitive Signal Matrix 공식 기준 문서화: **PASS**
 - STEP 10-F Video-use 품질규칙 CCUT 흡수 설계: **PASS**
+- STEP 10-G 무료 사용자 편집 폼 설계: **PASS**
 
 
 
@@ -59,8 +60,8 @@
 
 ## 5. 다음 작업 후보
 
-- STEP 10-F Video-use 품질규칙 흡수 설계 완료 (Rule/Snap/QA/Adapter)
-- 다음 후보: STEP 10-G Factory Simulation 보정 및 실제 데이터 연동 설계
+- STEP 10-G 무료 편집 폼 및 편집 지시서 계약 설계 완료
+- 다음 후보: STEP 10-G.1 Form to Edit Instruction Micro Simulation
 
 
 

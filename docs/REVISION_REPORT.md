@@ -29,6 +29,7 @@
 | STEP 10-E1 | Cognitive Signal Matrix Micro Simulation | PASS |
 | STEP 10-E1.5 | Cognitive Signal Matrix 공식 기준 문서화 | PASS |
 | STEP 10-F | Video-use 품질규칙 CCUT 흡수 설계 | PASS |
+| STEP 10-G | 무료 사용자 편집 폼 설계 | PASS |
 
 
 
@@ -128,6 +129,19 @@
   - `RENDER_QA_RULES.md`: 렌더링 후 자동 검수 항목 및 데이터 구조 설계
   - `VIDEO_USE_ADAPTER_POLICY.md`: Adapter 방식을 통한 로직 이식 원칙 수립
 - **무료버전 품질선 고정**: 말 잘림 방지, 소리 튐 방지 등 필수 물리 품질을 무료 기본 기능으로 확정
+- **Pipeline Isolation**: PASS (기본 파이프라인 영향 없음)
+
+---
+
+## Latest Revision (2026-04-30 23:05)
+
+- **STEP 10-G 무료 사용자 편집 폼 설계 완료**
+- **신규 문서 4종 추가**:
+  - `FREE_EDIT_FORM_SPEC.md`: 8가지 핵심 편집 폼 항목 정의
+  - `FORM_TO_EDIT_INSTRUCTION_CONTRACT.md`: 폼 데이터 → 내부 JSON 지시서 변환 계약 확정
+  - `FREE_EDIT_FORM_PRESETS.md`: 제품 리뷰, 브이로그 등 6대 핵심 프리셋 설계
+  - `FREE_EDIT_USER_FLOW.md`: 조각 기반 개입을 포함한 무료 사용자 여정 확립
+- **핵심 설계**: 외부 AI 없이 규칙 기반(Rule-based)으로 작동하는 로컬 편집 파이프라인 구조 확정
 - **Pipeline Isolation**: PASS (기본 파이프라인 영향 없음)
 
 ---
