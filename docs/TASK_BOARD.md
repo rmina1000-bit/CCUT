@@ -24,6 +24,7 @@
 | STEP 10-E1.5 | Cognitive Signal Matrix 공식 기준 문서화 |
 | STEP 10-F | Video-use 품질규칙 CCUT 흡수 설계 |
 | STEP 10-G | 무료 사용자 편집 폼 설계 |
+| STEP 10-G.1 | Form → Edit Instruction Micro Simulation |
 
 
 
@@ -36,7 +37,7 @@
 
 ## CURRENT 🔄
 
-- STEP 10-G 무료 편집 폼 및 편집 지시서 계약 설계 완료
+- STEP 10-G.1 폼-지시서 변환 시뮬레이션 및 검증 완료
 
 
 

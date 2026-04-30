@@ -1,0 +1,34 @@
+[
+  {
+    "case_id": "CASE_PRODUCT_REVIEW",
+    "instruction": {
+      "instruction_id": "INS_CASE_PRODUCT_REVIEW",
+      "mode": "free_local",
+      "target_output": "youtube_main",
+      "target_duration_sec": 180,
+      "pace": "fast",
+      "hook_strategy": "demo_first",
+      "reduce_rules": ["silence", "repetition", "ad_like_tone"],
+      "preserve_rules": ["actual_demo", "reaction", "final_opinion"],
+      "subtitle_policy": {
+        "type": "key_subtitles_only"
+      },
+      "analysis_policy": {
+        "matrix_mode": "ccut_matrix_light",
+        "row_size_sec": 2,
+        "worker_slots": 8
+      },
+      "quality_policy": {
+        "word_boundary_snap": true,
+        "render_qa": true,
+        "audio_pop_guard": true
+      }
+    },
+    "validation": {
+      "instruction_valid": true,
+      "missing_fields": [],
+      "policy_check": "PASS",
+      "free_mode_check": "PASS"
+    }
+  }
+]

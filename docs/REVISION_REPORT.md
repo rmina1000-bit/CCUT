@@ -30,6 +30,7 @@
 | STEP 10-E1.5 | Cognitive Signal Matrix 공식 기준 문서화 | PASS |
 | STEP 10-F | Video-use 품질규칙 CCUT 흡수 설계 | PASS |
 | STEP 10-G | 무료 사용자 편집 폼 설계 | PASS |
+| STEP 10-G.1 | Form → Edit Instruction Micro Simulation | PASS |
 
 
 
@@ -142,6 +143,17 @@
   - `FREE_EDIT_FORM_PRESETS.md`: 제품 리뷰, 브이로그 등 6대 핵심 프리셋 설계
   - `FREE_EDIT_USER_FLOW.md`: 조각 기반 개입을 포함한 무료 사용자 여정 확립
 - **핵심 설계**: 외부 AI 없이 규칙 기반(Rule-based)으로 작동하는 로컬 편집 파이프라인 구조 확정
+- **Pipeline Isolation**: PASS (기본 파이프라인 영향 없음)
+
+---
+
+## Latest Revision (2026-04-30 23:10)
+
+- **STEP 10-G.1 Form → Edit Instruction Micro Simulation 완료**
+- **시뮬레이션 스크립트 `simulate_form_to_edit_instruction_micro.py` 추가**
+- **6가지 핵심 편집 시나리오(제품 리뷰, 브이로그 등)에 대한 변환 검증 완료**
+- **결과물 `form_cases.json`, `instruction_result.json`, `instruction_summary.json` 생성**
+- **무료 정책 및 품질 정책(Word Snap, QA 등) 자동 활성화 확인**
 - **Pipeline Isolation**: PASS (기본 파이프라인 영향 없음)
 
 ---

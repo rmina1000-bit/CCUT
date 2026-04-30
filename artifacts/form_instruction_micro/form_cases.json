@@ -1,0 +1,24 @@
+[
+  {
+    "case_id": "CASE_PRODUCT_REVIEW",
+    "purpose": "product_review",
+    "target_duration": "3min",
+    "style": "fast_strong",
+    "opening": "demo_first",
+    "reduce": ["silence", "repetition", "ad_like_tone"],
+    "preserve": ["actual_demo", "reaction", "final_opinion"],
+    "subtitle": "key_subtitles_only",
+    "proposal_mode": "ab"
+  },
+  {
+    "case_id": "CASE_LECTURE",
+    "purpose": "lecture",
+    "target_duration": "half",
+    "style": "informative",
+    "opening": "natural_start",
+    "reduce": ["silence", "filler_words", "setup"],
+    "preserve": ["key_explanation", "conclusion"],
+    "subtitle": "full",
+    "proposal_mode": "standard"
+  }
+]

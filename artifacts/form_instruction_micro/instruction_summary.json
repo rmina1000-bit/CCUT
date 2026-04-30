@@ -1,0 +1,12 @@
+{
+  "simulation_id": "SIM_FORM_20260430_2310",
+  "total_cases": 6,
+  "valid_instruction_count": 6,
+  "invalid_instruction_count": 0,
+  "default_matrix_mode": "ccut_matrix_light",
+  "default_row_size_sec": 2,
+  "default_worker_slots": 8,
+  "quality_policy_check": "PASS",
+  "free_mode_check": "PASS",
+  "pipeline_isolation_check": "PASS"
+}
