@@ -30,7 +30,13 @@ CCUT 1.0.4 장기 구조 보강축:
    - [Presets](file:///d:/CCUT1.0.4/docs/FREE_EDIT_FORM_PRESETS.md)
    - [User Flow](file:///d:/CCUT1.0.4/docs/FREE_EDIT_USER_FLOW.md)
 
-이 7개는 STEP 10 이후 구조 보강 핵심이며,
+8. Free Version MVP & Policy (Final)
+   - [MVP Spec](file:///d:/CCUT1.0.4/docs/FREE_VERSION_MVP_SPEC.md)
+   - [Feature Boundary](file:///d:/CCUT1.0.4/docs/FREE_VERSION_FEATURE_BOUNDARY.md)
+   - [Paid Policy](file:///d:/CCUT1.0.4/docs/PAID_FEATURE_POLICY.md)
+   - [API Cost Governance](file:///d:/CCUT1.0.4/docs/API_COST_GOVERNANCE_POLICY.md)
+
+이 8개는 STEP 10 이후 구조 보강 핵심이며,
 STEP 0~9 PASS 파이프라인을 깨지 않는다.
 
 

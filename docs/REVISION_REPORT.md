@@ -31,6 +31,7 @@
 | STEP 10-F | Video-use 품질규칙 CCUT 흡수 설계 | PASS |
 | STEP 10-G | 무료 사용자 편집 폼 설계 | PASS |
 | STEP 10-G.1 | Form → Edit Instruction Micro Simulation | PASS |
+| STEP 10-H | 무료버전 MVP 범위 최종 정의 | PASS |
 
 
 
@@ -154,6 +155,19 @@
 - **6가지 핵심 편집 시나리오(제품 리뷰, 브이로그 등)에 대한 변환 검증 완료**
 - **결과물 `form_cases.json`, `instruction_result.json`, `instruction_summary.json` 생성**
 - **무료 정책 및 품질 정책(Word Snap, QA 등) 자동 활성화 확인**
+- **Pipeline Isolation**: PASS (기본 파이프라인 영향 없음)
+
+---
+
+## Latest Revision (2026-04-30 23:15)
+
+- **STEP 10-H 무료버전 MVP 범위 최종 정의 완료**
+- **신규 문서 4종 추가**:
+  - `FREE_VERSION_MVP_SPEC.md`: 무료버전 정의, 핵심 흐름 및 MVP 완료 기준 확립
+  - `FREE_VERSION_FEATURE_BOUNDARY.md`: 무료/유료 기능 경계 및 로컬 편집 무제한 원칙 고정
+  - `PAID_FEATURE_POLICY.md`: 월 9,900원 요금제 및 "기억/조언" 중심 유료 기능 정의
+  - `API_COST_GOVERNANCE_POLICY.md`: 외부 API 비용 사용자 별도 부담 및 CCUT의 관리 책임 명시
+- **핵심 전략**: 무료는 "편집 도구", 유료는 "기획 파트너"로 서비스 성격 분리
 - **Pipeline Isolation**: PASS (기본 파이프라인 영향 없음)
 
 ---

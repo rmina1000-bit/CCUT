@@ -25,6 +25,7 @@
 | STEP 10-F | Video-use 품질규칙 CCUT 흡수 설계 |
 | STEP 10-G | 무료 사용자 편집 폼 설계 |
 | STEP 10-G.1 | Form → Edit Instruction Micro Simulation |
+| STEP 10-H | 무료버전 MVP 범위 최종 정의 |
 
 
 
@@ -37,7 +38,7 @@
 
 ## CURRENT 🔄
 
-- STEP 10-G.1 폼-지시서 변환 시뮬레이션 및 검증 완료
+- STEP 10-H 무료/유료 기능 경계 및 MVP 범위 최종 정의 완료
 
 
 
