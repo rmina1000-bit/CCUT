@@ -32,6 +32,7 @@
 | STEP 10-G | 무료 사용자 편집 폼 설계 | PASS |
 | STEP 10-G.1 | Form → Edit Instruction Micro Simulation | PASS |
 | STEP 10-H | 무료버전 MVP 범위 최종 정의 | PASS |
+| STEP 10-I | 무료 폼 UI 최소 구현 설계 | PASS |
 
 
 
@@ -169,6 +170,19 @@
   - `API_COST_GOVERNANCE_POLICY.md`: 외부 API 비용 사용자 별도 부담 및 CCUT의 관리 책임 명시
 - **핵심 전략**: 무료는 "편집 도구", 유료는 "기획 파트너"로 서비스 성격 분리
 - **Pipeline Isolation**: PASS (기본 파이프라인 영향 없음)
+
+---
+
+## Latest Revision (2026-05-01 00:20)
+
+- **STEP 10-I 무료 폼 UI 최소 구현 설계 완료**
+- **신규 문서 4종 추가**:
+  - `FREE_FORM_UI_MINIMUM_SPEC.md`: 무료 폼 UI 정의 및 3단 구조(Sidebar, Form, Working Area) 확립
+  - `FREE_FORM_UI_LAYOUT_GUIDE.md`: 패널별 배치 상세 및 화면 우선순위 정의
+  - `FREE_FORM_UI_STYLE_GUIDE.md`: 흑백/무채색 기반 다크 UI 디자인 원칙 수립 (다색 사용 금지)
+  - `FREE_FORM_UI_COMPONENT_MAP.md`: 개발 시 필요한 15종 이상의 핵심 컴포넌트 맵 작성
+- **디자인 기준**: 2차 디자인의 새 프로젝트 버튼 구조 + 4차 디자인의 다크 배경 조화
+- **Pipeline Isolation**: PASS (기본 파이프라인 및 기존 React 코드 수정 없음)
 
 ---
 

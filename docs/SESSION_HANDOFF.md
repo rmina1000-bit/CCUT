@@ -30,6 +30,7 @@
 - STEP 10-G 무료 사용자 편집 폼 설계: **PASS**
 - STEP 10-G.1 Form → Edit Instruction Micro Simulation: **PASS**
 - STEP 10-H 무료버전 MVP 범위 최종 정의: **PASS**
+- STEP 10-I 무료 폼 UI 최소 구현 설계: **PASS**
 
 
 
@@ -62,8 +63,8 @@
 
 ## 5. 다음 작업 후보
 
-- STEP 10-H 무료버전 MVP 범위 및 유료 경계 확정 완료
-- 다음 후보: STEP 10-I 무료 폼 UI 최소 구현 설계 및 사용자 여정 확립
+- STEP 10-I 무료 폼 UI 최소 구현 설계 완료 (Spec/Layout/Style/Component)
+- 다음 후보: STEP 10-J 무료 폼 UI 실제 최소 구현 및 사용자 여정 확립
 
 
 
