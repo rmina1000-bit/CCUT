@@ -22,6 +22,7 @@
 | STEP 10-D | Resource Governor Simulation v0 |
 | STEP 10-E1 | Cognitive Signal Matrix Micro Simulation |
 | STEP 10-E1.5 | Cognitive Signal Matrix 공식 기준 문서화 |
+| STEP 10-F | Video-use 품질규칙 CCUT 흡수 설계 |
 
 
 
@@ -34,7 +35,7 @@
 
 ## CURRENT 🔄
 
-- STEP 10-E1.5 공식 기준 문서화 및 정책 고정 완료
+- STEP 10-F Video-use 품질규칙 흡수 설계 완료
 
 
 

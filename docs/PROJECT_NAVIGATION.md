@@ -18,7 +18,13 @@ CCUT 1.0.4 장기 구조 보강축:
    - [Matrix Mode Policy](file:///d:/CCUT1.0.4/docs/MATRIX_MODE_POLICY.md)
    - [Free/Paid Policy](file:///d:/CCUT1.0.4/docs/FREE_PAID_ANALYSIS_POLICY.md)
 
-이 5개는 STEP 10 이후 구조 보강 핵심이며,
+6. Video-use Quality Standards (Adapter Design)
+   - [Quality Rules](file:///d:/CCUT1.0.4/docs/VIDEO_USE_QUALITY_RULES_FOR_CCUT.md)
+   - [Word Snap Spec](file:///d:/CCUT1.0.4/docs/WORD_BOUNDARY_SNAP_SPEC.md)
+   - [Render QA Rules](file:///d:/CCUT1.0.4/docs/RENDER_QA_RULES.md)
+   - [Adapter Policy](file:///d:/CCUT1.0.4/docs/VIDEO_USE_ADAPTER_POLICY.md)
+
+이 6개는 STEP 10 이후 구조 보강 핵심이며,
 STEP 0~9 PASS 파이프라인을 깨지 않는다.
 
 

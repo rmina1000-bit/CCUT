@@ -26,6 +26,7 @@
 - STEP 10-D Resource Governor Simulation v0: **PASS**
 - STEP 10-E1 Cognitive Signal Matrix Micro Simulation: **PASS**
 - STEP 10-E1.5 Cognitive Signal Matrix 공식 기준 문서화: **PASS**
+- STEP 10-F Video-use 품질규칙 CCUT 흡수 설계: **PASS**
 
 
 
@@ -58,8 +59,8 @@
 
 ## 5. 다음 작업 후보
 
-- STEP 10-E1.5 공식 기준 문서화 완료 (Spec/Taxonomy/Policy 등)
-- 다음 후보: STEP 10-F External Proposal Service Simulation v0 설계
+- STEP 10-F Video-use 품질규칙 흡수 설계 완료 (Rule/Snap/QA/Adapter)
+- 다음 후보: STEP 10-G Factory Simulation 보정 및 실제 데이터 연동 설계
 
 
 

@@ -28,6 +28,7 @@
 | STEP 10-D | Resource Governor Simulation v0 | PASS |
 | STEP 10-E1 | Cognitive Signal Matrix Micro Simulation | PASS |
 | STEP 10-E1.5 | Cognitive Signal Matrix 공식 기준 문서화 | PASS |
+| STEP 10-F | Video-use 품질규칙 CCUT 흡수 설계 | PASS |
 
 
 
@@ -114,6 +115,19 @@
   - `MATRIX_MODE_POLICY.md`: 분석 모드(Speech/Light/Full)별 데이터 반영
   - `FREE_PAID_ANALYSIS_POLICY.md`: 무료/유료 서비스 범위 및 외부 AI 정책 고정
 - **10-E1 시뮬레이션 데이터 최종 반영**: (0.8s/16.01s/96.06s) 기준 확립
+- **Pipeline Isolation**: PASS (기본 파이프라인 영향 없음)
+
+---
+
+## Latest Revision (2026-04-30 23:00)
+
+- **STEP 10-F Video-use 품질규칙 CCUT 흡수 설계 완료**
+- **신규 문서 4종 추가**:
+  - `VIDEO_USE_QUALITY_RULES_FOR_CCUT.md`: 9대 편집 품질 규칙 정의
+  - `WORD_BOUNDARY_SNAP_SPEC.md`: 단어 기반 컷 경계 보정 인터페이스 및 규칙 확정
+  - `RENDER_QA_RULES.md`: 렌더링 후 자동 검수 항목 및 데이터 구조 설계
+  - `VIDEO_USE_ADAPTER_POLICY.md`: Adapter 방식을 통한 로직 이식 원칙 수립
+- **무료버전 품질선 고정**: 말 잘림 방지, 소리 튐 방지 등 필수 물리 품질을 무료 기본 기능으로 확정
 - **Pipeline Isolation**: PASS (기본 파이프라인 영향 없음)
 
 ---
