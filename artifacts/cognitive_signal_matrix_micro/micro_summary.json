@@ -1,0 +1,26 @@
+{
+  "simulation_id": "SIM_CSM_20260430_215809",
+  "total_cases": 72,
+  "timestamp": "2026-04-30T21:58:09.186424",
+  "findings": {
+    "fastest_mode": "video_use_speech_only",
+    "highest_precision_mode": "ccut_matrix_full",
+    "optimal_balance": "ccut_matrix_light + 2s + 8 slots",
+    "env_impact": "CCUT_TARGET_LAPTOP shows ~40% efficiency gain"
+  },
+  "averages_by_mode": {
+    "ccut_matrix_light": {
+      "avg_time_sec": 16.01,
+      "avg_precision": 0.88
+    },
+    "video_use_speech_only": {
+      "avg_time_sec": 0.8,
+      "avg_precision": 0.62
+    },
+    "ccut_matrix_full": {
+      "avg_time_sec": 96.06,
+      "avg_precision": 0.97
+    }
+  },
+  "pipeline_isolation_check": "PASS"
+}

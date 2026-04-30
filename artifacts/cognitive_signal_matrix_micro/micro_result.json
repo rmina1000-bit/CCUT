@@ -1,0 +1,1298 @@
+[
+  {
+    "case_id": 1,
+    "video_type": "talking_head",
+    "analysis_mode": "video_use_speech_only",
+    "row_size_sec": 2,
+    "worker_slot": 4,
+    "environment": "NORMAL_LAPTOP",
+    "metrics": {
+      "estimated_total_time_sec": 1.8,
+      "task_count": 36,
+      "cell_count": 30,
+      "boundary_precision_score": 0.65,
+      "visual_context_coverage": 0.0,
+      "user_editability_score": 0.55,
+      "reuse_score": 0.3,
+      "recommended_mode": "SPEED_PICK"
+    }
+  },
+  {
+    "case_id": 2,
+    "video_type": "talking_head",
+    "analysis_mode": "video_use_speech_only",
+    "row_size_sec": 2,
+    "worker_slot": 4,
+    "environment": "CCUT_TARGET_LAPTOP",
+    "metrics": {
+      "estimated_total_time_sec": 1.08,
+      "task_count": 36,
+      "cell_count": 30,
+      "boundary_precision_score": 0.65,
+      "visual_context_coverage": 0.0,
+      "user_editability_score": 0.55,
+      "reuse_score": 0.3,
+      "recommended_mode": "NONE"
+    }
+  },
+  {
+    "case_id": 3,
+    "video_type": "talking_head",
+    "analysis_mode": "video_use_speech_only",
+    "row_size_sec": 2,
+    "worker_slot": 8,
+    "environment": "NORMAL_LAPTOP",
+    "metrics": {
+      "estimated_total_time_sec": 1.06,
+      "task_count": 36,
+      "cell_count": 30,
+      "boundary_precision_score": 0.65,
+      "visual_context_coverage": 0.0,
+      "user_editability_score": 0.55,
+      "reuse_score": 0.3,
+      "recommended_mode": "SPEED_PICK"
+    }
+  },
+  {
+    "case_id": 4,
+    "video_type": "talking_head",
+    "analysis_mode": "video_use_speech_only",
+    "row_size_sec": 2,
+    "worker_slot": 8,
+    "environment": "CCUT_TARGET_LAPTOP",
+    "metrics": {
+      "estimated_total_time_sec": 0.64,
+      "task_count": 36,
+      "cell_count": 30,
+      "boundary_precision_score": 0.65,
+      "visual_context_coverage": 0.0,
+      "user_editability_score": 0.55,
+      "reuse_score": 0.3,
+      "recommended_mode": "NONE"
+    }
+  },
+  {
+    "case_id": 5,
+    "video_type": "talking_head",
+    "analysis_mode": "video_use_speech_only",
+    "row_size_sec": 5,
+    "worker_slot": 4,
+    "environment": "NORMAL_LAPTOP",
+    "metrics": {
+      "estimated_total_time_sec": 0.72,
+      "task_count": 14,
+      "cell_count": 12,
+      "boundary_precision_score": 0.6,
+      "visual_context_coverage": 0.0,
+      "user_editability_score": 0.5,
+      "reuse_score": 0.3,
+      "recommended_mode": "SPEED_PICK"
+    }
+  },
+  {
+    "case_id": 6,
+    "video_type": "talking_head",
+    "analysis_mode": "video_use_speech_only",
+    "row_size_sec": 5,
+    "worker_slot": 4,
+    "environment": "CCUT_TARGET_LAPTOP",
+    "metrics": {
+      "estimated_total_time_sec": 0.43,
+      "task_count": 14,
+      "cell_count": 12,
+      "boundary_precision_score": 0.6,
+      "visual_context_coverage": 0.0,
+      "user_editability_score": 0.5,
+      "reuse_score": 0.3,
+      "recommended_mode": "NONE"
+    }
+  },
+  {
+    "case_id": 7,
+    "video_type": "talking_head",
+    "analysis_mode": "video_use_speech_only",
+    "row_size_sec": 5,
+    "worker_slot": 8,
+    "environment": "NORMAL_LAPTOP",
+    "metrics": {
+      "estimated_total_time_sec": 0.42,
+      "task_count": 14,
+      "cell_count": 12,
+      "boundary_precision_score": 0.6,
+      "visual_context_coverage": 0.0,
+      "user_editability_score": 0.5,
+      "reuse_score": 0.3,
+      "recommended_mode": "SPEED_PICK"
+    }
+  },
+  {
+    "case_id": 8,
+    "video_type": "talking_head",
+    "analysis_mode": "video_use_speech_only",
+    "row_size_sec": 5,
+    "worker_slot": 8,
+    "environment": "CCUT_TARGET_LAPTOP",
+    "metrics": {
+      "estimated_total_time_sec": 0.25,
+      "task_count": 14,
+      "cell_count": 12,
+      "boundary_precision_score": 0.6,
+      "visual_context_coverage": 0.0,
+      "user_editability_score": 0.5,
+      "reuse_score": 0.3,
+      "recommended_mode": "NONE"
+    }
+  },
+  {
+    "case_id": 9,
+    "video_type": "talking_head",
+    "analysis_mode": "ccut_matrix_light",
+    "row_size_sec": 2,
+    "worker_slot": 4,
+    "environment": "NORMAL_LAPTOP",
+    "metrics": {
+      "estimated_total_time_sec": 36.0,
+      "task_count": 180,
+      "cell_count": 150,
+      "boundary_precision_score": 0.9,
+      "visual_context_coverage": 0.6,
+      "user_editability_score": 0.85,
+      "reuse_score": 0.7,
+      "recommended_mode": "NONE"
+    }
+  },
+  {
+    "case_id": 10,
+    "video_type": "talking_head",
+    "analysis_mode": "ccut_matrix_light",
+    "row_size_sec": 2,
+    "worker_slot": 4,
+    "environment": "CCUT_TARGET_LAPTOP",
+    "metrics": {
+      "estimated_total_time_sec": 21.6,
+      "task_count": 180,
+      "cell_count": 150,
+      "boundary_precision_score": 0.9,
+      "visual_context_coverage": 0.6,
+      "user_editability_score": 0.85,
+      "reuse_score": 0.7,
+      "recommended_mode": "NONE"
+    }
+  },
+  {
+    "case_id": 11,
+    "video_type": "talking_head",
+    "analysis_mode": "ccut_matrix_light",
+    "row_size_sec": 2,
+    "worker_slot": 8,
+    "environment": "NORMAL_LAPTOP",
+    "metrics": {
+      "estimated_total_time_sec": 21.18,
+      "task_count": 180,
+      "cell_count": 150,
+      "boundary_precision_score": 0.9,
+      "visual_context_coverage": 0.6,
+      "user_editability_score": 0.85,
+      "reuse_score": 0.7,
+      "recommended_mode": "BALANCED_PICK"
+    }
+  },
+  {
+    "case_id": 12,
+    "video_type": "talking_head",
+    "analysis_mode": "ccut_matrix_light",
+    "row_size_sec": 2,
+    "worker_slot": 8,
+    "environment": "CCUT_TARGET_LAPTOP",
+    "metrics": {
+      "estimated_total_time_sec": 12.71,
+      "task_count": 180,
+      "cell_count": 150,
+      "boundary_precision_score": 0.9,
+      "visual_context_coverage": 0.6,
+      "user_editability_score": 0.85,
+      "reuse_score": 0.7,
+      "recommended_mode": "BALANCED_PICK"
+    }
+  },
+  {
+    "case_id": 13,
+    "video_type": "talking_head",
+    "analysis_mode": "ccut_matrix_light",
+    "row_size_sec": 5,
+    "worker_slot": 4,
+    "environment": "NORMAL_LAPTOP",
+    "metrics": {
+      "estimated_total_time_sec": 14.4,
+      "task_count": 72,
+      "cell_count": 60,
+      "boundary_precision_score": 0.85,
+      "visual_context_coverage": 0.6,
+      "user_editability_score": 0.8,
+      "reuse_score": 0.7,
+      "recommended_mode": "NONE"
+    }
+  },
+  {
+    "case_id": 14,
+    "video_type": "talking_head",
+    "analysis_mode": "ccut_matrix_light",
+    "row_size_sec": 5,
+    "worker_slot": 4,
+    "environment": "CCUT_TARGET_LAPTOP",
+    "metrics": {
+      "estimated_total_time_sec": 8.64,
+      "task_count": 72,
+      "cell_count": 60,
+      "boundary_precision_score": 0.85,
+      "visual_context_coverage": 0.6,
+      "user_editability_score": 0.8,
+      "reuse_score": 0.7,
+      "recommended_mode": "NONE"
+    }
+  },
+  {
+    "case_id": 15,
+    "video_type": "talking_head",
+    "analysis_mode": "ccut_matrix_light",
+    "row_size_sec": 5,
+    "worker_slot": 8,
+    "environment": "NORMAL_LAPTOP",
+    "metrics": {
+      "estimated_total_time_sec": 8.47,
+      "task_count": 72,
+      "cell_count": 60,
+      "boundary_precision_score": 0.85,
+      "visual_context_coverage": 0.6,
+      "user_editability_score": 0.8,
+      "reuse_score": 0.7,
+      "recommended_mode": "NONE"
+    }
+  },
+  {
+    "case_id": 16,
+    "video_type": "talking_head",
+    "analysis_mode": "ccut_matrix_light",
+    "row_size_sec": 5,
+    "worker_slot": 8,
+    "environment": "CCUT_TARGET_LAPTOP",
+    "metrics": {
+      "estimated_total_time_sec": 5.08,
+      "task_count": 72,
+      "cell_count": 60,
+      "boundary_precision_score": 0.85,
+      "visual_context_coverage": 0.6,
+      "user_editability_score": 0.8,
+      "reuse_score": 0.7,
+      "recommended_mode": "NONE"
+    }
+  },
+  {
+    "case_id": 17,
+    "video_type": "talking_head",
+    "analysis_mode": "ccut_matrix_full",
+    "row_size_sec": 2,
+    "worker_slot": 4,
+    "environment": "NORMAL_LAPTOP",
+    "metrics": {
+      "estimated_total_time_sec": 216.0,
+      "task_count": 432,
+      "cell_count": 360,
+      "boundary_precision_score": 0.99,
+      "visual_context_coverage": 0.95,
+      "user_editability_score": 0.95,
+      "reuse_score": 0.95,
+      "recommended_mode": "NONE"
+    }
+  },
+  {
+    "case_id": 18,
+    "video_type": "talking_head",
+    "analysis_mode": "ccut_matrix_full",
+    "row_size_sec": 2,
+    "worker_slot": 4,
+    "environment": "CCUT_TARGET_LAPTOP",
+    "metrics": {
+      "estimated_total_time_sec": 129.6,
+      "task_count": 432,
+      "cell_count": 360,
+      "boundary_precision_score": 0.99,
+      "visual_context_coverage": 0.95,
+      "user_editability_score": 0.95,
+      "reuse_score": 0.95,
+      "recommended_mode": "QUALITY_PICK"
+    }
+  },
+  {
+    "case_id": 19,
+    "video_type": "talking_head",
+    "analysis_mode": "ccut_matrix_full",
+    "row_size_sec": 2,
+    "worker_slot": 8,
+    "environment": "NORMAL_LAPTOP",
+    "metrics": {
+      "estimated_total_time_sec": 127.06,
+      "task_count": 432,
+      "cell_count": 360,
+      "boundary_precision_score": 0.99,
+      "visual_context_coverage": 0.95,
+      "user_editability_score": 0.95,
+      "reuse_score": 0.95,
+      "recommended_mode": "NONE"
+    }
+  },
+  {
+    "case_id": 20,
+    "video_type": "talking_head",
+    "analysis_mode": "ccut_matrix_full",
+    "row_size_sec": 2,
+    "worker_slot": 8,
+    "environment": "CCUT_TARGET_LAPTOP",
+    "metrics": {
+      "estimated_total_time_sec": 76.24,
+      "task_count": 432,
+      "cell_count": 360,
+      "boundary_precision_score": 0.99,
+      "visual_context_coverage": 0.95,
+      "user_editability_score": 0.95,
+      "reuse_score": 0.95,
+      "recommended_mode": "QUALITY_PICK"
+    }
+  },
+  {
+    "case_id": 21,
+    "video_type": "talking_head",
+    "analysis_mode": "ccut_matrix_full",
+    "row_size_sec": 5,
+    "worker_slot": 4,
+    "environment": "NORMAL_LAPTOP",
+    "metrics": {
+      "estimated_total_time_sec": 86.4,
+      "task_count": 172,
+      "cell_count": 144,
+      "boundary_precision_score": 0.95,
+      "visual_context_coverage": 0.95,
+      "user_editability_score": 0.9,
+      "reuse_score": 0.95,
+      "recommended_mode": "NONE"
+    }
+  },
+  {
+    "case_id": 22,
+    "video_type": "talking_head",
+    "analysis_mode": "ccut_matrix_full",
+    "row_size_sec": 5,
+    "worker_slot": 4,
+    "environment": "CCUT_TARGET_LAPTOP",
+    "metrics": {
+      "estimated_total_time_sec": 51.84,
+      "task_count": 172,
+      "cell_count": 144,
+      "boundary_precision_score": 0.95,
+      "visual_context_coverage": 0.95,
+      "user_editability_score": 0.9,
+      "reuse_score": 0.95,
+      "recommended_mode": "QUALITY_PICK"
+    }
+  },
+  {
+    "case_id": 23,
+    "video_type": "talking_head",
+    "analysis_mode": "ccut_matrix_full",
+    "row_size_sec": 5,
+    "worker_slot": 8,
+    "environment": "NORMAL_LAPTOP",
+    "metrics": {
+      "estimated_total_time_sec": 50.82,
+      "task_count": 172,
+      "cell_count": 144,
+      "boundary_precision_score": 0.95,
+      "visual_context_coverage": 0.95,
+      "user_editability_score": 0.9,
+      "reuse_score": 0.95,
+      "recommended_mode": "NONE"
+    }
+  },
+  {
+    "case_id": 24,
+    "video_type": "talking_head",
+    "analysis_mode": "ccut_matrix_full",
+    "row_size_sec": 5,
+    "worker_slot": 8,
+    "environment": "CCUT_TARGET_LAPTOP",
+    "metrics": {
+      "estimated_total_time_sec": 30.49,
+      "task_count": 172,
+      "cell_count": 144,
+      "boundary_precision_score": 0.95,
+      "visual_context_coverage": 0.95,
+      "user_editability_score": 0.9,
+      "reuse_score": 0.95,
+      "recommended_mode": "QUALITY_PICK"
+    }
+  },
+  {
+    "case_id": 25,
+    "video_type": "product_review",
+    "analysis_mode": "video_use_speech_only",
+    "row_size_sec": 2,
+    "worker_slot": 4,
+    "environment": "NORMAL_LAPTOP",
+    "metrics": {
+      "estimated_total_time_sec": 1.8,
+      "task_count": 36,
+      "cell_count": 30,
+      "boundary_precision_score": 0.65,
+      "visual_context_coverage": 0.0,
+      "user_editability_score": 0.55,
+      "reuse_score": 0.3,
+      "recommended_mode": "SPEED_PICK"
+    }
+  },
+  {
+    "case_id": 26,
+    "video_type": "product_review",
+    "analysis_mode": "video_use_speech_only",
+    "row_size_sec": 2,
+    "worker_slot": 4,
+    "environment": "CCUT_TARGET_LAPTOP",
+    "metrics": {
+      "estimated_total_time_sec": 1.08,
+      "task_count": 36,
+      "cell_count": 30,
+      "boundary_precision_score": 0.65,
+      "visual_context_coverage": 0.0,
+      "user_editability_score": 0.55,
+      "reuse_score": 0.3,
+      "recommended_mode": "NONE"
+    }
+  },
+  {
+    "case_id": 27,
+    "video_type": "product_review",
+    "analysis_mode": "video_use_speech_only",
+    "row_size_sec": 2,
+    "worker_slot": 8,
+    "environment": "NORMAL_LAPTOP",
+    "metrics": {
+      "estimated_total_time_sec": 1.06,
+      "task_count": 36,
+      "cell_count": 30,
+      "boundary_precision_score": 0.65,
+      "visual_context_coverage": 0.0,
+      "user_editability_score": 0.55,
+      "reuse_score": 0.3,
+      "recommended_mode": "SPEED_PICK"
+    }
+  },
+  {
+    "case_id": 28,
+    "video_type": "product_review",
+    "analysis_mode": "video_use_speech_only",
+    "row_size_sec": 2,
+    "worker_slot": 8,
+    "environment": "CCUT_TARGET_LAPTOP",
+    "metrics": {
+      "estimated_total_time_sec": 0.64,
+      "task_count": 36,
+      "cell_count": 30,
+      "boundary_precision_score": 0.65,
+      "visual_context_coverage": 0.0,
+      "user_editability_score": 0.55,
+      "reuse_score": 0.3,
+      "recommended_mode": "NONE"
+    }
+  },
+  {
+    "case_id": 29,
+    "video_type": "product_review",
+    "analysis_mode": "video_use_speech_only",
+    "row_size_sec": 5,
+    "worker_slot": 4,
+    "environment": "NORMAL_LAPTOP",
+    "metrics": {
+      "estimated_total_time_sec": 0.72,
+      "task_count": 14,
+      "cell_count": 12,
+      "boundary_precision_score": 0.6,
+      "visual_context_coverage": 0.0,
+      "user_editability_score": 0.5,
+      "reuse_score": 0.3,
+      "recommended_mode": "SPEED_PICK"
+    }
+  },
+  {
+    "case_id": 30,
+    "video_type": "product_review",
+    "analysis_mode": "video_use_speech_only",
+    "row_size_sec": 5,
+    "worker_slot": 4,
+    "environment": "CCUT_TARGET_LAPTOP",
+    "metrics": {
+      "estimated_total_time_sec": 0.43,
+      "task_count": 14,
+      "cell_count": 12,
+      "boundary_precision_score": 0.6,
+      "visual_context_coverage": 0.0,
+      "user_editability_score": 0.5,
+      "reuse_score": 0.3,
+      "recommended_mode": "NONE"
+    }
+  },
+  {
+    "case_id": 31,
+    "video_type": "product_review",
+    "analysis_mode": "video_use_speech_only",
+    "row_size_sec": 5,
+    "worker_slot": 8,
+    "environment": "NORMAL_LAPTOP",
+    "metrics": {
+      "estimated_total_time_sec": 0.42,
+      "task_count": 14,
+      "cell_count": 12,
+      "boundary_precision_score": 0.6,
+      "visual_context_coverage": 0.0,
+      "user_editability_score": 0.5,
+      "reuse_score": 0.3,
+      "recommended_mode": "SPEED_PICK"
+    }
+  },
+  {
+    "case_id": 32,
+    "video_type": "product_review",
+    "analysis_mode": "video_use_speech_only",
+    "row_size_sec": 5,
+    "worker_slot": 8,
+    "environment": "CCUT_TARGET_LAPTOP",
+    "metrics": {
+      "estimated_total_time_sec": 0.25,
+      "task_count": 14,
+      "cell_count": 12,
+      "boundary_precision_score": 0.6,
+      "visual_context_coverage": 0.0,
+      "user_editability_score": 0.5,
+      "reuse_score": 0.3,
+      "recommended_mode": "NONE"
+    }
+  },
+  {
+    "case_id": 33,
+    "video_type": "product_review",
+    "analysis_mode": "ccut_matrix_light",
+    "row_size_sec": 2,
+    "worker_slot": 4,
+    "environment": "NORMAL_LAPTOP",
+    "metrics": {
+      "estimated_total_time_sec": 36.0,
+      "task_count": 180,
+      "cell_count": 150,
+      "boundary_precision_score": 0.9,
+      "visual_context_coverage": 0.6,
+      "user_editability_score": 0.85,
+      "reuse_score": 0.7,
+      "recommended_mode": "NONE"
+    }
+  },
+  {
+    "case_id": 34,
+    "video_type": "product_review",
+    "analysis_mode": "ccut_matrix_light",
+    "row_size_sec": 2,
+    "worker_slot": 4,
+    "environment": "CCUT_TARGET_LAPTOP",
+    "metrics": {
+      "estimated_total_time_sec": 21.6,
+      "task_count": 180,
+      "cell_count": 150,
+      "boundary_precision_score": 0.9,
+      "visual_context_coverage": 0.6,
+      "user_editability_score": 0.85,
+      "reuse_score": 0.7,
+      "recommended_mode": "NONE"
+    }
+  },
+  {
+    "case_id": 35,
+    "video_type": "product_review",
+    "analysis_mode": "ccut_matrix_light",
+    "row_size_sec": 2,
+    "worker_slot": 8,
+    "environment": "NORMAL_LAPTOP",
+    "metrics": {
+      "estimated_total_time_sec": 21.18,
+      "task_count": 180,
+      "cell_count": 150,
+      "boundary_precision_score": 0.9,
+      "visual_context_coverage": 0.6,
+      "user_editability_score": 0.85,
+      "reuse_score": 0.7,
+      "recommended_mode": "BALANCED_PICK"
+    }
+  },
+  {
+    "case_id": 36,
+    "video_type": "product_review",
+    "analysis_mode": "ccut_matrix_light",
+    "row_size_sec": 2,
+    "worker_slot": 8,
+    "environment": "CCUT_TARGET_LAPTOP",
+    "metrics": {
+      "estimated_total_time_sec": 12.71,
+      "task_count": 180,
+      "cell_count": 150,
+      "boundary_precision_score": 0.9,
+      "visual_context_coverage": 0.6,
+      "user_editability_score": 0.85,
+      "reuse_score": 0.7,
+      "recommended_mode": "BALANCED_PICK"
+    }
+  },
+  {
+    "case_id": 37,
+    "video_type": "product_review",
+    "analysis_mode": "ccut_matrix_light",
+    "row_size_sec": 5,
+    "worker_slot": 4,
+    "environment": "NORMAL_LAPTOP",
+    "metrics": {
+      "estimated_total_time_sec": 14.4,
+      "task_count": 72,
+      "cell_count": 60,
+      "boundary_precision_score": 0.85,
+      "visual_context_coverage": 0.6,
+      "user_editability_score": 0.8,
+      "reuse_score": 0.7,
+      "recommended_mode": "NONE"
+    }
+  },
+  {
+    "case_id": 38,
+    "video_type": "product_review",
+    "analysis_mode": "ccut_matrix_light",
+    "row_size_sec": 5,
+    "worker_slot": 4,
+    "environment": "CCUT_TARGET_LAPTOP",
+    "metrics": {
+      "estimated_total_time_sec": 8.64,
+      "task_count": 72,
+      "cell_count": 60,
+      "boundary_precision_score": 0.85,
+      "visual_context_coverage": 0.6,
+      "user_editability_score": 0.8,
+      "reuse_score": 0.7,
+      "recommended_mode": "NONE"
+    }
+  },
+  {
+    "case_id": 39,
+    "video_type": "product_review",
+    "analysis_mode": "ccut_matrix_light",
+    "row_size_sec": 5,
+    "worker_slot": 8,
+    "environment": "NORMAL_LAPTOP",
+    "metrics": {
+      "estimated_total_time_sec": 8.47,
+      "task_count": 72,
+      "cell_count": 60,
+      "boundary_precision_score": 0.85,
+      "visual_context_coverage": 0.6,
+      "user_editability_score": 0.8,
+      "reuse_score": 0.7,
+      "recommended_mode": "NONE"
+    }
+  },
+  {
+    "case_id": 40,
+    "video_type": "product_review",
+    "analysis_mode": "ccut_matrix_light",
+    "row_size_sec": 5,
+    "worker_slot": 8,
+    "environment": "CCUT_TARGET_LAPTOP",
+    "metrics": {
+      "estimated_total_time_sec": 5.08,
+      "task_count": 72,
+      "cell_count": 60,
+      "boundary_precision_score": 0.85,
+      "visual_context_coverage": 0.6,
+      "user_editability_score": 0.8,
+      "reuse_score": 0.7,
+      "recommended_mode": "NONE"
+    }
+  },
+  {
+    "case_id": 41,
+    "video_type": "product_review",
+    "analysis_mode": "ccut_matrix_full",
+    "row_size_sec": 2,
+    "worker_slot": 4,
+    "environment": "NORMAL_LAPTOP",
+    "metrics": {
+      "estimated_total_time_sec": 216.0,
+      "task_count": 432,
+      "cell_count": 360,
+      "boundary_precision_score": 0.99,
+      "visual_context_coverage": 0.95,
+      "user_editability_score": 0.95,
+      "reuse_score": 0.95,
+      "recommended_mode": "NONE"
+    }
+  },
+  {
+    "case_id": 42,
+    "video_type": "product_review",
+    "analysis_mode": "ccut_matrix_full",
+    "row_size_sec": 2,
+    "worker_slot": 4,
+    "environment": "CCUT_TARGET_LAPTOP",
+    "metrics": {
+      "estimated_total_time_sec": 129.6,
+      "task_count": 432,
+      "cell_count": 360,
+      "boundary_precision_score": 0.99,
+      "visual_context_coverage": 0.95,
+      "user_editability_score": 0.95,
+      "reuse_score": 0.95,
+      "recommended_mode": "QUALITY_PICK"
+    }
+  },
+  {
+    "case_id": 43,
+    "video_type": "product_review",
+    "analysis_mode": "ccut_matrix_full",
+    "row_size_sec": 2,
+    "worker_slot": 8,
+    "environment": "NORMAL_LAPTOP",
+    "metrics": {
+      "estimated_total_time_sec": 127.06,
+      "task_count": 432,
+      "cell_count": 360,
+      "boundary_precision_score": 0.99,
+      "visual_context_coverage": 0.95,
+      "user_editability_score": 0.95,
+      "reuse_score": 0.95,
+      "recommended_mode": "NONE"
+    }
+  },
+  {
+    "case_id": 44,
+    "video_type": "product_review",
+    "analysis_mode": "ccut_matrix_full",
+    "row_size_sec": 2,
+    "worker_slot": 8,
+    "environment": "CCUT_TARGET_LAPTOP",
+    "metrics": {
+      "estimated_total_time_sec": 76.24,
+      "task_count": 432,
+      "cell_count": 360,
+      "boundary_precision_score": 0.99,
+      "visual_context_coverage": 0.95,
+      "user_editability_score": 0.95,
+      "reuse_score": 0.95,
+      "recommended_mode": "QUALITY_PICK"
+    }
+  },
+  {
+    "case_id": 45,
+    "video_type": "product_review",
+    "analysis_mode": "ccut_matrix_full",
+    "row_size_sec": 5,
+    "worker_slot": 4,
+    "environment": "NORMAL_LAPTOP",
+    "metrics": {
+      "estimated_total_time_sec": 86.4,
+      "task_count": 172,
+      "cell_count": 144,
+      "boundary_precision_score": 0.95,
+      "visual_context_coverage": 0.95,
+      "user_editability_score": 0.9,
+      "reuse_score": 0.95,
+      "recommended_mode": "NONE"
+    }
+  },
+  {
+    "case_id": 46,
+    "video_type": "product_review",
+    "analysis_mode": "ccut_matrix_full",
+    "row_size_sec": 5,
+    "worker_slot": 4,
+    "environment": "CCUT_TARGET_LAPTOP",
+    "metrics": {
+      "estimated_total_time_sec": 51.84,
+      "task_count": 172,
+      "cell_count": 144,
+      "boundary_precision_score": 0.95,
+      "visual_context_coverage": 0.95,
+      "user_editability_score": 0.9,
+      "reuse_score": 0.95,
+      "recommended_mode": "QUALITY_PICK"
+    }
+  },
+  {
+    "case_id": 47,
+    "video_type": "product_review",
+    "analysis_mode": "ccut_matrix_full",
+    "row_size_sec": 5,
+    "worker_slot": 8,
+    "environment": "NORMAL_LAPTOP",
+    "metrics": {
+      "estimated_total_time_sec": 50.82,
+      "task_count": 172,
+      "cell_count": 144,
+      "boundary_precision_score": 0.95,
+      "visual_context_coverage": 0.95,
+      "user_editability_score": 0.9,
+      "reuse_score": 0.95,
+      "recommended_mode": "NONE"
+    }
+  },
+  {
+    "case_id": 48,
+    "video_type": "product_review",
+    "analysis_mode": "ccut_matrix_full",
+    "row_size_sec": 5,
+    "worker_slot": 8,
+    "environment": "CCUT_TARGET_LAPTOP",
+    "metrics": {
+      "estimated_total_time_sec": 30.49,
+      "task_count": 172,
+      "cell_count": 144,
+      "boundary_precision_score": 0.95,
+      "visual_context_coverage": 0.95,
+      "user_editability_score": 0.9,
+      "reuse_score": 0.95,
+      "recommended_mode": "QUALITY_PICK"
+    }
+  },
+  {
+    "case_id": 49,
+    "video_type": "vlog",
+    "analysis_mode": "video_use_speech_only",
+    "row_size_sec": 2,
+    "worker_slot": 4,
+    "environment": "NORMAL_LAPTOP",
+    "metrics": {
+      "estimated_total_time_sec": 1.8,
+      "task_count": 36,
+      "cell_count": 30,
+      "boundary_precision_score": 0.65,
+      "visual_context_coverage": 0.0,
+      "user_editability_score": 0.55,
+      "reuse_score": 0.3,
+      "recommended_mode": "SPEED_PICK"
+    }
+  },
+  {
+    "case_id": 50,
+    "video_type": "vlog",
+    "analysis_mode": "video_use_speech_only",
+    "row_size_sec": 2,
+    "worker_slot": 4,
+    "environment": "CCUT_TARGET_LAPTOP",
+    "metrics": {
+      "estimated_total_time_sec": 1.08,
+      "task_count": 36,
+      "cell_count": 30,
+      "boundary_precision_score": 0.65,
+      "visual_context_coverage": 0.0,
+      "user_editability_score": 0.55,
+      "reuse_score": 0.3,
+      "recommended_mode": "NONE"
+    }
+  },
+  {
+    "case_id": 51,
+    "video_type": "vlog",
+    "analysis_mode": "video_use_speech_only",
+    "row_size_sec": 2,
+    "worker_slot": 8,
+    "environment": "NORMAL_LAPTOP",
+    "metrics": {
+      "estimated_total_time_sec": 1.06,
+      "task_count": 36,
+      "cell_count": 30,
+      "boundary_precision_score": 0.65,
+      "visual_context_coverage": 0.0,
+      "user_editability_score": 0.55,
+      "reuse_score": 0.3,
+      "recommended_mode": "SPEED_PICK"
+    }
+  },
+  {
+    "case_id": 52,
+    "video_type": "vlog",
+    "analysis_mode": "video_use_speech_only",
+    "row_size_sec": 2,
+    "worker_slot": 8,
+    "environment": "CCUT_TARGET_LAPTOP",
+    "metrics": {
+      "estimated_total_time_sec": 0.64,
+      "task_count": 36,
+      "cell_count": 30,
+      "boundary_precision_score": 0.65,
+      "visual_context_coverage": 0.0,
+      "user_editability_score": 0.55,
+      "reuse_score": 0.3,
+      "recommended_mode": "NONE"
+    }
+  },
+  {
+    "case_id": 53,
+    "video_type": "vlog",
+    "analysis_mode": "video_use_speech_only",
+    "row_size_sec": 5,
+    "worker_slot": 4,
+    "environment": "NORMAL_LAPTOP",
+    "metrics": {
+      "estimated_total_time_sec": 0.72,
+      "task_count": 14,
+      "cell_count": 12,
+      "boundary_precision_score": 0.6,
+      "visual_context_coverage": 0.0,
+      "user_editability_score": 0.5,
+      "reuse_score": 0.3,
+      "recommended_mode": "SPEED_PICK"
+    }
+  },
+  {
+    "case_id": 54,
+    "video_type": "vlog",
+    "analysis_mode": "video_use_speech_only",
+    "row_size_sec": 5,
+    "worker_slot": 4,
+    "environment": "CCUT_TARGET_LAPTOP",
+    "metrics": {
+      "estimated_total_time_sec": 0.43,
+      "task_count": 14,
+      "cell_count": 12,
+      "boundary_precision_score": 0.6,
+      "visual_context_coverage": 0.0,
+      "user_editability_score": 0.5,
+      "reuse_score": 0.3,
+      "recommended_mode": "NONE"
+    }
+  },
+  {
+    "case_id": 55,
+    "video_type": "vlog",
+    "analysis_mode": "video_use_speech_only",
+    "row_size_sec": 5,
+    "worker_slot": 8,
+    "environment": "NORMAL_LAPTOP",
+    "metrics": {
+      "estimated_total_time_sec": 0.42,
+      "task_count": 14,
+      "cell_count": 12,
+      "boundary_precision_score": 0.6,
+      "visual_context_coverage": 0.0,
+      "user_editability_score": 0.5,
+      "reuse_score": 0.3,
+      "recommended_mode": "SPEED_PICK"
+    }
+  },
+  {
+    "case_id": 56,
+    "video_type": "vlog",
+    "analysis_mode": "video_use_speech_only",
+    "row_size_sec": 5,
+    "worker_slot": 8,
+    "environment": "CCUT_TARGET_LAPTOP",
+    "metrics": {
+      "estimated_total_time_sec": 0.25,
+      "task_count": 14,
+      "cell_count": 12,
+      "boundary_precision_score": 0.6,
+      "visual_context_coverage": 0.0,
+      "user_editability_score": 0.5,
+      "reuse_score": 0.3,
+      "recommended_mode": "NONE"
+    }
+  },
+  {
+    "case_id": 57,
+    "video_type": "vlog",
+    "analysis_mode": "ccut_matrix_light",
+    "row_size_sec": 2,
+    "worker_slot": 4,
+    "environment": "NORMAL_LAPTOP",
+    "metrics": {
+      "estimated_total_time_sec": 36.0,
+      "task_count": 180,
+      "cell_count": 150,
+      "boundary_precision_score": 0.9,
+      "visual_context_coverage": 0.6,
+      "user_editability_score": 0.85,
+      "reuse_score": 0.7,
+      "recommended_mode": "NONE"
+    }
+  },
+  {
+    "case_id": 58,
+    "video_type": "vlog",
+    "analysis_mode": "ccut_matrix_light",
+    "row_size_sec": 2,
+    "worker_slot": 4,
+    "environment": "CCUT_TARGET_LAPTOP",
+    "metrics": {
+      "estimated_total_time_sec": 21.6,
+      "task_count": 180,
+      "cell_count": 150,
+      "boundary_precision_score": 0.9,
+      "visual_context_coverage": 0.6,
+      "user_editability_score": 0.85,
+      "reuse_score": 0.7,
+      "recommended_mode": "NONE"
+    }
+  },
+  {
+    "case_id": 59,
+    "video_type": "vlog",
+    "analysis_mode": "ccut_matrix_light",
+    "row_size_sec": 2,
+    "worker_slot": 8,
+    "environment": "NORMAL_LAPTOP",
+    "metrics": {
+      "estimated_total_time_sec": 21.18,
+      "task_count": 180,
+      "cell_count": 150,
+      "boundary_precision_score": 0.9,
+      "visual_context_coverage": 0.6,
+      "user_editability_score": 0.85,
+      "reuse_score": 0.7,
+      "recommended_mode": "BALANCED_PICK"
+    }
+  },
+  {
+    "case_id": 60,
+    "video_type": "vlog",
+    "analysis_mode": "ccut_matrix_light",
+    "row_size_sec": 2,
+    "worker_slot": 8,
+    "environment": "CCUT_TARGET_LAPTOP",
+    "metrics": {
+      "estimated_total_time_sec": 12.71,
+      "task_count": 180,
+      "cell_count": 150,
+      "boundary_precision_score": 0.9,
+      "visual_context_coverage": 0.6,
+      "user_editability_score": 0.85,
+      "reuse_score": 0.7,
+      "recommended_mode": "BALANCED_PICK"
+    }
+  },
+  {
+    "case_id": 61,
+    "video_type": "vlog",
+    "analysis_mode": "ccut_matrix_light",
+    "row_size_sec": 5,
+    "worker_slot": 4,
+    "environment": "NORMAL_LAPTOP",
+    "metrics": {
+      "estimated_total_time_sec": 14.4,
+      "task_count": 72,
+      "cell_count": 60,
+      "boundary_precision_score": 0.85,
+      "visual_context_coverage": 0.6,
+      "user_editability_score": 0.8,
+      "reuse_score": 0.7,
+      "recommended_mode": "NONE"
+    }
+  },
+  {
+    "case_id": 62,
+    "video_type": "vlog",
+    "analysis_mode": "ccut_matrix_light",
+    "row_size_sec": 5,
+    "worker_slot": 4,
+    "environment": "CCUT_TARGET_LAPTOP",
+    "metrics": {
+      "estimated_total_time_sec": 8.64,
+      "task_count": 72,
+      "cell_count": 60,
+      "boundary_precision_score": 0.85,
+      "visual_context_coverage": 0.6,
+      "user_editability_score": 0.8,
+      "reuse_score": 0.7,
+      "recommended_mode": "NONE"
+    }
+  },
+  {
+    "case_id": 63,
+    "video_type": "vlog",
+    "analysis_mode": "ccut_matrix_light",
+    "row_size_sec": 5,
+    "worker_slot": 8,
+    "environment": "NORMAL_LAPTOP",
+    "metrics": {
+      "estimated_total_time_sec": 8.47,
+      "task_count": 72,
+      "cell_count": 60,
+      "boundary_precision_score": 0.85,
+      "visual_context_coverage": 0.6,
+      "user_editability_score": 0.8,
+      "reuse_score": 0.7,
+      "recommended_mode": "NONE"
+    }
+  },
+  {
+    "case_id": 64,
+    "video_type": "vlog",
+    "analysis_mode": "ccut_matrix_light",
+    "row_size_sec": 5,
+    "worker_slot": 8,
+    "environment": "CCUT_TARGET_LAPTOP",
+    "metrics": {
+      "estimated_total_time_sec": 5.08,
+      "task_count": 72,
+      "cell_count": 60,
+      "boundary_precision_score": 0.85,
+      "visual_context_coverage": 0.6,
+      "user_editability_score": 0.8,
+      "reuse_score": 0.7,
+      "recommended_mode": "NONE"
+    }
+  },
+  {
+    "case_id": 65,
+    "video_type": "vlog",
+    "analysis_mode": "ccut_matrix_full",
+    "row_size_sec": 2,
+    "worker_slot": 4,
+    "environment": "NORMAL_LAPTOP",
+    "metrics": {
+      "estimated_total_time_sec": 216.0,
+      "task_count": 432,
+      "cell_count": 360,
+      "boundary_precision_score": 0.99,
+      "visual_context_coverage": 0.95,
+      "user_editability_score": 0.95,
+      "reuse_score": 0.95,
+      "recommended_mode": "NONE"
+    }
+  },
+  {
+    "case_id": 66,
+    "video_type": "vlog",
+    "analysis_mode": "ccut_matrix_full",
+    "row_size_sec": 2,
+    "worker_slot": 4,
+    "environment": "CCUT_TARGET_LAPTOP",
+    "metrics": {
+      "estimated_total_time_sec": 129.6,
+      "task_count": 432,
+      "cell_count": 360,
+      "boundary_precision_score": 0.99,
+      "visual_context_coverage": 0.95,
+      "user_editability_score": 0.95,
+      "reuse_score": 0.95,
+      "recommended_mode": "QUALITY_PICK"
+    }
+  },
+  {
+    "case_id": 67,
+    "video_type": "vlog",
+    "analysis_mode": "ccut_matrix_full",
+    "row_size_sec": 2,
+    "worker_slot": 8,
+    "environment": "NORMAL_LAPTOP",
+    "metrics": {
+      "estimated_total_time_sec": 127.06,
+      "task_count": 432,
+      "cell_count": 360,
+      "boundary_precision_score": 0.99,
+      "visual_context_coverage": 0.95,
+      "user_editability_score": 0.95,
+      "reuse_score": 0.95,
+      "recommended_mode": "NONE"
+    }
+  },
+  {
+    "case_id": 68,
+    "video_type": "vlog",
+    "analysis_mode": "ccut_matrix_full",
+    "row_size_sec": 2,
+    "worker_slot": 8,
+    "environment": "CCUT_TARGET_LAPTOP",
+    "metrics": {
+      "estimated_total_time_sec": 76.24,
+      "task_count": 432,
+      "cell_count": 360,
+      "boundary_precision_score": 0.99,
+      "visual_context_coverage": 0.95,
+      "user_editability_score": 0.95,
+      "reuse_score": 0.95,
+      "recommended_mode": "QUALITY_PICK"
+    }
+  },
+  {
+    "case_id": 69,
+    "video_type": "vlog",
+    "analysis_mode": "ccut_matrix_full",
+    "row_size_sec": 5,
+    "worker_slot": 4,
+    "environment": "NORMAL_LAPTOP",
+    "metrics": {
+      "estimated_total_time_sec": 86.4,
+      "task_count": 172,
+      "cell_count": 144,
+      "boundary_precision_score": 0.95,
+      "visual_context_coverage": 0.95,
+      "user_editability_score": 0.9,
+      "reuse_score": 0.95,
+      "recommended_mode": "NONE"
+    }
+  },
+  {
+    "case_id": 70,
+    "video_type": "vlog",
+    "analysis_mode": "ccut_matrix_full",
+    "row_size_sec": 5,
+    "worker_slot": 4,
+    "environment": "CCUT_TARGET_LAPTOP",
+    "metrics": {
+      "estimated_total_time_sec": 51.84,
+      "task_count": 172,
+      "cell_count": 144,
+      "boundary_precision_score": 0.95,
+      "visual_context_coverage": 0.95,
+      "user_editability_score": 0.9,
+      "reuse_score": 0.95,
+      "recommended_mode": "QUALITY_PICK"
+    }
+  },
+  {
+    "case_id": 71,
+    "video_type": "vlog",
+    "analysis_mode": "ccut_matrix_full",
+    "row_size_sec": 5,
+    "worker_slot": 8,
+    "environment": "NORMAL_LAPTOP",
+    "metrics": {
+      "estimated_total_time_sec": 50.82,
+      "task_count": 172,
+      "cell_count": 144,
+      "boundary_precision_score": 0.95,
+      "visual_context_coverage": 0.95,
+      "user_editability_score": 0.9,
+      "reuse_score": 0.95,
+      "recommended_mode": "NONE"
+    }
+  },
+  {
+    "case_id": 72,
+    "video_type": "vlog",
+    "analysis_mode": "ccut_matrix_full",
+    "row_size_sec": 5,
+    "worker_slot": 8,
+    "environment": "CCUT_TARGET_LAPTOP",
+    "metrics": {
+      "estimated_total_time_sec": 30.49,
+      "task_count": 172,
+      "cell_count": 144,
+      "boundary_precision_score": 0.95,
+      "visual_context_coverage": 0.95,
+      "user_editability_score": 0.9,
+      "reuse_score": 0.95,
+      "recommended_mode": "QUALITY_PICK"
+    }
+  }
+]
