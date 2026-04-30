@@ -15,12 +15,24 @@ export const videoService = {
         const formData = new FormData();
         formData.append("file", file);
 
-        const response = await fetch(`${API_BASE_URL}/upload`, {
-            method: "POST",
-            body: formData,
-        });
-        if (!response.ok) throw new Error("업로드 실패: 서버 연결을 확인하세요.");
-        return await response.json();
+        try {
+            console.log(`[videoService] Uploading to: ${API_BASE_URL}/upload`);
+            const response = await fetch(`${API_BASE_URL}/upload`, {
+                method: "POST",
+                body: formData,
+            });
+            if (!response.ok) {
+                const errText = await response.text();
+                throw new Error(`업로드 실패 (${response.status}): ${errText || "서버 연결을 확인하세요."}`);
+            }
+            return await response.json();
+        } catch (error) {
+            console.error("[videoService] uploadVideo Error:", error);
+            if (error instanceof TypeError && error.message === "Failed to fetch") {
+                throw new Error("백엔드 서버에 연결할 수 없습니다. 127.0.0.1:8000 실행 상태를 확인하세요.");
+            }
+            throw error;
+        }
     },
 
     generateFragments: async (sourceId: string) => {

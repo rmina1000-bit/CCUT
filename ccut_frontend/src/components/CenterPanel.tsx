@@ -441,13 +441,20 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
       const files = Array.from(e.target.files);
+      console.log(`[CenterPanel] Files selected:`, files.map(f => f.name));
+      
       setExportUrl(null);
       setExportError(null);
       setProgressA(0);
       setProgressB(0);
 
       if (onFileSelect) onFileSelect(files[0]);
-      if (onAnalyze) await onAnalyze(files[0], files.slice(1));
+      if (onAnalyze) {
+        const success = await onAnalyze(files[0], files.slice(1));
+        if (!success) {
+          console.warn("[CenterPanel] Analysis failed or was cancelled.");
+        }
+      }
     }
   };
 

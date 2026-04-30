@@ -1,4 +1,4 @@
-﻿import React, { useState, useCallback, useRef, useEffect, useMemo } from "react";
+import React, { useState, useCallback, useRef, useEffect, useMemo } from "react";
 import LeftNav from "@/components/LeftNav";
 import CenterPanel from "@/components/CenterPanel";
 import OriginalPanorama from "@/components/OriginalPanorama";
@@ -465,11 +465,17 @@ const Index: React.FC = () => {
         }, 2000);
 
         return true;
-      } catch (e) {
-        console.error("[N-01] 분석 실패:", e);
-        setAnalyzeMessage("분석 중 오류가 발생했습니다. 콘솔을 확인해 주세요.");
+      } catch (e: any) {
+        console.error("[N-01] 분석 중단 오류:", e);
+        const errorMsg = e.message || "분석 중 알 수 없는 오류가 발생했습니다.";
+        setAnalyzeMessage(errorMsg);
         setAnalyzeProgress(0);
-        setAppState("analyzing");
+        
+        // 중요: 로딩 상태를 해제하여 사용자가 다시 시도할 수 있게 함
+        setAppState("empty");
+        
+        // 사용자에게 알림 (Toast 등이 있다면 좋겠지만 여기서는 alert로 우선 처리하거나 UI에 메시지 유지)
+        alert(`[분석 실패] ${errorMsg}`);
         return false;
       }
     },
