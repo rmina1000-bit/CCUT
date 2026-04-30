@@ -95,6 +95,11 @@ _batch_registry: dict[str, dict] = {}
 _program_to_batch: dict[str, str] = {}
 
 
+@app.get("/health")
+async def health_check():
+    return {"status": "OK", "timestamp": time.time()}
+
+
 # ═══════════════════════════════════════════════════════════════════
 #   CCUT: 영상 파일 업로드 엔드포인트
 # ═══════════════════════════════════════════════════════════════════
@@ -1362,3 +1367,8 @@ async def smart_analyze_video(video_path: str | None = None):
         "smart_split_count": len(smart_segments),
         "vector_indexed": vector_engine.is_ready(),
     }
+
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="127.0.0.1", port=8000)
