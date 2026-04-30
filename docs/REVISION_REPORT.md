@@ -27,6 +27,7 @@
 | STEP 10-C | Factory Simulation 구조 보정 | PASS |
 | STEP 10-D | Resource Governor Simulation v0 | PASS |
 | STEP 10-E1 | Cognitive Signal Matrix Micro Simulation | PASS |
+| STEP 10-E1.5 | Cognitive Signal Matrix 공식 기준 문서화 | PASS |
 
 
 
@@ -100,6 +101,20 @@
 - **최적 조합 확정**: `Matrix Light` + `2s` + `8 slots`
 - **시뮬레이션 ID**: `SIM_CSM_20260430_215809`
 - **GitHub Push 및 최종 SHA 확인 대기 중**
+
+---
+
+## Latest Revision (2026-04-30 22:45)
+
+- **STEP 10-E1.5 Cognitive Signal Matrix 공식 기준 문서화 완료**
+- **신규 문서 5종 추가**:
+  - `COGNITIVE_SIGNAL_MATRIX_SPEC.md`: 매트릭스 행/열/셀 구조 정의
+  - `COGNITIVE_SIGNAL_TAXONOMY.md`: 9대 인지 신호 체계 확립
+  - `FRAGMENTATION_RULES_BY_SIGNAL.md`: 신호별 조각 경계 결정 규칙 상세화
+  - `MATRIX_MODE_POLICY.md`: 분석 모드(Speech/Light/Full)별 데이터 반영
+  - `FREE_PAID_ANALYSIS_POLICY.md`: 무료/유료 서비스 범위 및 외부 AI 정책 고정
+- **10-E1 시뮬레이션 데이터 최종 반영**: (0.8s/16.01s/96.06s) 기준 확립
+- **Pipeline Isolation**: PASS (기본 파이프라인 영향 없음)
 
 ---
 

@@ -6,7 +6,7 @@
 - **SHA:** `e76bbe725f57410c7e92ba2be00eba852bf2d055`
 - **Local path:** `D:\CCUT1.0.4`
 - **Repo:** `https://github.com/rmina1000-bit/CCUT.git`
-- **Last updated:** 2026-04-28
+- **Last updated:** 2026-04-30
 
 ## 2. 완료 단계
 
@@ -25,6 +25,7 @@
 - STEP 10-C Factory Simulation 구조 보정: **PASS**
 - STEP 10-D Resource Governor Simulation v0: **PASS**
 - STEP 10-E1 Cognitive Signal Matrix Micro Simulation: **PASS**
+- STEP 10-E1.5 Cognitive Signal Matrix 공식 기준 문서화: **PASS**
 
 
 
@@ -57,7 +58,7 @@
 
 ## 5. 다음 작업 후보
 
-- STEP 10-E1 Cognitive Signal Matrix Micro Simulation 완료
+- STEP 10-E1.5 공식 기준 문서화 완료 (Spec/Taxonomy/Policy 등)
 - 다음 후보: STEP 10-F External Proposal Service Simulation v0 설계
 
 

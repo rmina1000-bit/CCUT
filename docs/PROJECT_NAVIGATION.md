@@ -11,8 +11,14 @@ CCUT 1.0.4 장기 구조 보강축:
 2. Virtual Fragment Factory
 3. Web AI Contract v0.1
 4. External Proposal Service
+5. Cognitive Signal Matrix (Official Spec)
+   - [Spec](file:///d:/CCUT1.0.4/docs/COGNITIVE_SIGNAL_MATRIX_SPEC.md)
+   - [Taxonomy](file:///d:/CCUT1.0.4/docs/COGNITIVE_SIGNAL_TAXONOMY.md)
+   - [Fragmentation Rules](file:///d:/CCUT1.0.4/docs/FRAGMENTATION_RULES_BY_SIGNAL.md)
+   - [Matrix Mode Policy](file:///d:/CCUT1.0.4/docs/MATRIX_MODE_POLICY.md)
+   - [Free/Paid Policy](file:///d:/CCUT1.0.4/docs/FREE_PAID_ANALYSIS_POLICY.md)
 
-이 4개는 STEP 10 이후 구조 보강 후보이며,
+이 5개는 STEP 10 이후 구조 보강 핵심이며,
 STEP 0~9 PASS 파이프라인을 깨지 않는다.
 
 

@@ -21,6 +21,7 @@
 | STEP 10-C | Factory Simulation 구조 보정 |
 | STEP 10-D | Resource Governor Simulation v0 |
 | STEP 10-E1 | Cognitive Signal Matrix Micro Simulation |
+| STEP 10-E1.5 | Cognitive Signal Matrix 공식 기준 문서화 |
 
 
 
@@ -33,7 +34,7 @@
 
 ## CURRENT 🔄
 
-- STEP 10-E1 마이크로 시뮬레이션 완료 및 결과 분석 문서 작성
+- STEP 10-E1.5 공식 기준 문서화 및 정책 고정 완료
 
 
 
