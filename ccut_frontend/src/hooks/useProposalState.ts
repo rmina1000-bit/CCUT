@@ -31,6 +31,7 @@ export const useProposalState = (sourceFragments: Fragment[]) => {
   }, []);
 
   const handleProposalCommit = useCallback((id: string) => {
+    console.log("[proposalState] handleProposalCommit called with id:", id);
     setSelectedProposalId(id);
     setCommittedProposalId(id);
   }, []);

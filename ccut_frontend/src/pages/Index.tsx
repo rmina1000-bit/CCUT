@@ -734,10 +734,26 @@ const Index: React.FC = () => {
   );
 
   const resolverResult = useMemo(() => {
-    if (!committedProposalId || !proposals) return { resolvedFragments: [], diagnostics: null };
+    if (!committedProposalId || !proposals) {
+      if (appState === "complete") {
+        console.log("[fragmentmap-debug] No committedProposalId or proposals. committedProposalId:", committedProposalId, "proposals:", !!proposals);
+      }
+      return { resolvedFragments: [], diagnostics: null };
+    }
     const proposal = proposals[committedProposalId as "A" | "B"];
-    return resolveProposalFragments(proposal, editFragments);
-  }, [committedProposalId, editFragments, proposals]);
+    const result = resolveProposalFragments(proposal, editFragments);
+    
+    // [STEP 10-I.5.12] Diagnostic Logging
+    console.log("[fragmentmap-debug] committedProposalId:", committedProposalId);
+    console.log("[fragmentmap-debug] proposals keys:", proposals ? Object.keys(proposals) : null);
+    console.log("[fragmentmap-debug] active proposal keys (first 10):", proposal?.key_fragments?.slice(0, 10));
+    console.log("[fragmentmap-debug] editFragments count:", editFragments.length);
+    console.log("[fragmentmap-debug] editFragments ids (first 10):", editFragments.slice(0, 10).map(f => f.fragment_id));
+    console.log("[fragmentmap-debug] resolvedFragments count:", result.resolvedFragments.length);
+    console.log("[fragmentmap-debug] resolved ids (first 10):", result.resolvedFragments.slice(0, 10).map(f => f.fragment_id));
+
+    return result;
+  }, [committedProposalId, editFragments, proposals, appState]);
 
   const resolvedFragments = useMemo(() => resolverResult.resolvedFragments, [resolverResult]);
 

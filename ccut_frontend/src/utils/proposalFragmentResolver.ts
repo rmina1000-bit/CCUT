@@ -156,8 +156,26 @@ export const resolveProposalFragments = (
     }
   });
 
-  return {
+  const result = {
     resolvedFragments: dedupeResolvedFragments(resolvedFragments),
     diagnostics
   };
+
+  // [STEP 10-I.5.12] Diagnostic Logging
+  if (editFragments.length > 0) {
+    console.log("[proposalResolver] Summary:");
+    console.log(`  - Key Count: ${diagnostics.proposalCount}`);
+    console.log(`  - Edit Count: ${editFragments.length}`);
+    console.log(`  - Exact: ${diagnostics.exactMatched}`);
+    console.log(`  - Time Fallback: ${diagnostics.timeFallbackMatched}`);
+    console.log(`  - Missing: ${diagnostics.missingIds.length}`);
+    if (diagnostics.missingIds.length > 0) {
+      console.log(`  - Unmatched Ids (first 10): ${diagnostics.missingIds.slice(0, 10)}`);
+    }
+    if (aliases.length > 0) {
+      console.log(`  - Aliases Sample (first 3):`, aliases.slice(0, 3));
+    }
+  }
+
+  return result;
 };
