@@ -307,70 +307,79 @@ const Index: React.FC = () => {
               setAnalyzeMessage("의미 조각 분석 중...");
               
               let generatedProposals: Record<"A" | "B", any> = {} as any;
-              let finalEditFragments: Fragment[] = [];
+              let finalEditFragments: Fragment[] = finalMappedA;
+              let semanticRows: any[] = [];
 
+              // 1. Semantic Fragment Fetch
               try {
-                // 1. Semantic Fragment Fetch
                 const semanticRes = await fetch(
                   `${videoService.API_BASE_URL}/semantic-fragments/${firstSourceId}`,
                   { method: "POST" }
                 );
-                if (!semanticRes.ok) throw new Error("Semantic Fragment 생성 실패");
-                const semanticData = await semanticRes.json();
-                const semanticRows = semanticData.fragments || [];
-                
-                if (semanticRows.length > 0) {
-                  setSemanticFragments(semanticRows);
-                  finalEditFragments = mapFragments(semanticRows, "A");
-                  setAnalyzeMessage("Semantic Fragment 생성 완료");
-                  console.log("[semantic-source] semantic count:", semanticRows.length);
+                if (semanticRes.ok) {
+                  const semanticData = await semanticRes.json();
+                  semanticRows = semanticData.fragments || [];
+                  
+                  if (semanticRows.length > 0) {
+                    setSemanticFragments(semanticRows);
+                    finalEditFragments = mapFragments(semanticRows, "A");
+                    setAnalyzeMessage("Semantic Fragment 생성 완료");
+                  } else {
+                    console.warn("[semantic-source] No semantic fragments, using raw fallback");
+                  }
                 } else {
-                  console.warn("[Index] No semantic fragments, falling back to raw segments");
-                  finalEditFragments = finalMappedA;
+                  const text = await semanticRes.text().catch(() => "");
+                  console.error("[semantic-source] semantic request failed:", semanticRes.status, text);
                 }
+              } catch (semanticErr) {
+                console.error("[semantic-source] semantic fetch error:", semanticErr);
+              }
 
-                // 2. Proposal Generation
+              // 2. Proposal Generation
+              try {
                 setAnalyzeMessage("편집 제안 생성 중...");
                 const proposalRes = await fetch(`${videoService.API_BASE_URL}/proposals/${firstSourceId}`, {
                   method: "POST"
                 });
-                if (!proposalRes.ok) throw new Error("백엔드 제안 생성 실패");
-                const proposalData = await proposalRes.json();
 
-                const backendProposals = proposalData.proposals || [];
-                if (backendProposals.length > 0) {
-                  backendProposals.forEach((p: any) => {
-                    const mode = p.mode === "A" ? "A" : "B";
-                    generatedProposals[mode] = {
-                      id: mode,
-                      proposal_id: p.proposal_id,
-                      mode: p.mode === "A" ? "market" : "user",
-                      title: p.mode === "A" ? "시장형 편집 (A)" : "사용자친화형 편집 (B)",
-                      desc: p.proposal_reason?.mode_reason || "백엔드 분석 기반 추천 편집안입니다.",
-                      score: String(Math.round(p.confidence * 100)) + "%",
-                      key_fragments: p.sequence.map((s: any) => s.fragment_id),
-                      direction: {},
-                      snapshot_id: "R1",
-                      template_id: p.mode,
-                      slot_trace: []
-                    };
-                    
-                    if (generatedProposals[mode].key_fragments.length > 0) {
-                      (generatedProposals[mode] as any).resolved_aliases = p.sequence.map((s: any) => ({
-                        proposal_fragment_id: s.fragment_id,
-                        source_id: s.source_id,
-                        source_fragment_id: s.source_id,
-                        display_id: s.display_id,
-                        start_sec: s.start,
-                        end_sec: s.end
-                      }));
-                    }
-                  });
+                if (proposalRes.ok) {
+                  const proposalData = await proposalRes.json();
+                  const backendProposals = proposalData.proposals || [];
+                  if (backendProposals.length > 0) {
+                    backendProposals.forEach((p: any) => {
+                      const mode = p.mode === "A" ? "A" : "B";
+                      generatedProposals[mode] = {
+                        id: mode,
+                        proposal_id: p.proposal_id,
+                        mode: p.mode === "A" ? "market" : "user",
+                        title: p.mode === "A" ? "시장형 편집 (A)" : "사용자친화형 편집 (B)",
+                        desc: p.proposal_reason?.mode_reason || "백엔드 분석 기반 추천 편집안입니다.",
+                        score: String(Math.round(p.confidence * 100)) + "%",
+                        key_fragments: p.sequence.map((s: any) => s.fragment_id),
+                        direction: {},
+                        snapshot_id: "R1",
+                        template_id: p.mode,
+                        slot_trace: []
+                      };
+                      
+                      if (generatedProposals[mode].key_fragments.length > 0) {
+                        (generatedProposals[mode] as any).resolved_aliases = p.sequence.map((s: any) => ({
+                          proposal_fragment_id: s.fragment_id,
+                          source_id: s.source_id,
+                          source_fragment_id: s.source_id,
+                          display_id: s.display_id,
+                          start_sec: s.start,
+                          end_sec: s.end
+                        }));
+                      }
+                    });
+                  }
+                } else {
+                  const text = await proposalRes.text().catch(() => "");
+                  console.error("[proposal-source] backend proposal failed:", proposalRes.status, text);
                 }
-              } catch (pipelineErr) {
-                console.error("[Index] Semantic/Proposal Pipeline Error:", pipelineErr);
-                setAnalyzeMessage("고급 분석 실패 - 기본 모드 전환");
-                finalEditFragments = finalMappedA;
+              } catch (proposalErr) {
+                console.error("[proposal-source] proposal fetch error:", proposalErr);
               }
 
               // Build combined for workspace
@@ -390,10 +399,11 @@ const Index: React.FC = () => {
 
               logProposalPair(generatedProposals, "INITIAL");
 
-              // [STEP 10-I.5.5] Switch to semanticMappedA as primary source if available
+              // [STEP 10-I.5.8] Switch to semanticMappedA as primary source if available
               const displayMappedA = finalEditFragments;
-              console.log("[semantic-source] raw:", finalMappedA.length, "final:", displayMappedA.length);
+              console.log("[semantic-source] raw:", finalMappedA.length, "semantic:", semanticRows.length, "using:", finalEditFragments.length);
               console.log("[semantic-source] durations:", displayMappedA.slice(0, 10).map(f => ((f.end_frame - f.start_frame) / 30).toFixed(1)));
+              console.log("[proposal-source] backend:", Object.keys(generatedProposals).length > 0 ? "OK" : "FALLBACK");
 
               setSourceEntries((prev) =>
                 prev.map((e) => (e.label === "A" ? { ...e, fragments: displayMappedA } : e))
