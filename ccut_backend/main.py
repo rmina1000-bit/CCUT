@@ -595,6 +595,8 @@ async def generate_semantic_fragments(source_id: str):
     gen = SemanticFragmentGenerator(bams)
     fragments = gen.generate(source_id)
     
+    print(f"[SEMANTIC] /semantic-fragments/{source_id} called. Result count: {len(fragments)}")
+    
     # Role 분산 통계 계산
     role_dist = {}
     for f in fragments:

@@ -24,6 +24,26 @@ class SemanticFragmentGenerator:
         source = self.bams.get_source(source_id)
         total_duration = source.duration if (source and source.duration) else (evidences[-1]["end"] if evidences else 0)
 
+        # [STEP 10-I.5.9] Diagnostic Logging
+        print(f"\n{'='*60}")
+        print(f"[SEMANTIC DIAGNOSTIC] Source ID: {source_id}")
+        
+        raw_vfs = [e for e in evidences if e.get("fragment_id", "").startswith("VF")]
+        print(f"[SEMANTIC DIAGNOSTIC] raw/VF fragment count: {len(raw_vfs)}")
+        if raw_vfs:
+            print(f"[SEMANTIC DIAGNOSTIC] raw/VF duration list (first 10): {[round(e['end']-e['start'], 1) for e in raw_vfs[:10]]}")
+            
+        whisper_segs = [e for e in evidences if e.get("worker_name") == "whisper_segments"]
+        print(f"[SEMANTIC DIAGNOSTIC] transcript/whisper segment count: {len(whisper_segs)}")
+        if whisper_segs:
+            print(f"[SEMANTIC DIAGNOSTIC] transcript/whisper duration list (first 10): {[round(e['end']-e['start'], 1) for e in whisper_segs[:10]]}")
+            
+        worker_counts = {}
+        for ev in evidences:
+            wn = ev.get("worker_name", "unknown")
+            worker_counts[wn] = worker_counts.get(wn, 0) + 1
+        print(f"[SEMANTIC DIAGNOSTIC] Evidence type counts: {worker_counts}")
+
         # 3. 경계 후보 생성 (Evidence-driven: scene, silence, motion, topic)
         boundaries = self.create_fragment_boundaries(evidences)
         
@@ -63,6 +83,10 @@ class SemanticFragmentGenerator:
         # 9. DB 저장
         self.bams.save_semantic_fragments(source_id, final_fragments)
         
+        # [SEMANTIC DIAGNOSTIC] Final summary
+        print(f"[SEMANTIC DIAGNOSTIC] Final semantic duration list (first 20): {[round(f['structural']['duration'], 1) for f in final_fragments[:20]]}")
+        print(f"{'='*60}\n")
+
         print(f"[SEMANTIC] {len(final_fragments)} fragments generated for {source_id}")
         return final_fragments
 
@@ -84,29 +108,57 @@ class SemanticFragmentGenerator:
 
         # 2. Scene Changes & Silence from all evidences
         for ev in evidences:
+            wn = ev.get("worker_name", "unknown")
+            # [STEP 10-I.5.9] Skip boundaries from workers that just repeat VF boundaries
+            if wn in ["audio", "signal_processor", "whisper"]:
+                continue
+
             if ev.get("scene_change") and isinstance(ev["scene_change"], list):
                 for ts in ev["scene_change"]:
                     boundaries.append(ts)
             
-            # Silence detection (usually from signal_processor)
-            if ev.get("audio_energy", 1.0) < 0.05:
+            # Silence detection (usually from specialized silence detectors)
+            if wn == "silence" or ev.get("audio_energy", 1.0) < 0.05:
                 boundaries.append(ev["start"])
+
+        # [STEP 10-I.5.9] Boundary source distribution log
+        whisper_boundary_count = len(whisper_evs) * 2
+        scene_boundary_count = sum(len(ev["scene_change"]) for ev in evidences if ev.get("scene_change") and isinstance(ev["scene_change"], list))
+        silence_boundary_count = sum(1 for ev in evidences if (ev.get("worker_name") == "silence" or (ev.get("audio_energy", 1.0) < 0.05 and ev.get("worker_name") not in ["audio", "signal_processor", "whisper"])))
+        
+        print(f"[SEMANTIC DIAGNOSTIC] Boundary distribution:")
+        print(f"  - whisper_segments: {whisper_boundary_count}")
+        print(f"  - scene_change: {scene_boundary_count}")
+        print(f"  - silence/audio_energy: {silence_boundary_count}")
 
         # [STEP 10-I.5.3] 0.0과 total_duration은 항상 포함 (evidences에서 계산)
         if evidences:
             all_ends = [e["end"] for e in evidences]
             if all_ends:
                 boundaries.append(max(all_ends))
+        
+        # [STEP 10-I.5.9] Add total_duration from source if available
+        if total_duration > 0:
+            boundaries.append(total_duration)
 
         # 중복 및 너무 가까운 경계 제거
-        sorted_b = sorted(list(set(boundaries)))
+        unique_b = sorted(list(set([round(b, 2) for b in boundaries])))
+        print(f"[SEMANTIC DIAGNOSTIC] Raw semantic boundary count (unique): {len(unique_b)}")
+        
+        sorted_b = unique_b
         if not sorted_b: return [0.0]
         
         filtered = [sorted_b[0]]
         for b in sorted_b[1:]:
-            # 텍스트 기반인 경우 조금 더 촘촘하게 (0.8초)
+            # [STEP 10-I.5.9] 텍스트 기반인 경우 조금 더 촘촘하게 (0.8초)
+            # 단, 너무 뒤로 밀리지 않도록 함
             if b - filtered[-1] >= 0.8:
                 filtered.append(b)
+        
+        # 마지막 경계가 total_duration보다 작으면 추가 (전체 영상 커버 보장)
+        if total_duration > 0 and filtered[-1] < total_duration - 0.5:
+             filtered.append(total_duration)
+             
         return filtered
 
     def build_fragments(self, source_id, evidences, boundaries):
@@ -277,17 +329,31 @@ class SemanticFragmentGenerator:
                 mid = frag["start"] + (duration / 2.0)
                 # 5초 정도의 여유를 둠 (너무 짧은 조각 방지)
                 cuts = [b for b in boundaries if frag["start"] + 5.0 < b < frag["end"] - 5.0]
+                
                 if cuts:
                     cut = sorted(cuts, key=lambda x: abs(x - mid))[0]
-                    f1 = frag.copy(); f1["end"] = cut; f1["structural"] = frag["structural"].copy(); f1["structural"]["duration"] = round(cut - f1["start"], 2)
-                    f1["fragment_id"] = f"{frag['fragment_id']}_S1"
-                    f2 = frag.copy(); f2["start"] = cut; f2["structural"] = frag["structural"].copy(); f2["structural"]["duration"] = round(f2["end"] - cut, 2)
-                    f2["fragment_id"] = f"{frag['fragment_id']}_S2"
-                    final.extend([f1, f2])
-                    continue
+                else:
+                    # [STEP 10-I.5.9] Boundary가 전혀 없으면 강제 분할 (8~12초 가변 윈도우)
+                    # 30초 고정 반복을 깨기 위해 가변성 부여
+                    import random
+                    cut = round(frag["start"] + 10.0 + random.uniform(-2.0, 2.0), 2)
+                    if not (frag["start"] + 5.0 < cut < frag["end"] - 5.0):
+                        cut = round(mid, 2)
                 
-                # 경계가 없으면 그냥 둠 (fallback_reason 기록)
-                frag["fallback_reason"] = "too_long_no_boundaries"
+                f1 = frag.copy(); f1["end"] = cut; f1["structural"] = frag["structural"].copy(); f1["structural"]["duration"] = round(cut - f1["start"], 2)
+                f1["fragment_id"] = f"{frag['fragment_id']}_S1"
+                
+                f2 = frag.copy(); f2["start"] = cut; f2["structural"] = frag["structural"].copy(); f2["structural"]["duration"] = round(f2["end"] - cut, 2)
+                f2["fragment_id"] = f"{frag['fragment_id']}_S2"
+                
+                # 재귀적으로 한 번 더 체크 (40초 초과 시 등)
+                if f1["structural"]["duration"] > 20.0 or f2["structural"]["duration"] > 20.0:
+                    sub_final = self.apply_merge_split([f1, f2], boundaries, total_duration)
+                    final.extend(sub_final)
+                else:
+                    final.extend([f1, f2])
+                continue
+                
             final.append(frag)
                 
         return final
