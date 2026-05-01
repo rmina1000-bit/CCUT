@@ -32,6 +32,7 @@
 | STEP 10-I.4 | Index Decomposition Plan | PASS |
 | STEP 10-I.5 | Extract Layout & Proposal hooks | PASS |
 | STEP 10-I.5.1 | Mojibake Log Cleanup | PASS |
+| STEP 10-I.5.2 | Fast Path Semantic Display Correction | PASS |
 
 
 
@@ -45,8 +46,10 @@
 ## CURRENT 🔄
 
 > [!IMPORTANT]
-> STEP 10-I.5.1 완료. `useProposalState` 내부의 깨진 한글 로그를 영문으로 정규화했습니다.
-> 이제 개발자 콘솔에서 인코딩 문제 없이 로그를 확인할 수 있습니다.
+> STEP 10-I.5.2 완료. Semantic Fragment의 30초 고정 노출 문제를 해결했습니다.
+> 1. SignalProcessor가 Scene/Silence 트리거를 저장하도록 보정.
+> 2. Proposal Resolver가 Alias의 정확한 시간을 Fragment에 강제 적용.
+> 3. Backend Pipeline에서 Whisper 완료 후 Semantic/Proposal 자동 생성 트리거.
 
 
 

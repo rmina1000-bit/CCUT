@@ -75,7 +75,7 @@ class SignalProcessor:
             current_start = best_end - overlap
 
         print(f"[SignalProcessor] Created {len(segments)} dynamic segments (10-30s).")
-        return segments
+        return segments, triggers
 
     def get_rms_energy(self, start: float, duration: float) -> float:
         """[STEP 2] 구간의 오디오 에너지(RMS) 계산"""

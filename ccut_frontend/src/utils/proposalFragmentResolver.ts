@@ -137,8 +137,16 @@ export const resolveProposalFragments = (
     }
 
     if (found) {
+      // [STEP 10-I.5.2] Semantic/Proposal 기반 정확한 시간 적용
+      // alias에 기록된 start_sec/end_sec이 있으면 우선 적용하여 30초 고정 문제를 해결함
+      const pStart = alias?.start_sec !== undefined ? alias.start_sec : (found.start_frame / 30);
+      const pEnd = alias?.end_sec !== undefined ? alias.end_sec : (found.end_frame / 30);
+      
       resolvedFragments.push({
         ...found,
+        start_frame: Math.round(pStart * 30),
+        end_frame: Math.round(pEnd * 30),
+        duration: Math.round((pEnd - pStart) * 30),
         stable_key: makeStableFragmentKey(proposalId, idx, found)
       });
       diagnostics.matchedCount++;

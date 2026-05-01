@@ -36,6 +36,7 @@
 - STEP 10-I.4 Index Decomposition Plan: **PASS**
 - STEP 10-I.5 Extract Layout & Proposal hooks: **PASS**
 - STEP 10-I.5.1 Mojibake Log Cleanup: **PASS**
+- STEP 10-I.5.2 Fast Path Semantic Display Correction: **PASS**
 
 
 
@@ -50,29 +51,26 @@
 
 ```text
 영상 업로드
-→ Quick Scan (POST /quick-scan/{source_id})
-→ Semantic Fragment (POST /generate-fragments/{source_id})
-→ Proposal 생성 (POST /proposals/{source_id})
-→ ExportInput 생성 (POST /export-input/{proposal_id})
-→ Render 실행 (POST /render/{export_input_id})
-→ 결과 조회 (GET /render-result/{export_input_id})
-→ UI mp4 표시 / 다운로드
+→ Whisper 분석 (background)
+→ Signal Trigger 자동 추출 (SignalProcessor)
+→ Semantic Fragment 자동 생성 (SemanticFragmentGenerator)
+→ Proposal 자동 생성 (ProposalEngine)
+→ UI polling 완료
+→ Proposal 확정 시 Resolver가 Alias 시간 강제 적용
+→ FragmentMap에 3~12초 가변 길이 조각 정상 노출
+→ Export/Render 파이프라인
 ```
 
-## 4. 최신 변경 요약 (2026-04-28)
+## 4. 최신 변경 요약 (2026-05-01)
 
-- **GitHub 위생 정리 완료:**
-  - 임시 파일 13종 삭제 (`check_db.py`, `fix_mojibake*.py`, `_archive_backend_20260420/`, `ccut_backend/logs/hook_distribution/` 등)
-  - 정리 스크립트 `clean_step89.ps1` 삭제
-- **코드 수정:**
-  - `Index.tsx`: Mojibake 한글 문자열 3종 정상화
-  - `main.py`: `D:/test_video.mp4` 하드코딩 제거 (`str = ""` 로 교체)
-  - `CenterPanel.tsx`: `localhost:8000` 하드코딩 → `videoService.API_BASE_URL` 정규화
-- **`.gitignore` 보강:** `*.log`, `*.bak`, `**/logs/`, `diff_*.txt` 등 추가
+- **Semantic Display Bug Fix (STEP 10-I.5.2):**
+  - `SignalProcessor`: Scene/Silence 트리거를 evidence board로 전달하도록 수정.
+  - `main.py`: Whisper 완료 시점에 Semantic/Proposal 생성을 background에서 즉시 실행하도록 파이프라인 보정.
+  - `proposalFragmentResolver.ts`: Proposal Alias에 기록된 precise `start_sec`/`end_sec`을 실제 조각 객체에 오버라이드하여 30초 고정 문제를 해결.
+  - `Index.tsx`: `mapFragments`에서 `structural.duration` 우선순위 상향.
 
 ## 5. 다음 작업 후보
 
-- STEP 10-I.5 Hook Extraction (useWorkspaceLayout, useProposalState)
 - STEP 10-I.6 Hook Extraction (useFragmentWorkspace, useAnalysisPipeline)
 - STEP 10-J 무료 폼 UI 실제 최소 구현 및 사용자 여정 확립
 

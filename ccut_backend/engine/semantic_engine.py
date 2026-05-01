@@ -208,8 +208,8 @@ class SemanticFragmentGenerator:
         if not fragments: return []
         
         is_fast_path = total_duration <= 60.0
-        # Fast Path 시 3.5초 미만 병합, 일반 2.0초
-        merge_threshold = 3.5 if is_fast_path else 2.0
+        # [STEP 10-I.5.2] Fast Path 시 2.5초 미만 병합 (기존 3.5초는 너무 큼), 일반 2.0초
+        merge_threshold = 2.5 if is_fast_path else 2.0
         
         # 1. Merge (Threshold 미만 조각 제거)
         res = []
@@ -229,7 +229,8 @@ class SemanticFragmentGenerator:
             else:
                 res.append(frag)
         
-        # [STEP 10-I.3] 조각 수 강제 제한 (Fast Path: 8~18개)
+        # [STEP 10-I.5.2] 조각 수 강제 제한 (Fast Path: 8~18개)
+        # 너무 많으면 의미적으로 뭉치고, 너무 적으면 30초 고정이 됨.
         if is_fast_path and len(res) > 18:
             print(f"[SEMANTIC] Fast Path Limit: {len(res)} -> 18 merging...")
             while len(res) > 18:

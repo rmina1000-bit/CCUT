@@ -261,12 +261,23 @@ def _background_whisper(source_id: str, video_path: str, fragments: list):
         # 4. 분포 로그
         log_hook_distribution(source_id, fragments)
         
+        # [STEP 10-I.5.2] Semantic Analysis & Proposal Generation Trigger
+        print(f"[PIPELINE] Triggering Semantic Analysis for {source_id}")
+        from engine.semantic_engine import SemanticFragmentGenerator
+        from engine.proposal_engine import ProposalEngine
+        
+        sem_gen = SemanticFragmentGenerator(bams)
+        sem_gen.generate(source_id)
+        
+        prop_eng = ProposalEngine(bams)
+        prop_eng.generate_proposals(source_id)
+        
         # 완료 상태 기록
         if source_id in _fragment_job_registry:
             _fragment_job_registry[source_id]["status"] = "ANALYSIS_COMPLETE"
             _fragment_job_registry[source_id]["progress"] = 100
             
-        print(f"[ASR BG] {source_id} 완료")
+        print(f"[ASR BG] {source_id} 완료 (Semantic/Proposals Ready)")
     except Exception as e:
         print(f"[ASR BG] {source_id} 실행 오류: {e}")
         if source_id in _fragment_job_registry:
@@ -417,7 +428,7 @@ async def generate_fragments(
         # [STEP 1] Dynamic Partitioning
         sp = SignalProcessor(proxy_path or resolved_path)
         try:
-            smart_segments = sp.build_dynamic_segments(total_duration)
+            smart_segments, triggers = sp.build_dynamic_segments(total_duration)
             analysis_mode = "DYNAMIC_PARTITION_V321"
         except Exception as e:
             print(f"[GENERATE-FRAGMENTS] 신호 전처리 실패: {e}")
@@ -440,12 +451,29 @@ async def generate_fragments(
                 "end_frame": end_frame,
                 "duration": seg["duration"],
                 "_proxy_video_path": proxy_path,
-                "intelligence": {"transcript": "", "hook_score": 0.5},
+                "intelligence": {
+                    "transcript": "", 
+                    "hook_score": 0.5,
+                    "scene_change": [t for t in triggers if seg["start"] <= t <= seg["end"]]
+                },
                 "status": "VIRTUAL"
             }
             fragments.append(frag_data)
         
         bams.archive_fragments(fragments)
+        
+        # [STEP 2] Initialize Evidence Board with Signal Triggers
+        for frag in fragments:
+            bams.update_evidence(frag["fragment_id"], {
+                "source_id": source_id,
+                "worker_name": "signal_processor",
+                "start": frag["start_time"],
+                "end": frag["end_time"],
+                "scene_change": frag["intelligence"].get("scene_change", []),
+                "confidence": 1.0
+            })
+            bams.flush_evidence(frag["fragment_id"])
+            
         print(f"[GENERATE-FRAGMENTS] New Analysis Started: {source_id}")
     else:
         # [STEP 1] 캐시 히트: 기존 조각 재사용

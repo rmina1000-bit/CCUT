@@ -176,7 +176,7 @@ const Index: React.FC = () => {
           const mapped: Fragment[] = frags.map((f: any, idx: number) => {
             const fps = 30;
             // SF vs VF structure support
-            const durationSec = f.duration || f.structural?.duration || (f.end_time - f.start_time) || (f.end - f.start) || 5;
+            const durationSec = f.structural?.duration || f.duration || (f.end_time - f.start_time) || (f.end - f.start) || 5;
             const startTime = f.start_time ?? f.start ?? 0;
             const startFrame = Math.round(f.start_frame ?? (startTime * fps));
             const endFrame = Math.round(
@@ -390,7 +390,8 @@ const Index: React.FC = () => {
                     if (generatedProposals[mode].key_fragments.length > 0) {
                       (generatedProposals[mode] as any).resolved_aliases = p.sequence.map((s: any) => ({
                         proposal_fragment_id: s.fragment_id,
-                        source_fragment_id: s.source_id,
+                        source_id: s.source_id,
+                        source_fragment_id: s.source_id, // Backward compatibility
                         display_id: s.display_id,
                         start_sec: s.start,
                         end_sec: s.end
