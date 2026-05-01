@@ -4,6 +4,7 @@ import CenterPanel from "@/components/CenterPanel";
 import OriginalPanorama from "@/components/OriginalPanorama";
 import FragmentMap from "@/components/FragmentMap";
 import ReservedFragments from "@/components/ReservedFragments";
+import { useWorkspaceLayout } from "@/hooks/useWorkspaceLayout";
 
 import {
   Fragment,
@@ -25,9 +26,7 @@ import { generateProposals } from "@/proposal/proposalOrchestrator";
 import { resolveProposalFragments } from "@/utils/proposalFragmentResolver";
 import { buildExportClipsFromResolvedFragments } from "@/utils/exportClipBuilder";
 
-const MIN_CENTER = 420;
-const MIN_RIGHT = 400;
-const LEFT_NAV_WIDTH = 220;
+// Layout constants moved to useWorkspaceLayout.ts
 
 type QuickScanData = {
   source_id?: string;
@@ -51,9 +50,18 @@ type SemanticFragmentData = {
 };
 
 const Index: React.FC = () => {
-  const [activeNavItem, setActiveNavItem] = useState("projects");
-  const [navCollapsed, setNavCollapsed] = useState(false);
-  const [projects, setProjects] = useState<{ id: string; name: string; date: string; count: number }[]>([]);
+  const {
+    containerRef,
+    activeNavItem,
+    setActiveNavItem,
+    navCollapsed,
+    setNavCollapsed,
+    projects,
+    setProjects,
+    centerWidth,
+    isDragging,
+    setIsDragging,
+  } = useWorkspaceLayout();
 
   const [activeSource, setActiveSource] = useState("A");
 
@@ -91,13 +99,7 @@ const Index: React.FC = () => {
   };
   const [sourceEntries, setSourceEntries] = useState<SourceEntry[]>([]);
 
-  const [centerWidth, setCenterWidth] = useState<number>(() => {
-    const vw = typeof window !== "undefined" ? window.innerWidth : 1200;
-    return Math.max(MIN_CENTER, Math.floor(vw * 0.55));
-  });
-
-  const [isDragging, setIsDragging] = useState(false);
-  const containerRef = useRef<HTMLDivElement>(null);
+// centerWidth, isDragging, containerRef moved to useWorkspaceLayout
 
   const toFullUrl = useCallback((path?: string | null) => {
     if (!path) return null;
@@ -542,35 +544,7 @@ const Index: React.FC = () => {
     }
   }, []);
 
-  useEffect(() => {
-    if (!isDragging) return;
-
-    const handleMouseMove = (e: MouseEvent) => {
-      if (!containerRef.current) return;
-
-      const containerRect = containerRef.current.getBoundingClientRect();
-      const totalWidth = containerRect.width;
-      const relativeX = e.clientX - containerRect.left - LEFT_NAV_WIDTH;
-      const maxCenter = totalWidth - LEFT_NAV_WIDTH - MIN_RIGHT;
-      const clamped = Math.max(MIN_CENTER, Math.min(maxCenter, relativeX));
-
-      setCenterWidth(clamped);
-    };
-
-    const handleMouseUp = () => setIsDragging(false);
-
-    document.addEventListener("mousemove", handleMouseMove);
-    document.addEventListener("mouseup", handleMouseUp);
-    document.body.style.cursor = "col-resize";
-    document.body.style.userSelect = "none";
-
-    return () => {
-      document.removeEventListener("mousemove", handleMouseMove);
-      document.removeEventListener("mouseup", handleMouseUp);
-      document.body.style.cursor = "";
-      document.body.style.userSelect = "";
-    };
-  }, [isDragging]);
+  // Resize effect moved to useWorkspaceLayout
 
   const handleEditFragmentClick = useCallback(
     (f: Fragment) => {

@@ -34,6 +34,8 @@
 - STEP 10-I.2 Proposal Resolver + Physical EDL Stabilization: **PASS**
 - STEP 10-I.3 Fragment Count Simplification & Fast Path: **PASS**
 - STEP 10-I.4 Index Decomposition Plan: **PASS**
+- STEP 10-I.5 Extract Workspace Layout Hook: **PASS**
+
 
 
 
@@ -110,6 +112,7 @@ M ccut_frontend/src/pages/Index.tsx (등 STEP 10-I.2 관련 수정 사항 표시
 ```
 
 > [!IMPORTANT]
-> STEP 10-I.4 완료. Index.tsx 대규모 refactoring을 위한 Hook 분리 설계가 완료되었습니다.
-> `docs/INDEX_DECOMPOSITION_PLAN.md`에 상세 계획이 정리되어 있습니다.
+> STEP 10-I.5 완료. Index.tsx의 레이아웃 로직(resize, nav, projects)이 `useWorkspaceLayout` 훅으로 성공적으로 분리되었습니다.
+> Index.tsx의 복잡도가 감소하기 시작했으며, 다음 단계에서 Proposal 및 Workspace 로직 분리를 진행합니다.
+
 

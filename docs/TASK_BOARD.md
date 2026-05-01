@@ -30,21 +30,24 @@
 | STEP 10-I.2 | Proposal Resolver + Physical EDL Stabilization | PASS |
 | STEP 10-I.3 | Fragment Count Simplification & Fast Path | PASS |
 | STEP 10-I.4 | Index Decomposition Plan | PASS |
+| STEP 10-I.5 | Extract Workspace Layout Hook | PASS |
 
 
 
 
 
 
+
+
+## CURRENT 🔄
 
 ## CURRENT 🔄
 
 ## CURRENT 🔄
 
-## CURRENT 🔄
+- STEP 10-I.5 Hook Extraction Phase 1 완료 (useWorkspaceLayout.ts)
+- Index.tsx 레이아웃/리사이즈 로직 분리 성공
 
-- STEP 10-I.4 Index Decomposition Plan 작성 완료 (docs/INDEX_DECOMPOSITION_PLAN.md)
-- Index.tsx 과밀 해소를 위한 4개 Hook 분리 계획 수립
 
 
 
