@@ -128,10 +128,18 @@ const LeftNav: React.FC<LeftNavProps> = ({
                     />
                   </div>
                 ) : (
-                  <button
+                  <div
+                    role="button"
+                    tabIndex={0}
                     onClick={() => onItemClick(proj.id)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        onItemClick(proj.id);
+                      }
+                    }}
                     title={proj.name}
-                    className={`w-full text-left px-3 py-2.5 rounded-lg transition-colors duration-100
+                    className={`w-full text-left px-3 py-2.5 rounded-lg transition-colors duration-100 cursor-pointer outline-none focus-visible:ring-1 focus-visible:ring-primary/50
                       ${isActive
                         ? "bg-secondary text-foreground"
                         : "text-foreground/70 hover:bg-secondary/50 hover:text-foreground/90"
@@ -161,7 +169,7 @@ const LeftNav: React.FC<LeftNavProps> = ({
                         {proj.date} · {proj.count}개 영상
                       </span>
                     )}
-                  </button>
+                  </div>
                 )}
 
                 {menuOpenId === proj.id && !collapsed && (
