@@ -26,7 +26,9 @@
 | STEP 10-G | 무료 사용자 편집 폼 설계 |
 | STEP 10-G.1 | Form → Edit Instruction Micro Simulation |
 | STEP 10-H | 무료버전 MVP 범위 최종 정의 |
-| STEP 10-I | 무료 폼 UI 최소 구현 설계 |
+| STEP 10-I | 무료 폼 UI 최소 구현 설계 | PASS |
+| STEP 10-I.2 | Proposal Resolver + Physical EDL Stabilization | PASS |
+| STEP 10-I.3 | Fragment Count Simplification & Fast Path | PASS |
 
 
 
@@ -49,8 +51,9 @@
 
 ## NEXT 📋
 
-- STEP 10-F External Proposal Service Simulation v0 설계
-- STEP 10-G Factory Simulation 보정 (필요 시)
+  - STEP 10-J 무료 폼 UI 실제 최소 구현 및 사용자 여정 확립
+  - STEP 10-F External Proposal Service Simulation v0 설계
+ - STEP 10-G Factory Simulation 보정 (필요 시)
 
 
 
@@ -58,7 +61,7 @@
 
 ## HOLD ⏸
 
-- Resource Governor 연동
+  - Resource Governor 연동
 - 병렬 Worker 렌더링
 - Cache 고급 최적화
 - PBE(Precision Boundary Editor) 재연결

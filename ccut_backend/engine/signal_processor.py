@@ -1,4 +1,4 @@
-﻿import subprocess
+import subprocess
 import re
 import os
 import time
@@ -20,9 +20,11 @@ class SignalProcessor:
     def build_dynamic_segments(self, video_duration: float, status_obj=None) -> list[dict]:
         """
         [STEP 1] Dynamic segment partitioning (10~30s) with 0.5s overlap.
-        v3.2.1 Specification adherence.
+        [STEP 10-I.3] Fast Path for shorts (<= 60s):
+        - 60초 이하 영상은 1~3개 대형 조각으로 제한하여 파티션 폭주 방지.
         """
-        print(f"[SignalProcessor] Starting dynamic partitioning for {video_duration}s video...")
+        is_fast_path = video_duration <= 60.0
+        print(f"[SignalProcessor] Starting {'FAST PATH' if is_fast_path else 'DYNAMIC'} partitioning for {video_duration}s video...")
         
         # 1. 침묵 및 장면 전환 탐지
         if status_obj: status_obj.update({"msg": "Analyzing audio/visual signals...", "progress": 15})
@@ -37,17 +39,20 @@ class SignalProcessor:
         overlap = 0.5
         
         while current_start < video_duration:
-            ideal_end = current_start + 20.0
+            # Fast Path 시 더 긴 구간(30s)을 지향
+            ideal_end = current_start + (30.0 if is_fast_path else 20.0)
             
-            # [10s, 30s] 창 내에서 가장 적합한 트리거 지점 탐색
-            legal_triggers = [t for t in triggers if current_start + 10.0 <= t <= current_start + 30.0]
+            # Fast Path 시 최소 15s 보장, 일반 10s 보장
+            min_window = 15.0 if is_fast_path else 10.0
+            max_window = 45.0 if is_fast_path else 30.0
+            legal_triggers = [t for t in triggers if current_start + min_window <= t <= current_start + max_window]
             
             if legal_triggers:
                 # 이상적인 종료 지점(20s)에 가장 가까운 지점 선택
                 best_end = min(legal_triggers, key=lambda t: abs(t - ideal_end))
             else:
-                # 기간 내 지점이 없으면 최대 30s 또는 영상 끝으로 강제 분할
-                best_end = min(current_start + 30.0, video_duration)
+                # 기간 내 지점이 없으면 강제 분할 (Fast Path 시 45s까지 허용)
+                best_end = min(current_start + max_window, video_duration)
             
             # 마지막 잔여 구간 처리: 남은 구간이 너무 짧으면 합침 (최대 35s 허용)
             remaining = video_duration - best_end

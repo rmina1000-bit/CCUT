@@ -31,6 +31,8 @@
 - STEP 10-G.1 Form → Edit Instruction Micro Simulation: **PASS**
 - STEP 10-H 무료버전 MVP 범위 최종 정의: **PASS**
 - STEP 10-I 무료 폼 UI 최소 구현 설계: **PASS**
+- STEP 10-I.2 Proposal Resolver + Physical EDL Stabilization: **PASS**
+- STEP 10-I.3 Fragment Count Simplification & Fast Path: **PASS**
 
 
 
@@ -63,8 +65,8 @@
 
 ## 5. 다음 작업 후보
 
-- STEP 10-I 무료 폼 UI 최소 구현 설계 완료 (Spec/Layout/Style/Component)
-- 다음 후보: STEP 10-J 무료 폼 UI 실제 최소 구현 및 사용자 여정 확립
+- STEP 10-J 무료 폼 UI 실제 최소 구현 및 사용자 여정 확립
+- STEP 10-F External Proposal Service Simulation v0 설계
 
 
 
@@ -99,5 +101,9 @@ git status --short
 ccut-1.0.4-step9
 e76bbe725f57410c7e92ba2be00eba852bf2d055
 e76bbe725f57410c7e92ba2be00eba852bf2d055
-(출력 없음 = working tree clean)
+M ccut_frontend/src/pages/Index.tsx (등 STEP 10-I.2 관련 수정 사항 표시)
 ```
+
+> [!IMPORTANT]
+> STEP 10-I.2 및 10-I.3(조각 수 최적화) 완료되었습니다. 
+> 41초 영상 기준 11개 내외의 조각으로 안정화되었으며, Physical EDL 기반 내보내기 흐름이 확립되었습니다.

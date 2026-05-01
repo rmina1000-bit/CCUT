@@ -29,160 +29,27 @@
 | STEP 10-E1 | Cognitive Signal Matrix Micro Simulation | PASS |
 | STEP 10-E1.5 | Cognitive Signal Matrix 공식 기준 문서화 | PASS |
 | STEP 10-F | Video-use 품질규칙 CCUT 흡수 설계 | PASS |
-| STEP 10-G | 무료 사용자 편집 폼 설계 | PASS |
-| STEP 10-G.1 | Form → Edit Instruction Micro Simulation | PASS |
-| STEP 10-H | 무료버전 MVP 범위 최종 정의 | PASS |
-| STEP 10-I | 무료 폼 UI 최소 구현 설계 | PASS |
-
-
-
-
-
+| STEP 10-G | 무료 사용자 편집 폼 설계 | PASS || STEP 10-I | 무료 폼 UI 최소 구현 설계 | PASS |
+| STEP 10-I.2 | Proposal Resolver + Physical EDL Stabilization | PASS |
+| STEP 10-I.3 | Fragment Count Simplification & Fast Path | PASS |
 
 ---
 
-## Important Fixes (2026-04-28)
+## Latest Revision (2026-05-01 13:00)
 
-### GitHub 위생 정리
-- 임시 파일 13종 삭제 (`check_db.py`, `fix_mojibake*.py`, `_archive_backend_20260420/`, `ccut_backend/logs/hook_distribution/` 300+ JSON 등)
-- 정리 스크립트 `clean_step89.ps1` 삭제
-- `.gitignore` 보강 (`*.log`, `*.bak`, `**/logs/` 등)
-
-### 코드 수정
-- **Index.tsx**: Mojibake 한글 문자열 3종 정상화
-  - `"백엔드 분석 기반 추천 편집안입니다."`
-  - `"분석 중 오류가 발생했습니다. 콘솔을 확인해 주세요."`
-  - `"[Reproposal] sourceFragments가 없어 재제안을 건너뜁니다."`
-- **main.py**: `D:/test_video.mp4` 하드코딩 제거 → `video_path: str = ""`
-- **CenterPanel.tsx**: `http://localhost:8000` 하드코딩 → `videoService.API_BASE_URL`
-
----
-
-## Latest Revision (2026-04-29)
-
-- **Common Core v1 문서 추가**
-- **Virtual Fragment Factory 문서 추가**
-- **Web AI Contract v0.1 문서 추가**
-- **External Proposal Service 방향 문서 추가**
-- **PROJECT_NAVIGATION / EXECUTION_PLAN / TASK_BOARD / HANDOFF / SESSION_HANDOFF 갱신**
-- **기준 SHA 일괄 정정 (`ddbd6e2779e51bf9e45b9d832830ee14b3716340`)**
-
----
-
-## Latest Revision (2026-04-29 01:00)
-
-- **STEP 10-B Virtual Fragment Factory Simulation v0 완료**
-- **시뮬레이션 문서 및 스크립트 추가**
-- **factory_result.json / factory_summary.json 생성 및 검증 완료**
-- **기존 핵심 파이프라인(Render/Export) 영향 없음 확인**
-
----
-
-## Latest Revision (2026-04-29 01:10)
-
-- **STEP 10-C Factory Simulation 구조 보정 완료**
-- **Source/Room/Task/Worker/Evidence 최소 계약 필드 확정 및 반영**
-- **시뮬레이션 스크립트 내 ID 연결성 및 Time Range 검증 로직 추가**
-- **factory_summary.json 내 상세 검증 필드(PASS/FAIL) 추가**
-
----
-
-## Latest Revision (2026-04-29 01:20)
-
-- **STEP 10-D Resource Governor Simulation v0 완료**
-- **Resource Policy v0 정의 및 Mock Scenario(NORMAL/PRESSURE/OVERLOAD) 적용**
-- **Governor Decision 로직 및 로그 생성 시뮬레이션 완료**
-- **OVERLOAD 상태에서 THROTTLE/DELAY 발생 확인 및 검증 PASS**
-
----
-
-## Latest Revision (2026-04-30 22:00)
-
-- **STEP 10-E1 Cognitive Signal Matrix Micro Simulation 최종 검증 완료**
-- **실제 측정 데이터 반영**:
-  - `video_use_speech_only`: 0.8s / 0.62
-  - `ccut_matrix_light`: 16.01s / 0.88
-  - `ccut_matrix_full`: 96.06s / 0.97
-- **최적 조합 확정**: `Matrix Light` + `2s` + `8 slots`
-- **시뮬레이션 ID**: `SIM_CSM_20260430_215809`
-- **GitHub Push 및 최종 SHA 확인 대기 중**
-
----
-
-## Latest Revision (2026-04-30 22:45)
-
-- **STEP 10-E1.5 Cognitive Signal Matrix 공식 기준 문서화 완료**
-- **신규 문서 5종 추가**:
-  - `COGNITIVE_SIGNAL_MATRIX_SPEC.md`: 매트릭스 행/열/셀 구조 정의
-  - `COGNITIVE_SIGNAL_TAXONOMY.md`: 9대 인지 신호 체계 확립
-  - `FRAGMENTATION_RULES_BY_SIGNAL.md`: 신호별 조각 경계 결정 규칙 상세화
-  - `MATRIX_MODE_POLICY.md`: 분석 모드(Speech/Light/Full)별 데이터 반영
-  - `FREE_PAID_ANALYSIS_POLICY.md`: 무료/유료 서비스 범위 및 외부 AI 정책 고정
-- **10-E1 시뮬레이션 데이터 최종 반영**: (0.8s/16.01s/96.06s) 기준 확립
-- **Pipeline Isolation**: PASS (기본 파이프라인 영향 없음)
-
----
-
-## Latest Revision (2026-04-30 23:00)
-
-- **STEP 10-F Video-use 품질규칙 CCUT 흡수 설계 완료**
-- **신규 문서 4종 추가**:
-  - `VIDEO_USE_QUALITY_RULES_FOR_CCUT.md`: 9대 편집 품질 규칙 정의
-  - `WORD_BOUNDARY_SNAP_SPEC.md`: 단어 기반 컷 경계 보정 인터페이스 및 규칙 확정
-  - `RENDER_QA_RULES.md`: 렌더링 후 자동 검수 항목 및 데이터 구조 설계
-  - `VIDEO_USE_ADAPTER_POLICY.md`: Adapter 방식을 통한 로직 이식 원칙 수립
-- **무료버전 품질선 고정**: 말 잘림 방지, 소리 튐 방지 등 필수 물리 품질을 무료 기본 기능으로 확정
-- **Pipeline Isolation**: PASS (기본 파이프라인 영향 없음)
-
----
-
-## Latest Revision (2026-04-30 23:05)
-
-- **STEP 10-G 무료 사용자 편집 폼 설계 완료**
-- **신규 문서 4종 추가**:
-  - `FREE_EDIT_FORM_SPEC.md`: 8가지 핵심 편집 폼 항목 정의
-  - `FORM_TO_EDIT_INSTRUCTION_CONTRACT.md`: 폼 데이터 → 내부 JSON 지시서 변환 계약 확정
-  - `FREE_EDIT_FORM_PRESETS.md`: 제품 리뷰, 브이로그 등 6대 핵심 프리셋 설계
-  - `FREE_EDIT_USER_FLOW.md`: 조각 기반 개입을 포함한 무료 사용자 여정 확립
-- **핵심 설계**: 외부 AI 없이 규칙 기반(Rule-based)으로 작동하는 로컬 편집 파이프라인 구조 확정
-- **Pipeline Isolation**: PASS (기본 파이프라인 영향 없음)
-
----
-
-## Latest Revision (2026-04-30 23:10)
-
-- **STEP 10-G.1 Form → Edit Instruction Micro Simulation 완료**
-- **시뮬레이션 스크립트 `simulate_form_to_edit_instruction_micro.py` 추가**
-- **6가지 핵심 편집 시나리오(제품 리뷰, 브이로그 등)에 대한 변환 검증 완료**
-- **결과물 `form_cases.json`, `instruction_result.json`, `instruction_summary.json` 생성**
-- **무료 정책 및 품질 정책(Word Snap, QA 등) 자동 활성화 확인**
-- **Pipeline Isolation**: PASS (기본 파이프라인 영향 없음)
-
----
-
-## Latest Revision (2026-04-30 23:15)
-
-- **STEP 10-H 무료버전 MVP 범위 최종 정의 완료**
-- **신규 문서 4종 추가**:
-  - `FREE_VERSION_MVP_SPEC.md`: 무료버전 정의, 핵심 흐름 및 MVP 완료 기준 확립
-  - `FREE_VERSION_FEATURE_BOUNDARY.md`: 무료/유료 기능 경계 및 로컬 편집 무제한 원칙 고정
-  - `PAID_FEATURE_POLICY.md`: 월 9,900원 요금제 및 "기억/조언" 중심 유료 기능 정의
-  - `API_COST_GOVERNANCE_POLICY.md`: 외부 API 비용 사용자 별도 부담 및 CCUT의 관리 책임 명시
-- **핵심 전략**: 무료는 "편집 도구", 유료는 "기획 파트너"로 서비스 성격 분리
-- **Pipeline Isolation**: PASS (기본 파이프라인 영향 없음)
-
----
-
-## Latest Revision (2026-05-01 00:20)
-
-- **STEP 10-I 무료 폼 UI 최소 구현 설계 완료**
-- **신규 문서 4종 추가**:
-  - `FREE_FORM_UI_MINIMUM_SPEC.md`: 무료 폼 UI 정의 및 3단 구조(Sidebar, Form, Working Area) 확립
-  - `FREE_FORM_UI_LAYOUT_GUIDE.md`: 패널별 배치 상세 및 화면 우선순위 정의
-  - `FREE_FORM_UI_STYLE_GUIDE.md`: 흑백/무채색 기반 다크 UI 디자인 원칙 수립 (다색 사용 금지)
-  - `FREE_FORM_UI_COMPONENT_MAP.md`: 개발 시 필요한 15종 이상의 핵심 컴포넌트 맵 작성
-- **디자인 기준**: 2차 디자인의 새 프로젝트 버튼 구조 + 4차 디자인의 다크 배경 조화
-- **Pipeline Isolation**: PASS (기본 파이프라인 및 기존 React 코드 수정 없음)
+- **STEP 10-I.2 Proposal Resolver + Physical EDL Stabilization 완료**
+- **STEP 10-I.3 Fragment Count Simplification & Fast Path 완료**
+- **실측 측정 데이터 반영 (41s 영상)**:
+  - raw/VF count: 2
+  - semantic/SF count: 11
+  - proposal A/B count: 11
+  - FragmentMap count: 11
+  - ExportInput clips count: 11
+- **주요 성과**:
+  - `Fast Path` 로직을 통해 단시간(<= 60s) 영상 분석 시 조각 수 폭주 방지 (48개 → 11개)
+  - `Physical EDL` 기반 내보내기 흐름 확립 (ID 의존성 제거)
+  - 프론트엔드/백엔드 불필요한 디버그 로그 대폭 정리
+- **Pipeline Isolation**: PASS (기존 파이프라인 영향 없음)
 
 ---
 
@@ -194,7 +61,8 @@
 | UI 통합 (export-input → render → render-result) | PASS |
 | GitHub 위생 | PASS |
 | 로컬 ↔ GitHub 동기화 | PASS |
-| Working tree | Clean |
+| Fragment Count Optimization | PASS (11 frags for 41s) |
+| Physical EDL Stability | PASS |
 
 ---
 
@@ -208,5 +76,57 @@
 
 ## Next
 
+- STEP 10-J 무료 폼 UI 실제 최소 구현 및 사용자 여정 확립
+- STEP 10-F External Proposal Service Simulation v0 설계
+- STEP 10 최종 안정화 / 회귀 테스트
+�� 기준 확립
+  - `FREE_VERSION_FEATURE_BOUNDARY.md`: 무료/유료 기능 경계 및 로컬 편집 무제한 원칙 고정
+  - `PAID_FEATURE_POLICY.md`: 월 9,900원 요금제 및 "기억/조언" 중심 유료 기능 정의
+  - `API_COST_GOVERNANCE_POLICY.md`: 외부 API 비용 사용자 별도 부담 및 CCUT의 관리 책임 명시
+- **핵심 전략**: 무료는 "편집 도구", 유료는 "기획 파트너"로 서비스 성격 분리
+- **Pipeline Isolation**: PASS (기본 파이프라인 영향 없음)
+
+---
+
+## Latest Revision (2026-05-01 12:00)
+
+- **STEP 10-I.2 Proposal Resolver + Physical EDL Stabilization (HOLD)**
+- **구조적 개선 완료**:
+  - `proposalFragmentResolver.ts`: Proposal ID → Fragment 매칭 로직 유틸리티화
+  - `exportClipBuilder.ts`: Resolved Fragment → Physical EDL (Time-range) 변환 로직 분리
+  - `Index.tsx`: 매칭/추출 로직 제거 및 유틸리티 호출 구조로 간소화
+  - `export_engine.py`: Physical EDL 필드(`start_sec`, `end_sec`) 우선 참조 로직 보완
+- **발견된 이슈 (HOLD 사유)**:
+  - **조각 수 과다 발생**: 41초 영상 분석 시 약 48개의 조각이 생성됨. 
+  - 조각맵 표시 및 내보내기 흐름은 안정화되었으나, 너무 짧은 조각들이 많아 편집 가독성과 렌더링 효율이 저하될 위험이 있음.
+- **다음 작업**: STEP 10-I.3 Fragment Count Simplification & Fast Path (조각 병합 및 분석 간소화)
+- **Git 상태**: 로컬에 미커밋 수정 사항이 남아 있을 수 있음. 다음 세션 시작 시 `git status --short` 필수 확인.
+
+---
+
+## Validation Summary
+
+| 항목 | 결과 |
+|------|------|
+| RenderEngine 구현 (`render_from_export_input`) | PASS |
+| UI 통합 (export-input → render → render-result) | PASS |
+| GitHub 위생 | PASS |
+| 로컬 ↔ GitHub 동기화 | PASS |
+| Working tree | Modified (STEP 10-I.2) |
+
+---
+
+## Open Issues
+
+- **Fragment Count Overload**: 41s 영상 기준 48개 조각 생성 (병합 필요)
+- Resource Governor 미연동 (향후 STEP 10)
+- PBE(Precision Boundary Editor) 비활성화 상태 유지 중
+- 병렬 렌더링 미구현 (설계 단계)
+
+---
+
+## Next
+
+- STEP 10-I.3 Fragment Count Simplification & Fast Path
 - STEP 10 최종 안정화 / 회귀 테스트
 - 문서 구조 고정 및 방이전 자동화 체계 운영 시작

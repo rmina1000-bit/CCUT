@@ -51,8 +51,12 @@ class ProposalEngine:
         
         selected = []
         current_len = 0
+        is_fast_path = target_len <= 60.0
+        max_frags = 12 if is_fast_path else 25
+
         for f in sorted_frags:
             f_dur = f["structural"]["duration"]
+            if len(selected) >= max_frags: break
             if current_len + f_dur <= target_len * 1.1:
                 selected.append(f)
                 current_len += f_dur
@@ -95,9 +99,13 @@ class ProposalEngine:
         
         selected = []
         current_len = 0
+        is_fast_path = target_len <= 60.0
+        max_frags = 12 if is_fast_path else 25
+
         for f in sorted_frags:
             if f["structural"]["edit_value"] < 0.1: continue 
             f_dur = f["structural"]["duration"]
+            if len(selected) >= max_frags: break
             if current_len + f_dur <= target_len * 1.1:
                 selected.append(f)
                 current_len += f_dur

@@ -46,7 +46,6 @@ const FragmentMap: React.FC<FragmentMapProps> = ({
   onSourceRestore,
   onBoundaryClick,
 }) => {
-  console.log("[DEBUG] FragmentMap 리렌더링, onSourceRestore:", !!onSourceRestore);
   const [draggedId, setDraggedId] = useState<string | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
   const [hoveredSeamKey, setHoveredSeamKey] = useState<string | null>(null);
@@ -284,7 +283,7 @@ const FragmentMap: React.FC<FragmentMapProps> = ({
             const nextVisible = visIdx < visibleFragments.length - 1 ? visibleFragments[visIdx + 1] : null;
 
             return (
-              <React.Fragment key={uid}>
+              <React.Fragment key={(f as any).stable_key || uid}>
 
 
                 <div

@@ -22,6 +22,8 @@ import {
   createNextSnapshot,
 } from "@/proposal/directionSnapshot";
 import { generateProposals } from "@/proposal/proposalOrchestrator";
+import { resolveProposalFragments } from "@/utils/proposalFragmentResolver";
+import { buildExportClipsFromResolvedFragments } from "@/utils/exportClipBuilder";
 
 const MIN_CENTER = 420;
 const MIN_RIGHT = 400;
@@ -301,10 +303,10 @@ const Index: React.FC = () => {
                   .flatMap((e) => e.fragments),
               ];
 
-              console.log(
-                "[multi-source] merged fragments: " + combinedForEditing.length,
-                "(A: " + finalMappedA.length + ", others: " + (combinedForEditing.length - finalMappedA.length) + ")"
-              );
+              // Log summary once instead of repeating
+              if (combinedForEditing.length > 0) {
+                console.log(`[Index] Analysis summary: ${combinedForEditing.length} frags, A: ${finalMappedA.length}`);
+              }
 
               const hooks = combinedForEditing.map(
                 (f) => (f.intelligence as any)?.hook_score ?? 0.5
@@ -314,14 +316,8 @@ const Index: React.FC = () => {
               const uniqueRoles = new Set(roles.filter(Boolean)).size;
               const canProceed = uniqueHooks > 1 && uniqueRoles > 1;
 
-              console.log(
-                "[proposal-gate] canProceed:",
-                canProceed,
-                "| uniqueHooks:",
-                uniqueHooks,
-                "| uniqueRoles:",
-                uniqueRoles
-              );
+              // Simplified proposal gate log
+              if (!canProceed) console.warn("[Index] Proposal gate restricted (low diversity)");
 
               let generatedProposals: Record<"A" | "B", any> = {} as any;
               let semanticReady = false;
@@ -467,7 +463,7 @@ const Index: React.FC = () => {
               setAnalyzeMessage("분석 완료!");
               setAppState("complete");
 
-              console.log("[N-01] analysis complete, proposal count fragments:", combinedForEditing.length);
+              // Removed redundant log
             } else if (statusData.status === "FAILED") {
               clearInterval(pollInterval);
               setAnalyzeMessage("분석 실패: " + statusData.error);
@@ -502,12 +498,10 @@ const Index: React.FC = () => {
   );
 
   const handleProposalPreview = useCallback((id: string) => {
-    console.log(`[STEP5] Proposal previewed: ${id}`);
     setSelectedProposalId(id);
   }, []);
 
   const handleProposalCommit = useCallback((id: string) => {
-    console.log(`[STEP5] Proposal committed: ${id}`);
     setSelectedProposalId(id);
     setCommittedProposalId(id);
   }, []);
@@ -836,96 +830,17 @@ const Index: React.FC = () => {
     [removeByUid, committedProposalId, proposals]
   );
 
-  const filteredFragments = useMemo(() => {
-    if (!committedProposalId || !proposals) return [];
-
+  const resolverResult = useMemo(() => {
+    if (!committedProposalId || !proposals) return { resolvedFragments: [], diagnostics: null };
     const proposal = proposals[committedProposalId as "A" | "B"];
-    const proposalFragIds = proposal?.key_fragments || [];
-    const aliases = (proposal as any)?.resolved_aliases || [];
-    
-    if (proposalFragIds.length === 0) {
-      console.warn("[proposalResolver] proposalFragIds is empty for:", committedProposalId);
-      return [];
-    }
-
-    console.log("[proposalResolver] proposal ids:", proposalFragIds);
-    console.log("[proposalResolver] fragment aliases:", aliases.length);
-
-    const result: Fragment[] = [];
-    let exactCount = 0;
-    let timeFallbackCount = 0;
-    let singleFallbackCount = 0;
-
-    proposalFragIds.forEach((id, idx) => {
-      const alias = aliases[idx];
-      
-      // 1. Exact ID match (Exhaustive search)
-      let found = editFragments.find((f: any) => {
-        return (
-          f.fragment_id === id ||
-          f.fragment_uid === id ||
-          f.id === id ||
-          f.uid === id ||
-          f.display_id === id ||
-          f.original_id === id ||
-          f.source_fragment_id === id ||
-          f.root_fragment_uid === id ||
-          f.parent_fragment_uid === id ||
-          f.derivedFrom === id ||
-          f.semantic?.id === id ||
-          f.semantic?.fragment_id === id ||
-          f.structural?.source_fragment_id === id ||
-          f.intelligence?.semantic_fragment_id === id ||
-          f.intelligence?.source_fragment_id === id
-        );
-      });
-
-      if (found) {
-        exactCount++;
-      } else if (alias) {
-        // 2. Time range fallback
-        const pStart = alias.start_sec;
-        const pEnd = alias.end_sec;
-        
-        found = editFragments.find((f: any) => {
-          const fps = 30;
-          const fStart = f.start_time ?? f.start ?? f.semantic?.start_sec ?? f.structural?.start_sec ?? (f.start_frame / fps);
-          const fEnd = f.end_time ?? f.end ?? f.semantic?.end_sec ?? f.structural?.end_sec ?? (f.end_frame / fps);
-          
-          // Overlap check (within 0.5s tolerance)
-          return Math.abs(fStart - pStart) < 0.5 && Math.abs(fEnd - pEnd) < 0.5;
-        });
-        
-        if (found) timeFallbackCount++;
-      }
-
-      // 3. Single-fragment fallback
-      if (!found && editFragments.length === 1 && proposalFragIds.length === 1) {
-        found = editFragments[0];
-        if (found) {
-          singleFallbackCount++;
-          console.warn("[proposalResolver] single fallback matched for ID:", id);
-        }
-      }
-
-      if (found) {
-        result.push(found);
-      }
-    });
-
-    console.log(`[proposalResolver] exact matched: ${exactCount}`);
-    console.log(`[proposalResolver] time fallback matched: ${timeFallbackCount}`);
-    console.log(`[proposalResolver] single fallback matched: ${singleFallbackCount}`);
-    console.log(`[filteredFragments] mode: ${committedProposalId}, proposalFragIds: ${proposalFragIds.length}, matched: ${result.length}`);
-
-    if (result.length < proposalFragIds.length) {
-      console.warn(
-        `[proposalResolver] mismatch! result count: ${result.length}, expected: ${proposalFragIds.length}`
-      );
-    }
-
-    return result;
+    return resolveProposalFragments(proposal, editFragments);
   }, [committedProposalId, editFragments, proposals]);
+
+  const resolvedFragments = useMemo(() => resolverResult.resolvedFragments, [resolverResult]);
+
+  const physicalClips = useMemo(() => {
+    return buildExportClipsFromResolvedFragments(resolvedFragments);
+  }, [resolvedFragments]);
 
   const handleEmptyTrash = useCallback(() => {
     setDeletedFragments([]);
@@ -980,7 +895,8 @@ const Index: React.FC = () => {
           onCommitProposal={handleProposalCommit}
           onExport={handleExport}
           onReproposal={handleReproposal}
-          fragments={filteredFragments}
+          fragments={resolvedFragments}
+          exportClips={physicalClips}
           guidanceMessage={
             semanticFragments.length > 0
               ? "Semantic " + semanticFragments.length + " / Quick Scan " + (quickScanData?.status ?? "READY")
@@ -1041,7 +957,7 @@ const Index: React.FC = () => {
 
         <div className="flex-1 overflow-y-auto">
           <FragmentMap
-            fragments={filteredFragments}
+            fragments={resolvedFragments}
             onFragmentsChange={handleFragmentsReorder}
             selectedFragmentId={selectedFragment ? getUid(selectedFragment) : null}
             expandedFragmentId={expandedFragment}

@@ -28,16 +28,18 @@ class ExportEngine:
         total_dur = 0.0
         
         for i, frag in enumerate(sequence):
-            # Semantic Fragment 구조에서 필수 필드 추출
+            # [STEP 10-I.2] Physical EDL 우선 참조 (start_sec, end_sec)
             clip = {
                 "fragment_id": frag.get("fragment_id"),
-                "start": frag.get("start"),
-                "end": frag.get("end"),
-                "duration": frag.get("structural", {}).get("duration", 0),
+                "display_id": frag.get("display_id"),
+                "source_id": frag.get("source_id", source_id),
+                "start": frag.get("start_sec") if frag.get("start_sec") is not None else frag.get("start"),
+                "end": frag.get("end_sec") if frag.get("end_sec") is not None else frag.get("end"),
+                "duration": frag.get("duration_sec") if frag.get("duration_sec") is not None else frag.get("duration", 0),
                 "order": i
             }
             clips.append(clip)
-            total_dur += clip["duration"]
+            total_dur += (clip["duration"] or 0)
 
         # 3. Export Input 객체 구성
         export_data = {

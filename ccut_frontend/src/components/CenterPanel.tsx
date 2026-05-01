@@ -3,6 +3,7 @@ import { Upload, Play, Loader2, Send, CheckCircle2, Package } from "lucide-react
 import { Fragment } from "@/data/fragmentData";
 import { videoService } from "@/services/videoService";
 import { Direction } from "@/proposal/proposalTypes";
+import { PhysicalClip, validateExportClips } from "@/utils/exportClipBuilder";
 
 type AppState = "empty" | "analyzing" | "complete";
 
@@ -39,6 +40,7 @@ interface CenterPanelProps {
   sourceId?: string | null;
   sourceEntries?: SourceEntry[];
   fragments?: Fragment[];
+  exportClips?: PhysicalClip[];
 }
 
 function parseDirectionFromText(text: string): Direction | null {
@@ -101,6 +103,7 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
   sourceId,
   sourceEntries = [],
   fragments = [],
+  exportClips = [],
 }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const videoRefA = useRef<HTMLVideoElement>(null);
@@ -520,7 +523,11 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
   );
 
   const handleExportClick = async () => {
-    if (!committedProposalId) return;
+    // [STEP 10-I.2] Export 전 유효성 검사 강화 (Physical EDL 정합성 확인)
+    if (!committedProposalId || !validateExportClips(exportClips)) {
+      setExportError("확정된 조각이 없습니다. A안 또는 B안을 먼저 확정하세요.");
+      return;
+    }
 
     setIsExporting(true);
     setExportError(null);
@@ -532,11 +539,11 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
       const proposal = proposals?.[committedProposalId];
       const backendId = proposal?.proposal_id || proposal?.id || committedProposalId;
 
-      // [STEP 9] 1. ExportInput 생성 (POST /export-input/{proposal_id})
+      // [STEP 10-I.2] fragment_id가 아닌 Physical EDL(exportClips)을 전송
       const exportInputRes = await fetch(`${videoService.API_BASE_URL}/export-input/${backendId}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ clips: fragments })
+        body: JSON.stringify({ clips: exportClips })
       });
       if (!exportInputRes.ok) throw new Error(`ExportInput 생성 실패 (${exportInputRes.status})`);
       const exportInputData = await exportInputRes.json();

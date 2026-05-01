@@ -54,7 +54,7 @@ class SemanticFragmentGenerator:
             final_fragments.append(frag)
 
         # 8. Merge / Split 보정 (2s ~ 60s)
-        final_fragments = self.apply_merge_split(final_fragments, boundaries)
+        final_fragments = self.apply_merge_split(final_fragments, boundaries, total_duration)
 
         # [STEP 4 RESYNC] 최종 경계 확정 후 fallback_reason 재계산
         for frag in final_fragments:
@@ -99,7 +99,15 @@ class SemanticFragmentGenerator:
                 if bool(ev.get("text")) != bool(prev.get("text")):
                     boundaries.append(ev["start"])
                     
-        return sorted(list(set(boundaries)))
+        # [STEP 10-I.3] 중복 및 너무 가까운 경계 제거 (최소 1초 간격 권장)
+        sorted_b = sorted(list(set(boundaries)))
+        if not sorted_b: return []
+        
+        filtered = [sorted_b[0]]
+        for b in sorted_b[1:]:
+            if b - filtered[-1] >= 1.0: # 1초 미만 간격의 경계는 무시
+                filtered.append(b)
+        return filtered
 
     def build_fragments(self, source_id, evidences, boundaries):
         """[STEP 4] Evidence segments를 Boundary 기준으로 분할 및 매핑"""
@@ -195,11 +203,15 @@ class SemanticFragmentGenerator:
             continuity["topic_similarity"] = 0.7 if current["semantic"]["topic"] == prev["semantic"]["topic"] else 0.4
         return continuity
 
-    def apply_merge_split(self, fragments, boundaries):
+    def apply_merge_split(self, fragments, boundaries, total_duration):
         """[STEP 4] Merge (2s 미만) 및 Split (60s 초과) 실제 보정"""
         if not fragments: return []
         
-        # 1. Merge (2초 미만 조각 제거)
+        is_fast_path = total_duration <= 60.0
+        # Fast Path 시 3.5초 미만 병합, 일반 2.0초
+        merge_threshold = 3.5 if is_fast_path else 2.0
+        
+        # 1. Merge (Threshold 미만 조각 제거)
         res = []
         for frag in fragments:
             if not res:
@@ -207,7 +219,7 @@ class SemanticFragmentGenerator:
                 continue
             
             last = res[-1]
-            if last["structural"]["duration"] < 2.0 or frag["structural"]["duration"] < 2.0:
+            if last["structural"]["duration"] < merge_threshold or frag["structural"]["duration"] < merge_threshold:
                 # 병합
                 last["end"] = frag["end"]
                 last["structural"]["duration"] = last["end"] - last["start"]
@@ -216,6 +228,45 @@ class SemanticFragmentGenerator:
                 res[-1] = last
             else:
                 res.append(frag)
+        
+        # [STEP 10-I.3] 조각 수 강제 제한 (Fast Path: 8~18개)
+        if is_fast_path and len(res) > 18:
+            print(f"[SEMANTIC] Fast Path Limit: {len(res)} -> 18 merging...")
+            while len(res) > 18:
+                # 가장 짧은 조각을 찾아 인접 조각과 병합
+                min_idx = -1
+                min_dur = 9999.0
+                for i, f in enumerate(res):
+                    if f["structural"]["duration"] < min_dur:
+                        min_dur = f["structural"]["duration"]
+                        min_idx = i
+                
+                # 병합 방향 결정 (앞 또는 뒤)
+                if min_idx == 0:
+                    merge_to = 1
+                elif min_idx == len(res) - 1:
+                    merge_to = min_idx - 1
+                else:
+                    # 앞뒤 중 더 짧은 쪽으로 병합
+                    prev_dur = res[min_idx-1]["structural"]["duration"]
+                    next_dur = res[min_idx+1]["structural"]["duration"]
+                    merge_to = min_idx - 1 if prev_dur < next_dur else min_idx + 1
+                
+                # 병합 실행
+                target = res[min_idx]
+                dest = res[merge_to]
+                
+                new_start = min(target["start"], dest["start"])
+                new_end = max(target["end"], dest["end"])
+                
+                dest["start"] = new_start
+                dest["end"] = new_end
+                dest["structural"]["duration"] = new_end - new_start
+                for key in ["evidence_refs", "transcript_refs"]:
+                    dest["semantic"][key] = list(set(dest["semantic"][key] + target["semantic"][key]))
+                
+                res.pop(min_idx)
+                # res[merge_to] 는 이미 업데이트됨
         
         # 2. Split (60초 초과 분할 시도)
         final = []
