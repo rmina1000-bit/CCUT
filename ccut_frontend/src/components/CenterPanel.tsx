@@ -770,9 +770,12 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
 
             <button
               onClick={() => handleProposalCommit("A")}
+              disabled={!proposals || !proposals.A}
               className={`text-[14px] font-black tracking-[0.5em] transition-all uppercase group relative py-2 ${committedProposalId === "A"
                 ? "text-primary"
-                : "text-muted-foreground/40 hover:text-primary"
+                : !proposals || !proposals.A
+                  ? "text-muted-foreground/10 cursor-not-allowed"
+                  : "text-muted-foreground/40 hover:text-primary"
                 }`}
             >
               {committedProposalId === "A" ? "✓ A안 확정됨" : "A안 선택"}
@@ -884,9 +887,12 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
 
             <button
               onClick={() => handleProposalCommit("B")}
+              disabled={!proposals || !proposals.B}
               className={`text-[14px] font-black tracking-[0.5em] transition-all uppercase group relative py-2 ${committedProposalId === "B"
                 ? "text-ccut-indigo"
-                : "text-muted-foreground/40 hover:text-ccut-indigo"
+                : !proposals || !proposals.B
+                  ? "text-muted-foreground/10 cursor-not-allowed"
+                  : "text-muted-foreground/40 hover:text-ccut-indigo"
                 }`}
             >
               {committedProposalId === "B" ? "✓ B안 확정됨" : "B안 선택"}
@@ -899,7 +905,7 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
         </div>
 
         <div className="w-full grid grid-cols-2 gap-4">
-          {proposals &&
+          {proposals ? (
             Object.entries(proposals).map(([key, p]: [string, any]) => (
               <div
                 key={key}
@@ -926,7 +932,17 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
                   </p>
                 </div>
               </div>
-            ))}
+            ))
+          ) : (
+            <div className="col-span-2 p-10 rounded-2xl bg-red-500/5 border border-red-500/10 flex flex-col items-center gap-2">
+              <span className="text-[12px] font-bold text-red-400/60 uppercase tracking-widest">
+                Analysis Pipeline Failure
+              </span>
+              <p className="text-[11px] text-muted-foreground/40">
+                제안을 생성하지 못했습니다. 원본 영상 상태를 확인하거나 다시 분석을 시도해 주세요.
+              </p>
+            </div>
+          )}
         </div>
 
         {committedProposalId && (

@@ -31,10 +31,14 @@ export const useProposalState = (sourceFragments: Fragment[]) => {
   }, []);
 
   const handleProposalCommit = useCallback((id: string) => {
+    if (!proposals || !proposals[id as "A" | "B"]) {
+      console.warn("[proposalState] commit blocked: proposals not ready", id);
+      return;
+    }
     console.log("[proposalState] handleProposalCommit called with id:", id);
     setSelectedProposalId(id);
     setCommittedProposalId(id);
-  }, []);
+  }, [proposals]);
 
   const handleReproposal = useCallback(
     (nextDirection: Direction) => {

@@ -420,10 +420,12 @@ const Index: React.FC = () => {
             } else if (statusData.status === "FAILED") {
               clearInterval(pollInterval);
               setAnalyzeMessage("분석 실패: " + statusData.error);
+              setProposals(null); // Explicitly ensure no proposals
               setAppState("complete");
             } else if (pollCount >= MAX_POLLS) {
               clearInterval(pollInterval);
               setAnalyzeMessage("분석 시간 초과");
+              setProposals(null); // Explicitly ensure no proposals
               setAppState("complete");
             }
           } catch (err) {
