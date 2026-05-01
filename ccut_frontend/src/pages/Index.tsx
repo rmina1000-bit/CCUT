@@ -282,13 +282,18 @@ const Index: React.FC = () => {
         if (!firstSourceId) throw new Error("source_id 확인 실패");
 
         let pollCount = 0;
+        let lastStatus: string | null = null;
         const MAX_POLLS = 100;
 
         const pollInterval = setInterval(async () => {
           try {
             pollCount++;
             const statusData = await videoService.getFragmentStatus(firstSourceId!);
-            console.log(`[analysis-status] (${pollCount})`, statusData.status);
+            
+            if (pollCount === 1 || statusData.status !== lastStatus || statusData.status === "ANALYSIS_COMPLETE" || statusData.status === "FAILED") {
+              console.log(`[analysis-status] ${statusData.status} (${pollCount})`);
+              lastStatus = statusData.status;
+            }
 
             if (statusData.status === "ANALYSIS_COMPLETE") {
               clearInterval(pollInterval);
