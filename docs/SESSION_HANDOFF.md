@@ -35,6 +35,8 @@
 - STEP 10-I.3 Fragment Count Simplification & Fast Path: **PASS**
 - STEP 10-I.4 Index Decomposition Plan: **PASS**
 - STEP 10-I.5 Extract Layout & Proposal hooks: **PASS**
+- STEP 10-I.5.1 Mojibake Log Cleanup: **PASS**
+
 
 
 
@@ -113,9 +115,9 @@ M ccut_frontend/src/pages/Index.tsx (등 STEP 10-I.2 관련 수정 사항 표시
 ```
 
 > [!IMPORTANT]
-> STEP 10-I.5 Phase 2 완료. 레이아웃 리사이즈 로직의 오차를 수정하고, 
-> Proposal 관련 상태와 핸들러를 `useProposalState`로 성공적으로 분리했습니다.
-> 백엔드 서버(127.0.0.1:8000)가 꺼져있을 경우 분석 요청이 실패하므로 서버 구동이 필요합니다.
+> STEP 10-I.5.1 완료. `useProposalState` 내부의 깨진 한글 로그를 영문으로 정규화했습니다.
+> 이제 개발자 콘솔에서 인코딩 문제 없이 로그를 확인할 수 있습니다.
+
 
 
 

@@ -31,6 +31,7 @@
 | STEP 10-I.3 | Fragment Count Simplification & Fast Path | PASS |
 | STEP 10-I.4 | Index Decomposition Plan | PASS |
 | STEP 10-I.5 | Extract Layout & Proposal hooks | PASS |
+| STEP 10-I.5.1 | Mojibake Log Cleanup | PASS |
 
 
 
@@ -40,15 +41,12 @@
 
 
 
-## CURRENT 🔄
-
-## CURRENT 🔄
 
 ## CURRENT 🔄
 
-- STEP 10-I.5 Phase 1 & 2 완료 (useWorkspaceLayout, useProposalState)
-- 리사이즈 로직 보정 (사이드바 너비 동적 반영)
-- Index.tsx 코드 추가 100라인 이상 분리 성공
+> [!IMPORTANT]
+> STEP 10-I.5.1 완료. `useProposalState` 내부의 깨진 한글 로그를 영문으로 정규화했습니다.
+> 이제 개발자 콘솔에서 인코딩 문제 없이 로그를 확인할 수 있습니다.
 
 
 

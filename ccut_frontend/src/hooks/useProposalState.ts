@@ -14,13 +14,13 @@ export const useProposalState = (sourceFragments: Fragment[]) => {
     (pair: Record<"A" | "B", Proposal>, label: string) => {
       const keyA = pair.A.key_fragments;
       const keyB = pair.B.key_fragments;
-      const firstA = keyA[0] ?? "없음";
-      const firstB = keyB[0] ?? "없음";
+      const firstA = keyA[0] ?? "none";
+      const firstB = keyB[0] ?? "none";
       const isFirstDiff = firstA !== firstB;
 
-      console.log(`[strategyEngine] A안 순서:`, keyA);
-      console.log(`[strategyEngine] B안 순서:`, keyB);
-      console.log(`[strategyEngine] A/B 첫 조각 다름: ${isFirstDiff}`);
+      console.log("[strategyEngine] A order:", keyA);
+      console.log("[strategyEngine] B order:", keyB);
+      console.log(`[strategyEngine] A/B first fragment differs: ${isFirstDiff}`);
       console.log(`[PROPOSAL][${label}] snapshot=${pair.A.snapshot_id} (A:${firstA}, B:${firstB})`);
     },
     []
@@ -38,7 +38,7 @@ export const useProposalState = (sourceFragments: Fragment[]) => {
   const handleReproposal = useCallback(
     (nextDirection: Direction) => {
       if (!sourceFragments.length) {
-        console.warn("[Reproposal] sourceFragments가 없어 재제안을 건너뜁니다.");
+        console.warn("[Reproposal] sourceFragments is empty. Skipping reproposal.");
         return;
       }
 
