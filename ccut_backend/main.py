@@ -277,12 +277,20 @@ def _background_whisper(source_id: str, video_path: str, fragments: list):
         
         # [STEP 10-I.5.2] Semantic Analysis & Proposal Generation Trigger
         print(f"[PIPELINE] Triggering Semantic Analysis for {source_id}")
+        if source_id in _fragment_job_registry:
+            _fragment_job_registry[source_id]["stage"] = "semantic_boundary"
+            _fragment_job_registry[source_id]["progress"] = 80
+
         from engine.semantic_engine import SemanticFragmentGenerator
         from engine.proposal_engine import ProposalEngine
         
         sem_gen = SemanticFragmentGenerator(bams)
         sem_gen.generate(source_id)
         
+        if source_id in _fragment_job_registry:
+            _fragment_job_registry[source_id]["stage"] = "proposal_generation"
+            _fragment_job_registry[source_id]["progress"] = 90
+
         prop_eng = ProposalEngine(bams)
         prop_eng.generate_proposals(source_id)
         
@@ -535,6 +543,7 @@ async def get_fragment_analysis_status(source_id: str):
     return {
         "status": job.get("status", "PENDING"),
         "progress": job.get("progress", 0),
+        "stage": job.get("stage", "initial"),
         "source_id": source_id,
         "error": job.get("error"),
     }

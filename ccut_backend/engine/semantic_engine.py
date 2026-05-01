@@ -45,7 +45,7 @@ class SemanticFragmentGenerator:
         print(f"[SEMANTIC DIAGNOSTIC] Evidence type counts: {worker_counts}")
 
         # 3. 경계 후보 생성 (Evidence-driven: scene, silence, motion, topic)
-        boundaries = self.create_fragment_boundaries(evidences)
+        boundaries = self.create_fragment_boundaries(evidences, total_duration)
         
         # 4. Fragment 초기 구축 (Evidence grouping)
         fragments = self.build_fragments(source_id, evidences, boundaries)
@@ -90,7 +90,7 @@ class SemanticFragmentGenerator:
         print(f"[SEMANTIC] {len(final_fragments)} fragments generated for {source_id}")
         return final_fragments
 
-    def create_fragment_boundaries(self, evidences):
+    def create_fragment_boundaries(self, evidences, total_duration=0):
         """
         [STEP 10-I.5.3] Text-first 경계 후보 생성
         - whisper_segments: 가장 강력한 텍스트/문장 경계
