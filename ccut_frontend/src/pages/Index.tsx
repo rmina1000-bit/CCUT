@@ -175,14 +175,14 @@ const Index: React.FC = () => {
         const mapFragments = (frags: any[], label: string) => {
           const mapped: Fragment[] = frags.map((f: any, idx: number) => {
             const fps = 30;
-            // SF vs VF structure support
-            const durationSec = f.structural?.duration || f.duration || (f.end_time - f.start_time) || (f.end - f.start) || 5;
-            const startTime = f.start_time ?? f.start ?? 0;
-            const startFrame = Math.round(f.start_frame ?? (startTime * fps));
-            const endFrame = Math.round(
-              f.end_frame ?? ((f.end_time ?? f.end ?? (startTime + durationSec)) * fps)
-            );
+            // [STEP 10-I.5.3] Strict timing priority
+            const startSec = f.start_sec ?? f.start ?? f.start_time ?? f.semantic?.start_sec ?? f.structural?.start_sec ?? 0;
+            const endSec = f.end_sec ?? f.end ?? f.end_time ?? f.semantic?.end_sec ?? f.structural?.end_sec ?? (startSec + (f.duration_sec || f.structural?.duration || f.duration || 0));
+            
+            const startFrame = Math.round(f.start_frame ?? (startSec * fps));
+            const endFrame = Math.round(f.end_frame ?? (endSec * fps));
             const durationFrames = Math.max(1, endFrame - startFrame);
+            const durationSec = durationFrames / fps;
             const rawThumb = f.intelligence?.thumb_url || f.thumb || f.thumbnail_url;
 
             return {
@@ -300,67 +300,32 @@ const Index: React.FC = () => {
                 prev.map((e) => (e.label === "A" ? { ...e, fragments: finalMappedA } : e))
               );
 
-              const combinedForEditing: Fragment[] = [
-                ...finalMappedA,
-                ...collectedEntries
-                  .filter((e) => e.label !== "A")
-                  .flatMap((e) => e.fragments),
-              ];
-
-              // Log summary once instead of repeating
-              if (combinedForEditing.length > 0) {
-                console.log(`[Index] Analysis summary: ${combinedForEditing.length} frags, A: ${finalMappedA.length}`);
-              }
-
-              const hooks = combinedForEditing.map(
-                (f) => (f.intelligence as any)?.hook_score ?? 0.5
-              );
-              const uniqueHooks = new Set(hooks).size;
-              const roles = combinedForEditing.map((f) => (f.intelligence as any)?.role);
-              const uniqueRoles = new Set(roles.filter(Boolean)).size;
-              const canProceed = uniqueHooks > 1 && uniqueRoles > 1;
-
-              // Simplified proposal gate log
-              if (!canProceed) console.warn("[Index] Proposal gate restricted (low diversity)");
-
+              // [STEP 10-I.5.3] Analysis Completed - Next Phase: Semantic & Proposals
+              setAnalyzeMessage("의미 조각 분석 중...");
+              
               let generatedProposals: Record<"A" | "B", any> = {} as any;
-              let semanticReady = false;
+              let finalEditFragments: Fragment[] = [];
 
               try {
-                setAnalyzeMessage("편집 제안 생성 중...");
-                // [STEP 9] 2. Backend Proposal 생성 (POST /proposals/{source_id})
-                try {
-                  const quickScanRes = await fetch(
-                    `${videoService.API_BASE_URL}/quick-scan/${firstSourceId}`
-                  );
-                  if (!quickScanRes.ok) {
-                    throw new Error(`Quick Scan 조회 실패 (${quickScanRes.status})`);
-                  }
-                  const quickScan = await quickScanRes.json();
-                  setQuickScanData(quickScan);
-                  setAnalyzeMessage("Quick Scan 완료");
-                } catch (quickScanErr) {
-                  console.warn("[Index] Quick Scan Error:", quickScanErr);
-                  setAnalyzeMessage("Quick Scan 조회 실패 - 계속 진행");
-                }
-
-                setAnalyzeMessage("Semantic Fragment 생성 중...");
+                // 1. Semantic Fragment Fetch
                 const semanticRes = await fetch(
                   `${videoService.API_BASE_URL}/semantic-fragments/${firstSourceId}`,
                   { method: "POST" }
                 );
-                if (!semanticRes.ok) {
-                  throw new Error(`Semantic Fragment 생성 실패 (${semanticRes.status})`);
-                }
+                if (!semanticRes.ok) throw new Error("Semantic Fragment 생성 실패");
                 const semanticData = await semanticRes.json();
                 const semanticRows = semanticData.fragments || [];
-                if (semanticRows.length === 0) {
-                  throw new Error("Semantic Fragment 결과가 비어 있습니다.");
+                
+                if (semanticRows.length > 0) {
+                  setSemanticFragments(semanticRows);
+                  finalEditFragments = mapFragments(semanticRows, "A");
+                  setAnalyzeMessage("Semantic Fragment 생성 완료");
+                } else {
+                  console.warn("[Index] No semantic fragments, falling back to raw segments");
+                  finalEditFragments = finalMappedA;
                 }
-                semanticReady = true;
-                setSemanticFragments(semanticRows);
-                setAnalyzeMessage("Semantic Fragment 생성 완료");
 
+                // 2. Proposal Generation
                 setAnalyzeMessage("편집 제안 생성 중...");
                 const proposalRes = await fetch(`${videoService.API_BASE_URL}/proposals/${firstSourceId}`, {
                   method: "POST"
@@ -386,12 +351,11 @@ const Index: React.FC = () => {
                       slot_trace: []
                     };
                     
-                    // Enrich sequence with aliases for resolver
                     if (generatedProposals[mode].key_fragments.length > 0) {
                       (generatedProposals[mode] as any).resolved_aliases = p.sequence.map((s: any) => ({
                         proposal_fragment_id: s.fragment_id,
                         source_id: s.source_id,
-                        source_fragment_id: s.source_id, // Backward compatibility
+                        source_fragment_id: s.source_id,
                         display_id: s.display_id,
                         start_sec: s.start,
                         end_sec: s.end
@@ -399,87 +363,54 @@ const Index: React.FC = () => {
                     }
                   });
                 }
-
-                if (generatedProposals.A && !generatedProposals.B) {
-                  generatedProposals.B = { ...generatedProposals.A, id: "B", title: "사용자친화형 편집 (B)" };
-                } else if (!generatedProposals.A && generatedProposals.B) {
-                  generatedProposals.A = { ...generatedProposals.B, id: "A", title: "시장형 편집 (A)" };
-                }
-              } catch (err) {
-                if (!semanticReady) {
-                  console.error("[Index] Semantic pipeline error:", err);
-                  setAnalyzeMessage("Semantic Fragment 조회 실패");
-                  setAnalyzeProgress(100);
-                  setAppState("complete");
-                  return;
-                }
-                console.error("[Index] Backend Proposal Error, fallback to client-side:", err);
+              } catch (pipelineErr) {
+                console.error("[Index] Semantic/Proposal Pipeline Error:", pipelineErr);
+                setAnalyzeMessage("고급 분석 실패 - 기본 모드 전환");
+                finalEditFragments = finalMappedA;
               }
 
-              // Fallback if backend failed or returned nothing
-              if (Object.keys(generatedProposals).length === 0) {
-                if (canProceed) {
-                  const initialSnapshot = createInitialSnapshot();
-                  generatedProposals = generateProposals(combinedForEditing, initialSnapshot);
-                  setDirectionSnapshot(initialSnapshot);
-                } else {
-                  console.warn("[proposal-gate] 의미 데이터 분산 부족 - fallback 사용");
-                  const allFragIds = combinedForEditing.map((f) => f.fragment_id);
-                  const timeOrdered = [...combinedForEditing]
-                    .sort((a, b) => (a.start_frame ?? 0) - (b.start_frame ?? 0))
-                    .map((f) => f.fragment_id);
+              // Build combined for workspace
+              const combinedForEditing: Fragment[] = [
+                ...finalEditFragments,
+                ...collectedEntries
+                  .filter((e) => e.label !== "A")
+                  .flatMap((e) => e.fragments),
+              ];
 
-                  generatedProposals = {
-                    A: {
-                      id: "A",
-                      mode: "market",
-                      title: "시장형 편집",
-                      desc: "분석 완료 후 더 정교한 제안이 생성됩니다.",
-                      score: "50%",
-                      key_fragments: allFragIds,
-                      direction: {},
-                      snapshot_id: "R0",
-                      template_id: "fallback",
-                      slot_trace: [],
-                    },
-                    B: {
-                      id: "B",
-                      mode: "user",
-                      title: "사용자친화형 편집",
-                      desc: "원본 시간 순서를 유지한 편집안입니다.",
-                      score: "50%",
-                      key_fragments: timeOrdered,
-                      direction: {},
-                      snapshot_id: "R0",
-                      template_id: "fallback_time",
-                      slot_trace: [],
-                    },
-                  };
-                }
+              // Client-side Fallback if no backend proposals
+              if (Object.keys(generatedProposals).length === 0) {
+                const initialSnapshot = createInitialSnapshot();
+                generatedProposals = generateProposals(combinedForEditing, initialSnapshot);
+                setDirectionSnapshot(initialSnapshot);
               }
 
               logProposalPair(generatedProposals, "INITIAL");
 
               setEditFragments(combinedForEditing);
               setSourceFragments(finalMappedA);
-
               setProposals(generatedProposals);
+              
               setAnalyzeProgress(100);
               setAnalyzeMessage("분석 완료!");
               setAppState("complete");
 
-              // Removed redundant log
             } else if (statusData.status === "FAILED") {
               clearInterval(pollInterval);
               setAnalyzeMessage("분석 실패: " + statusData.error);
               setAppState("complete");
             } else if (pollCount >= MAX_POLLS) {
               clearInterval(pollInterval);
-              setAnalyzeMessage("분석 시간 초과 (백엔드에서 계속 진행될 수 있습니다)");
+              setAnalyzeMessage("분석 시간 초과");
               setAppState("complete");
             }
           } catch (err) {
             console.error("[Index] Polling error:", err);
+            if (err instanceof Error && (err.message.includes("Failed to fetch") || err.message.includes("NetworkError") || err.message.includes("fetch"))) {
+               clearInterval(pollInterval);
+               setAnalyzeMessage("백엔드 서버 연결이 끊겼습니다. 서버를 확인한 뒤 다시 분석하세요.");
+               setAppState("empty");
+               return;
+            }
             if (pollCount >= MAX_POLLS) clearInterval(pollInterval);
           }
         }, 2000);

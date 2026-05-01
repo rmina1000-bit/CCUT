@@ -68,83 +68,95 @@ class SemanticFragmentGenerator:
 
     def create_fragment_boundaries(self, evidences):
         """
-        [STEP 4] 경계 후보 생성 (v3.2.1 보완)
-        - scene_change: 리스트 내 모든 지점 반영
-        - silence: audio_energy < 0.05
-        - motion_score: 급격한 변화 (> 0.4)
-        - text_shift: 텍스트 유무 변화 (토픽 전환 힌트)
+        [STEP 10-I.5.3] Text-first 경계 후보 생성
+        - whisper_segments: 가장 강력한 텍스트/문장 경계
+        - scene_change: 시각적 전환
+        - silence: 오디오 중단
+        - VF artificial boundaries (30s)는 의도적으로 제외
         """
-        boundaries = []
-        for i, ev in enumerate(evidences):
-            # 1. 원본 세그먼트 경계
+        boundaries = [0.0]
+        
+        # 1. Whisper Segments (Text-first priority)
+        whisper_evs = [e for e in evidences if e.get("worker_name") == "whisper_segments"]
+        for ev in whisper_evs:
             boundaries.append(ev["start"])
             boundaries.append(ev["end"])
 
-            # 2. 씬 체인지 (타임스탬프 리스트)
+        # 2. Scene Changes & Silence from all evidences
+        for ev in evidences:
             if ev.get("scene_change") and isinstance(ev["scene_change"], list):
                 for ts in ev["scene_change"]:
                     boundaries.append(ts)
             
-            # 3. 침묵 구간 (오디오 에너지 저하)
+            # Silence detection (usually from signal_processor)
             if ev.get("audio_energy", 1.0) < 0.05:
                 boundaries.append(ev["start"])
-            
-            # 4. 신호 변화 감지
-            if i > 0:
-                prev = evidences[i-1]
-                # 모션 급변
-                if abs(ev.get("motion_score", 0.0) - prev.get("motion_score", 0.0)) > 0.4:
-                    boundaries.append(ev["start"])
-                # 텍스트 존재 유무 변화
-                if bool(ev.get("text")) != bool(prev.get("text")):
-                    boundaries.append(ev["start"])
-                    
-        # [STEP 10-I.3] 중복 및 너무 가까운 경계 제거 (최소 1초 간격 권장)
+
+        # [STEP 10-I.5.3] 0.0과 total_duration은 항상 포함 (evidences에서 계산)
+        if evidences:
+            all_ends = [e["end"] for e in evidences]
+            if all_ends:
+                boundaries.append(max(all_ends))
+
+        # 중복 및 너무 가까운 경계 제거
         sorted_b = sorted(list(set(boundaries)))
-        if not sorted_b: return []
+        if not sorted_b: return [0.0]
         
         filtered = [sorted_b[0]]
         for b in sorted_b[1:]:
-            if b - filtered[-1] >= 1.0: # 1초 미만 간격의 경계는 무시
+            # 텍스트 기반인 경우 조금 더 촘촘하게 (0.8초)
+            if b - filtered[-1] >= 0.8:
                 filtered.append(b)
         return filtered
 
     def build_fragments(self, source_id, evidences, boundaries):
-        """[STEP 4] Evidence segments를 Boundary 기준으로 분할 및 매핑"""
+        """[STEP 10-I.5.3] Global boundaries 기반으로 조각 생성 (30s 경계 무관)"""
         final_fragments = []
         
-        for ev in evidences:
-            ev_start, ev_end = ev["start"], ev["end"]
+        # boundaries는 이미 0.0부터 total_duration까지 정렬되어 있음
+        for i in range(len(boundaries)-1):
+            start, end = round(boundaries[i], 2), round(boundaries[i+1], 2)
+            duration = round(end - start, 2)
+            if duration < 0.2: continue 
             
-            # 해당 evidence 범위 내의 경계점 추출
-            cuts = [b for b in boundaries if ev_start < b < ev_end]
-            cuts = sorted(list(set([ev_start] + cuts + [ev_end])))
+            # 해당 시간 범위에 걸쳐 있는 모든 evidences 찾기
+            overlapping_evs = [
+                ev for ev in evidences 
+                if not (ev["end"] <= start or ev["start"] >= end)
+            ]
             
-            for i in range(len(cuts)-1):
-                start, end = round(cuts[i], 2), round(cuts[i+1], 2)
-                if end - start < 0.2: continue 
-                
-                sf_id = f"SF_{uuid.uuid4().hex[:6].upper()}_{source_id}"
-                final_fragments.append({
-                    "fragment_id": sf_id,
-                    "source_id": source_id,
-                    "start": start,
-                    "end": end,
-                    "semantic": {
-                        "summary": (ev.get("text")[:50] + "...") if ev.get("text") else "Visual/Audio Context",
-                        "topic": "general",
-                        "transcript_refs": [ev["fragment_id"]],
-                        "evidence_refs": [ev["fragment_id"]]
-                    },
-                    "structural": {
-                        "role": "context",
-                        "edit_value": 0.5, # Default / User Rescored
-                        "market_value": 0.5, # Static Market Value
-                        "duration": end - start
-                    },
-                    "continuity": {},
-                    "confidence": ev.get("confidence", 1.0)
-                })
+            if not overlapping_evs:
+                # Evidence가 없는 구간 (그럴 수 없지만 방어코드)
+                continue
+            
+            # 첫 번째 Evidence를 기본 정보로 사용 (Summary 등)
+            primary_ev = overlapping_evs[0]
+            
+            # 여러 evidence의 텍스트 병합
+            combined_text = " ".join([e.get("text", "") for e in overlapping_evs if e.get("text")]).strip()
+            
+            sf_id = f"SF_{uuid.uuid4().hex[:6].upper()}_{source_id}"
+            final_fragments.append({
+                "fragment_id": sf_id,
+                "source_id": source_id,
+                "start": start,
+                "end": end,
+                "semantic": {
+                    "summary": (combined_text[:50] + "...") if combined_text else "Visual/Audio Context",
+                    "topic": primary_ev.get("topic", "general"),
+                    "transcript_refs": [e["fragment_id"] for e in overlapping_evs],
+                    "evidence_refs": [e["fragment_id"] for e in overlapping_evs]
+                },
+                "structural": {
+                    "role": "context",
+                    "edit_value": 0.5,
+                    "market_value": 0.5,
+                    "duration": duration
+                },
+                "continuity": {},
+                "confidence": max([e.get("confidence", 0.5) for e in overlapping_evs])
+            })
+            
         return final_fragments
 
     def classify_role(self, fragment, total_duration, intent_seed):
@@ -204,12 +216,12 @@ class SemanticFragmentGenerator:
         return continuity
 
     def apply_merge_split(self, fragments, boundaries, total_duration):
-        """[STEP 4] Merge (2s 미만) 및 Split (60s 초과) 실제 보정"""
+        """[STEP 10-I.5.3] Merge (3s 미만) 및 Split (20s 초과) 보정"""
         if not fragments: return []
         
         is_fast_path = total_duration <= 60.0
-        # [STEP 10-I.5.2] Fast Path 시 2.5초 미만 병합 (기존 3.5초는 너무 큼), 일반 2.0초
-        merge_threshold = 2.5 if is_fast_path else 2.0
+        # 3.0초 미만은 병합 시도 (Text-first 권장 최소 길이)
+        merge_threshold = 3.0
         
         # 1. Merge (Threshold 미만 조각 제거)
         res = []
@@ -219,22 +231,21 @@ class SemanticFragmentGenerator:
                 continue
             
             last = res[-1]
-            if last["structural"]["duration"] < merge_threshold or frag["structural"]["duration"] < merge_threshold:
+            # 너무 짧으면 이전 조각에 병합 (단, 병합 후 너무 길어지지 않는 경우)
+            if last["structural"]["duration"] < merge_threshold:
                 # 병합
                 last["end"] = frag["end"]
-                last["structural"]["duration"] = last["end"] - last["start"]
+                last["structural"]["duration"] = round(last["end"] - last["start"], 2)
                 for key in ["evidence_refs", "transcript_refs"]:
                     last["semantic"][key] = list(set(last["semantic"][key] + frag["semantic"][key]))
                 res[-1] = last
             else:
                 res.append(frag)
         
-        # [STEP 10-I.5.2] 조각 수 강제 제한 (Fast Path: 8~18개)
-        # 너무 많으면 의미적으로 뭉치고, 너무 적으면 30초 고정이 됨.
+        # [STEP 10-I.5.3] 조각 수 강제 제한 (8~18개)
         if is_fast_path and len(res) > 18:
             print(f"[SEMANTIC] Fast Path Limit: {len(res)} -> 18 merging...")
             while len(res) > 18:
-                # 가장 짧은 조각을 찾아 인접 조각과 병합
                 min_idx = -1
                 min_dur = 9999.0
                 for i, f in enumerate(res):
@@ -242,50 +253,41 @@ class SemanticFragmentGenerator:
                         min_dur = f["structural"]["duration"]
                         min_idx = i
                 
-                # 병합 방향 결정 (앞 또는 뒤)
-                if min_idx == 0:
-                    merge_to = 1
-                elif min_idx == len(res) - 1:
-                    merge_to = min_idx - 1
+                if min_idx == 0: merge_to = 1
+                elif min_idx == len(res) - 1: merge_to = min_idx - 1
                 else:
-                    # 앞뒤 중 더 짧은 쪽으로 병합
                     prev_dur = res[min_idx-1]["structural"]["duration"]
                     next_dur = res[min_idx+1]["structural"]["duration"]
                     merge_to = min_idx - 1 if prev_dur < next_dur else min_idx + 1
                 
-                # 병합 실행
-                target = res[min_idx]
-                dest = res[merge_to]
-                
-                new_start = min(target["start"], dest["start"])
-                new_end = max(target["end"], dest["end"])
-                
-                dest["start"] = new_start
-                dest["end"] = new_end
-                dest["structural"]["duration"] = new_end - new_start
+                target = res[min_idx]; dest = res[merge_to]
+                dest["start"] = min(target["start"], dest["start"])
+                dest["end"] = max(target["end"], dest["end"])
+                dest["structural"]["duration"] = round(dest["end"] - dest["start"], 2)
                 for key in ["evidence_refs", "transcript_refs"]:
                     dest["semantic"][key] = list(set(dest["semantic"][key] + target["semantic"][key]))
-                
                 res.pop(min_idx)
-                # res[merge_to] 는 이미 업데이트됨
         
-        # 2. Split (60초 초과 분할 시도)
+        # 2. Split (20초 초과 분할 시도)
         final = []
         for frag in res:
-            if frag["structural"]["duration"] > 60.0:
-                # 내부 경계 탐색
-                mid = frag["start"] + 30.0
+            duration = frag["structural"]["duration"]
+            if duration > 20.0:
+                # 내부 경계 탐색 (가장 중앙에 가까운 경계 찾기)
+                mid = frag["start"] + (duration / 2.0)
+                # 5초 정도의 여유를 둠 (너무 짧은 조각 방지)
                 cuts = [b for b in boundaries if frag["start"] + 5.0 < b < frag["end"] - 5.0]
                 if cuts:
-                    # 중간에 가장 가까운 경계에서 쪼갬
                     cut = sorted(cuts, key=lambda x: abs(x - mid))[0]
-                    # 쪼개기 (단순화: 2개로 분할)
-                    f1 = frag.copy(); f1["end"] = cut; f1["structural"] = frag["structural"].copy(); f1["structural"]["duration"] = cut - f1["start"]
-                    f2 = frag.copy(); f2["start"] = cut; f2["structural"] = frag["structural"].copy(); f2["structural"]["duration"] = f2["end"] - cut
+                    f1 = frag.copy(); f1["end"] = cut; f1["structural"] = frag["structural"].copy(); f1["structural"]["duration"] = round(cut - f1["start"], 2)
+                    f1["fragment_id"] = f"{frag['fragment_id']}_S1"
+                    f2 = frag.copy(); f2["start"] = cut; f2["structural"] = frag["structural"].copy(); f2["structural"]["duration"] = round(f2["end"] - cut, 2)
+                    f2["fragment_id"] = f"{frag['fragment_id']}_S2"
                     final.extend([f1, f2])
                     continue
-
-                frag["fallback_reason"] = "split_candidate_too_long"
+                
+                # 경계가 없으면 그냥 둠 (fallback_reason 기록)
+                frag["fallback_reason"] = "too_long_no_boundaries"
             final.append(frag)
                 
         return final

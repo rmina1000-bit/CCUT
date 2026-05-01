@@ -212,7 +212,21 @@ def _background_whisper(source_id: str, video_path: str, fragments: list):
 
     try:
         total_duration = max(float(f.get("end_time", 0)) for f in fragments)
-        transcripts    = asr.transcribe_fragments(video_path, fragments)
+        whisper_res    = asr.transcribe_fragments(video_path, fragments)
+        
+        transcripts  = whisper_res.get("fragment_transcripts", {})
+        all_segments = whisper_res.get("all_segments", [])
+
+        # [STEP 10-I.5.3] Store raw segments as evidence for Text-first Semantic Path
+        for i, seg in enumerate(all_segments):
+            bams.update_evidence(f"SPEECH_{i}_{source_id}", {
+                "source_id": source_id,
+                "worker_name": "whisper_segments",
+                "start": seg["start"],
+                "end": seg["end"],
+                "text": seg["text"].strip(),
+                "confidence": 0.95
+            })
 
         # 1. 조각별 intelligence 계산
         for frag in fragments:

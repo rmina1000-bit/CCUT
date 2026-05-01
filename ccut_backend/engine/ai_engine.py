@@ -55,27 +55,35 @@ HIGH_HOOK_KEYWORDS = [
 
 
 def transcribe_full_then_split(model, video_path: str, fragments: list) -> dict:
-    """영상 전체 한 번 전사 후 조각별 분리."""
+    """영상 전체 한 번 전사 후 조각별 분리 및 원본 세그먼트 보존."""
     try:
         result = model.transcribe(video_path, language="ko", word_timestamps=True)
     except Exception as e:
         print(f"[Whisper] 전체 전사 실패: {e}")
-        return {frag["fragment_id"]: "" for frag in fragments}
+        return {
+            "fragment_transcripts": {frag["fragment_id"]: "" for frag in fragments},
+            "all_segments": []
+        }
 
+    all_segments = result.get("segments", [])
     fragment_transcripts = {}
     for frag in fragments:
         frag_id = frag["fragment_id"]
         start   = float(frag.get("start_time", 0))
         end     = float(frag.get("end_time", 0))
         words   = []
-        for segment in result.get("segments", []):
+        for segment in all_segments:
             seg_start = float(segment["start"])
             seg_end   = float(segment["end"])
             if seg_end <= start or seg_start >= end:
                 continue
             words.append(segment["text"].strip())
         fragment_transcripts[frag_id] = " ".join(words).strip()
-    return fragment_transcripts
+    
+    return {
+        "fragment_transcripts": fragment_transcripts,
+        "all_segments": all_segments
+    }
 
 
 def calc_speech_density(transcript: str, duration_sec: float) -> float:
