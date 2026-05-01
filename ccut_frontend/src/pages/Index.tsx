@@ -5,6 +5,8 @@ import OriginalPanorama from "@/components/OriginalPanorama";
 import FragmentMap from "@/components/FragmentMap";
 import ReservedFragments from "@/components/ReservedFragments";
 import { useWorkspaceLayout } from "@/hooks/useWorkspaceLayout";
+import { useProposalState } from "@/hooks/useProposalState";
+
 
 import {
   Fragment,
@@ -74,22 +76,36 @@ const Index: React.FC = () => {
   const [holdPositions, setHoldPositions] = useState<Record<string, { x: number; y: number }>>({});
   const [deletedFragments, setDeletedFragments] = useState<Fragment[]>([]);
 
-  const [selectedProposalId, setSelectedProposalId] = useState<string | null>(null);
-  const [committedProposalId, setCommittedProposalId] = useState<string | null>(null);
+// selectedProposalId, committedProposalId moved to useProposalState
 
   const [appState, setAppState] = useState<"empty" | "analyzing" | "complete">("empty");
   const [analyzeProgress, setAnalyzeProgress] = useState(0);
   const [analyzeMessage, setAnalyzeMessage] = useState("");
   const [intelligenceOn, setIntelligenceOn] = useState(false);
 
-  const [proposals, setProposals] = useState<Record<"A" | "B", Proposal> | null>(null);
-  const [directionSnapshot, setDirectionSnapshot] = useState<DirectionSnapshot | null>(null);
+// proposals, directionSnapshot moved to useProposalState
 
   const [sourceFragments, setSourceFragments] = useState<Fragment[]>([]);
   const [currentSourceId, setCurrentSourceId] = useState<string | null>(null);
   const [currentVideoUrl, setCurrentVideoUrl] = useState<string | null>(null);
   const [quickScanData, setQuickScanData] = useState<QuickScanData | null>(null);
   const [semanticFragments, setSemanticFragments] = useState<SemanticFragmentData[]>([]);
+
+  const {
+    selectedProposalId,
+    setSelectedProposalId,
+    committedProposalId,
+    setCommittedProposalId,
+    proposals,
+    setProposals,
+    directionSnapshot,
+    setDirectionSnapshot,
+    handleProposalPreview,
+    handleProposalCommit,
+    handleReproposal,
+    logProposalPair
+  } = useProposalState(sourceFragments);
+
 
   type SourceEntry = {
     source_id: string;
@@ -116,21 +132,7 @@ const Index: React.FC = () => {
     return prev.filter((f) => getUid(f) !== getUid(target));
   }, []);
 
-  const logProposalPair = useCallback(
-    (pair: Record<"A" | "B", Proposal>, label: string) => {
-      const keyA = pair.A.key_fragments;
-      const keyB = pair.B.key_fragments;
-      const firstA = keyA[0] ?? "없음";
-      const firstB = keyB[0] ?? "없음";
-      const isFirstDiff = firstA !== firstB;
-
-      console.log(`[strategyEngine] A안 순서:`, keyA);
-      console.log(`[strategyEngine] B안 순서:`, keyB);
-      console.log(`[strategyEngine] A/B 첫 조각 다름: ${isFirstDiff}`);
-      console.log(`[PROPOSAL][${label}] snapshot=${pair.A.snapshot_id} (A:${firstA}, B:${firstB})`);
-    },
-    []
-  );
+// logProposalPair moved to useProposalState
 
   const resetAnalysisState = useCallback(() => {
     setSelectedProposalId(null);
@@ -499,37 +501,9 @@ const Index: React.FC = () => {
     [logProposalPair, resetAnalysisState, toFullUrl]
   );
 
-  const handleProposalPreview = useCallback((id: string) => {
-    setSelectedProposalId(id);
-  }, []);
+// handleProposalPreview, handleProposalCommit moved to useProposalState
 
-  const handleProposalCommit = useCallback((id: string) => {
-    setSelectedProposalId(id);
-    setCommittedProposalId(id);
-  }, []);
-
-  const handleReproposal = useCallback(
-    (nextDirection: Direction) => {
-      if (!sourceFragments.length) {
-        console.warn("[Reproposal] sourceFragments가 없어 재제안을 건너뜁니다.");
-        return;
-      }
-
-      const nextSnapshot = createNextSnapshot(directionSnapshot, nextDirection);
-      const nextProposals = generateProposals(sourceFragments, nextSnapshot);
-
-      logProposalPair(nextProposals, "REPROPOSAL");
-
-      setSelectedProposalId(null);
-      setCommittedProposalId(null);
-      setProposals(nextProposals);
-      setDirectionSnapshot(nextSnapshot);
-
-      console.log("[Reproposal] active_direction:", nextSnapshot.active_direction);
-      console.log("[Reproposal] snapshot_id:", nextSnapshot.snapshot_id);
-    },
-    [directionSnapshot, logProposalPair, sourceFragments]
-  );
+// handleReproposal moved to useProposalState
 
   const handleExport = useCallback(async (projectId: string) => {
     try {

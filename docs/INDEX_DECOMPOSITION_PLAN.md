@@ -51,7 +51,7 @@ Currently, `Index.tsx` handles:
 
 ### Phase 2: Atomic Extraction (Sequential)
 1. **Extraction of `useWorkspaceLayout`**: [COMPLETED] Simplest logic, low risk.
-2. **Extraction of `useProposalState`**: Well-defined state transitions.
+2. **Extraction of `useProposalState`**: [COMPLETED] Well-defined state transitions.
 
 3. **Extraction of `useFragmentWorkspace`**: Complex interactions with `proposals`.
 4. **Extraction of `useAnalysisPipeline`**: Heaviest logic, requires careful state wiring.

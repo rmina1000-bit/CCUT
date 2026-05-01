@@ -30,7 +30,7 @@
 | STEP 10-I.2 | Proposal Resolver + Physical EDL Stabilization | PASS |
 | STEP 10-I.3 | Fragment Count Simplification & Fast Path | PASS |
 | STEP 10-I.4 | Index Decomposition Plan | PASS |
-| STEP 10-I.5 | Extract Workspace Layout Hook | PASS |
+| STEP 10-I.5 | Extract Layout & Proposal hooks | PASS |
 
 
 
@@ -38,15 +38,18 @@
 
 
 
+
+
+## CURRENT 🔄
 
 ## CURRENT 🔄
 
 ## CURRENT 🔄
 
-## CURRENT 🔄
+- STEP 10-I.5 Phase 1 & 2 완료 (useWorkspaceLayout, useProposalState)
+- 리사이즈 로직 보정 (사이드바 너비 동적 반영)
+- Index.tsx 코드 추가 100라인 이상 분리 성공
 
-- STEP 10-I.5 Hook Extraction Phase 1 완료 (useWorkspaceLayout.ts)
-- Index.tsx 레이아웃/리사이즈 로직 분리 성공
 
 
 
