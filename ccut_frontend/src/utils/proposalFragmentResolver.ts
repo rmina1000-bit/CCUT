@@ -53,8 +53,9 @@ export const collectFragmentAliases = (f: any): string[] => {
  */
 export const getFragmentTimeRange = (f: any): { start: number; end: number } => {
   const fps = 30;
-  const start = f.start_time ?? f.start ?? f.semantic?.start_sec ?? f.structural?.start_sec ?? (f.start_frame / fps) ?? 0;
-  const end = f.end_time ?? f.end ?? f.semantic?.end_sec ?? f.structural?.end_sec ?? (f.end_frame / fps) ?? (start + 1);
+  // [STEP 10-I.5.5] Strict priority matching mapFragments in Index.tsx
+  const start = f.start_sec ?? f.start ?? f.start_time ?? f.semantic?.start_sec ?? f.structural?.start_sec ?? (f.start_frame / fps) ?? 0;
+  const end = f.end_sec ?? f.end ?? f.end_time ?? f.semantic?.end_sec ?? f.structural?.end_sec ?? (start + (f.duration_sec || f.structural?.duration || f.duration || 5));
   return { start, end };
 };
 

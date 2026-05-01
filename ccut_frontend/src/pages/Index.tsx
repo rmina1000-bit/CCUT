@@ -175,14 +175,14 @@ const Index: React.FC = () => {
         const mapFragments = (frags: any[], label: string) => {
           const mapped: Fragment[] = frags.map((f: any, idx: number) => {
             const fps = 30;
-            // [STEP 10-I.5.3] Strict timing priority
+            // [STEP 10-I.5.5] Strict timing priority
             const startSec = f.start_sec ?? f.start ?? f.start_time ?? f.semantic?.start_sec ?? f.structural?.start_sec ?? 0;
-            const endSec = f.end_sec ?? f.end ?? f.end_time ?? f.semantic?.end_sec ?? f.structural?.end_sec ?? (startSec + (f.duration_sec || f.structural?.duration || f.duration || 0));
+            const endSec = f.end_sec ?? f.end ?? f.end_time ?? f.semantic?.end_sec ?? f.structural?.end_sec ?? 
+                           (startSec + (f.duration_sec || f.structural?.duration || f.duration || 5));
             
             const startFrame = Math.round(f.start_frame ?? (startSec * fps));
             const endFrame = Math.round(f.end_frame ?? (endSec * fps));
             const durationFrames = Math.max(1, endFrame - startFrame);
-            const durationSec = durationFrames / fps;
             const rawThumb = f.intelligence?.thumb_url || f.thumb || f.thumbnail_url;
 
             return {
@@ -211,7 +211,7 @@ const Index: React.FC = () => {
           });
 
           if (mapped.length > 0) {
-            console.log(`[mapFragments] ${label} 첫 조각 thumb:`, mapped[0].thumbnail?.thumbnail_url);
+            console.log(`[mapFragments] ${label} (${mapped.length} frags) first thumb:`, mapped[0].thumbnail?.thumbnail_url);
           }
           return assignShortDisplayIds(recalcDisplayIds(mapped as any));
         };
@@ -296,9 +296,7 @@ const Index: React.FC = () => {
               const freshData = await videoService.getFragmentsBySource(firstSourceId!);
               const finalMappedA = mapFragments(freshData.fragments || [], "A");
 
-              setSourceEntries((prev) =>
-                prev.map((e) => (e.label === "A" ? { ...e, fragments: finalMappedA } : e))
-              );
+              // Note: SourceEntries will be updated later with displayMappedA (semantic if available)
 
               // [STEP 10-I.5.3] Analysis Completed - Next Phase: Semantic & Proposals
               setAnalyzeMessage("의미 조각 분석 중...");
@@ -320,6 +318,7 @@ const Index: React.FC = () => {
                   setSemanticFragments(semanticRows);
                   finalEditFragments = mapFragments(semanticRows, "A");
                   setAnalyzeMessage("Semantic Fragment 생성 완료");
+                  console.log("[semantic-source] semantic count:", semanticRows.length);
                 } else {
                   console.warn("[Index] No semantic fragments, falling back to raw segments");
                   finalEditFragments = finalMappedA;
@@ -386,8 +385,17 @@ const Index: React.FC = () => {
 
               logProposalPair(generatedProposals, "INITIAL");
 
+              // [STEP 10-I.5.5] Switch to semanticMappedA as primary source if available
+              const displayMappedA = finalEditFragments;
+              console.log("[semantic-source] raw:", finalMappedA.length, "final:", displayMappedA.length);
+              console.log("[semantic-source] durations:", displayMappedA.slice(0, 10).map(f => ((f.end_frame - f.start_frame) / 30).toFixed(1)));
+
+              setSourceEntries((prev) =>
+                prev.map((e) => (e.label === "A" ? { ...e, fragments: displayMappedA } : e))
+              );
+
               setEditFragments(combinedForEditing);
-              setSourceFragments(finalMappedA);
+              setSourceFragments(displayMappedA);
               setProposals(generatedProposals);
               
               setAnalyzeProgress(100);

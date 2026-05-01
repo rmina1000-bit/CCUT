@@ -33,6 +33,12 @@
 | STEP 10-I.5 | Extract Layout & Proposal hooks | PASS |
 | STEP 10-I.5.1 | Mojibake Log Cleanup | PASS |
 | STEP 10-I.5.2 | Fast Path Semantic Display Correction | PASS |
+| STEP 10-I.5.3 | Polling Guard + Text-first Path | PASS |
+| STEP 10-I.7 | Extract useAnalysisPipeline | PASS |
+| STEP 10-I.8 | Fragment Map Masking | PASS |
+| STEP 10-J | Free Form UI Implementation | PASS |
+| STEP 10-I.5.4 | Fixed 30s investigation | DONE |
+| STEP 10-I.5.5 | Semantic Source UI Fix | PASS |
 
 
 
@@ -46,10 +52,10 @@
 ## CURRENT 🔄
 
 > [!IMPORTANT]
-> STEP 10-I.5.2 완료. Semantic Fragment의 30초 고정 노출 문제를 해결했습니다.
-> 1. SignalProcessor가 Scene/Silence 트리거를 저장하도록 보정.
-> 2. Proposal Resolver가 Alias의 정확한 시간을 Fragment에 강제 적용.
-> 3. Backend Pipeline에서 Whisper 완료 후 Semantic/Proposal 자동 생성 트리거.
+> STEP 10-I.5.5 완료. Semantic Fragment를 UI 및 Proposal Fallback의 기본 데이터 소스로 확정했습니다.
+> 1. Index.tsx에서 semanticRows 존재 시 raw fragment 대신 최우선 사용.
+> 2. mapFragments의 duration 계산 시 start/end 기반 정밀 계산 우선 적용.
+> 3. Proposal Fallback 시 semantic fragment ID 체계를 유지하도록 보정.
 
 
 

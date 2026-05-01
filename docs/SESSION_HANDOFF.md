@@ -37,6 +37,12 @@
 - STEP 10-I.5 Extract Layout & Proposal hooks: **PASS**
 - STEP 10-I.5.1 Mojibake Log Cleanup: **PASS**
 - STEP 10-I.5.2 Fast Path Semantic Display Correction: **PASS**
+- STEP 10-I.5.3 Polling Guard + Text-first Path: **PASS**
+- STEP 10-I.7 Extract useAnalysisPipeline: **PASS**
+- STEP 10-I.8 Fragment Map Masking: **PASS**
+- STEP 10-J Free Form UI Implementation: **PASS**
+- STEP 10-I.5.4 Fixed 30s investigation: **DONE**
+- STEP 10-I.5.5 Semantic Source UI Fix: **PASS**
 
 
 
@@ -63,18 +69,14 @@
 
 ## 4. 최신 변경 요약 (2026-05-01)
 
-- **Semantic Display Bug Fix (STEP 10-I.5.2):**
-  - `SignalProcessor`: Scene/Silence 트리거를 evidence board로 전달하도록 수정.
-  - `main.py`: Whisper 완료 시점에 Semantic/Proposal 생성을 background에서 즉시 실행하도록 파이프라인 보정.
-  - `proposalFragmentResolver.ts`: Proposal Alias에 기록된 precise `start_sec`/`end_sec`을 실제 조각 객체에 오버라이드하여 30초 고정 문제를 해결.
-  - `Index.tsx`: `mapFragments`에서 `structural.duration` 우선순위 상향.
+- **Semantic Source UI Fix (STEP 10-I.5.5):**
+  - `Index.tsx`: Semantic 분석 완료 시 `semanticRows`가 존재하면 raw 30s fragment 대신 이를 최우선 소스로 사용하도록 로직 변경.
+  - `mapFragments`: `duration` 필드보다 `start/end` 기반의 정밀 계산을 우선하도록 순위 조정.
+  - `proposalFragmentResolver.ts`: 시간 범위 추출 로직을 `Index.tsx`와 동일하게 정밀화.
+  - 이로써 /proposals 500 발생 시의 fallback proposal도 semantic ID 체계를 유지하게 됨.
 
-## 5. 다음 작업 후보
-
-- STEP 10-I.6 Hook Extraction (useFragmentWorkspace, useAnalysisPipeline)
-- STEP 10-J 무료 폼 UI 실제 최소 구현 및 사용자 여정 확립
-
-- STEP 10-F External Proposal Service Simulation v0 설계
+- STEP 10-I.6 Hook Extraction (useFragmentWorkspace)
+- STEP 11 Phase: External Proposal Service Integration
 
 
 
@@ -113,8 +115,8 @@ M ccut_frontend/src/pages/Index.tsx (등 STEP 10-I.2 관련 수정 사항 표시
 ```
 
 > [!IMPORTANT]
-> STEP 10-I.5.1 완료. `useProposalState` 내부의 깨진 한글 로그를 영문으로 정규화했습니다.
-> 이제 개발자 콘솔에서 인코딩 문제 없이 로그를 확인할 수 있습니다.
+> STEP 10-I.5.5 완료. Semantic Fragment가 UI 및 Proposal Fallback의 기본 데이터 소스로 확정되었습니다.
+> 이제 30.0s 고정 노출 현상이 해결되었으며, 분석 실패 시에도 Semantic 조각 기반의 제안이 유지됩니다.
 
 
 
