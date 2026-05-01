@@ -1,4 +1,4 @@
-﻿import uuid
+import uuid
 
 class ExportEngine:
     """
@@ -9,21 +9,25 @@ class ExportEngine:
     def __init__(self, bams):
         self.bams = bams
 
-    def create_export_input(self, proposal_id: str):
+    def create_export_input(self, proposal_id: str, custom_clips=None):
         # 1. Proposal 로드
         proposal = self.bams.get_single_proposal(proposal_id)
+        # Fallback for client-side proposals (A/B)
+        if not proposal and proposal_id in ["A", "B"]:
+            proposal = {"source_id": "UNKNOWN", "mode": proposal_id, "sequence": []}
+
         if not proposal:
             print(f"[EXPORT] Proposal {proposal_id} not found.")
             return None
 
-        source_id = proposal["source_id"]
+        source_id = proposal.get("source_id", "UNKNOWN")
         
-        # 2. Clips 생성 (Proposal Sequence 순회)
-        # sequence는 STEP 6에서 선정된 Semantic Fragments의 리스트임
+        # 2. Clips 생성 (custom_clips 가 있으면 우선 사용)
+        sequence = custom_clips if custom_clips is not None else proposal.get("sequence", [])
         clips = []
         total_dur = 0.0
         
-        for i, frag in enumerate(proposal["sequence"]):
+        for i, frag in enumerate(sequence):
             # Semantic Fragment 구조에서 필수 필드 추출
             clip = {
                 "fragment_id": frag.get("fragment_id"),

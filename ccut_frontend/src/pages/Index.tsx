@@ -169,18 +169,20 @@ const Index: React.FC = () => {
         const mapFragments = (frags: any[], label: string) => {
           const mapped: Fragment[] = frags.map((f: any, idx: number) => {
             const fps = 30;
-            const durationSec = f.duration ?? 5;
-            const startFrame = Math.round(f.start_frame ?? ((f.start_time ?? 0) * fps));
+            // SF vs VF structure support
+            const durationSec = f.duration || f.structural?.duration || (f.end_time - f.start_time) || (f.end - f.start) || 5;
+            const startTime = f.start_time ?? f.start ?? 0;
+            const startFrame = Math.round(f.start_frame ?? (startTime * fps));
             const endFrame = Math.round(
-              f.end_frame ?? ((f.end_time ?? ((f.start_time ?? 0) + durationSec)) * fps)
+              f.end_frame ?? ((f.end_time ?? f.end ?? (startTime + durationSec)) * fps)
             );
             const durationFrames = Math.max(1, endFrame - startFrame);
-            const rawThumb = f.intelligence?.thumb_url || f.thumb;
+            const rawThumb = f.intelligence?.thumb_url || f.thumb || f.thumbnail_url;
 
             return {
               fragment_id: f.fragment_id,
               fragment_uid: f.fragment_id,
-              root_fragment_uid: f.fragment_id,
+              root_fragment_uid: f.root_fragment_uid || f.fragment_id,
               display_id: f.fragment_id,
               selection_state: "S" as SelectionState,
               status: "committed" as FragmentStatus,
@@ -192,12 +194,12 @@ const Index: React.FC = () => {
               thumbnail: {
                 thumbnail_url:
                   toFullUrl(rawThumb) ??
-                  `http://localhost:8000/static/thumbnails/${f.fragment_id}.jpg`,
+                  `http://127.0.0.1:8000/static/thumbnails/${f.fragment_id}.jpg`,
               },
               intelligence: {
-                hook_score: f.intelligence?.hook_score ?? 0.5,
-                role: f.intelligence?.role ?? "Main",
-                description: f.intelligence?.description || f.intelligence?.visual_description || "",
+                hook_score: f.intelligence?.hook_score || f.structural?.market_value || 0.5,
+                role: f.intelligence?.role || f.structural?.role || "Main",
+                description: f.intelligence?.description || f.intelligence?.visual_description || f.semantic?.summary || "",
               },
             } as any;
           });
@@ -369,7 +371,7 @@ const Index: React.FC = () => {
                 const backendProposals = proposalData.proposals || [];
                 if (backendProposals.length > 0) {
                   backendProposals.forEach((p: any) => {
-                    const mode = p.mode === "A" ? "A" : "B"; // 'A' or 'B' expected from backend v3.2.1
+                    const mode = p.mode === "A" ? "A" : "B";
                     generatedProposals[mode] = {
                       id: mode,
                       proposal_id: p.proposal_id,
@@ -383,7 +385,24 @@ const Index: React.FC = () => {
                       template_id: p.mode,
                       slot_trace: []
                     };
+                    
+                    // Enrich sequence with aliases for resolver
+                    if (generatedProposals[mode].key_fragments.length > 0) {
+                      (generatedProposals[mode] as any).resolved_aliases = p.sequence.map((s: any) => ({
+                        proposal_fragment_id: s.fragment_id,
+                        source_fragment_id: s.source_id,
+                        display_id: s.display_id,
+                        start_sec: s.start,
+                        end_sec: s.end
+                      }));
+                    }
                   });
+                }
+
+                if (generatedProposals.A && !generatedProposals.B) {
+                  generatedProposals.B = { ...generatedProposals.A, id: "B", title: "사용자친화형 편집 (B)" };
+                } else if (!generatedProposals.A && generatedProposals.B) {
+                  generatedProposals.A = { ...generatedProposals.B, id: "A", title: "시장형 편집 (A)" };
                 }
               } catch (err) {
                 if (!semanticReady) {
@@ -822,27 +841,88 @@ const Index: React.FC = () => {
 
     const proposal = proposals[committedProposalId as "A" | "B"];
     const proposalFragIds = proposal?.key_fragments || [];
-    if (proposalFragIds.length === 0) return [];
+    const aliases = (proposal as any)?.resolved_aliases || [];
+    
+    if (proposalFragIds.length === 0) {
+      console.warn("[proposalResolver] proposalFragIds is empty for:", committedProposalId);
+      return [];
+    }
 
-    const matched = editFragments.filter((f) => {
-      if (proposalFragIds.includes(f.fragment_id)) return true;
-      if (f.root_fragment_uid && proposalFragIds.includes(f.root_fragment_uid)) return true;
-      if (f.parent_fragment_uid && proposalFragIds.includes(f.parent_fragment_uid)) return true;
-      if (f.derivedFrom && proposalFragIds.includes(f.derivedFrom)) return true;
-      return false;
+    console.log("[proposalResolver] proposal ids:", proposalFragIds);
+    console.log("[proposalResolver] fragment aliases:", aliases.length);
+
+    const result: Fragment[] = [];
+    let exactCount = 0;
+    let timeFallbackCount = 0;
+    let singleFallbackCount = 0;
+
+    proposalFragIds.forEach((id, idx) => {
+      const alias = aliases[idx];
+      
+      // 1. Exact ID match (Exhaustive search)
+      let found = editFragments.find((f: any) => {
+        return (
+          f.fragment_id === id ||
+          f.fragment_uid === id ||
+          f.id === id ||
+          f.uid === id ||
+          f.display_id === id ||
+          f.original_id === id ||
+          f.source_fragment_id === id ||
+          f.root_fragment_uid === id ||
+          f.parent_fragment_uid === id ||
+          f.derivedFrom === id ||
+          f.semantic?.id === id ||
+          f.semantic?.fragment_id === id ||
+          f.structural?.source_fragment_id === id ||
+          f.intelligence?.semantic_fragment_id === id ||
+          f.intelligence?.source_fragment_id === id
+        );
+      });
+
+      if (found) {
+        exactCount++;
+      } else if (alias) {
+        // 2. Time range fallback
+        const pStart = alias.start_sec;
+        const pEnd = alias.end_sec;
+        
+        found = editFragments.find((f: any) => {
+          const fps = 30;
+          const fStart = f.start_time ?? f.start ?? f.semantic?.start_sec ?? f.structural?.start_sec ?? (f.start_frame / fps);
+          const fEnd = f.end_time ?? f.end ?? f.semantic?.end_sec ?? f.structural?.end_sec ?? (f.end_frame / fps);
+          
+          // Overlap check (within 0.5s tolerance)
+          return Math.abs(fStart - pStart) < 0.5 && Math.abs(fEnd - pEnd) < 0.5;
+        });
+        
+        if (found) timeFallbackCount++;
+      }
+
+      // 3. Single-fragment fallback
+      if (!found && editFragments.length === 1 && proposalFragIds.length === 1) {
+        found = editFragments[0];
+        if (found) {
+          singleFallbackCount++;
+          console.warn("[proposalResolver] single fallback matched for ID:", id);
+        }
+      }
+
+      if (found) {
+        result.push(found);
+      }
     });
 
-    const result = proposalFragIds
-      .map((id) =>
-        matched.find(
-          (f) =>
-            f.fragment_id === id ||
-            f.root_fragment_uid === id ||
-            f.parent_fragment_uid === id ||
-            f.derivedFrom === id
-        )
-      )
-      .filter(Boolean) as Fragment[];
+    console.log(`[proposalResolver] exact matched: ${exactCount}`);
+    console.log(`[proposalResolver] time fallback matched: ${timeFallbackCount}`);
+    console.log(`[proposalResolver] single fallback matched: ${singleFallbackCount}`);
+    console.log(`[filteredFragments] mode: ${committedProposalId}, proposalFragIds: ${proposalFragIds.length}, matched: ${result.length}`);
+
+    if (result.length < proposalFragIds.length) {
+      console.warn(
+        `[proposalResolver] mismatch! result count: ${result.length}, expected: ${proposalFragIds.length}`
+      );
+    }
 
     return result;
   }, [committedProposalId, editFragments, proposals]);
@@ -900,6 +980,7 @@ const Index: React.FC = () => {
           onCommitProposal={handleProposalCommit}
           onExport={handleExport}
           onReproposal={handleReproposal}
+          fragments={filteredFragments}
           guidanceMessage={
             semanticFragments.length > 0
               ? "Semantic " + semanticFragments.length + " / Quick Scan " + (quickScanData?.status ?? "READY")

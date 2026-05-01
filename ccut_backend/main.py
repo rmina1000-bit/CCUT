@@ -500,7 +500,11 @@ async def get_fragment_analysis_status(source_id: str):
 @app.get("/fragments/{source_id}")
 async def get_fragments_by_source(source_id: str):
     """의미분석 완료 후 최신 intelligence가 포함된 조각 재조회"""
-    fragments = bams.get_fragments_by_source(source_id)
+    # [STEP 6] Semantic Fragments 가 존재하면 우선 반환하여 Proposal 과 ID 를 맞춤
+    fragments = bams.get_semantic_fragments(source_id)
+    if not fragments:
+        fragments = bams.get_fragments_by_source(source_id)
+        
     return {
         "status": "SUCCESS",
         "source_id": source_id,
@@ -659,14 +663,17 @@ async def get_proposals_api(source_id: str):
 # ═══════════════════════════════════════════════════════════════════
 
 @app.post("/export-input/{proposal_id}")
-async def post_export_input(proposal_id: str):
+async def post_export_input(proposal_id: str, payload: dict = None):
     """
     [STEP 7] Proposal -> Export Input 변환
     해당 proposal_id의 시퀀스를 렌더링용 클립 리스트로 전환합니다.
+    payload에 'clips'가 있으면 이를 직접 사용하여 Resolver 결과를 반영합니다.
     """
     from engine.export_engine import ExportEngine
     engine = ExportEngine(bams)
-    export_input = engine.create_export_input(proposal_id)
+    
+    custom_clips = payload.get("clips") if payload else None
+    export_input = engine.create_export_input(proposal_id, custom_clips=custom_clips)
     
     if not export_input:
         return {"status": "NOT_FOUND", "proposal_id": proposal_id}

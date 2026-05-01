@@ -38,6 +38,7 @@ interface CenterPanelProps {
   sourceFragments?: Fragment[];
   sourceId?: string | null;
   sourceEntries?: SourceEntry[];
+  fragments?: Fragment[];
 }
 
 function parseDirectionFromText(text: string): Direction | null {
@@ -99,6 +100,7 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
   onCommitProposal,
   sourceId,
   sourceEntries = [],
+  fragments = [],
 }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const videoRefA = useRef<HTMLVideoElement>(null);
@@ -532,7 +534,9 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
 
       // [STEP 9] 1. ExportInput 생성 (POST /export-input/{proposal_id})
       const exportInputRes = await fetch(`${videoService.API_BASE_URL}/export-input/${backendId}`, {
-        method: "POST"
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ clips: fragments })
       });
       if (!exportInputRes.ok) throw new Error(`ExportInput 생성 실패 (${exportInputRes.status})`);
       const exportInputData = await exportInputRes.json();
