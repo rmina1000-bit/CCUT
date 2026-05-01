@@ -33,6 +33,8 @@
 - STEP 10-I 무료 폼 UI 최소 구현 설계: **PASS**
 - STEP 10-I.2 Proposal Resolver + Physical EDL Stabilization: **PASS**
 - STEP 10-I.3 Fragment Count Simplification & Fast Path: **PASS**
+- STEP 10-I.4 Index Decomposition Plan: **PASS**
+
 
 
 
@@ -65,7 +67,10 @@
 
 ## 5. 다음 작업 후보
 
+- STEP 10-I.5 Hook Extraction (useWorkspaceLayout, useProposalState)
+- STEP 10-I.6 Hook Extraction (useFragmentWorkspace, useAnalysisPipeline)
 - STEP 10-J 무료 폼 UI 실제 최소 구현 및 사용자 여정 확립
+
 - STEP 10-F External Proposal Service Simulation v0 설계
 
 
@@ -105,5 +110,6 @@ M ccut_frontend/src/pages/Index.tsx (등 STEP 10-I.2 관련 수정 사항 표시
 ```
 
 > [!IMPORTANT]
-> STEP 10-I.2 및 10-I.3(조각 수 최적화) 완료되었습니다. 
-> 41초 영상 기준 11개 내외의 조각으로 안정화되었으며, Physical EDL 기반 내보내기 흐름이 확립되었습니다.
+> STEP 10-I.4 완료. Index.tsx 대규모 refactoring을 위한 Hook 분리 설계가 완료되었습니다.
+> `docs/INDEX_DECOMPOSITION_PLAN.md`에 상세 계획이 정리되어 있습니다.
+

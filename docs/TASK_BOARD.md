@@ -29,19 +29,23 @@
 | STEP 10-I | 무료 폼 UI 최소 구현 설계 | PASS |
 | STEP 10-I.2 | Proposal Resolver + Physical EDL Stabilization | PASS |
 | STEP 10-I.3 | Fragment Count Simplification & Fast Path | PASS |
+| STEP 10-I.4 | Index Decomposition Plan | PASS |
 
 
 
 
 
+
+
+## CURRENT 🔄
 
 ## CURRENT 🔄
 
 ## CURRENT 🔄
 
-## CURRENT 🔄
+- STEP 10-I.4 Index Decomposition Plan 작성 완료 (docs/INDEX_DECOMPOSITION_PLAN.md)
+- Index.tsx 과밀 해소를 위한 4개 Hook 분리 계획 수립
 
-- STEP 10-I 무료 폼 UI 최소 구현 설계 및 흑백 UI 기준 확정 완료
 
 
 
@@ -51,7 +55,10 @@
 
 ## NEXT 📋
 
+  - STEP 10-I.5 Hook Extraction (useWorkspaceLayout, useProposalState)
+  - STEP 10-I.6 Hook Extraction (useFragmentWorkspace, useAnalysisPipeline)
   - STEP 10-J 무료 폼 UI 실제 최소 구현 및 사용자 여정 확립
+
   - STEP 10-F External Proposal Service Simulation v0 설계
  - STEP 10-G Factory Simulation 보정 (필요 시)
 
