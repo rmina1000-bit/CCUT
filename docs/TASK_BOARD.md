@@ -39,6 +39,12 @@
 | STEP 10-J | Free Form UI Implementation | PASS |
 | STEP 10-I.5.4 | Fixed 30s investigation | DONE |
 | STEP 10-I.5.5 | Semantic Source UI Fix | PASS |
+| STEP 10-I.5.6 | React Router Future Warning Fix | PASS |
+| STEP 10-I.5.7 | Remove Nested Button DOM Warning | PASS |
+| STEP 10-I.5.8 | Quiet Polling Logs | PASS |
+| STEP 10-I.5.9 | Separate Semantic Success from Proposal Failure | PASS |
+| STEP 10-I.5.10 | Backend Semantic Boundary Fix | PASS |
+| STEP 10-I.5.11 | Proposal 500 Trace & Schema Validation | DONE |
 
 
 
@@ -68,6 +74,8 @@
 
 ## NEXT 📋
 
+  - STEP 10-I.5.12 Deterministic Semantic Split (Remove Random)
+  - STEP 10-I.5.13 Frontend resolved_aliases mapping Fix
   - STEP 10-I.5 Hook Extraction (useWorkspaceLayout, useProposalState)
   - STEP 10-I.6 Hook Extraction (useFragmentWorkspace, useAnalysisPipeline)
   - STEP 10-J 무료 폼 UI 실제 최소 구현 및 사용자 여정 확립

@@ -43,6 +43,12 @@
 - STEP 10-J Free Form UI Implementation: **PASS**
 - STEP 10-I.5.4 Fixed 30s investigation: **DONE**
 - STEP 10-I.5.5 Semantic Source UI Fix: **PASS**
+- STEP 10-I.5.6 React Router Future Warning Fix: **PASS**
+- STEP 10-I.5.7 Remove Nested Button DOM Warning: **PASS**
+- STEP 10-I.5.8 Quiet Polling Logs: **PASS**
+- STEP 10-I.5.9 Separate Semantic Success from Proposal Failure: **PASS**
+- STEP 10-I.5.10 Backend Semantic Boundary Fix: **PASS**
+- STEP 10-I.5.11 Proposal 500 Trace & Schema Validation: **PASS**
 
 
 
@@ -69,12 +75,16 @@
 
 ## 4. 최신 변경 요약 (2026-05-01)
 
-- **Semantic Source UI Fix (STEP 10-I.5.5):**
-  - `Index.tsx`: Semantic 분석 완료 시 `semanticRows`가 존재하면 raw 30s fragment 대신 이를 최우선 소스로 사용하도록 로직 변경.
-  - `mapFragments`: `duration` 필드보다 `start/end` 기반의 정밀 계산을 우선하도록 순위 조정.
-  - `proposalFragmentResolver.ts`: 시간 범위 추출 로직을 `Index.tsx`와 동일하게 정밀화.
-  - 이로써 /proposals 500 발생 시의 fallback proposal도 semantic ID 체계를 유지하게 됨.
+- **Pipeline Stabilization & Diagnostics (2026-05-01):**
+  - **Console Hygiene:** React Router future flags 설정 및 `LeftNav` nested button 경고 제거 완료.
+  - **Polling Logs:** 분석 폴링 로그 중복 출력 억제 (상태 변경 시에만 출력).
+  - **Pipeline Robustness:** Proposal 생성 실패 시에도 Semantic 조각 결과를 폐기하지 않도록 `Index.tsx` 구조 개선.
+  - **Semantic Boundary Fix:** 백엔드에서 raw 30s 경계가 semantic으로 유출되는 현상을 차단하고, 20s 초과 시 강제 분할 로직 강화.
+  - **Proposal Diagnostics:** /proposals 500 원인 파악을 위해 상세 traceback, schema validation, 내부 로깅 추가.
 
+- STEP 10-I.5.12 Deterministic Semantic Split (Remove Random)
+- STEP 10-I.5.13 Frontend resolved_aliases mapping Fix
+- STEP 10-I.5 Hook Extraction (useWorkspaceLayout, useProposalState)
 - STEP 10-I.6 Hook Extraction (useFragmentWorkspace)
 - STEP 11 Phase: External Proposal Service Integration
 

@@ -674,22 +674,114 @@ async def get_user_intent(source_id: str):
 #   [STEP 6] Proposal Engine Integration
 # ═══════════════════════════════════════════════════════════════════
 
+def validate_semantic_schema(fragments: list) -> list:
+    """[STEP 10-I.5.11] Semantic Fragment Schema Validation"""
+    errors = []
+    for f in fragments:
+        missing = []
+        invalid = []
+        
+        if not f.get("fragment_id"): missing.append("fragment_id")
+        if not f.get("source_id"): missing.append("source_id")
+        
+        start = f.get("start")
+        end = f.get("end")
+        if start is None: missing.append("start")
+        if end is None: missing.append("end")
+        
+        if start is not None and end is not None:
+            if end <= start: invalid.append(f"end({end}) <= start({start})")
+            
+        structural = f.get("structural")
+        if not isinstance(structural, dict):
+            invalid.append("structural is not a dict")
+        else:
+            if structural.get("duration") is None: missing.append("structural.duration")
+            elif structural.get("duration") <= 0: invalid.append(f"duration({structural.get('duration')}) <= 0")
+            
+        if not isinstance(f.get("semantic"), (dict, type(None))):
+            invalid.append("semantic is not a dict or None")
+            
+        if missing or invalid:
+            errors.append({
+                "fragment_id": f.get("fragment_id", "UNKNOWN"),
+                "missing": missing,
+                "invalid": invalid
+            })
+    return errors
+
 @app.post("/proposals/{source_id}")
 async def post_generate_proposals(source_id: str):
     """
-    [STEP 6] Proposal 생성 트리거
-    Semantic Fragments를 조합하여 A(Market)/B(User) 두 가지 제안 생성.
+    [STEP 6] Proposal 생성 트리거 (v3.2.1 정밀 진단 버전)
     """
+    import traceback
     from engine.proposal_engine import ProposalEngine
-    engine = ProposalEngine(bams)
-    proposals = engine.generate_proposals(source_id)
-    
-    return {
-        "status": "PROPOSAL_READY",
-        "source_id": source_id,
-        "proposal_count": len(proposals),
-        "proposals": proposals
-    }
+
+    try:
+        # 1. Semantic Fragment 조회 및 검증
+        fragments = bams.get_semantic_fragments(source_id)
+        if not fragments:
+            print(f"[PROPOSAL] No semantic fragments found for {source_id}")
+            return {
+                "status": "NO_SEMANTIC_DATA",
+                "source_id": source_id,
+                "proposal_count": 0,
+                "proposals": []
+            }
+        
+        # 2. Schema Validation
+        schema_errors = validate_semantic_schema(fragments)
+        if schema_errors:
+            print(f"[PROPOSAL] Schema Validation Failed for {source_id}")
+            print(f"[PROPOSAL] Errors: {schema_errors[:5]}...") # 5개만 출력
+            return {
+                "status": "PROPOSAL_SCHEMA_INVALID",
+                "source_id": source_id,
+                "errors": schema_errors
+            }
+
+        # 3. Proposal 생성
+        engine = ProposalEngine(bams)
+        proposals = engine.generate_proposals(source_id)
+        
+        return {
+            "status": "PROPOSAL_READY",
+            "source_id": source_id,
+            "proposal_count": len(proposals),
+            "proposals": proposals
+        }
+
+    except Exception as e:
+        print("\n" + "!" * 60)
+        print(f"[PROPOSAL ERROR] source_id: {source_id}")
+        print(f"Exception Type: {type(e).__name__}")
+        print(f"Message: {str(e)}")
+        print("-" * 60)
+        traceback.print_exc()
+        
+        # Semantic Sample Logging
+        fragments = bams.get_semantic_fragments(source_id)
+        print(f"[PROPOSAL ERROR] Total semantic fragments: {len(fragments)}")
+        if fragments:
+            print("[PROPOSAL ERROR] Sample Fragments (first 3):")
+            for f in fragments[:3]:
+                print(f"  - ID: {f.get('fragment_id')}")
+                print(f"    Source: {f.get('source_id')}")
+                print(f"    Time: {f.get('start')} ~ {f.get('end')}")
+                print(f"    Structural: {f.get('structural')}")
+                print(f"    Semantic keys: {list(f.get('semantic', {}).keys()) if f.get('semantic') else 'None'}")
+                print(f"    Confidence: {f.get('confidence')}")
+                print(f"    Fallback: {f.get('fallback_reason')}")
+        print("!" * 60 + "\n")
+
+        return {
+            "status": "INTERNAL_SERVER_ERROR",
+            "source_id": source_id,
+            "error_type": type(e).__name__,
+            "message": str(e),
+            "traceback": traceback.format_exc()
+        }
 
 @app.get("/proposals/{source_id}")
 async def get_proposals_api(source_id: str):

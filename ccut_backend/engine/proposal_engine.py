@@ -9,9 +9,14 @@ class ProposalEngine:
         self.bams = bams
 
     def generate_proposals(self, source_id: str):
+        print(f"[PROPOSAL ENGINE] generate_proposals ENTER: {source_id}")
         # 1. 필요 데이터 로드
         fragments = self.bams.get_semantic_fragments(source_id)
-        if not fragments: return []
+        if not fragments:
+            print(f"[PROPOSAL ENGINE] No fragments for {source_id}")
+            return []
+        
+        print(f"[PROPOSAL ENGINE] Input semantic fragment count: {len(fragments)}")
         
         user_intent = self.bams.get_user_intent(source_id)
         if not user_intent:
@@ -21,9 +26,11 @@ class ProposalEngine:
         target_len = user_intent.get("target_length", 60.0) if user_intent else 60.0
 
         # 2. Mode A (Market) 생성
+        print("[PROPOSAL ENGINE] Creating Market Proposal (A)...")
         p_a = self._create_market_proposal(source_id, fragments, target_len)
         
         # 3. Mode B (User) 생성
+        print("[PROPOSAL ENGINE] Creating User Proposal (B)...")
         p_b = self._create_user_proposal(source_id, fragments, target_len, user_intent)
         
         # 4. A/B 차별성 및 정합성 보완 (v3.2.1) - JSON 구조 반영
@@ -36,7 +43,7 @@ class ProposalEngine:
         # 5. 저장 및 반환
         self.bams.save_proposals(source_id, proposals)
         
-        print(f"[PROPOSAL] Dual proposals refined with JSON reasons for {source_id}")
+        print(f"[PROPOSAL ENGINE] generate_proposals EXIT: {source_id}")
         return proposals
 
     def _create_market_proposal(self, source_id, fragments, target_len):
@@ -55,12 +62,17 @@ class ProposalEngine:
         max_frags = 12 if is_fast_path else 25
 
         for f in sorted_frags:
-            f_dur = f["structural"]["duration"]
+            f_dur = f.get("structural", {}).get("duration", 0)
+            if f_dur is None:
+                print(f"[PROPOSAL ENGINE] Warning: Fragment {f.get('fragment_id')} has null duration")
+                f_dur = 0
+            
             if len(selected) >= max_frags: break
             if current_len + f_dur <= target_len * 1.1:
                 selected.append(f)
                 current_len += f_dur
         
+        print(f"[PROPOSAL ENGINE] Market Proposal (A) - Selected {len(selected)} fragments, total {current_len:.1f}s")
         selected, bridge_details = self._insert_bridges(selected, fragments)
         current_len = sum(f["structural"]["duration"] for f in selected)
         
@@ -103,13 +115,18 @@ class ProposalEngine:
         max_frags = 12 if is_fast_path else 25
 
         for f in sorted_frags:
-            if f["structural"]["edit_value"] < 0.1: continue 
-            f_dur = f["structural"]["duration"]
+            if f.get("structural", {}).get("edit_value", 0.5) < 0.1: continue 
+            f_dur = f.get("structural", {}).get("duration", 0)
+            if f_dur is None:
+                print(f"[PROPOSAL ENGINE] Warning: Fragment {f.get('fragment_id')} has null duration")
+                f_dur = 0
+
             if len(selected) >= max_frags: break
             if current_len + f_dur <= target_len * 1.1:
                 selected.append(f)
                 current_len += f_dur
 
+        print(f"[PROPOSAL ENGINE] User Proposal (B) - Selected {len(selected)} fragments, total {current_len:.1f}s")
         selected, bridge_details = self._insert_bridges(selected, fragments)
         current_len = sum(f["structural"]["duration"] for f in selected)
         
@@ -144,11 +161,13 @@ class ProposalEngine:
     def _insert_bridges(self, selected, all_fragments):
         """
         [STEP 6] Bridge Fragment 예외 추가 및 로그 기록
-        조건: 사이 위치, continuity.time_proximity > 0.7, duration < 5초
         """
-        if len(selected) < 2: return selected, []
+        print(f"[PROPOSAL ENGINE] _insert_bridges ENTER: input={len(selected)}")
+        if len(selected) < 2:
+            print("[PROPOSAL ENGINE] _insert_bridges EXIT: too few fragments")
+            return selected, []
         
-        selected = sorted(selected, key=lambda x: x["start"])
+        selected = sorted(selected, key=lambda x: x.get("start", 0))
         augmented = []
         bridge_details = []
         
@@ -177,7 +196,10 @@ class ProposalEngine:
         res = []
         seen = set()
         for f in augmented:
-            if f["fragment_id"] not in seen:
+            fid = f.get("fragment_id")
+            if fid and fid not in seen:
                 res.append(f)
-                seen.add(f["fragment_id"])
+                seen.add(fid)
+        
+        print(f"[PROPOSAL ENGINE] _insert_bridges EXIT: final={len(res)}, bridges={len(bridge_details)}")
         return res, bridge_details
