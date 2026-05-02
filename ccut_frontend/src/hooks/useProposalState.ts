@@ -48,6 +48,16 @@ export const useProposalState = (sourceFragments: Fragment[]) => {
       }
 
       const nextSnapshot = createNextSnapshot(directionSnapshot, nextDirection);
+      
+      // [STEP 10-I.5.27-E2] Local reproposal isolation
+      if (proposals) {
+        console.warn("[Reproposal] Local strategyEngine is legacy fallback only. Backend narrative reproposal is required.");
+        // Keep existing proposals but update the snapshot to reflect user intent
+        setDirectionSnapshot(nextSnapshot);
+        return;
+      }
+
+      console.warn("[Reproposal] Falling back to local strategyEngine (No backend proposals found).");
       const nextProposals = generateProposals(sourceFragments, nextSnapshot);
 
       logProposalPair(nextProposals, "REPROPOSAL");

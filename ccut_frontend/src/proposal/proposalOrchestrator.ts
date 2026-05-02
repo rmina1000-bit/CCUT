@@ -1,3 +1,8 @@
+/**
+ * [LEGACY] CLIENT-SIDE PROPOSAL ORCHESTRATOR.
+ * Official proposal generation is now handled by the backend ProposalEngine.
+ * This is kept for offline fallback or debugging only.
+ */
 import { Fragment } from "@/data/fragmentData";
 import { DirectionSnapshot, Proposal } from "./proposalTypes";
 import { buildProposalPair } from "./strategyEngine";

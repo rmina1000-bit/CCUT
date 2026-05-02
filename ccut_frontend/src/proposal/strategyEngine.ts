@@ -1,3 +1,8 @@
+/**
+ * [LEGACY] CLIENT-SIDE PROPOSAL FALLBACK ONLY.
+ * Do not use as official proposal/narrative SSOT.
+ * Backend ProposalEngine is canonical for multi-source proposal_story/proposal_explanation/source_usage.
+ */
 import { Fragment } from "@/data/fragmentData";
 import { DirectionSnapshot, Proposal, ProposalSlotTrace } from "./proposalTypes";
 import {
