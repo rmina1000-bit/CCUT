@@ -390,6 +390,7 @@ const Index: React.FC = () => {
                       score: String(Math.round(p.confidence * 100)) + "%",
                       key_fragments: p.sequence.map((s: any) => s.fragment_id),
                       proposal_story: p.proposal_story, // 스토리 보존
+                      proposal_explanation: p.proposal_explanation, // [STEP 10-I.5.25-A] 설명 데이터 추가
                       direction: {},
                       snapshot_id: "R1",
                       template_id: p.mode,

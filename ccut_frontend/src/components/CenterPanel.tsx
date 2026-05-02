@@ -1,5 +1,5 @@
 import React, { useRef, useEffect, useState, useCallback, useMemo } from "react";
-import { Upload, Play, Loader2, Send, CheckCircle2, Package } from "lucide-react";
+import { Upload, Play, Loader2, Send, CheckCircle2, Package, BookOpen, List, ChevronDown, AlertCircle } from "lucide-react";
 import { Fragment } from "@/data/fragmentData";
 import { videoService } from "@/services/videoService";
 import { Direction } from "@/proposal/proposalTypes";
@@ -930,6 +930,94 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
                   <p className="text-[13px] text-muted-foreground/30 leading-relaxed font-medium transition-colors">
                     {p.desc}
                   </p>
+
+                  {/* [STEP 10-I.5.25-A] Story & Explanation UI */}
+                  {(p.proposal_story || p.proposal_explanation) && (
+                    <div className="mt-4 pt-4 border-t border-white/5 space-y-4 animate-in fade-in duration-500">
+                      {/* 1. 편집 스토리 (Summary) */}
+                      {p.proposal_story && (
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-1.5 opacity-50">
+                            <BookOpen size={10} className="text-primary" />
+                            <span className="text-[10px] font-bold uppercase tracking-wider">편집 스토리</span>
+                          </div>
+                          <p className="text-[11px] text-muted-foreground/50 leading-relaxed">
+                            {p.proposal_story.story_summary}
+                          </p>
+                        </div>
+                      )}
+
+                      {/* 2. 스토리라인 (Steps) - Collapsible */}
+                      {p.proposal_explanation?.storyline && (
+                        <details className="group/details">
+                          <summary className="flex items-center justify-between cursor-pointer list-none opacity-40 hover:opacity-70 transition-all">
+                            <div className="flex items-center gap-1.5">
+                              <List size={10} className="text-primary" />
+                              <span className="text-[10px] font-bold uppercase tracking-wider">전개 과정</span>
+                            </div>
+                            <ChevronDown size={10} className="group-open/details:rotate-180 transition-transform" />
+                          </summary>
+                          <div className="mt-2 space-y-2 border-l border-white/5 pl-3 py-1">
+                            {p.proposal_explanation.storyline.map((step: any) => (
+                              <div key={step.step} className="space-y-0.5">
+                                <div className="flex items-center gap-2">
+                                  <span className="text-[9px] font-black text-primary/40">0{step.step}</span>
+                                  <span className="text-[10px] font-bold text-foreground/60">{step.role.toUpperCase()}</span>
+                                </div>
+                                <p className="text-[10px] text-muted-foreground/40 leading-snug">
+                                  {step.description}
+                                </p>
+                              </div>
+                            ))}
+                          </div>
+                        </details>
+                      )}
+
+                      {/* 3. 소스별 요약 - Collapsible */}
+                      {p.proposal_explanation?.source_summaries && (
+                        <details className="group/details">
+                          <summary className="flex items-center justify-between cursor-pointer list-none opacity-40 hover:opacity-70 transition-all">
+                            <div className="flex items-center gap-1.5">
+                              <Package size={10} className="text-primary" />
+                              <span className="text-[10px] font-bold uppercase tracking-wider">영상별 분석</span>
+                            </div>
+                            <ChevronDown size={10} className="group-open/details:rotate-180 transition-transform" />
+                          </summary>
+                          <div className="mt-2 grid grid-cols-1 gap-2 border-l border-white/5 pl-3 py-1">
+                            {p.proposal_explanation.source_summaries.map((src: any) => (
+                              <div key={src.source_id} className="flex flex-col">
+                                <div className="flex items-center gap-2">
+                                  <span className="text-[10px] font-bold text-foreground/70">소스 {src.source_label}</span>
+                                  <span className="text-[9px] px-1.5 py-0.5 bg-white/5 rounded text-muted-foreground/60">{src.dominant_topic}</span>
+                                </div>
+                                <p className="text-[9px] text-muted-foreground/40 mt-0.5">
+                                  {src.visual_character} ({src.fragment_count}개 조각)
+                                </p>
+                              </div>
+                            ))}
+                          </div>
+                        </details>
+                      )}
+
+                      {/* 4. 품질 경고 (Quality Warnings) */}
+                      {p.proposal_explanation?.quality_warnings?.length > 0 && (
+                        <div className="pt-2">
+                          <div className="flex items-center gap-1.5 opacity-40 mb-1.5">
+                            <AlertCircle size={10} className="text-amber-500" />
+                            <span className="text-[10px] font-bold uppercase tracking-wider text-amber-500/80">데이터 품질 안내</span>
+                          </div>
+                          <ul className="space-y-1 list-none">
+                            {p.proposal_explanation.quality_warnings.map((warn: string, i: number) => (
+                              <li key={i} className="text-[9px] text-amber-500/40 leading-relaxed flex gap-1.5 items-start">
+                                <span className="mt-1 w-1 h-1 rounded-full bg-amber-500/20 shrink-0" />
+                                {warn}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               </div>
             ))
