@@ -16,6 +16,13 @@ class ProposalEngine:
             print(f"[PROPOSAL ENGINE] No fragments for {source_id}")
             return []
         
+        # [STEP 10-I.5.19] 진단 로그
+        durations = [self._safe_duration(f) for f in fragments]
+        none_count = sum(1 for f in fragments if f.get("structural", {}).get("duration") is None)
+        zero_count = sum(1 for d in durations if d <= 0)
+        print(f"[PROPOSAL ENGINE] Duration Diagnostics - None: {none_count}, Zero: {zero_count}")
+        print(f"[PROPOSAL ENGINE] First 20 durations: {durations[:20]}")
+        
         print(f"[PROPOSAL ENGINE] Input semantic fragment count: {len(fragments)}")
         
         user_intent = self.bams.get_user_intent(source_id)
@@ -62,10 +69,7 @@ class ProposalEngine:
         max_frags = 12 if is_fast_path else 25
 
         for f in sorted_frags:
-            f_dur = f.get("structural", {}).get("duration", 0)
-            if f_dur is None:
-                print(f"[PROPOSAL ENGINE] Warning: Fragment {f.get('fragment_id')} has null duration")
-                f_dur = 0
+            f_dur = self._safe_duration(f)
             
             if len(selected) >= max_frags: break
             if current_len + f_dur <= target_len * 1.1:
@@ -74,7 +78,7 @@ class ProposalEngine:
         
         print(f"[PROPOSAL ENGINE] Market Proposal (A) - Selected {len(selected)} fragments, total {current_len:.1f}s")
         selected, bridge_details = self._insert_bridges(selected, fragments)
-        current_len = sum(f["structural"]["duration"] for f in selected)
+        current_len = sum(self._safe_duration(f) for f in selected)
         
         # target_length ±10% 정합성
         fallback = None
@@ -108,7 +112,10 @@ class ProposalEngine:
     def _create_user_proposal(self, source_id, fragments, target_len, intent):
         """B: User Mode (User Intent 엄격 반영)"""
         # edit_value가 높은 순으로 정렬하여 선택 시도
-        sorted_frags = sorted(fragments, key=lambda x: x["structural"]["edit_value"], reverse=True)
+        def edit_score(f):
+            val = f.get("structural", {}).get("edit_value")
+            return float(val) if val is not None else 0.5
+        sorted_frags = sorted(fragments, key=edit_score, reverse=True)
         
         selected = []
         current_len = 0
@@ -118,10 +125,7 @@ class ProposalEngine:
         for f in sorted_frags:
             # 엄격한 필터링: edit_value가 0.1 미만이면 제외
             if f.get("structural", {}).get("edit_value", 0.5) < 0.1: continue 
-            f_dur = f.get("structural", {}).get("duration", 0)
-            if f_dur is None:
-                print(f"[PROPOSAL ENGINE] Warning: Fragment {f.get('fragment_id')} has null duration")
-                f_dur = 0
+            f_dur = self._safe_duration(f)
 
             if len(selected) >= max_frags: break
             if current_len + f_dur <= target_len * 1.1:
@@ -141,8 +145,8 @@ class ProposalEngine:
             if len(fragments) <= 5:
                 selected = fragments
             else:
-                # 3초 이상 + confidence 높은 순으로 상위 N개 추출
-                candidates = [f for f in fragments if f["structural"]["duration"] >= 3.0]
+            # 3초 이상 + confidence 높은 순으로 상위 N개 추출
+                candidates = [f for f in fragments if self._safe_duration(f) >= 3.0]
                 if len(candidates) < 3:
                     candidates = fragments # 3초 미만이 많으면 전체에서 선택
                 
@@ -151,11 +155,11 @@ class ProposalEngine:
                 
             # 유저 모드는 원래 순서(연대기순)를 선호하므로 재정렬
             selected = sorted(selected, key=lambda x: x.get("start", 0))
-            current_len = sum(f["structural"]["duration"] for f in selected)
+            current_len = sum(self._safe_duration(f) for f in selected)
 
         print(f"[PROPOSAL ENGINE] User Proposal (B) - Selected {len(selected)} fragments, total {current_len:.1f}s")
         selected, bridge_details = self._insert_bridges(selected, fragments)
-        current_len = sum(f["structural"]["duration"] for f in selected)
+        current_len = sum(self._safe_duration(f) for f in selected)
         
         status = "within_range"
         if not fallback: # fallback이 이미 설정된 경우(비어있음 구제)는 length mismatch 체크보다 우선함
@@ -206,7 +210,7 @@ class ProposalEngine:
             for f in all_fragments:
                 if curr["end"] <= f["start"] and f["end"] <= nxt["start"]:
                     # bridge 조건 충족 여부
-                    duration = f["structural"]["duration"]
+                    duration = self._safe_duration(f)
                     continuity = f["continuity"].get("time_proximity", 0.75) # Placeholder default if missing
                     
                     if duration < 5.0 and continuity > 0.7:
@@ -230,3 +234,45 @@ class ProposalEngine:
         
         print(f"[PROPOSAL ENGINE] _insert_bridges EXIT: final={len(res)}, bridges={len(bridge_details)}")
         return res, bridge_details
+
+    def _safe_duration(self, frag):
+        """[STEP 10-I.5.19] 안전하게 duration 산출 (NoneType crash 방지)"""
+        structural = frag.get("structural") or {}
+        duration = (
+            frag.get("duration_sec")
+            or frag.get("duration")
+            or structural.get("duration")
+        )
+        
+        # 0.0을 false로 취급하지 않도록 explicit None check가 좋지만, 
+        # 위 체인은 duration이 0일 때 아래 start/end 로직을 탈 수 있음.
+        # 하지만 start/end 로직도 duration 0을 산출하므로 결과적으로 안전함.
+        
+        if duration is None:
+            # start/end 기반 계산 시도
+            start = frag.get("start_sec")
+            if start is None: start = frag.get("start")
+            if start is None: start = frag.get("start_time")
+
+            end = frag.get("end_sec")
+            if end is None: end = frag.get("end")
+            if end is None: end = frag.get("end_time")
+
+            if start is not None and end is not None:
+                try:
+                    duration = float(end) - float(start)
+                except:
+                    duration = 0.0
+        
+        try:
+            if duration is not None:
+                duration = float(duration)
+            else:
+                duration = 0.0
+        except:
+            duration = 0.0
+
+        if duration < 0:
+            duration = 0.0
+
+        return duration

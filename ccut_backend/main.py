@@ -833,8 +833,13 @@ def validate_semantic_schema(fragments: list) -> list:
         if not isinstance(structural, dict):
             invalid.append("structural is not a dict")
         else:
-            if structural.get("duration") is None: missing.append("structural.duration")
-            elif structural.get("duration") <= 0: invalid.append(f"duration({structural.get('duration')}) <= 0")
+            if structural.get("duration") is None:
+                if start is not None and end is not None:
+                    pass # start/end 로 계산 가능하므로 허용
+                else:
+                    missing.append("structural.duration")
+            elif structural.get("duration") <= 0:
+                invalid.append(f"duration({structural.get('duration')}) <= 0")
             
         if not isinstance(f.get("semantic"), (dict, type(None))):
             invalid.append("semantic is not a dict or None")
