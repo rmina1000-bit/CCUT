@@ -143,11 +143,22 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
 
   const allSourceFragments = useMemo(
     () =>
-      sourceEntries.length > 0
+      sourceEntries && sourceEntries.length > 0
         ? sourceEntries.flatMap((e) => e.fragments)
         : (sourceFragments ?? []),
     [sourceEntries, sourceFragments]
   );
+
+  const sourceLabelMap = useMemo(() => {
+    const map: Record<string, string> = {};
+    sourceEntries?.forEach((e) => {
+      map[e.source_id] = e.label;
+    });
+    return map;
+  }, [sourceEntries]);
+
+  const labels = useMemo(() => ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J"], []);
+
 
   const pendingLoadHandlerARef = useRef<(() => void) | null>(null);
   const pendingLoadHandlerBRef = useRef<(() => void) | null>(null);
@@ -987,7 +998,9 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
                             {p.proposal_explanation.source_summaries.map((src: any, idx: number) => (
                               <div key={`${src.source_id}-${idx}`} className="flex flex-col">
                                 <div className="flex items-center gap-2">
-                                  <span className="text-[10px] font-bold text-foreground/70">소스 {src.source_label}</span>
+                                  <span className="text-[10px] font-bold text-foreground/70">
+                                    소스 {sourceLabelMap[src.source_id] || src.source_label || labels[idx] || `S${idx + 1}`}
+                                  </span>
                                   <span className="text-[9px] px-1.5 py-0.5 bg-white/5 rounded text-muted-foreground/60">{src.dominant_topic}</span>
                                 </div>
                                 <div className="flex items-center gap-2 mt-0.5">

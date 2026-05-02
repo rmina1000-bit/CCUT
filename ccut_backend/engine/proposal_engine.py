@@ -376,7 +376,8 @@ class ProposalEngine:
 
     def _summarize_sources(self, source_ids, fragments_pool, selected_sequence=None):
         summaries = []
-        labels = ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J"] 
+        # [STEP 10-I.5.27-E6-R1] Expand labels to full A-Z for safety
+        labels = [chr(i) for i in range(ord('A'), ord('Z') + 1)] 
         
         # [STEP 10-I.5.27-E6] Stable Dedupe & Labeling Normalize
         clean_source_ids = []

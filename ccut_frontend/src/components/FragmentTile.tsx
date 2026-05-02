@@ -71,18 +71,13 @@ const FragmentTile: React.FC<FragmentTileProps> = ({
           draggable={false}
           src={
             fragment.thumbnail?.thumbnail_url ||
-            `http://127.0.0.1:8000/static/thumbnails/${fragment.fragment_id}.jpg`
+            "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7"
           }
           alt={fragment.fragment_id}
           className="absolute inset-0 w-full h-full object-cover opacity-80 group-hover:opacity-100 transition-opacity duration-200 z-[1]"
           onError={(e) => {
-            const target = e.target as HTMLImageElement;
-            const staticFallback = `http://127.0.0.1:8000/static/thumbnails/${fragment.fragment_id}.jpg`;
-            if (target.src !== staticFallback) {
-              target.src = staticFallback;
-            } else {
-              setHasImageError(true);
-            }
+            // [STEP 10-I.5.27-E6-R1] Suppress SF_*.jpg failed requests
+            setHasImageError(true);
           }}
         />
       )}
