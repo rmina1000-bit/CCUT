@@ -45,6 +45,10 @@
 | STEP 10-I.5.9 | Separate Semantic Success from Proposal Failure | PASS |
 | STEP 10-I.5.10 | Backend Semantic Boundary Fix | PASS |
 | STEP 10-I.5.11 | Proposal 500 Trace & Schema Validation | DONE |
+| STEP 10-I.5.18 | SOURCE_REUSED Registry Restoration | DONE |
+| STEP 10-I.5.19 | Proposal Duration None Crash Fix | DONE |
+| STEP 10-I.5.20 | Proposal TargetLength None Crash Fix | DONE |
+| STEP 10-I.5.21 | Stabilization Evidence for Codex Audit | DONE |
 
 
 
@@ -58,10 +62,10 @@
 ## CURRENT 🔄
 
 > [!IMPORTANT]
-> STEP 10-I.5.5 완료. Semantic Fragment를 UI 및 Proposal Fallback의 기본 데이터 소스로 확정했습니다.
-> 1. Index.tsx에서 semanticRows 존재 시 raw fragment 대신 최우선 사용.
-> 2. mapFragments의 duration 계산 시 start/end 기반 정밀 계산 우선 적용.
-> 3. Proposal Fallback 시 semantic fragment ID 체계를 유지하도록 보정.
+> STEP 10-I.5 파이프라인 안정화 완료. 
+> 1. 백엔드 재시작 및 소스 재사용 시 상태 복구(Registry Restoration) 완비.
+> 2. Proposal Engine의 데이터 누락(duration, target_length)에 대한 방어 로직 강화.
+> 3. Codex 감사를 위한 런타임 증거 확보 및 보고서 생성 완료 (STEP 10-I.5.21).
 
 
 

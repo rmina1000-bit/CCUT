@@ -49,6 +49,10 @@
 - STEP 10-I.5.9 Separate Semantic Success from Proposal Failure: **PASS**
 - STEP 10-I.5.10 Backend Semantic Boundary Fix: **PASS**
 - STEP 10-I.5.11 Proposal 500 Trace & Schema Validation: **PASS**
+- STEP 10-I.5.18 SOURCE_REUSED Registry Restoration: **PASS**
+- STEP 10-I.5.19 Proposal Duration None Crash Fix: **PASS**
+- STEP 10-I.5.20 Proposal TargetLength None Crash Fix: **PASS**
+- STEP 10-I.5.21 Stabilization Evidence for Codex Audit: **PASS**
 
 
 
@@ -81,6 +85,10 @@
   - **Pipeline Robustness:** Proposal 생성 실패 시에도 Semantic 조각 결과를 폐기하지 않도록 `Index.tsx` 구조 개선.
   - **Semantic Boundary Fix:** 백엔드에서 raw 30s 경계가 semantic으로 유출되는 현상을 차단하고, 20s 초과 시 강제 분할 로직 강화.
   - **Proposal Diagnostics:** /proposals 500 원인 파악을 위해 상세 traceback, schema validation, 내부 로깅 추가.
+- **Stabilization & Recovery (2026-05-02):**
+  - **SOURCE_REUSED Resilience:** 백엔드 재시작 시 인메모리 레지스트리를 DB 정보를 바탕으로 자동 복구하도록 개선.
+  - **Crash Prevention:** `ProposalEngine`에서 `duration`이나 `target_length`가 `None`일 경우 발생하던 `TypeError` 전면 차단 (`_safe_duration`, `_safe_target_len` 적용).
+  - **Codex Audit Handoff:** 현재 파이프라인의 상태와 증거를 문서화하여 `docs/reports/` 폴더에 업로드 완료. (STEP 10-I.5.21)
 
 - STEP 10-I.5.12 Deterministic Semantic Split (Remove Random)
 - STEP 10-I.5.13 Frontend resolved_aliases mapping Fix
