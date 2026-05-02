@@ -96,6 +96,20 @@ const formatDuration = (seconds?: number) => {
   return `${secs}초`;
 };
 
+/**
+ * [STEP 10-I.5.27-E6-R4] Fragment Source ID Extraction Fallback
+ */
+function getFragmentSourceId(fragment: any): string {
+  if (!fragment) return "";
+  if (fragment.source_id) return fragment.source_id;
+  if (fragment.source_video) return fragment.source_video;
+  if (fragment.sourceId) return fragment.sourceId;
+
+  const raw = String(fragment.fragment_id || fragment.id || "");
+  const match = raw.match(/SRC_[A-Z0-9]+/);
+  return match?.[0] || "";
+}
+
 const CenterPanel: React.FC<CenterPanelProps> = ({
   selectedFragment,
   selectedSource,
@@ -801,7 +815,7 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
                 ? "text-primary"
                 : !proposals || !proposals.A
                   ? "text-muted-foreground/10 cursor-not-allowed"
-                  : "text-muted-foreground/40 hover:text-primary"
+                  : "text-foreground/60 hover:text-primary"
                 }`}
             >
               {committedProposalId === "A" ? "✓ A안 확정됨" : "A안 선택"}
@@ -918,7 +932,7 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
                 ? "text-ccut-indigo"
                 : !proposals || !proposals.B
                   ? "text-muted-foreground/10 cursor-not-allowed"
-                  : "text-muted-foreground/40 hover:text-ccut-indigo"
+                  : "text-foreground/60 hover:text-ccut-indigo"
                 }`}
             >
               {committedProposalId === "B" ? "✓ B안 확정됨" : "B안 선택"}
@@ -950,10 +964,10 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
                 </div>
 
                 <div className="space-y-3">
-                  <h4 className="text-[16px] font-bold text-foreground/80 transition-colors">
+                  <h4 className="text-[16px] font-bold text-foreground transition-colors">
                     {p.title}
                   </h4>
-                  <p className="text-[13px] text-muted-foreground/30 leading-relaxed font-medium transition-colors">
+                  <p className="text-[13px] text-foreground/80 leading-relaxed font-medium transition-colors">
                     {p.desc}
                   </p>
 
@@ -963,11 +977,11 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
                       {/* 1. 편집 스토리 (Summary) */}
                       {p.proposal_story && (
                         <div className="space-y-1">
-                          <div className="flex items-center gap-1.5 opacity-50">
+                          <div className="flex items-center gap-1.5 opacity-80">
                             <BookOpen size={10} className="text-primary" />
                             <span className="text-[10px] font-bold uppercase tracking-wider">편집 스토리</span>
                           </div>
-                          <p className="text-[11px] text-muted-foreground/50 leading-relaxed">
+                          <p className="text-[11px] text-foreground/75 leading-relaxed">
                             {p.proposal_story.story_summary}
                           </p>
                         </div>
@@ -976,7 +990,7 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
                       {/* 2. 스토리라인 (Steps) - Collapsible */}
                       {p.proposal_explanation?.storyline && (
                         <details className="group/details">
-                          <summary className="flex items-center justify-between cursor-pointer list-none opacity-40 hover:opacity-70 transition-all">
+                          <summary className="flex items-center justify-between cursor-pointer list-none opacity-70 hover:opacity-100 transition-all">
                             <div className="flex items-center gap-1.5">
                               <List size={10} className="text-primary" />
                               <span className="text-[10px] font-bold uppercase tracking-wider">전개 과정</span>
@@ -987,10 +1001,10 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
                             {p.proposal_explanation.storyline.map((step: any) => (
                               <div key={step.step} className="space-y-0.5">
                                 <div className="flex items-center gap-2">
-                                  <span className="text-[9px] font-black text-primary/40">0{step.step}</span>
-                                  <span className="text-[10px] font-bold text-foreground/60">{step.role.toUpperCase()}</span>
+                                  <span className="text-[9px] font-black text-primary/70">0{step.step}</span>
+                                  <span className="text-[10px] font-bold text-foreground/80">{step.role.toUpperCase()}</span>
                                 </div>
-                                <p className="text-[10px] text-muted-foreground/40 leading-snug">
+                                <p className="text-[10px] text-foreground/60 leading-snug">
                                   {step.description}
                                 </p>
                               </div>
@@ -1002,47 +1016,52 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
                       {/* 3. 소스별 요약 - Collapsible */}
                       {p.proposal_explanation?.source_summaries && (
                         <details className="group/details">
-                          <summary className="flex items-center justify-between cursor-pointer list-none opacity-40 hover:opacity-70 transition-all">
+                          <summary className="flex items-center justify-between cursor-pointer list-none opacity-70 hover:opacity-100 transition-all">
                             <div className="flex items-center gap-1.5">
                               <Package size={10} className="text-primary" />
-                              <span className="text-[10px] font-bold uppercase tracking-wider">영상별 분석</span>
+                              <span className="text-[10px] font-bold uppercase tracking-wider text-foreground/80">영상별 분석</span>
                             </div>
                             <ChevronDown size={10} className="group-open/details:rotate-180 transition-transform" />
                           </summary>
                           <div className="mt-2 grid grid-cols-1 gap-2 border-l border-white/5 pl-3 py-1">
-                            {p.proposal_explanation.source_summaries
-                              .filter((src: any) => sourceLabelMap[src.source_id]) // [STEP 10-I.5.27-E6-R2] 실제 업로드된 영상만 표시
-                              .map((src: any, idx: number) => {
-                                const entry = sourceEntries?.find(e => e.source_id === src.source_id);
-                                // [STEP 10-I.5.27-E6-R3] Frontend-driven recount for stability
-                                const realProposedCount = fragments.filter(f => 
-                                  f.source_id === src.source_id || 
-                                  f.fragment_id?.includes(`_SRC_${src.source_id}`)
-                                ).length;
+                            {(() => {
+                              const selectedCountBySourceId = new Map<string, number>();
+                              const proposalSequence = p.sequence || p.key_fragments || [];
+                              proposalSequence.forEach((f: any) => {
+                                const sid = getFragmentSourceId(f);
+                                if (sid) selectedCountBySourceId.set(sid, (selectedCountBySourceId.get(sid) || 0) + 1);
+                              });
 
-                                return (
-                                  <div key={`${src.source_id}-${idx}`} className="flex flex-col">
-                                    <div className="flex items-center gap-2">
-                                      <span className="text-[10px] font-bold text-foreground/70">
-                                        영상 {sourceLabelMap[src.source_id] || src.source_label || labels[idx] || `S${idx + 1}`}
-                                      </span>
-                                      <span className="text-[9px] text-muted-foreground/30 font-medium">
-                                        · {formatMB(entry?.file_size_bytes)} · {formatDuration(entry?.duration_sec)}
-                                      </span>
-                                      <span className="text-[9px] px-1.5 py-0.5 bg-white/5 rounded text-muted-foreground/60 ml-auto">{src.dominant_topic}</span>
-                                    </div>
-                                    <div className="flex items-center gap-2 mt-0.5">
-                                      <p className="text-[9px] text-muted-foreground/40">
-                                        {src.visual_character}
-                                      </p>
-                                      <div className="flex gap-2 text-[9px] font-medium">
-                                        <span className="text-muted-foreground/30">분석된 의미 조각: {src.fragment_count}개</span>
-                                        <span className="text-primary/40">제안 사용 조각: {realProposedCount}개</span>
+                              return p.proposal_explanation.source_summaries
+                                .filter((src: any) => sourceLabelMap[src.source_id])
+                                .map((src: any, idx: number) => {
+                                  const entry = sourceEntries?.find(e => e.source_id === src.source_id);
+                                  const realProposedCount = selectedCountBySourceId.get(src.source_id) || 0;
+
+                                  return (
+                                    <div key={`${src.source_id}-${idx}`} className="flex flex-col">
+                                      <div className="flex items-center gap-2">
+                                        <span className="text-[10px] font-bold text-foreground/80">
+                                          영상 {sourceLabelMap[src.source_id] || src.source_label || labels[idx] || `S${idx + 1}`}
+                                        </span>
+                                        <span className="text-[9px] text-foreground/50 font-medium">
+                                          · {formatMB(entry?.file_size_bytes)} · {formatDuration(entry?.duration_sec)}
+                                        </span>
+                                        <span className="text-[9px] px-1.5 py-0.5 bg-white/5 rounded text-foreground/60 ml-auto">{src.dominant_topic}</span>
+                                      </div>
+                                      <div className="flex items-center gap-2 mt-0.5">
+                                        <p className="text-[9px] text-foreground/60">
+                                          {src.visual_character}
+                                        </p>
+                                        <div className="flex gap-2 text-[9px] font-medium">
+                                          <span className="text-foreground/50">분석된 의미 조각: {src.fragment_count}개</span>
+                                          <span className="text-primary/70">제안 사용 조각: {realProposedCount}개</span>
+                                        </div>
                                       </div>
                                     </div>
-                                  </div>
-                                );
-                              })}
+                                  );
+                                });
+                            })()}
                           </div>
                         </details>
                       )}
@@ -1050,14 +1069,14 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
                       {/* 4. 품질 경고 (Quality Warnings) */}
                       {p.proposal_explanation?.quality_warnings?.length > 0 && (
                         <div className="pt-2">
-                          <div className="flex items-center gap-1.5 opacity-40 mb-1.5">
+                          <div className="flex items-center gap-1.5 opacity-80 mb-1.5">
                             <AlertCircle size={10} className="text-amber-500" />
-                            <span className="text-[10px] font-bold uppercase tracking-wider text-amber-500/80">데이터 품질 안내</span>
+                            <span className="text-[10px] font-bold uppercase tracking-wider text-amber-500">데이터 품질 안내</span>
                           </div>
                           <ul className="space-y-1 list-none">
                             {p.proposal_explanation.quality_warnings.map((warn: string, i: number) => (
-                              <li key={i} className="text-[9px] text-amber-500/40 leading-relaxed flex gap-1.5 items-start">
-                                <span className="mt-1 w-1 h-1 rounded-full bg-amber-500/20 shrink-0" />
+                              <li key={i} className="text-[9px] text-amber-200/70 leading-relaxed flex gap-1.5 items-start">
+                                <span className="mt-1 w-1 h-1 rounded-full bg-amber-500/40 shrink-0" />
                                 {warn}
                               </li>
                             ))}
