@@ -987,6 +987,88 @@ def validate_semantic_schema(fragments: list) -> list:
             })
     return errors
 
+class ProjectProposalRequest(BaseModel):
+    project_id: str
+    source_ids: list[str]
+    target_length: float = 60.0
+
+@app.post("/proposals/project")
+async def post_generate_project_proposals(req: ProjectProposalRequest):
+    """
+    [STEP 10-I.5.24-R1] Multi-Source Project Proposal 생성 (v0.1)
+    """
+    import traceback
+    from engine.proposal_engine import ProposalEngine
+
+    project_id = req.project_id
+    source_ids = req.source_ids
+    target_len = req.target_length
+
+    if not source_ids:
+        return {"status": "ERROR", "message": "source_ids 배열이 비어있습니다."}
+
+    all_fragments = []
+    warnings = []
+
+    for sid in source_ids:
+        frags = bams.get_semantic_fragments(sid)
+        if not frags:
+            # [STEP 10-I.5.24-R1] Raw fallback 금지, Skip + Warning
+            warnings.append({
+                "source_id": sid, 
+                "reason": "NO_SEMANTIC_FRAGMENTS_SKIPPED"
+            })
+            continue
+        
+        # [STEP 10-I.5.22-C] Inject thumbnails
+        frags = inject_semantic_thumbnails(frags)
+        all_fragments.extend(frags)
+
+    if not all_fragments:
+        return {
+            "status": "NO_SEMANTIC_DATA",
+            "project_id": project_id,
+            "source_ids": source_ids,
+            "message": "제안을 생성할 유효한 Semantic 조각이 없습니다.",
+            "warnings": warnings
+        }
+
+    try:
+        engine = ProposalEngine(bams)
+        proposals = engine.generate_proposals_from_fragments(
+            project_id=project_id,
+            source_ids=source_ids,
+            fragments=all_fragments,
+            target_len=target_len
+        )
+
+        # Source Usage 진단 (제안 A/B 통합)
+        source_usage = {}
+        for p in proposals:
+            for frag in p.get("sequence", []):
+                sid = frag.get("source_id", "UNKNOWN")
+                source_usage[sid] = source_usage.get(sid, 0) + 1
+
+        return {
+            "status": "PROPOSAL_READY",
+            "project_id": project_id,
+            "source_ids": source_ids,
+            "semantic_count": len(all_fragments),
+            "proposals": proposals,
+            "source_usage": source_usage,
+            "warnings": warnings if warnings else None
+        }
+
+    except Exception as e:
+        print(f"[PROJECT PROPOSAL ERROR] {str(e)}")
+        traceback.print_exc()
+        return {
+            "status": "INTERNAL_SERVER_ERROR",
+            "project_id": project_id,
+            "message": str(e)
+        }
+
+
 @app.post("/proposals/{source_id}")
 async def post_generate_proposals(source_id: str):
     """
@@ -1063,6 +1145,8 @@ async def post_generate_proposals(source_id: str):
             "error_type": type(e).__name__,
             "message": str(e),
             "traceback": traceback.format_exc()
+        }
+
         }
 
 @app.get("/proposals/{source_id}")
