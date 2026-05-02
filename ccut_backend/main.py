@@ -725,6 +725,56 @@ async def get_quick_scan(source_id: str):
         "msg": "Evidence Board 분석 진행 중... (10% 미확보)"
     }
 
+def inject_semantic_thumbnails(fragments: list):
+    """
+    [STEP 10-I.5.22-C] Inject parent VF thumbnails into semantic fragments safely.
+    """
+    if not fragments:
+        return fragments
+        
+    thumb_dir = STORAGE_DIR / "thumbnails"
+    try:
+        available_thumbs = set(os.listdir(thumb_dir))
+    except Exception:
+        available_thumbs = set()
+
+    for f in fragments:
+        # 1. Skip if already has thumbnail_url in either format
+        if f.get("thumbnail_url") or (isinstance(f.get("thumbnail"), dict) and f["thumbnail"].get("thumbnail_url")):
+            continue
+            
+        parent_vf_id = None
+        
+        # 2. Priority for parent candidates
+        candidates = []
+        # a. semantic object refs
+        sem = f.get("semantic")
+        if isinstance(sem, dict):
+            candidates.extend(sem.get("evidence_refs", []))
+            candidates.extend(sem.get("transcript_refs", []))
+        # b. top level refs
+        candidates.extend(f.get("evidence_refs", []))
+        candidates.extend(f.get("transcript_refs", []))
+        
+        # 3. Find first valid VF ID
+        for cand in candidates:
+            if isinstance(cand, str) and cand.startswith("VF") and "_SRC_" in cand:
+                parent_vf_id = cand
+                break
+        
+        # 4. Apply fallback if file exists
+        if parent_vf_id:
+            thumb_filename = f"{parent_vf_id}.jpg"
+            if thumb_filename in available_thumbs:
+                fallback_url = f"/static/thumbnails/{thumb_filename}"
+                f["thumbnail_url"] = fallback_url
+                # Ensure thumbnail object also exists for frontend compatibility
+                if not isinstance(f.get("thumbnail"), dict):
+                    f["thumbnail"] = {}
+                f["thumbnail"]["thumbnail_url"] = fallback_url
+    
+    return fragments
+
 @app.post("/semantic-fragments/{source_id}")
 async def generate_semantic_fragments(source_id: str):
     """[STEP 4] Evidence Board 기반 Semantic Fragment 생성"""
@@ -733,6 +783,9 @@ async def generate_semantic_fragments(source_id: str):
     fragments = gen.generate(source_id)
     
     print(f"[SEMANTIC] /semantic-fragments/{source_id} called. Result count: {len(fragments)}")
+    
+    # [STEP 10-I.5.22-C] Inject thumbnails
+    fragments = inject_semantic_thumbnails(fragments)
     
     # Role 분산 통계 계산
     role_dist = {}
@@ -752,6 +805,9 @@ async def generate_semantic_fragments(source_id: str):
 async def get_semantic_fragments(source_id: str):
     """[STEP 4] 저장된 Semantic Fragments 조회 (v3.2.1 보완)"""
     fragments = bams.get_semantic_fragments(source_id)
+    
+    # [STEP 10-I.5.22-C] Inject thumbnails
+    fragments = inject_semantic_thumbnails(fragments)
     
     role_dist = {}
     for f in fragments:
@@ -886,6 +942,11 @@ async def post_generate_proposals(source_id: str):
         # 3. Proposal 생성
         engine = ProposalEngine(bams)
         proposals = engine.generate_proposals(source_id)
+        
+        # [STEP 10-I.5.22-C] Inject thumbnails into proposal sequences
+        for p in proposals:
+            if "sequence" in p:
+                p["sequence"] = inject_semantic_thumbnails(p["sequence"])
         
         return {
             "status": "PROPOSAL_READY",
