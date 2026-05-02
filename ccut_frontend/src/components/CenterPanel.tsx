@@ -97,17 +97,47 @@ const formatDuration = (seconds?: number) => {
 };
 
 /**
- * [STEP 10-I.5.27-E6-R4] Fragment Source ID Extraction Fallback
+ * [STEP 10-I.5.27-E6-R5] Robust Fragment Source ID Extraction Fallback
  */
-function getFragmentSourceId(fragment: any): string {
-  if (!fragment) return "";
-  if (fragment.source_id) return fragment.source_id;
-  if (fragment.source_video) return fragment.source_video;
-  if (fragment.sourceId) return fragment.sourceId;
+function extractSourceIdFromAny(value: any): string {
+  if (!value) return "";
 
-  const raw = String(fragment.fragment_id || fragment.id || "");
-  const match = raw.match(/SRC_[A-Z0-9]+/);
-  return match?.[0] || "";
+  // If input is string, directly match SRC_...
+  if (typeof value === "string") {
+    const match = value.match(/SRC_[A-Z0-9]+/);
+    return match?.[0] || "";
+  }
+
+  // If input is object, try direct fields
+  const direct =
+    value.source_id ||
+    value.source_video ||
+    value.sourceId ||
+    value.source?.source_id ||
+    "";
+
+  if (direct) {
+    // If field found, still run regex on it just in case it's a decorated ID
+    const sid = extractSourceIdFromAny(String(direct));
+    if (sid) return sid;
+    return String(direct);
+  }
+
+  // Fallback to searching candidate ID fields
+  const candidates = [
+    value.fragment_id,
+    value.id,
+    value.source_fragment_id,
+    value.display_id,
+    value.key,
+  ];
+
+  for (const candidate of candidates) {
+    const sid = extractSourceIdFromAny(candidate);
+    if (sid) return sid;
+  }
+
+  return "";
 }
 
 const CenterPanel: React.FC<CenterPanelProps> = ({
@@ -1026,17 +1056,34 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
                           <div className="mt-2 grid grid-cols-1 gap-2 border-l border-white/5 pl-3 py-1">
                             {(() => {
                               const selectedCountBySourceId = new Map<string, number>();
-                              const proposalSequence = p.sequence || p.key_fragments || [];
-                              proposalSequence.forEach((f: any) => {
-                                const sid = getFragmentSourceId(f);
+                              const proposalFragments =
+                                p.sequence ||
+                                p.fragments ||
+                                p.key_fragments ||
+                                p.resolved_fragments ||
+                                [];
+
+                              proposalFragments.forEach((f: any) => {
+                                const sid = extractSourceIdFromAny(f);
                                 if (sid) selectedCountBySourceId.set(sid, (selectedCountBySourceId.get(sid) || 0) + 1);
                               });
+
+                              // Diagnostic log (One-time check per render loop)
+                              const totalFound = Array.from(selectedCountBySourceId.values()).reduce((a, b) => a + b, 0);
+                              if (proposalFragments.length > 0 && totalFound === 0) {
+                                console.warn("[proposal-usage-count] all usage counts are zero", {
+                                  proposalKeys: Object.keys(p || {}),
+                                  sampleSequence: proposalFragments.slice(0, 5),
+                                  sourceEntries: sourceEntries?.slice(0, 5),
+                                });
+                              }
 
                               return p.proposal_explanation.source_summaries
                                 .filter((src: any) => sourceLabelMap[src.source_id])
                                 .map((src: any, idx: number) => {
                                   const entry = sourceEntries?.find(e => e.source_id === src.source_id);
-                                  const realProposedCount = selectedCountBySourceId.get(src.source_id) || 0;
+                                  const sidKey = extractSourceIdFromAny(src.source_id) || src.source_id;
+                                  const realProposedCount = selectedCountBySourceId.get(sidKey) || selectedCountBySourceId.get(src.source_id) || 0;
 
                                   return (
                                     <div key={`${src.source_id}-${idx}`} className="flex flex-col">
