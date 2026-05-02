@@ -64,5 +64,22 @@ export const videoService = {
             method: "POST",
             body: JSON.stringify({ target_id: fragId, action, user_reason: reason })
         });
+    },
+
+    requestProjectProposals: async (projectId: string, sourceIds: string[], targetLength: number = 60.0) => {
+        const response = await fetch(`${API_BASE_URL}/proposals/project`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                project_id: projectId,
+                source_ids: sourceIds,
+                target_length: targetLength
+            })
+        });
+        if (!response.ok) {
+            const errText = await response.text();
+            throw new Error(`프로젝트 제안 생성 실패 (${response.status}): ${errText}`);
+        }
+        return await response.json();
     }
 };

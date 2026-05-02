@@ -267,6 +267,7 @@ const Index: React.FC = () => {
           return [newProject, ...prev];
         });
 
+
         setSourceEntries(collectedEntries);
         setActiveSource("A");
 
@@ -279,164 +280,162 @@ const Index: React.FC = () => {
         setAnalyzeMessage("의미분석(Whisper) 진행 중입니다...");
         setAppState("analyzing");
 
-        if (!firstSourceId) throw new Error("source_id 확인 실패");
+        const uploadedSourceIds = collectedEntries.map(e => e.source_id).filter(Boolean);
+        console.log("[N-01] 분석 대상 source_ids:", uploadedSourceIds);
 
         let pollCount = 0;
-        let lastStatus: string | null = null;
         const MAX_POLLS = 100;
+        const sourceStatusMap: Record<string, string> = {};
+        const completedSourceIds: string[] = [];
+        const failedSourceIds: string[] = [];
 
         const pollInterval = setInterval(async () => {
           try {
             pollCount++;
-            const statusData = await videoService.getFragmentStatus(firstSourceId!);
             
-            if (pollCount === 1 || statusData.status !== lastStatus || statusData.status === "ANALYSIS_COMPLETE" || statusData.status === "FAILED") {
-              console.log(`[analysis-status] ${statusData.status} (${pollCount})`);
-              lastStatus = statusData.status;
+            // 모든 업로드 소스에 대해 상태 체크
+            for (const sid of uploadedSourceIds) {
+              if (completedSourceIds.includes(sid) || failedSourceIds.includes(sid)) continue;
+              
+              const statusData = await videoService.getFragmentStatus(sid);
+              sourceStatusMap[sid] = statusData.status;
+
+              if (statusData.status === "ANALYSIS_COMPLETE") {
+                completedSourceIds.push(sid);
+                console.log(`[analysis-status] ${sid}: ANALYSIS_COMPLETE`);
+              } else if (statusData.status === "FAILED") {
+                failedSourceIds.push(sid);
+                console.error(`[analysis-status] ${sid}: FAILED - ${statusData.error}`);
+              }
             }
 
-            if (statusData.status === "ANALYSIS_COMPLETE") {
+            const allSettled = (completedSourceIds.length + failedSourceIds.length) === uploadedSourceIds.length;
+            const isTimeout = pollCount >= MAX_POLLS;
+
+            if (allSettled || isTimeout) {
               clearInterval(pollInterval);
-
-              const freshData = await videoService.getFragmentsBySource(firstSourceId!);
-              const finalMappedA = mapFragments(freshData.fragments || [], "A");
-
-              // Note: SourceEntries will be updated later with displayMappedA (semantic if available)
-
-              // [STEP 10-I.5.3] Analysis Completed - Next Phase: Semantic & Proposals
-              setAnalyzeMessage("의미 조각 분석 중...");
               
+              if (completedSourceIds.length === 0) {
+                setAnalyzeMessage("모든 영상 분석 실패 또는 시간 초과");
+                setAppState("complete");
+                return;
+              }
+
+              setAnalyzeMessage("의미 조각 수집 및 제안 생성 중...");
+              
+              // 1. 모든 완료된 소스에서 Semantic Fragments 수집
+              const semanticResults: Record<string, any[]> = {};
+              const sourceLabels = collectedEntries.reduce((acc, e) => ({ ...acc, [e.source_id]: e.label }), {} as Record<string, string>);
+
+              for (const sid of completedSourceIds) {
+                try {
+                  const semanticRes = await fetch(`${videoService.API_BASE_URL}/semantic-fragments/${sid}`, { method: "POST" });
+                  if (semanticRes.ok) {
+                    const semanticData = await semanticRes.json();
+                    semanticResults[sid] = semanticData.fragments || [];
+                  }
+                } catch (err) {
+                  console.error(`[semantic-source] ${sid} fetch error:`, err);
+                }
+              }
+
+              // 2. 소스 엔트리 업데이트 (Semantic으로 교체)
+              let finalEditFragments: Fragment[] = [];
+              const updatedEntries = collectedEntries.map(entry => {
+                const sid = entry.source_id;
+                const rows = semanticResults[sid] || [];
+                if (rows.length > 0) {
+                  const mapped = mapFragments(rows, entry.label);
+                  finalEditFragments = [...finalEditFragments, ...mapped];
+                  return { ...entry, fragments: mapped };
+                }
+                // Semantic 없는 경우 경고 (R1 정책에 따라 Skip되겠지만 프론트에서도 표시 유지)
+                return entry;
+              });
+
+              setSourceEntries(updatedEntries);
+
+              // 3. 제안 생성 요청
               let generatedProposals: Record<"A" | "B", any> = {} as any;
-              let finalEditFragments: Fragment[] = finalMappedA;
-              let semanticRows: any[] = [];
+              let proposalData: any = null;
 
-              // 1. Semantic Fragment Fetch
               try {
-                const semanticRes = await fetch(
-                  `${videoService.API_BASE_URL}/semantic-fragments/${firstSourceId}`,
-                  { method: "POST" }
-                );
-                if (semanticRes.ok) {
-                  const semanticData = await semanticRes.json();
-                  semanticRows = semanticData.fragments || [];
-                  
-                  if (semanticRows.length > 0) {
-                    setSemanticFragments(semanticRows);
-                    finalEditFragments = mapFragments(semanticRows, "A");
-                    setAnalyzeMessage("Semantic Fragment 생성 완료");
-                  } else {
-                    console.warn("[semantic-source] No semantic fragments, using raw fallback");
-                  }
+                if (completedSourceIds.length >= 2) {
+                  // 멀티 소스 프로젝트 제안
+                  proposalData = await videoService.requestProjectProposals(projectId, completedSourceIds, 60.0);
+                  console.log("[proposal-project] Diagnostics:", {
+                    project_id: proposalData.project_id,
+                    source_ids: proposalData.source_ids,
+                    source_usage: proposalData.source_usage,
+                    warnings: proposalData.warnings,
+                    completed: completedSourceIds,
+                    failed: failedSourceIds
+                  });
                 } else {
-                  const text = await semanticRes.text().catch(() => "");
-                  console.error("[semantic-source] semantic request failed:", semanticRes.status, text);
+                  // 단일 소스 제안
+                  const sid = completedSourceIds[0];
+                  const res = await fetch(`${videoService.API_BASE_URL}/proposals/${sid}`, { method: "POST" });
+                  if (res.ok) proposalData = await res.json();
                 }
-              } catch (semanticErr) {
-                console.error("[semantic-source] semantic fetch error:", semanticErr);
+
+                if (proposalData && proposalData.proposals) {
+                  proposalData.proposals.forEach((p: any) => {
+                    const mode = p.mode === "A" ? "A" : "B";
+                    generatedProposals[mode] = {
+                      id: mode,
+                      proposal_id: p.proposal_id,
+                      mode: p.mode === "A" ? "market" : "user",
+                      title: p.mode === "A" ? "시장형 편집 (A)" : "사용자친화형 편집 (B)",
+                      desc: p.proposal_reason?.mode_reason || "백엔드 분석 기반 추천 편집안입니다.",
+                      score: String(Math.round(p.confidence * 100)) + "%",
+                      key_fragments: p.sequence.map((s: any) => s.fragment_id),
+                      proposal_story: p.proposal_story, // 스토리 보존
+                      direction: {},
+                      snapshot_id: "R1",
+                      template_id: p.mode,
+                      slot_trace: []
+                    };
+                    
+                    if (generatedProposals[mode].key_fragments.length > 0) {
+                      generatedProposals[mode].resolved_aliases = p.sequence.map((s: any) => ({
+                        proposal_fragment_id: s.fragment_id,
+                        source_id: s.source_id,
+                        source_fragment_id: s.fragment_id, // FIX: s.source_id -> s.fragment_id
+                        display_id: s.display_id,
+                        start_sec: s.start,
+                        end_sec: s.end,
+                        thumbnail_url: s.thumbnail_url
+                      }));
+                    }
+                  });
+                }
+              } catch (pErr) {
+                console.error("[proposal-orchestration] error:", pErr);
               }
 
-              // 2. Proposal Generation
-              try {
-                setAnalyzeMessage("편집 제안 생성 중...");
-                const proposalRes = await fetch(`${videoService.API_BASE_URL}/proposals/${firstSourceId}`, {
-                  method: "POST"
-                });
-
-                if (proposalRes.ok) {
-                  const proposalData = await proposalRes.json();
-                  const backendProposals = proposalData.proposals || [];
-                  if (backendProposals.length > 0) {
-                    backendProposals.forEach((p: any) => {
-                      const mode = p.mode === "A" ? "A" : "B";
-                      generatedProposals[mode] = {
-                        id: mode,
-                        proposal_id: p.proposal_id,
-                        mode: p.mode === "A" ? "market" : "user",
-                        title: p.mode === "A" ? "시장형 편집 (A)" : "사용자친화형 편집 (B)",
-                        desc: p.proposal_reason?.mode_reason || "백엔드 분석 기반 추천 편집안입니다.",
-                        score: String(Math.round(p.confidence * 100)) + "%",
-                        key_fragments: p.sequence.map((s: any) => s.fragment_id),
-                        direction: {},
-                        snapshot_id: "R1",
-                        template_id: p.mode,
-                        slot_trace: []
-                      };
-                      
-                      if (generatedProposals[mode].key_fragments.length > 0) {
-                        (generatedProposals[mode] as any).resolved_aliases = p.sequence.map((s: any) => ({
-                          proposal_fragment_id: s.fragment_id,
-                          source_id: s.source_id,
-                          source_fragment_id: s.source_id,
-                          display_id: s.display_id,
-                          start_sec: s.start,
-                          end_sec: s.end
-                        }));
-                      }
-                    });
-                  }
-                } else {
-                  const text = await proposalRes.text().catch(() => "");
-                  console.error("[proposal-source] backend proposal failed:", proposalRes.status, text);
-                }
-              } catch (proposalErr) {
-                console.error("[proposal-source] proposal fetch error:", proposalErr);
-              }
-
-              // Build combined for workspace
-              const combinedForEditing: Fragment[] = [
-                ...finalEditFragments,
-                ...collectedEntries
-                  .filter((e) => e.label !== "A")
-                  .flatMap((e) => e.fragments),
-              ];
-
-              // Client-side Fallback if no backend proposals
+              // 4. 최종 상태 적용
               if (Object.keys(generatedProposals).length === 0) {
                 const initialSnapshot = createInitialSnapshot();
-                generatedProposals = generateProposals(combinedForEditing, initialSnapshot);
+                generatedProposals = generateProposals(finalEditFragments, initialSnapshot);
                 setDirectionSnapshot(initialSnapshot);
               }
 
-              logProposalPair(generatedProposals, "INITIAL");
-
-              // [STEP 10-I.5.8] Switch to semanticMappedA as primary source if available
-              const displayMappedA = finalEditFragments;
-              console.log("[semantic-source] raw:", finalMappedA.length, "semantic:", semanticRows.length, "using:", finalEditFragments.length);
-              console.log("[semantic-source] durations:", displayMappedA.slice(0, 10).map(f => ((f.end_frame - f.start_frame) / 30).toFixed(1)));
-              console.log("[proposal-source] backend:", Object.keys(generatedProposals).length > 0 ? "OK" : "FALLBACK");
-
-              setSourceEntries((prev) =>
-                prev.map((e) => (e.label === "A" ? { ...e, fragments: displayMappedA } : e))
-              );
-
-              setEditFragments(combinedForEditing);
-              setSourceFragments(displayMappedA);
+              setEditFragments(finalEditFragments);
+              setSourceFragments(updatedEntries[0]?.fragments || []);
               setProposals(generatedProposals);
-              
-              setAnalyzeProgress(100);
-              setAnalyzeMessage("분석 완료!");
-              setAppState("complete");
+              setSemanticFragments(Object.values(semanticResults).flat());
 
-            } else if (statusData.status === "FAILED") {
-              clearInterval(pollInterval);
-              setAnalyzeMessage("분석 실패: " + statusData.error);
-              setProposals(null); // Explicitly ensure no proposals
-              setAppState("complete");
-            } else if (pollCount >= MAX_POLLS) {
-              clearInterval(pollInterval);
-              setAnalyzeMessage("분석 시간 초과");
-              setProposals(null); // Explicitly ensure no proposals
+              setAnalyzeProgress(100);
+              setAnalyzeMessage(failedSourceIds.length > 0 ? `일부 분석 실패 (${failedSourceIds.length}개), 제안 생성 완료` : "모든 영상 분석 및 제안 완료");
               setAppState("complete");
             }
           } catch (err) {
-            console.error("[Index] Polling error:", err);
-            if (err instanceof Error && (err.message.includes("Failed to fetch") || err.message.includes("NetworkError") || err.message.includes("fetch"))) {
-               clearInterval(pollInterval);
-               setAnalyzeMessage("백엔드 서버 연결이 끊겼습니다. 서버를 확인한 뒤 다시 분석하세요.");
-               setAppState("empty");
-               return;
+            console.error("[Index] Multi-source polling error:", err);
+            if (err instanceof Error && (err.message.includes("Failed to fetch") || err.message.includes("NetworkError"))) {
+              clearInterval(pollInterval);
+              setAnalyzeMessage("백엔드 서버 연결이 끊겼습니다.");
+              setAppState("empty");
             }
-            if (pollCount >= MAX_POLLS) clearInterval(pollInterval);
           }
         }, 2000);
 
