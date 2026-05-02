@@ -30,7 +30,9 @@ class ProposalEngine:
             quick_scan = self.bams.get_quick_scan(source_id)
             user_intent = quick_scan.get("default_intent_seed") if quick_scan else {}
             
-        target_len = user_intent.get("target_length", 60.0) if user_intent else 60.0
+        target_len_raw = user_intent.get("target_length", 60.0) if user_intent else 60.0
+        target_len = self._safe_target_len(target_len_raw, fragments)
+        print(f"[PROPOSAL ENGINE] target_len raw: {target_len_raw}, normalized: {target_len}")
 
         # 2. Mode A (Market) 생성
         print("[PROPOSAL ENGINE] Creating Market Proposal (A)...")
@@ -55,6 +57,7 @@ class ProposalEngine:
 
     def _create_market_proposal(self, source_id, fragments, target_len):
         """A: Market Mode (대중적 호속력)"""
+        target_len = self._safe_target_len(target_len, fragments)
         def market_score(f):
             score = f["structural"].get("market_value", 0.5)
             if f["structural"].get("role") in ["hook", "payoff"]:
@@ -111,6 +114,7 @@ class ProposalEngine:
 
     def _create_user_proposal(self, source_id, fragments, target_len, intent):
         """B: User Mode (User Intent 엄격 반영)"""
+        target_len = self._safe_target_len(target_len, fragments)
         # edit_value가 높은 순으로 정렬하여 선택 시도
         def edit_score(f):
             val = f.get("structural", {}).get("edit_value")
@@ -276,3 +280,21 @@ class ProposalEngine:
             duration = 0.0
 
         return duration
+
+    def _safe_target_len(self, target_len, fragments):
+        """[STEP 10-I.5.20] target_len 안전하게 산출 (NoneType crash 방지)"""
+        try:
+            if target_len is not None:
+                target_len = float(target_len)
+        except Exception:
+            target_len = None
+
+        if target_len is None or target_len <= 0:
+            # fragments 전체 합산의 min(total, 60.0)을 기본값으로 사용
+            total = sum(self._safe_duration(f) for f in fragments)
+            if total > 0:
+                target_len = min(total, 60.0)
+            else:
+                target_len = 60.0
+
+        return target_len
