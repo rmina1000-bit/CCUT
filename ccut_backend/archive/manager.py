@@ -1,9 +1,10 @@
-﻿from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session
 from sqlalchemy import or_
 from database import SessionLocal, engine, Base
 from .db_models import SourceTable, FragmentTable, DecisionTable, ProgramTable, EvidenceTable, QuickScanTable
 import uuid
 import datetime
+import os
 
 Base.metadata.create_all(bind=engine)
 
@@ -445,6 +446,18 @@ class BAMSManager:
                 }
                 for r in rows
             ]
+
+    def get_analysis_stage(self, source_id: str) -> str:
+        """[STEP 10-I.5.18] Determine current analysis stage from DB state (Restoration helper)"""
+        with SessionLocal() as db:
+            from archive.db_models import ProposalTable, SemanticFragmentTable, EvidenceTable
+            if db.query(ProposalTable).filter_by(source_id=source_id).first():
+                return "proposal_generation"
+            if db.query(SemanticFragmentTable).filter_by(source_id=source_id).first():
+                return "semantic_boundary"
+            if db.query(EvidenceTable).filter_by(source_id=source_id).first():
+                return "whisper"
+            return "initial"
 
     def get_single_proposal(self, proposal_id: str):
         """[STEP 7] 특정 제안 조회 (변환용)"""

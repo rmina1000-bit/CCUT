@@ -105,7 +105,7 @@ async def health_check():
 # ═══════════════════════════════════════════════════════════════════
 
 @app.post("/upload")
-async def upload_video(file: UploadFile = File(...)):
+async def upload_video(background_tasks: BackgroundTasks, file: UploadFile = File(...)):
     """
     [영상 업로드 v3.2.1]
     SHA-256 fingerprint를 생성하여 동일 영상 존재 시 기존 source_id를 반환합니다.
@@ -127,11 +127,72 @@ async def upload_video(file: UploadFile = File(...)):
         
         existing = bams.get_source_by_hash(fingerprint)
         if existing:
-            print(f"[UPLOAD] Fingerprint HIT: {fingerprint} -> source_id={existing.source_id}")
+            source_id = existing.source_id
+            print(f"[UPLOAD] Fingerprint HIT: {fingerprint} -> source_id={source_id}")
+            
+            # [STEP 10-I.5.18] Registry 상태 초기화 또는 복구
+            if source_id not in _fragment_job_registry:
+                # DB에 이미 결과가 있는지 확인
+                proposals = bams.get_proposals(source_id)
+                if proposals:
+                    _fragment_job_registry[source_id] = {
+                        "status": "ANALYSIS_COMPLETE",
+                        "progress": 100,
+                        "stage": "proposal_generation",
+                        "source_id": source_id,
+                        "error": None
+                    }
+                else:
+                    # 기존 분석 결과가 없거나 불완전한 경우 -> 재분석 트리거
+                    fragments = bams.get_fragments_by_source(source_id)
+                    if fragments:
+                        stage = bams.get_analysis_stage(source_id)
+                        print(f"[UPLOAD] Re-triggering analysis for incomplete source: {source_id} (Stage: {stage})")
+                        _fragment_job_registry[source_id] = {
+                            "status": "ANALYSIS_RUNNING",
+                            "progress": 30,
+                            "stage": f"reanalysis_{stage}",
+                            "source_id": source_id,
+                            "error": None
+                        }
+                        background_tasks.add_task(_background_whisper, source_id, abs_path, fragments)
+                        background_tasks.add_task(_background_panorama, source_id, abs_path, fragments)
+                        background_tasks.add_task(_background_signal_analysis, source_id, abs_path, fragments)
+                    else:
+                        # 소스는 있지만 조각이 없는 경우 -> PENDING으로 두어 /generate-fragments 유도
+                        _fragment_job_registry[source_id] = {
+                            "status": "PENDING",
+                            "progress": 0,
+                            "source_id": source_id,
+                            "error": None
+                        }
+            else:
+                # 기존에 FAILED 상태였다면 재시도를 위해 초기화 및 재실행
+                job = _fragment_job_registry[source_id]
+                if job.get("status") == "FAILED":
+                    print(f"[UPLOAD] Resetting FAILED state for reused source: {source_id}")
+                    fragments = bams.get_fragments_by_source(source_id)
+                    if fragments:
+                        job.update({
+                            "status": "ANALYSIS_RUNNING",
+                            "progress": 30,
+                            "stage": "retry_after_failure",
+                            "error": None
+                        })
+                        background_tasks.add_task(_background_whisper, source_id, abs_path, fragments)
+                        background_tasks.add_task(_background_panorama, source_id, abs_path, fragments)
+                        background_tasks.add_task(_background_signal_analysis, source_id, abs_path, fragments)
+                    else:
+                        job.update({
+                            "status": "PENDING",
+                            "progress": 0,
+                            "error": None
+                        })
+
             return {
                 "status": "SOURCE_REUSED",
                 "file_name": safe_name,
-                "source_id": existing.source_id,
+                "source_id": source_id,
                 "hash_value": fingerprint,
                 "cache_hit": True,
                 "reused": True,
@@ -503,17 +564,47 @@ async def generate_fragments(
         analysis_mode = "FINGERPRINT_CACHE_HIT"
         print(f"[GENERATE-FRAGMENTS] Using Cached Analysis: {source_id}")
 
-    _fragment_job_registry[source_id] = {
-        "progress": 30, # L1 작업 완료 직후이므로 30% 정도로 표시
-        "status": "FRAGMENT_READY",
-        "source_id": source_id,
-        "fragment_count": len(fragments),
-        "analysis_mode": analysis_mode,
-    }
+    # [STEP 10-I.5.18] 이미 분석 완료된 데이터가 있는지 확인
+    proposals = bams.get_proposals(source_id)
 
-    background_tasks.add_task(_background_whisper, source_id, resolved_path, fragments)
-    background_tasks.add_task(_background_panorama, source_id, resolved_path, fragments)
-    background_tasks.add_task(_background_signal_analysis, source_id, resolved_path, fragments)
+    # [FIX] Registry에 이미 진행 중인 작업이 있는지 확인 (중복 방지)
+    existing_job = _fragment_job_registry.get(source_id)
+    if existing_job and existing_job.get("status") in ["ANALYSIS_RUNNING", "FRAGMENT_READY"]:
+        print(f"[GENERATE-FRAGMENTS] Job already in progress for {source_id}")
+        return {
+            "status": "L1_COMPLETE",
+            "progress": 100,
+            "source_id": source_id,
+            "count": len(fragments),
+            "fragments": fragments,
+            "analysis_mode": analysis_mode,
+            "pipeline": "virtual_clipping_v1.0.6",
+        }
+
+    if not is_new_source and proposals:
+        print(f"[GENERATE-FRAGMENTS] Already Analyzed: {source_id}")
+        _fragment_job_registry[source_id] = {
+            "progress": 100,
+            "status": "ANALYSIS_COMPLETE",
+            "stage": "proposal_generation",
+            "source_id": source_id,
+            "fragment_count": len(fragments),
+            "analysis_mode": analysis_mode,
+            "error": None
+        }
+    else:
+        _fragment_job_registry[source_id] = {
+            "progress": 30, # L1 작업 완료 직후이므로 30% 정도로 표시
+            "status": "FRAGMENT_READY",
+            "source_id": source_id,
+            "fragment_count": len(fragments),
+            "analysis_mode": analysis_mode,
+            "error": None
+        }
+
+        background_tasks.add_task(_background_whisper, source_id, resolved_path, fragments)
+        background_tasks.add_task(_background_panorama, source_id, resolved_path, fragments)
+        background_tasks.add_task(_background_signal_analysis, source_id, resolved_path, fragments)
 
     print(f"[GENERATE-FRAGMENTS] L1 완료. {len(fragments)}개 Virtual Fragment 즉시 반환.")
 
@@ -535,11 +626,48 @@ async def generate_fragments(
 
 
 @app.get("/generate-fragments/status/{source_id}")
-async def get_fragment_analysis_status(source_id: str):
+async def get_fragment_analysis_status(source_id: str, background_tasks: BackgroundTasks):
     """의미분석 진행 상태 조회 (Index.tsx polling용)"""
     job = _fragment_job_registry.get(source_id)
     if not job:
-        return {"status": "NOT_FOUND", "source_id": source_id}
+        # [STEP 10-I.5.18] Registry 에 없으면 DB에서 상태 복원 또는 재분석 트리거
+        proposals = bams.get_proposals(source_id)
+        if proposals:
+            job = {
+                "status": "ANALYSIS_COMPLETE",
+                "progress": 100,
+                "stage": "proposal_generation",
+                "source_id": source_id,
+                "error": None
+            }
+            _fragment_job_registry[source_id] = job
+            print(f"[STATUS] Registry restored (COMPLETE) from DB for {source_id}")
+        else:
+            # 완료되지 않았지만 fragments는 있을 수 있음
+            fragments = bams.get_fragments_by_source(source_id)
+            if fragments:
+                # 분석이 중단된 상태로 간주 -> 재분석 트리거 시도
+                source = bams.get_source(source_id)
+                if source and os.path.exists(source.file_path):
+                    stage = bams.get_analysis_stage(source_id)
+                    job = {
+                        "status": "ANALYSIS_RUNNING",
+                        "progress": 30,
+                        "stage": f"restored_{stage}",
+                        "source_id": source_id,
+                        "error": None
+                    }
+                    _fragment_job_registry[source_id] = job
+                    background_tasks.add_task(_background_whisper, source_id, source.file_path, fragments)
+                    background_tasks.add_task(_background_panorama, source_id, source.file_path, fragments)
+                    background_tasks.add_task(_background_signal_analysis, source_id, source.file_path, fragments)
+                    print(f"[STATUS] Registry restored (RUNNING) from DB for {source_id} at stage {stage}")
+                else:
+                    # 파일까지 없으면 실패로 간주
+                    return {"status": "FAILED", "source_id": source_id, "error": "Source file missing or registry lost"}
+            else:
+                return {"status": "NOT_FOUND", "source_id": source_id}
+
     return {
         "status": job.get("status", "PENDING"),
         "progress": job.get("progress", 0),
