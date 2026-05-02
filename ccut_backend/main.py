@@ -94,6 +94,33 @@ _batch_registry: dict[str, dict] = {}
 # 진행 중인 program_id → batch_id 역방향 인덱스 (중복 요청 감지용)
 _program_to_batch: dict[str, str] = {}
 
+def init_job_timing():
+    return {
+        "upload_start": None,
+        "raw_start": None,
+        "raw_done": None,
+        "semantic_start": None,
+        "semantic_done": None,
+        "proposal_start": None,
+        "proposal_done": None,
+        "analysis_done": None
+    }
+
+def get_timing_summary(timing: dict):
+    if not timing:
+        return None
+    def _diff(end, start):
+        if end is not None and start is not None and end > start:
+            return round(end - start, 2)
+        return None
+
+    return {
+        "raw_sec": _diff(timing.get("raw_done"), timing.get("raw_start")),
+        "semantic_sec": _diff(timing.get("semantic_done"), timing.get("semantic_start")),
+        "proposal_sec": _diff(timing.get("proposal_done"), timing.get("proposal_start")),
+        "total_sec": _diff(timing.get("analysis_done"), timing.get("upload_start"))
+    }
+
 
 @app.get("/health")
 async def health_check():
@@ -126,6 +153,7 @@ async def upload_video(background_tasks: BackgroundTasks, file: UploadFile = Fil
         fingerprint = video_engine.generate_fingerprint(abs_path)
         
         existing = bams.get_source_by_hash(fingerprint)
+        source_id = None
         if existing:
             source_id = existing.source_id
             print(f"[UPLOAD] Fingerprint HIT: {fingerprint} -> source_id={source_id}")
@@ -140,8 +168,10 @@ async def upload_video(background_tasks: BackgroundTasks, file: UploadFile = Fil
                         "progress": 100,
                         "stage": "proposal_generation",
                         "source_id": source_id,
-                        "error": None
+                        "error": None,
+                        "timing": init_job_timing()
                     }
+                    _fragment_job_registry[source_id]["timing"]["upload_start"] = time.time()
                 else:
                     # 기존 분석 결과가 없거나 불완전한 경우 -> 재분석 트리거
                     fragments = bams.get_fragments_by_source(source_id)
@@ -153,8 +183,10 @@ async def upload_video(background_tasks: BackgroundTasks, file: UploadFile = Fil
                             "progress": 30,
                             "stage": f"reanalysis_{stage}",
                             "source_id": source_id,
-                            "error": None
+                            "error": None,
+                            "timing": init_job_timing()
                         }
+                        _fragment_job_registry[source_id]["timing"]["upload_start"] = time.time()
                         background_tasks.add_task(_background_whisper, source_id, abs_path, fragments)
                         background_tasks.add_task(_background_panorama, source_id, abs_path, fragments)
                         background_tasks.add_task(_background_signal_analysis, source_id, abs_path, fragments)
@@ -164,8 +196,10 @@ async def upload_video(background_tasks: BackgroundTasks, file: UploadFile = Fil
                             "status": "PENDING",
                             "progress": 0,
                             "source_id": source_id,
-                            "error": None
+                            "error": None,
+                            "timing": init_job_timing()
                         }
+                        _fragment_job_registry[source_id]["timing"]["upload_start"] = time.time()
             else:
                 # 기존에 FAILED 상태였다면 재시도를 위해 초기화 및 재실행
                 job = _fragment_job_registry[source_id]
@@ -201,6 +235,16 @@ async def upload_video(background_tasks: BackgroundTasks, file: UploadFile = Fil
 
         source_id = f"SRC_{uuid.uuid4().hex[:8].upper()}"
         _upload_registry[source_id] = abs_path
+        
+        # [STEP 10-I.5.22-D] Initialize registry for new source
+        _fragment_job_registry[source_id] = {
+            "status": "PENDING",
+            "progress": 0,
+            "source_id": source_id,
+            "error": None,
+            "timing": init_job_timing()
+        }
+        _fragment_job_registry[source_id]["timing"]["upload_start"] = time.time()
 
         # [STEP 1] 보완: 1차 업로드 시점에 DB에 hash_value를 등록해야 2차 업로드 시 hit 가능
         source_data = {
@@ -239,7 +283,11 @@ def _background_whisper(source_id: str, video_path: str, fragments: list):
 
     # Update registry: 시작 상태 기록
     if source_id in _fragment_job_registry:
-        _fragment_job_registry[source_id]["status"] = "ANALYSIS_RUNNING"
+        job = _fragment_job_registry[source_id]
+        job["status"] = "ANALYSIS_RUNNING"
+        if "timing" not in job:
+            job["timing"] = init_job_timing()
+        job["timing"]["raw_start"] = time.time()
 
     import importlib
     import engine.ai_engine
@@ -339,8 +387,12 @@ def _background_whisper(source_id: str, video_path: str, fragments: list):
         # [STEP 10-I.5.2] Semantic Analysis & Proposal Generation Trigger
         print(f"[PIPELINE] Triggering Semantic Analysis for {source_id}")
         if source_id in _fragment_job_registry:
-            _fragment_job_registry[source_id]["stage"] = "semantic_boundary"
-            _fragment_job_registry[source_id]["progress"] = 80
+            job = _fragment_job_registry[source_id]
+            job["stage"] = "semantic_boundary"
+            job["progress"] = 80
+            if "timing" in job:
+                job["timing"]["raw_done"] = time.time()
+                job["timing"]["semantic_start"] = time.time()
 
         from engine.semantic_engine import SemanticFragmentGenerator
         from engine.proposal_engine import ProposalEngine
@@ -349,16 +401,30 @@ def _background_whisper(source_id: str, video_path: str, fragments: list):
         sem_gen.generate(source_id)
         
         if source_id in _fragment_job_registry:
-            _fragment_job_registry[source_id]["stage"] = "proposal_generation"
-            _fragment_job_registry[source_id]["progress"] = 90
+            job = _fragment_job_registry[source_id]
+            job["stage"] = "proposal_generation"
+            job["progress"] = 90
+            if "timing" in job:
+                job["timing"]["semantic_done"] = time.time()
+                job["timing"]["proposal_start"] = time.time()
 
         prop_eng = ProposalEngine(bams)
         prop_eng.generate_proposals(source_id)
         
+        if source_id in _fragment_job_registry:
+            job = _fragment_job_registry[source_id]
+            if "timing" in job:
+                job["timing"]["proposal_done"] = time.time()
+        
         # 완료 상태 기록
         if source_id in _fragment_job_registry:
-            _fragment_job_registry[source_id]["status"] = "ANALYSIS_COMPLETE"
-            _fragment_job_registry[source_id]["progress"] = 100
+            job = _fragment_job_registry[source_id]
+            job["status"] = "ANALYSIS_COMPLETE"
+            job["progress"] = 100
+            if "timing" in job:
+                job["timing"]["analysis_done"] = time.time()
+                summary = get_timing_summary(job["timing"])
+                print(f"[PIPELINE-TIMING] source={source_id} raw={summary['raw_sec']}s semantic={summary['semantic_sec']}s proposal={summary['proposal_sec']}s total={summary['total_sec']}s")
             
         print(f"[ASR BG] {source_id} 완료 (Semantic/Proposals Ready)")
     except Exception as e:
@@ -583,6 +649,9 @@ async def generate_fragments(
 
     if not is_new_source and proposals:
         print(f"[GENERATE-FRAGMENTS] Already Analyzed: {source_id}")
+        existing_job = _fragment_job_registry.get(source_id)
+        upload_start = existing_job["timing"]["upload_start"] if (existing_job and "timing" in existing_job) else time.time()
+        
         _fragment_job_registry[source_id] = {
             "progress": 100,
             "status": "ANALYSIS_COMPLETE",
@@ -590,17 +659,24 @@ async def generate_fragments(
             "source_id": source_id,
             "fragment_count": len(fragments),
             "analysis_mode": analysis_mode,
-            "error": None
+            "error": None,
+            "timing": init_job_timing()
         }
+        _fragment_job_registry[source_id]["timing"]["upload_start"] = upload_start
     else:
+        existing_job = _fragment_job_registry.get(source_id)
+        upload_start = existing_job["timing"]["upload_start"] if (existing_job and "timing" in existing_job) else time.time()
+
         _fragment_job_registry[source_id] = {
             "progress": 30, # L1 작업 완료 직후이므로 30% 정도로 표시
             "status": "FRAGMENT_READY",
             "source_id": source_id,
             "fragment_count": len(fragments),
             "analysis_mode": analysis_mode,
-            "error": None
+            "error": None,
+            "timing": init_job_timing()
         }
+        _fragment_job_registry[source_id]["timing"]["upload_start"] = upload_start
 
         background_tasks.add_task(_background_whisper, source_id, resolved_path, fragments)
         background_tasks.add_task(_background_panorama, source_id, resolved_path, fragments)
@@ -638,7 +714,8 @@ async def get_fragment_analysis_status(source_id: str, background_tasks: Backgro
                 "progress": 100,
                 "stage": "proposal_generation",
                 "source_id": source_id,
-                "error": None
+                "error": None,
+                "timing": init_job_timing()
             }
             _fragment_job_registry[source_id] = job
             print(f"[STATUS] Registry restored (COMPLETE) from DB for {source_id}")
@@ -655,7 +732,8 @@ async def get_fragment_analysis_status(source_id: str, background_tasks: Backgro
                         "progress": 30,
                         "stage": f"restored_{stage}",
                         "source_id": source_id,
-                        "error": None
+                        "error": None,
+                        "timing": init_job_timing()
                     }
                     _fragment_job_registry[source_id] = job
                     background_tasks.add_task(_background_whisper, source_id, source.file_path, fragments)
@@ -674,6 +752,7 @@ async def get_fragment_analysis_status(source_id: str, background_tasks: Backgro
         "stage": job.get("stage", "initial"),
         "source_id": source_id,
         "error": job.get("error"),
+        "timing_summary": get_timing_summary(job.get("timing"))
     }
 
 @app.get("/fragments/{source_id}")
