@@ -350,8 +350,8 @@ class ProposalEngine:
             f"멀티 소스 환경에서 {'교차 편집' if is_multi else '단일 흐름'}을 최우선으로 고려했습니다."
         )
 
-        # 2. Source Summaries
-        source_summaries = self._summarize_sources(source_ids, fragments_pool)
+        # 2. Source Summaries (전체 분석 조각 vs 제안 사용 조각 구분)
+        source_summaries = self._summarize_sources(source_ids, fragments_pool, selected_sequence)
 
         # 3. Storyline Trace
         storyline = self._trace_storyline(selected_sequence)
@@ -374,14 +374,27 @@ class ProposalEngine:
             "quality_warnings": quality_warnings
         }
 
-    def _summarize_sources(self, source_ids, fragments_pool):
+    def _summarize_sources(self, source_ids, fragments_pool, selected_sequence=None):
         summaries = []
-        labels = ["A", "B", "C", "D", "E"] # Simple labels
+        labels = ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J"] 
         
-        for i, sid in enumerate(source_ids):
+        # [STEP 10-I.5.27-E6] Stable Dedupe & Labeling Normalize
+        clean_source_ids = []
+        seen_ids = set()
+        for sid in source_ids:
+            if sid and sid not in seen_ids:
+                clean_source_ids.append(sid)
+                seen_ids.add(sid)
+
+        for i, sid in enumerate(clean_source_ids):
             src_frags = [f for f in fragments_pool if f.get("source_id") == sid]
             if not src_frags: continue
             
+            # [STEP 10-I.5.27-E6] 제안 사용 조각 수 계산
+            proposed_count = 0
+            if selected_sequence:
+                proposed_count = sum(1 for f in selected_sequence if f.get("source_id") == sid)
+
             # Dominant Topic & Visual Character
             topics = [f.get("semantic", {}).get("topic", "general") for f in src_frags]
             dom_topic = max(set(topics), key=topics.count) if topics else "unknown"
@@ -398,12 +411,13 @@ class ProposalEngine:
 
             summaries.append({
                 "source_id": sid,
-                "source_label": labels[i] if i < len(labels) else f"S{i}",
+                "source_label": labels[i] if i < len(labels) else f"S{i+1}",
                 "summary": f"{len(src_frags)}개의 장면 조각이 분석되었습니다.",
                 "dominant_topic": dom_topic,
                 "visual_character": visual_char,
                 "audio_text_status": audio_status,
-                "fragment_count": len(src_frags)
+                "fragment_count": len(src_frags),
+                "proposed_count": proposed_count # [STEP 10-I.5.27-E6] 추가
             })
         return summaries
 

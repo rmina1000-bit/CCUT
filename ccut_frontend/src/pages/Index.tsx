@@ -361,8 +361,11 @@ const Index: React.FC = () => {
 
               try {
                 if (completedSourceIds.length >= 2) {
+                  // [STEP 10-I.5.27-E6] Source Identity Normalize: 업로드 순서(uploadedSourceIds) 유지
+                  const orderedSourceIds = uploadedSourceIds.filter(id => completedSourceIds.includes(id));
+                  
                   // 멀티 소스 프로젝트 제안
-                  proposalData = await videoService.requestProjectProposals(projectId, completedSourceIds, 60.0);
+                  proposalData = await videoService.requestProjectProposals(projectId, orderedSourceIds, 60.0);
                   console.log("[proposal-project] Diagnostics:", {
                     project_id: proposalData.project_id,
                     source_ids: proposalData.source_ids,

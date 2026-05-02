@@ -984,15 +984,21 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
                             <ChevronDown size={10} className="group-open/details:rotate-180 transition-transform" />
                           </summary>
                           <div className="mt-2 grid grid-cols-1 gap-2 border-l border-white/5 pl-3 py-1">
-                            {p.proposal_explanation.source_summaries.map((src: any) => (
-                              <div key={src.source_id} className="flex flex-col">
+                            {p.proposal_explanation.source_summaries.map((src: any, idx: number) => (
+                              <div key={`${src.source_id}-${idx}`} className="flex flex-col">
                                 <div className="flex items-center gap-2">
                                   <span className="text-[10px] font-bold text-foreground/70">소스 {src.source_label}</span>
                                   <span className="text-[9px] px-1.5 py-0.5 bg-white/5 rounded text-muted-foreground/60">{src.dominant_topic}</span>
                                 </div>
-                                <p className="text-[9px] text-muted-foreground/40 mt-0.5">
-                                  {src.visual_character} ({src.fragment_count}개 조각)
-                                </p>
+                                <div className="flex items-center gap-2 mt-0.5">
+                                  <p className="text-[9px] text-muted-foreground/40">
+                                    {src.visual_character}
+                                  </p>
+                                  <div className="flex gap-2 text-[9px] font-medium">
+                                    <span className="text-muted-foreground/30">분석된 의미 조각: {src.fragment_count}개</span>
+                                    <span className="text-primary/40">제안 사용 조각: {src.proposed_count ?? 0}개</span>
+                                  </div>
+                                </div>
                               </div>
                             ))}
                           </div>

@@ -1001,7 +1001,16 @@ async def post_generate_project_proposals(req: ProjectProposalRequest):
     from engine.proposal_engine import ProposalEngine
 
     project_id = req.project_id
-    source_ids = req.source_ids
+    
+    # [STEP 10-I.5.27-E6] Stable Dedupe: 순서 보존하며 중복 제거
+    raw_source_ids = req.source_ids
+    source_ids = []
+    seen = set()
+    for sid in raw_source_ids:
+        if sid and sid not in seen:
+            source_ids.append(sid)
+            seen.add(sid)
+            
     target_len = req.target_length
 
     if not source_ids:
