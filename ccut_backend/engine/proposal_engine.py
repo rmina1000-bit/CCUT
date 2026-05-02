@@ -101,13 +101,18 @@ class ProposalEngine:
             "bridge": bridge_details if bridge_details else None
         }
 
+        story_data = self._generate_story("A", selected)
+        story_data["proposal_id"] = f"PROP_A_{uuid.uuid4().hex[:6].upper()}_{source_id}"
+        story_data["mode"] = "A"
+
         return {
-            "proposal_id": f"PROP_A_{uuid.uuid4().hex[:6].upper()}_{source_id}",
+            "proposal_id": story_data["proposal_id"],
             "source_id": source_id,
             "mode": "A",
             "sequence": selected,
             "duration": round(current_len, 2),
             "proposal_reason": reason_data,
+            "proposal_story": story_data,
             "confidence": 0.9,
             "fallback_reason": fallback
         }
@@ -182,13 +187,18 @@ class ProposalEngine:
             "bridge": bridge_details if bridge_details else None
         }
 
+        story_data = self._generate_story("B", selected)
+        story_data["proposal_id"] = f"PROP_B_{uuid.uuid4().hex[:6].upper()}_{source_id}"
+        story_data["mode"] = "B"
+
         return {
-            "proposal_id": f"PROP_B_{uuid.uuid4().hex[:6].upper()}_{source_id}",
+            "proposal_id": story_data["proposal_id"],
             "source_id": source_id,
             "mode": "B",
             "sequence": selected,
             "duration": round(current_len, 2),
             "proposal_reason": reason_data,
+            "proposal_story": story_data,
             "confidence": 0.85,
             "fallback_reason": fallback
         }
@@ -238,6 +248,36 @@ class ProposalEngine:
         
         print(f"[PROPOSAL ENGINE] _insert_bridges EXIT: final={len(res)}, bridges={len(bridge_details)}")
         return res, bridge_details
+
+    def _generate_story(self, mode, sequence):
+        """
+        [STEP 4] 편집 스토리 / 시나리오 요약 생성
+        """
+        if mode == "A":
+            title = "시장형 편집"
+            story = (
+                "초반에는 가장 눈에 들어오는 장면으로 시작해 시선을 끕니다. "
+                "이후 움직임이 있는 장면을 이어 붙여 영상의 리듬을 빠르게 만들고, "
+                "중복되는 구간은 줄여 짧고 선명한 흐름으로 정리합니다. "
+                "마지막은 안정적인 장면으로 마무리해 전체 인상을 깔끔하게 남깁니다."
+            )
+            keywords = ["초반 몰입", "빠른 전개", "반복 최소화", "짧은 완성도"]
+        else:
+            title = "사용자친화형 편집"
+            story = (
+                "처음에는 원본의 분위기를 자연스럽게 보여주며 시작합니다. "
+                "장면의 시간 흐름을 크게 흔들지 않고 이어가며, "
+                "사용자가 촬영한 현장의 느낌을 유지합니다. "
+                "중복되는 부분만 가볍게 줄이고 자연스럽게 마무리합니다."
+            )
+            keywords = ["원본 흐름 유지", "자연스러운 전개", "기록성", "편안한 감상"]
+
+        return {
+            "title": title,
+            "story_summary": story,
+            "intent_keywords": keywords,
+            "hidden_fragment_refs": [f.get("fragment_id") for f in sequence]
+        }
 
     def _safe_duration(self, frag):
         """[STEP 10-I.5.19] 안전하게 duration 산출 (NoneType crash 방지)"""
