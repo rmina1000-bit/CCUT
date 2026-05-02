@@ -1147,7 +1147,6 @@ async def post_generate_proposals(source_id: str):
             "traceback": traceback.format_exc()
         }
 
-        }
 
 @app.get("/proposals/{source_id}")
 async def get_proposals_api(source_id: str):
