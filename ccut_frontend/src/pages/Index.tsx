@@ -112,6 +112,8 @@ const Index: React.FC = () => {
     label: string;
     video_url: string;
     fragments: Fragment[];
+    file_size_bytes?: number;
+    duration_sec?: number;
   };
   const [sourceEntries, setSourceEntries] = useState<SourceEntry[]>([]);
 
@@ -198,9 +200,7 @@ const Index: React.FC = () => {
               duration: durationFrames,
               thumbnail_hue: idx % 2 === 0 ? 211 : 30,
               thumbnail: {
-                thumbnail_url:
-                  toFullUrl(rawThumb) ??
-                  `http://127.0.0.1:8000/static/thumbnails/${f.fragment_id}.jpg`,
+                thumbnail_url: toFullUrl(rawThumb) ?? null,
               },
               intelligence: {
                 hook_score: f.intelligence?.hook_score || f.structural?.market_value || 0.5,
@@ -247,6 +247,8 @@ const Index: React.FC = () => {
             label,
             video_url: vurl,
             fragments: initialFrags,
+            file_size_bytes: allFiles[i].size,
+            duration_sec: initialFrags.length > 0 ? initialFrags[initialFrags.length - 1].end_frame / 30 : 0
           });
 
           console.log(`[N-01] ${label}: ${initialFrags.length}개 초벌 조각 완료`);
@@ -870,11 +872,12 @@ const Index: React.FC = () => {
           sources={
             sourceEntries.length > 0
               ? sourceEntries.map((e) => ({
-                source_id: e.label,
+                source_id: e.source_id,
+                label: e.label,
                 video_url: e.video_url,
               }))
               : currentSourceId
-                ? [{ source_id: "A", video_url: currentVideoUrl || undefined }]
+                ? [{ source_id: currentSourceId, label: "A", video_url: currentVideoUrl || undefined }]
                 : []
           }
         />

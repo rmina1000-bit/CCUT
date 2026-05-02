@@ -451,8 +451,11 @@ def _background_panorama(source_id: str, video_path: str, fragments: list):
                 frag["start_time"],
                 frag["fragment_id"],
             )
-            bams.update_fragment_thumb(frag["fragment_id"], thumb_path)
-            print(f"[PANORAMA BG] {frag['fragment_id']} 썸네일 생성 완료: {thumb_path}")
+            if thumb_path:
+                bams.update_fragment_thumb(frag["fragment_id"], thumb_path)
+                print(f"[PANORAMA BG] {frag['fragment_id']} 썸네일 생성 완료: {thumb_path}")
+            else:
+                print(f"[PANORAMA BG] {frag['fragment_id']} 썸네일 생성 실패 (None)")
         except Exception as e:
             print(f"[PANORAMA BG] {frag['fragment_id']} 썸네일 실패: {e}")
     print(f"[PANORAMA BG] source_id={source_id} 파노라마 전체 완료")

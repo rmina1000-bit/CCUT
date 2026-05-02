@@ -131,14 +131,15 @@ class BAMSManager:
         with SessionLocal() as db:
             frag = db.query(FragmentTable).filter_by(fragment_id=fragment_id).first()
             if frag:
-                thumb_url = f"http://localhost:8000/static/thumbnails/{fragment_id}.jpg"
-                frag.intelligence = {**(frag.intelligence or {}), "thumb_url": thumb_url}
+                # [STEP 10-I.5.27-E6-R3] Stop hardcoded speculative URLs in DB
+                # thumb_url = f"http://localhost:8000/static/thumbnails/{fragment_id}.jpg"
+                # frag.intelligence = {**(frag.intelligence or {}), "thumb_url": thumb_url}
                 db.commit()
                 
-                # [STEP 2] Evidence Board에 키프레임 실데이터 반영
+                # [STEP 2] Evidence Board sync (Keep local path or relative)
                 self.update_evidence(fragment_id, {
                     "worker_name": "keyframe",
-                    "keyframe": thumb_url,
+                    "keyframe": f"/static/thumbnails/{fragment_id}.jpg",
                     "confidence": 1.0,
                     "fallback_reason": None
                 })

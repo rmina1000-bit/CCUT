@@ -44,8 +44,8 @@ export const videoService = {
         return await response.json();
     },
 
-    getThumb: (fragId: string) => `${API_BASE_URL}/static/thumbnails/${fragId}.jpg`,
-    getThumbnailUrl: (fragId: string) => `${API_BASE_URL}/static/thumbnails/${fragId}.jpg`,
+    getThumb: (fragId: string) => null,
+    getThumbnailUrl: (fragId: string) => null,
 
     getFragmentsFromDB: async (sourceId: string) => {
         return await fetcher(`/fragments/${encodeURIComponent(sourceId)}`);

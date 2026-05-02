@@ -1,4 +1,4 @@
-﻿import subprocess
+import subprocess
 import json
 import os
 import hashlib
@@ -100,25 +100,26 @@ class VideoEngine:
         if output_path.exists():
             return str(output_path)
             
-        if not os.path.exists(video_path):
-            return str(output_path)
+        if not video_path or not os.path.exists(video_path):
+            return None
             
         cmd = [
             'ffmpeg', '-y', '-ss', str(timestamp), '-i', video_path,
             '-vframes', '1', '-q:v', '2', str(output_path)
         ]
         try:
-            subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
+            if output_path.exists():
+                return str(output_path)
         except Exception as e:
-            print(f"ffmpeg thumb error: {e}")
-        return str(output_path)
+            print(f"[VideoEngine] ffmpeg thumb error: {e}")
+        return None
 
     def create_fragment_clip(self, video_path, start, duration, output_name):
         """실제로 영상을 잘라 개별 조각 파일(.mp4) 생성"""
         output_path = self.fragments_path / f"{output_name}.mp4"
-        if not os.path.exists(video_path):
-            output_path.touch()
-            return str(output_path)
+        if not video_path or not os.path.exists(video_path):
+            return None
             
         cmd = [
             'ffmpeg', '-y', '-ss', str(start), '-t', str(duration),
@@ -126,10 +127,12 @@ class VideoEngine:
             '-crf', '23', '-c:a', 'aac', str(output_path)
         ]
         try:
-            subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
+            if output_path.exists():
+                return str(output_path)
         except Exception as e:
-            print(f"ffmpeg clip error: {e}")
-        return str(output_path)
+            print(f"[VideoEngine] ffmpeg clip error: {e}")
+        return None
 
     def extract_panorama_frames(self, video_path, start, end, num_frames=12, prefix="panorama"):
         """조각의 구간을 12프레임으로 쪼개서 추출 (Race Condition 방지 + 존재 보장)"""

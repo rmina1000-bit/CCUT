@@ -91,7 +91,7 @@ const OriginalPanorama: React.FC<OriginalPanoramaProps> = ({
                       : "text-muted-foreground/60 hover:text-foreground/70 hover:bg-secondary/40"
                     }`}
                 >
-                  {s.source_id.split('_').pop() || s.source_id}
+                  {(s as any).label || (s.source_id.split('_').pop() || s.source_id)}
                 </button>
               ))}
             </div>

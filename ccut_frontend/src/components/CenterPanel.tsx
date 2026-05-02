@@ -12,6 +12,8 @@ type SourceEntry = {
   label: string;
   video_url: string;
   fragments: Fragment[];
+  file_size_bytes?: number;
+  duration_sec?: number;
 };
 
 interface CenterPanelProps {
@@ -80,6 +82,19 @@ function parseDirectionFromText(text: string): Direction | null {
 
   return Object.keys(direction).length > 0 ? direction : null;
 }
+
+const formatMB = (bytes?: number) => {
+  if (!bytes) return "0MB";
+  return `${(bytes / (1024 * 1024)).toFixed(1)}MB`;
+};
+
+const formatDuration = (seconds?: number) => {
+  if (!seconds) return "0초";
+  const mins = Math.floor(seconds / 60);
+  const secs = Math.floor(seconds % 60);
+  if (mins > 0) return `${mins}분 ${secs}초`;
+  return `${secs}초`;
+};
 
 const CenterPanel: React.FC<CenterPanelProps> = ({
   selectedFragment,
@@ -995,25 +1010,39 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
                             <ChevronDown size={10} className="group-open/details:rotate-180 transition-transform" />
                           </summary>
                           <div className="mt-2 grid grid-cols-1 gap-2 border-l border-white/5 pl-3 py-1">
-                            {p.proposal_explanation.source_summaries.map((src: any, idx: number) => (
-                              <div key={`${src.source_id}-${idx}`} className="flex flex-col">
-                                <div className="flex items-center gap-2">
-                                  <span className="text-[10px] font-bold text-foreground/70">
-                                    소스 {sourceLabelMap[src.source_id] || src.source_label || labels[idx] || `S${idx + 1}`}
-                                  </span>
-                                  <span className="text-[9px] px-1.5 py-0.5 bg-white/5 rounded text-muted-foreground/60">{src.dominant_topic}</span>
-                                </div>
-                                <div className="flex items-center gap-2 mt-0.5">
-                                  <p className="text-[9px] text-muted-foreground/40">
-                                    {src.visual_character}
-                                  </p>
-                                  <div className="flex gap-2 text-[9px] font-medium">
-                                    <span className="text-muted-foreground/30">분석된 의미 조각: {src.fragment_count}개</span>
-                                    <span className="text-primary/40">제안 사용 조각: {src.proposed_count ?? 0}개</span>
+                            {p.proposal_explanation.source_summaries
+                              .filter((src: any) => sourceLabelMap[src.source_id]) // [STEP 10-I.5.27-E6-R2] 실제 업로드된 영상만 표시
+                              .map((src: any, idx: number) => {
+                                const entry = sourceEntries?.find(e => e.source_id === src.source_id);
+                                // [STEP 10-I.5.27-E6-R3] Frontend-driven recount for stability
+                                const realProposedCount = fragments.filter(f => 
+                                  f.source_id === src.source_id || 
+                                  f.fragment_id?.includes(`_SRC_${src.source_id}`)
+                                ).length;
+
+                                return (
+                                  <div key={`${src.source_id}-${idx}`} className="flex flex-col">
+                                    <div className="flex items-center gap-2">
+                                      <span className="text-[10px] font-bold text-foreground/70">
+                                        영상 {sourceLabelMap[src.source_id] || src.source_label || labels[idx] || `S${idx + 1}`}
+                                      </span>
+                                      <span className="text-[9px] text-muted-foreground/30 font-medium">
+                                        · {formatMB(entry?.file_size_bytes)} · {formatDuration(entry?.duration_sec)}
+                                      </span>
+                                      <span className="text-[9px] px-1.5 py-0.5 bg-white/5 rounded text-muted-foreground/60 ml-auto">{src.dominant_topic}</span>
+                                    </div>
+                                    <div className="flex items-center gap-2 mt-0.5">
+                                      <p className="text-[9px] text-muted-foreground/40">
+                                        {src.visual_character}
+                                      </p>
+                                      <div className="flex gap-2 text-[9px] font-medium">
+                                        <span className="text-muted-foreground/30">분석된 의미 조각: {src.fragment_count}개</span>
+                                        <span className="text-primary/40">제안 사용 조각: {realProposedCount}개</span>
+                                      </div>
+                                    </div>
                                   </div>
-                                </div>
-                              </div>
-                            ))}
+                                );
+                              })}
                           </div>
                         </details>
                       )}
