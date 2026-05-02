@@ -72,10 +72,17 @@ class ProposalEngine:
         
         proposals = [p_a, p_b]
         
-        # 응답에 source_ids 명시
+        # 4. Explanation & Storyline Trace 추가 (STEP 10-I.5.25)
         for p in proposals:
             p["project_id"] = project_id
             p["source_ids"] = source_ids
+            p["proposal_explanation"] = self._generate_explanation(
+                project_id=project_id,
+                source_ids=source_ids,
+                fragments_pool=fragments,
+                selected_sequence=p["sequence"],
+                mode=p["mode"]
+            )
 
         print(f"[PROPOSAL ENGINE] generate_proposals_from_fragments EXIT: {project_id}")
         return proposals
@@ -325,6 +332,183 @@ class ProposalEngine:
             "intent_keywords": keywords,
             "hidden_fragment_refs": [f.get("fragment_id") for f in sequence]
         }
+
+    # ═══════════════════════════════════════════════════════════════════
+    #   [STEP 10-I.5.25] Explanation & Storyline Trace Logic
+    # ═══════════════════════════════════════════════════════════════════
+
+    def _generate_explanation(self, project_id, source_ids, fragments_pool, selected_sequence, mode):
+        """사람이 읽을 수 있는 제안 근거 및 스토리라인 추적 생성"""
+        
+        is_multi = len(source_ids) > 1
+        mode_label = "시장형(Market)" if mode == "A" else "사용자친화형(User)"
+        
+        # 1. Project Summary
+        summary = (
+            f"이 프로젝트는 {len(source_ids)}개의 소스 영상을 분석하여 "
+            f"{mode_label} 관점으로 최적의 {len(selected_sequence)}개 장면을 선정했습니다. "
+            f"멀티 소스 환경에서 {'교차 편집' if is_multi else '단일 흐름'}을 최우선으로 고려했습니다."
+        )
+
+        # 2. Source Summaries
+        source_summaries = self._summarize_sources(source_ids, fragments_pool)
+
+        # 3. Storyline Trace
+        storyline = self._trace_storyline(selected_sequence)
+
+        # 4. Selection Reasons
+        selection_reasons = self._build_selection_reasons(selected_sequence, mode)
+
+        # 5. Quality Warnings
+        quality_warnings = self._detect_quality_warnings(source_ids, fragments_pool, selected_sequence)
+
+        return {
+            "project_summary": summary,
+            "source_summaries": source_summaries,
+            "storyline": storyline,
+            "selection_reasons": selection_reasons,
+            "exclusion_policy": [
+                "비슷한 구도나 중복되는 장면군은 다양성을 위해 제외 시도",
+                "지나치게 짧거나 분석 신뢰도가 낮은 조각은 후순위 배치"
+            ],
+            "quality_warnings": quality_warnings
+        }
+
+    def _summarize_sources(self, source_ids, fragments_pool):
+        summaries = []
+        labels = ["A", "B", "C", "D", "E"] # Simple labels
+        
+        for i, sid in enumerate(source_ids):
+            src_frags = [f for f in fragments_pool if f.get("source_id") == sid]
+            if not src_frags: continue
+            
+            # Dominant Topic & Visual Character
+            topics = [f.get("semantic", {}).get("topic", "general") for f in src_frags]
+            dom_topic = max(set(topics), key=topics.count) if topics else "unknown"
+            if dom_topic == "general": dom_topic = "구체 주제 미확정"
+            
+            # Visual character (simplified)
+            roles = [f.get("structural", {}).get("role", "main") for f in src_frags]
+            has_hook = "hook" in roles
+            visual_char = "시각적 임팩트(Hook) 포함" if has_hook else "안정적인 흐름 위주"
+            
+            # Audio status
+            has_transcript = any(f.get("semantic", {}).get("transcript_refs") for f in src_frags)
+            audio_status = "available" if has_transcript else "missing"
+
+            summaries.append({
+                "source_id": sid,
+                "source_label": labels[i] if i < len(labels) else f"S{i}",
+                "summary": f"{len(src_frags)}개의 장면 조각이 분석되었습니다.",
+                "dominant_topic": dom_topic,
+                "visual_character": visual_char,
+                "audio_text_status": audio_status,
+                "fragment_count": len(src_frags)
+            })
+        return summaries
+
+    def _trace_storyline(self, sequence):
+        if not sequence: return []
+        
+        trace = []
+        count = len(sequence)
+        
+        # 1. Opening
+        trace.append({
+            "step": 1,
+            "role": "opening",
+            "description": "가장 시선을 끄는 장면으로 도입부를 구성합니다.",
+            "fragment_refs": [sequence[0].get("fragment_id")]
+        })
+        
+        # 2. Main/Development
+        if count > 2:
+            mid_idx = count // 2
+            mid_frags = sequence[1:-1]
+            # 최대 3개만 표시
+            refs = [f.get("fragment_id") for f in mid_frags[:3]]
+            
+            # 소스 전환 확인
+            sources = set(f.get("source_id") for f in sequence)
+            desc = "전체적인 흐름을 이어가며 주요 내용을 전달합니다."
+            if len(sources) > 1:
+                desc += " 소스 간 교차 편집을 통해 변화를 주었습니다."
+
+            trace.append({
+                "step": 2,
+                "role": "main",
+                "description": desc,
+                "fragment_refs": refs
+            })
+            
+        # 3. Closing
+        trace.append({
+            "step": 3,
+            "role": "closing",
+            "description": "안정적이고 여운이 남는 장면으로 마무리합니다.",
+            "fragment_refs": [sequence[-1].get("fragment_id")]
+        })
+        
+        return trace
+
+    def _build_selection_reasons(self, sequence, mode):
+        reasons = []
+        for i, f in enumerate(sequence):
+            role = f.get("structural", {}).get("role", "main")
+            market_val = f.get("structural", {}).get("market_value", 0.5)
+            edit_val = f.get("structural", {}).get("edit_value", 0.5)
+            
+            reason = "영상 흐름상 적절한 장면으로 판단"
+            if i == 0:
+                reason = "도입부 주목도를 높이기 위해 선정" if role == "hook" else "자연스러운 시작을 위해 선정"
+            elif i == len(sequence) - 1:
+                reason = "깔끔한 마무리를 위해 선정"
+            elif role == "hook":
+                reason = "중간 몰입도를 유지하는 하이라이트 장면"
+            elif mode == "A" and market_val > 0.7:
+                reason = "대중적 선호도가 높은 시각적 구성"
+            elif mode == "B" and edit_val > 0.7:
+                reason = "사용자의 편집 의도와 일치하는 맥락"
+
+            reasons.append({
+                "fragment_id": f.get("fragment_id"),
+                "source_id": f.get("source_id"),
+                "reason": reason,
+                "role": role,
+                "score_basis": {
+                    "market_value": round(float(market_val), 2),
+                    "edit_value": round(float(edit_val), 2),
+                    "confidence": round(float(f.get("confidence", 0.5)), 2)
+                }
+            })
+        return reasons
+
+    def _detect_quality_warnings(self, source_ids, fragments_pool, selected_sequence):
+        warnings = []
+        
+        # 1. Transcript check
+        has_any_transcript = any(f.get("semantic", {}).get("transcript_refs") for f in fragments_pool)
+        if not has_any_transcript:
+            warnings.append("음성 분석 데이터(Transcript)가 없어 시각 정보 위주로 편집되었습니다.")
+            
+        # 2. Generic summary check
+        summaries = [f.get("semantic", {}).get("summary", "") for f in fragments_pool]
+        generic_count = sum(1 for s in summaries if "Visual/Audio Context" in s)
+        if len(fragments_pool) > 0 and (generic_count / len(fragments_pool)) > 0.5:
+            warnings.append("의미 분석 결과가 일반적(Generic)인 조각이 많아 정밀한 주제 선별이 제한되었습니다.")
+            
+        # 3. Source diversity check
+        if len(source_ids) > 1:
+            selected_sources = set(f.get("source_id") for f in selected_sequence)
+            if len(selected_sources) == 1:
+                warnings.append("멀티 소스 입력이나, 실제 선택된 장면은 단일 소스에 집중되어 있습니다.")
+                
+        # 4. Thumbnail repetition
+        thumbs = [f.get("thumbnail", {}).get("thumbnail_url") for f in selected_sequence if f.get("thumbnail")]
+        if len(thumbs) != len(set(thumbs)):
+            warnings.append("비슷한 구간이 중복 선택되었을 가능성이 있습니다. (썸네일 중복)")
+
+        return warnings
 
     def _safe_duration(self, frag):
         """[STEP 10-I.5.19] 안전하게 duration 산출 (NoneType crash 방지)"""
