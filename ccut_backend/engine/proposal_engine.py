@@ -16,43 +16,68 @@ class ProposalEngine:
             print(f"[PROPOSAL ENGINE] No fragments for {source_id}")
             return []
         
-        # [STEP 10-I.5.19] 진단 로그
-        durations = [self._safe_duration(f) for f in fragments]
-        none_count = sum(1 for f in fragments if f.get("structural", {}).get("duration") is None)
-        zero_count = sum(1 for d in durations if d <= 0)
-        print(f"[PROPOSAL ENGINE] Duration Diagnostics - None: {none_count}, Zero: {zero_count}")
-        print(f"[PROPOSAL ENGINE] First 20 durations: {durations[:20]}")
-        
-        print(f"[PROPOSAL ENGINE] Input semantic fragment count: {len(fragments)}")
-        
         user_intent = self.bams.get_user_intent(source_id)
         if not user_intent:
             quick_scan = self.bams.get_quick_scan(source_id)
             user_intent = quick_scan.get("default_intent_seed") if quick_scan else {}
             
         target_len_raw = user_intent.get("target_length", 60.0) if user_intent else 60.0
-        target_len = self._safe_target_len(target_len_raw, fragments)
-        print(f"[PROPOSAL ENGINE] target_len raw: {target_len_raw}, normalized: {target_len}")
+        
+        proposals = self.generate_proposals_from_fragments(
+            project_id=source_id, 
+            source_ids=[source_id], 
+            fragments=fragments, 
+            target_len=target_len_raw
+        )
+        
+        # 5. 저장 (generate_proposals_from_fragments는 저장을 수행하지 않으므로 여기서 수행)
+        self.bams.save_proposals(source_id, proposals)
+        
+        print(f"[PROPOSAL ENGINE] generate_proposals EXIT: {source_id}")
+        return proposals
 
-        # 2. Mode A (Market) 생성
+    def generate_proposals_from_fragments(self, project_id, source_ids, fragments, target_len=60.0):
+        """
+        [STEP 10-I.5.24] 여러 소스의 조각 Pool에서 A/B 제안 생성
+        """
+        print(f"[PROPOSAL ENGINE] generate_proposals_from_fragments ENTER: proj={project_id}, sources={source_ids}")
+        
+        if not fragments:
+            print("[PROPOSAL ENGINE] No fragments provided")
+            return []
+
+        # [STEP 10-I.5.19] 진단 로그
+        durations = [self._safe_duration(f) for f in fragments]
+        none_count = sum(1 for f in fragments if f.get("structural", {}).get("duration") is None)
+        zero_count = sum(1 for d in durations if d <= 0)
+        print(f"[PROPOSAL ENGINE] Pool Diagnostics - Total: {len(fragments)}, None: {none_count}, Zero: {zero_count}")
+        
+        target_len = self._safe_target_len(target_len, fragments)
+        print(f"[PROPOSAL ENGINE] target_len normalized: {target_len}")
+
+        # 1. Mode A (Market) 생성
         print("[PROPOSAL ENGINE] Creating Market Proposal (A)...")
-        p_a = self._create_market_proposal(source_id, fragments, target_len)
+        p_a = self._create_market_proposal(project_id, fragments, target_len)
         
-        # 3. Mode B (User) 생성
+        # 2. Mode B (User) 생성
         print("[PROPOSAL ENGINE] Creating User Proposal (B)...")
-        p_b = self._create_user_proposal(source_id, fragments, target_len, user_intent)
+        # Multi-source용 default intent (B모드용)
+        intent = {"target_length": target_len}
+        p_b = self._create_user_proposal(project_id, fragments, target_len, intent)
         
-        # 4. A/B 차별성 및 정합성 보완 (v3.2.1) - JSON 구조 반영
+        # 3. A/B 차별성 보완
         if [f["fragment_id"] for f in p_a["sequence"]] == [f["fragment_id"] for f in p_b["sequence"]]:
             p_a["proposal_reason"]["sequence_reason"] = "same_sequence_due_to_limited_fragments"
             p_b["proposal_reason"]["sequence_reason"] = "same_sequence_due_to_limited_fragments"
         
         proposals = [p_a, p_b]
         
-        # 5. 저장 및 반환
-        self.bams.save_proposals(source_id, proposals)
-        
-        print(f"[PROPOSAL ENGINE] generate_proposals EXIT: {source_id}")
+        # 응답에 source_ids 명시
+        for p in proposals:
+            p["project_id"] = project_id
+            p["source_ids"] = source_ids
+
+        print(f"[PROPOSAL ENGINE] generate_proposals_from_fragments EXIT: {project_id}")
         return proposals
 
     def _create_market_proposal(self, source_id, fragments, target_len):
@@ -252,25 +277,47 @@ class ProposalEngine:
     def _generate_story(self, mode, sequence):
         """
         [STEP 4] 편집 스토리 / 시나리오 요약 생성
+        [STEP 10-I.5.24] 멀티 소스 감지 및 문구 분기
         """
+        source_ids = set(f.get("source_id") for f in sequence if f.get("source_id"))
+        is_multi = len(source_ids) > 1
+
         if mode == "A":
-            title = "시장형 편집"
-            story = (
-                "초반에는 가장 눈에 들어오는 장면으로 시작해 시선을 끕니다. "
-                "이후 움직임이 있는 장면을 이어 붙여 영상의 리듬을 빠르게 만들고, "
-                "중복되는 구간은 줄여 짧고 선명한 흐름으로 정리합니다. "
-                "마지막은 안정적인 장면으로 마무리해 전체 인상을 깔끔하게 남깁니다."
-            )
-            keywords = ["초반 몰입", "빠른 전개", "반복 최소화", "짧은 완성도"]
+            title = "시장형 편집" if not is_multi else "교차 하이라이트 편집"
+            if not is_multi:
+                story = (
+                    "초반에는 가장 눈에 들어오는 장면으로 시작해 시선을 끕니다. "
+                    "이후 움직임이 있는 장면을 이어 붙여 영상의 리듬을 빠르게 만들고, "
+                    "중복되는 구간은 줄여 짧고 선명한 흐름으로 정리합니다. "
+                    "마지막은 안정적인 장면으로 마무리해 전체 인상을 깔끔하게 남깁니다."
+                )
+                keywords = ["초반 몰입", "빠른 전개", "반복 최소화", "짧은 완성도"]
+            else:
+                story = (
+                    "서로 다른 영상에서 눈에 잘 들어오는 장면을 골라 빠르게 이어 붙집니다. "
+                    "초반에는 가장 선명한 장면으로 시선을 잡고, "
+                    "중간에는 분위기가 다른 장면을 교차시켜 변화감을 만듭니다. "
+                    "마지막은 가장 안정적인 장면으로 정리해 짧은 모음 영상처럼 마무리합니다."
+                )
+                keywords = ["여러 영상 하이라이트", "빠른 전개", "장면 대비", "짧은 완성도"]
         else:
-            title = "사용자친화형 편집"
-            story = (
-                "처음에는 원본의 분위기를 자연스럽게 보여주며 시작합니다. "
-                "장면의 시간 흐름을 크게 흔들지 않고 이어가며, "
-                "사용자가 촬영한 현장의 느낌을 유지합니다. "
-                "중복되는 부분만 가볍게 줄이고 자연스럽게 마무리합니다."
-            )
-            keywords = ["원본 흐름 유지", "자연스러운 전개", "기록성", "편안한 감상"]
+            title = "사용자친화형 편집" if not is_multi else "흐름 통합 편집"
+            if not is_multi:
+                story = (
+                    "처음에는 원본의 분위기를 자연스럽게 보여주며 시작합니다. "
+                    "장면의 시간 흐름을 크게 흔들지 않고 이어가며, "
+                    "사용자가 촬영한 현장의 느낌을 유지합니다. "
+                    "중복되는 부분만 가볍게 줄이고 자연스럽게 마무리합니다."
+                )
+                keywords = ["원본 흐름 유지", "자연스러운 전개", "기록성", "편안한 감상"]
+            else:
+                story = (
+                    "각 영상의 분위기를 크게 섞지 않고, 장면들을 차례로 보여줍니다. "
+                    "서로 다른 장소나 상황은 구간별로 나누어 배치하고, "
+                    "중복되는 부분은 줄이되 원본의 흐름은 유지합니다. "
+                    "전체적으로 하루 기록을 요약한 영상처럼 자연스럽게 정리합니다."
+                )
+                keywords = ["원본 흐름 유지", "여러 장면 정리", "기록성", "편안한 감상"]
 
         return {
             "title": title,
