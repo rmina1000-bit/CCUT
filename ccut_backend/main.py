@@ -35,7 +35,7 @@ from report.generator import report_gen
 # ═══════════════════════════════════════════════════════════════════
 
 BACKEND_DIR = Path(__file__).resolve().parent
-STORAGE_DIR = Path(os.getenv("CCUT_STORAGE_DIR", str(BACKEND_DIR / "storage")))
+STORAGE_DIR = Path(os.getenv("CCUT_STORAGE_DIR", str(BACKEND_DIR / ".." / "storage")))
 UPLOAD_DIR = STORAGE_DIR / "uploads"
 APP_BASE_URL = os.getenv("CCUT_BASE_URL", "http://127.0.0.1:8000").rstrip("/")
 
