@@ -28,4 +28,4 @@ CCUT targets local execution of Narrative LLMs. Several runtime options are avai
 - **Suitability**: Low. Not recommended for primary local inference.
 
 ## 3. Recommendation
-For CCUT 1.0.4, **llama-server** or **Ollama** are the primary candidates. Since Qwen3-ASR already uses a specialized `llama-server.exe`, extending this path to the Narrative LLM provides the most consistent architecture.
+For CCUT 1.0.4, **Ollama** is the primary local runtime candidate for Narrative LLM. **llama-server** remains a secondary consistency candidate because Qwen3-ASR already uses a specialized `llama-server.exe`, but Narrative LLM must remain provider-swappable.

@@ -1,4 +1,4 @@
-# Narrative Model Selection Matrix
+﻿# Narrative Model Selection Matrix
 
 ## 1. Candidate Comparison
 
@@ -16,7 +16,7 @@
 ## 2. Selection Rationale
 
 ### Primary: Qwen3-Instruct
-Chosen for its synergy with the existing Qwen3-ASR pipeline, excellent Korean instruction following, and strong adherence to structured JSON outputs required for `StoryIntentPatch`.
+Chosen for Qwen family continuity, expected Korean instruction following, and potential adherence to structured JSON outputs required for `StoryIntentPatch`. Qwen3-ASR remains ASR-only and is not used for Narrative Chat.
 
 ### Secondary: Mistral
 A reliable fallback with a clean Apache-2.0 license, widely supported across all local runtimes.
