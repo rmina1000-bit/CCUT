@@ -32,11 +32,10 @@
 
 ## Next Priority
 
-1. 문서팩 Narrative 전환 정렬 (Current)
+1. R10-D: Ollama Timeout / keep_alive / JSON Stabilization (Current)
 2. ChatGPT Form Narrative Chat Repair
 3. StoryIntent → Proposal Request 연결
-4. Narrative Draft 품질 향상
-5. Local LLM / External AI Adapter 검토
+4. AI Boundary Integration with main.py (Non-runtime to Runtime)
 
 ---
 

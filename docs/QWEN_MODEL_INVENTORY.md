@@ -16,9 +16,8 @@ Used for Narrative Consultation and StoryIntentPatch generation.
 - **Status**: **MISSING/NOT FOUND**.
 - **Observation**: No Instruct-variant GGUF or Safetensors files were detected in the `ai_models` folders.
 
-### C. Qwen2 (Legacy)
-- **Status**: FOUND in Ollama registry (`qwen2:latest`).
-- **Observation**: Legacy version, not currently used by CCUT 1.0.4 boundary logic.
+- **Status**: **FOUND** in Ollama registry (`qwen2:latest`).
+- **Observation**: Legacy/test-only version. Not suitable for Narrative LLM production.
 
 ### D. Qwen-VL (Vision-Language)
 - **Status**: MISSING. Only placeholders exist in the codebase.
@@ -34,9 +33,10 @@ Used for Narrative Consultation and StoryIntentPatch generation.
 | D:\CCUT1.0.4\...\ai_models | qwen3-asr-1.7b | GGUF | 1.7B |
 | D:\CCUT_1.0.3\...\ai_models | qwen3-asr-0.6b | GGUF | 0.6B |
 | D:\CCUT_1.0.3\...\ai_models | qwen3-asr-1.7b | GGUF | 1.7B |
+| Ollama Registry | qwen3:0.6b | Ollama | 0.6B (Smoke-test/Experimental) |
 | Ollama Registry | qwen2 | Ollama | latest (Legacy/Test-only) |
 
 ## 4. Conclusion
 The current inventory confirms that CCUT has **ASR-specialized Qwen3 models** but lacks the **Instruct-specialized Qwen3 models** required for meaningful Narrative Consultation.
 
-**Next Required Action**: Execute the **Qwen3-Instruct Acquisition Plan (R10-B)** to secure a conversational model for the Narrative LLM provider.
+**Next Required Action**: Execute the **Ollama Stabilization (R10-D)** to address timeouts observed in the smoke-test.

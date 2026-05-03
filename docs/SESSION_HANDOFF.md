@@ -52,17 +52,18 @@ User feedback:
 ## 1. 현재 기준선
 
 - **Branch:** `ccut-1.0.4-step9`
-- **SHA:** `75d0a961c2e7d7caf0fcf4e3fa16c5e4cf47add6`
+- **SHA:** `603c46861d0817e4f47e6539545b0eb3a3c3bc24`
 - **Local path:** `D:\CCUT1.0.4`
 - **Repo:** `https://github.com/rmina1000-bit/CCUT.git`
 - **Last updated:** 2026-05-04
 
-### AI Staff & Qwen3 Baseline
-- AI Staff Strategy (R5B) & Swappable Provider (R7) docs completed.
-- Target Hardware Profiles (R8) & Ollama Probe (R9) implemented.
-- Qwen Model Inventory (R10-A) & Acquisition Plan (R10-B) completed.
-- Qwen3 4B-Instruct (R10-C) set as the Primary Validation Baseline.
-- Experimental probe of Qwen3 0.6B completed (result: latency timeout).
+### Room Close: AI Boundary & Narrative LLM Readiness
+- R5A ~ R10-C completed: AI Boundary, Swappable Provider, Hardware Probe, Qwen Inventory, and 4B Baseline plan.
+- Qwen3-Instruct (4B) is set as the validation baseline.
+- `qwen3:0.6b` manually installed and tested; smoke-test revealed 10s timeout finding.
+- Ollama identified as primary local runtime.
+- `config.yaml` still references legacy 1.0.3 ASR paths (documented as debt).
+- Next: R10-D (Ollama stabilization).
 
 ... (이하 기존 내역 보존)
 

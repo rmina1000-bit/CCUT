@@ -1,8 +1,8 @@
-# CCUT 1.0.4 PROJECT NAVIGATION v3.3.0
+# CCUT 1.0.4 PROJECT NAVIGATION v3.4.0
 
-> **현재 기준 SHA:** `56554c70e76ad03537193d5b560fd19457ce2477`  
+> **현재 기준 SHA:** `603c46861d0817e4f47e6539545b0eb3a3c3bc24`  
 > **Branch:** `ccut-1.0.4-step9`  
-> **완료 단계:** STEP 0 ~ STEP 9 모두 PASS  
+> **완료 단계:** R5A ~ R10-C 모두 PASS (AI Boundary & Baseline 정렬)  
 > **핵심 흐름:** 영상 → 분석 → 편집스토리 초안 → 사용자 협의 → StoryIntent → A/B 제안 → Render  
 > **절대 원칙:** 협의 없이 제안 금지 / StoryIntent 없이 Proposal 생성 금지 / Proposal 없이 Export 금지
 
@@ -20,17 +20,21 @@ CCUT은 사용자의 자연어 의견을 StoryIntent로 정리한 뒤, 그 Story
 
 이 구조는 CCUT을 단순 자동편집툴이 아니라, 영상 데이터를 이해하고 편집 전 사용자와 이야기 방향을 합의하는 로컬 AI 편집 시스템으로 정의한다.
 
-## Roadmap: STEP 10-I.5.28-E9 계열
+## Roadmap: STEP 10-I.5.28-E9 & R10 계열
 
-- E9-PRE: Story Direction Confirmation 설계 (PASS)
-- E9-R1: Story Direction Preview Skeleton (PASS)
-- E9-R1-R1: Story Direction Card Placement Repair (PASS)
 - E9-R2: Pre-Proposal Narrative Consultation Flow (PASS)
-- E9-R2-R1/R2: Chat History / ChatGPT-like UX 시도 (HOLD/REWORK)
-- E9-R2-R3 예정: ChatGPT Form Narrative Chat Repair
-- E9-R3 예정: StoryIntent → Proposal Request 연결
+- R5A: AI Boundary Unification & Skeleton (PASS)
+- R5B: AI Staff Strategy & Model Policy (PASS)
+- R6: Mock Narrative LLM Adapter Contract (PASS)
+- R7: Swappable Narrative LLM Provider Architecture (PASS)
+- R8: Target Hardware Profile & Compatibility Probe (PASS)
+- R9: Ollama Local Narrative Provider Probe (PASS)
+- R10-A: Qwen Model Inventory & Path Hygiene Review (PASS)
+- R10-B: Qwen3-Instruct Acquisition & Ollama Registration Plan (PASS)
+- R10-C: Qwen3 4B Ollama Candidate Install Plan (PASS)
+- R10-D 예정: Ollama Timeout / keep_alive / JSON Response Stabilization
 
-> **주의:** E9-R2는 기능적으로 PASS이나, E9-R2-R1/R2의 채팅 UX는 최종 PASS가 아니다. 다음 작업은 ChatGPT식 익숙한 대화 폼으로 Narrative Consultation UI를 재정렬하는 것이다.
+> **주의:** AI는 CCUT Core가 아니라 AI Staff / Boundary Provider로 정의한다. CCUT Core는 StoryIntentPatch 계약을 통해서만 AI의 조언을 수용하며, 최종 제안 생성 로직(ProposalEngine)은 Core가 직접 소유한다.
 
 ---
 
@@ -57,8 +61,8 @@ CCUT 1.0.4는 **영상 데이터를 의미/이야기 데이터로 해석하고, 
 6. Quick Scan + Hypothesis 생성
 7. **Narrative Consultation (New)**
    - 분석 데이터를 편집스토리 초안으로 변환
-   - 사용자 자연어 의견 수집
-   - StoryIntent 확정
+   - 사용자 자연어 의견 수집 (AI Staff/Core Companion 조언 활용)
+   - StoryIntent 확정 (StoryIntentPatch 적용)
 8. **A/B Proposal 생성 (Guided by StoryIntent)**
 9. Partial/Final 결과 표시
 10. Preview 시 영상 로딩
@@ -71,6 +75,9 @@ CCUT 1.0.4는 **영상 데이터를 의미/이야기 데이터로 해석하고, 
 - 사용자 협의 전 편집 제안 영상 노출 금지
 - StoryIntent 없이 ProposalEngine에 사용자 의도를 강하게 반영했다고 주장 금지
 - Narrative Consultation 이전 Export/Render 접근 금지
+- **AI를 CCUT Core에 Hard-link 금지 (Boundary 필수)**
+- 특정 모델(Qwen 등)에 Core 로직 종속 금지
+- 사용자 승인 없는 모델 자동 다운로드 금지
 - 코드 먼저 작성 금지
 - UI 선행 금지
 - 기존 코드 삭제 금지: 1차는 격리만 허용

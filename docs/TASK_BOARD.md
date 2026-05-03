@@ -30,9 +30,9 @@
 > **Reason:** The structure works, but UX does not yet match the desired ChatGPT-form conversational model.
 
 ### NEXT 📋
+- R10-D Ollama Timeout / keep_alive / num_predict / JSON Response Stabilization
 - E9-R2-R3 ChatGPT Form Narrative Chat Repair
 - E9-R3 StoryIntent → Proposal Request connection
-- E9-R4 Narrative Draft quality upgrade
 - E10 Transition Coherence / Scene Order improvement
 
 ---
