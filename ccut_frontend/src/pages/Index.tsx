@@ -105,6 +105,7 @@ const Index: React.FC = () => {
     handleProposalPreview,
     handleProposalCommit,
     handleReproposal,
+    handleConsultation,
     logProposalPair
   } = useProposalState(sourceFragments);
 
@@ -573,6 +574,9 @@ const Index: React.FC = () => {
         confirmation_status: "pending",
         consultation_status: "draft_ready",
         narrative_draft: draft,
+        messages: [
+            { id: "ai_init", sender: "ai", text: draft, timestamp: Date.now() }
+        ],
         story_intent: {}
     };
 
@@ -951,34 +955,8 @@ const Index: React.FC = () => {
           onCommitProposal={handleProposalCommit}
           onExport={handleExport}
           onReproposal={(dir: any) => {
-            // [STEP 10-I.5.28-E9-R2] Narrative Consultation Intent Handling
             if (storyPlan && storyPlan.consultation_status !== "confirmed") {
-                const text = typeof dir === "string" ? dir : ""; 
-                const lower = text.toLowerCase();
-                
-                if (lower.includes("이대로") || lower.includes("좋아") || lower.includes("진행") || lower.includes("제안해")) {
-                    setStoryPlan({
-                        ...storyPlan,
-                        consultation_status: "confirmed",
-                        confirmation_status: "confirmed"
-                    });
-                    return;
-                }
-
-                // Keyword based intent extraction
-                const intent: any = { ...storyPlan.story_intent };
-                if (lower.includes("빠르게") || lower.includes("템포")) intent.pace = "fast";
-                if (lower.includes("감성") || lower.includes("따뜻")) intent.mood = "warm";
-                if (lower.includes("사람") || lower.includes("가족")) intent.focus = "people";
-                if (lower.includes("풍경") || lower.includes("배경")) intent.focus = "landscape";
-                if (lower.includes("골고루")) intent.coverage = "balanced_sources";
-
-                setStoryPlan({
-                    ...storyPlan,
-                    story_intent: intent,
-                    consultation_status: "user_requested_change",
-                    user_notes: text
-                });
+                handleConsultation(typeof dir === "string" ? dir : "");
                 return;
             }
             handleReproposal(dir);

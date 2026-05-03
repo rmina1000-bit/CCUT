@@ -61,6 +61,13 @@ export type NarrativeConsultationStatus =
   | "user_requested_change"
   | "confirmed";
 
+export type ConsultationMessage = {
+  id: string;
+  sender: "ai" | "user";
+  text: string;
+  timestamp: number;
+};
+
 export type StoryPlanPreview = {
   story_plan_id: string;
   project_type: string;
@@ -79,6 +86,7 @@ export type StoryPlanPreview = {
   consultation_status?: NarrativeConsultationStatus;
   narrative_draft?: string;
   user_notes?: string;
+  messages?: ConsultationMessage[]; 
   story_intent?: {
     pace?: "slow" | "medium" | "fast";
     mood?: "calm" | "warm" | "emotional" | "dynamic";

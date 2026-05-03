@@ -171,9 +171,17 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const videoRefA = useRef<HTMLVideoElement>(null);
   const videoRefB = useRef<HTMLVideoElement>(null);
+  const chatEndRef = useRef<HTMLDivElement>(null);
 
   const [activePlayer, setActivePlayer] = useState<"A" | "B" | null>(null);
   const activePlayerRef = useRef<"A" | "B" | null>(null);
+
+  // Auto scroll for consultation chat
+  useEffect(() => {
+    if (storyPlan?.messages && storyPlan.consultation_status !== "confirmed") {
+        chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    }
+  }, [storyPlan?.messages, storyPlan?.consultation_status]);
 
   const setActivePlayerSafe = useCallback((player: "A" | "B" | null) => {
     activePlayerRef.current = player;
@@ -746,70 +754,69 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
     return (
       <div className="flex-1 w-full px-4 pt-4 flex flex-col items-center space-y-4 overflow-y-auto no-scrollbar pb-20">
         
-        {/* [STEP 10-I.5.28-E9-R2] Pre-Proposal Narrative Consultation View */}
+        {/* [STEP 10-I.5.28-E9-R2-R3] ChatGPT Form Narrative Consultation Chat History */}
         {storyPlan && storyPlan.consultation_status !== "confirmed" && (
-          <div className="w-full max-w-[800px] bg-card/60 border border-primary/30 rounded-3xl p-8 shadow-2xl backdrop-blur-md animate-in fade-in zoom-in duration-500 mt-4">
-            <div className="flex flex-col gap-6">
-              <div className="flex items-center gap-4">
-                <div className="w-12 h-12 rounded-2xl bg-primary/20 flex items-center justify-center">
-                  <BookOpen size={24} className="text-primary" />
-                </div>
-                <div>
-                  <h2 className="text-[18px] font-bold text-foreground">편집스토리 초안 협의</h2>
-                  <p className="text-[12px] text-muted-foreground/70">분석 데이터를 기반으로 먼저 이야기 흐름을 구성했습니다.</p>
-                </div>
-              </div>
-
-              <div className="bg-secondary/20 rounded-2xl p-6 border border-border/10 leading-relaxed text-[14px] text-foreground/90 whitespace-pre-wrap italic">
-                "{storyPlan.narrative_draft}"
-              </div>
-
-              <div className="space-y-4">
-                <p className="text-[12px] font-semibold text-primary/80 uppercase tracking-widest">이 방향이 맞을까요?</p>
-                <div className="flex flex-wrap gap-2">
-                  <button 
-                    className="px-6 py-2.5 bg-primary text-primary-foreground rounded-xl text-[13px] font-bold hover:opacity-90 shadow-xl shadow-primary/20 transition-all hover:scale-105"
-                    onClick={() => onStoryPlanConfirm?.({ ...storyPlan, consultation_status: "confirmed", confirmation_status: "confirmed" })}
-                  >
-                    좋아, 이대로 제안해줘
-                  </button>
-                  <button 
-                    className="px-5 py-2.5 bg-secondary/40 text-foreground rounded-xl text-[13px] font-medium hover:bg-secondary/60 transition-all"
-                    onClick={() => onReproposal?.("사람 중심으로")}
-                  >
-                    사람 중심
-                  </button>
-                  <button 
-                    className="px-5 py-2.5 bg-secondary/40 text-foreground rounded-xl text-[13px] font-medium hover:bg-secondary/60 transition-all"
-                    onClick={() => onReproposal?.("풍경 줄이기")}
-                  >
-                    풍경 줄이기
-                  </button>
-                  <button 
-                    className="px-5 py-2.5 bg-secondary/40 text-foreground rounded-xl text-[13px] font-medium hover:bg-secondary/60 transition-all"
-                    onClick={() => onReproposal?.("더 빠르게")}
-                  >
-                    더 빠르게
-                  </button>
-                  <button 
-                    className="px-5 py-2.5 bg-secondary/40 text-foreground rounded-xl text-[13px] font-medium hover:bg-secondary/60 transition-all"
-                    onClick={() => onReproposal?.("여러 영상을 골고루")}
-                  >
-                    여러 영상을 골고루
-                  </button>
-                </div>
-                <p className="text-[11px] text-muted-foreground/50 italic">아래 채팅창에 원하는 편집 방향을 자유롭게 말씀하셔도 됩니다.</p>
-              </div>
-
-              {storyPlan.consultation_status === "user_requested_change" && (
-                <div className="mt-4 p-4 bg-amber-500/10 border border-amber-500/20 rounded-2xl flex items-center gap-3">
-                  <AlertCircle size={18} className="text-amber-500" />
-                  <div>
-                    <p className="text-[12px] font-bold text-amber-200">의견이 반영되었습니다</p>
-                    <p className="text-[11px] text-amber-200/60">"{storyPlan.user_notes}" 방향을 고려하여 제안을 준비합니다. 완료되면 '이대로 제안해줘'라고 말씀하세요.</p>
+          <div className="w-full max-w-[800px] flex flex-col gap-6 py-8 animate-in fade-in duration-700">
+            
+            {/* Message History */}
+            <div className="flex flex-col gap-8">
+              {(storyPlan.messages || []).map((msg, idx) => (
+                <div key={msg.id} className={`flex ${msg.sender === "user" ? "justify-end" : "justify-start"} animate-in fade-in slide-in-from-bottom-2 duration-500`}>
+                  <div className={`flex gap-4 max-w-[85%] ${msg.sender === "user" ? "flex-row-reverse" : "flex-row"}`}>
+                    <div className={`w-8 h-8 rounded-lg flex-shrink-0 flex items-center justify-center mt-1 ${msg.sender === "ai" ? "bg-primary/10 text-primary" : "bg-secondary/40 text-muted-foreground"}`}>
+                      {msg.sender === "ai" ? <BookOpen size={16} /> : <List size={16} />}
+                    </div>
+                    <div className={`flex flex-col gap-1.5 ${msg.sender === "user" ? "items-end" : "items-start"}`}>
+                      <div className={`px-5 py-3.5 rounded-2xl leading-relaxed text-[14px] whitespace-pre-wrap break-words ${
+                        msg.sender === "user" 
+                          ? "bg-[#161618] border border-white/5 text-foreground/90 rounded-tr-none" 
+                          : "bg-secondary/10 border border-border/5 text-foreground/90 rounded-tl-none"
+                      }`}>
+                        {msg.text}
+                      </div>
+                      <span className="text-[10px] text-muted-foreground/40 px-1">{new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                    </div>
                   </div>
                 </div>
-              )}
+              ))}
+              <div ref={chatEndRef} />
+            </div>
+
+            {/* Suggestion Chips (Secondary) */}
+            <div className="flex flex-col gap-3 mt-4 border-t border-white/5 pt-8">
+              <p className="text-[11px] font-bold text-muted-foreground/40 uppercase tracking-widest px-1">의견 제안</p>
+              <div className="flex flex-wrap gap-2">
+                <button 
+                  className="px-4 py-2 bg-primary/20 text-primary border border-primary/20 rounded-full text-[12px] font-bold hover:bg-primary hover:text-primary-foreground transition-all"
+                  onClick={() => onStoryPlanConfirm?.({ ...storyPlan, consultation_status: "confirmed", confirmation_status: "confirmed" })}
+                >
+                  이대로 제안해줘
+                </button>
+                <button 
+                  className="px-4 py-2 bg-secondary/30 text-muted-foreground border border-white/5 rounded-full text-[12px] font-medium hover:bg-secondary/50 hover:text-foreground transition-all"
+                  onClick={() => onReproposal?.("사람 중심으로")}
+                >
+                  사람 중심으로
+                </button>
+                <button 
+                  className="px-4 py-2 bg-secondary/30 text-muted-foreground border border-white/5 rounded-full text-[12px] font-medium hover:bg-secondary/50 hover:text-foreground transition-all"
+                  onClick={() => onReproposal?.("풍경은 줄여줘")}
+                >
+                  풍경은 줄이고
+                </button>
+                <button 
+                  className="px-4 py-2 bg-secondary/30 text-muted-foreground border border-white/5 rounded-full text-[12px] font-medium hover:bg-secondary/50 hover:text-foreground transition-all"
+                  onClick={() => onReproposal?.("더 빠르게")}
+                >
+                  더 빠르게
+                </button>
+                <button 
+                  className="px-4 py-2 bg-secondary/30 text-muted-foreground border border-white/5 rounded-full text-[12px] font-medium hover:bg-secondary/50 hover:text-foreground transition-all"
+                  onClick={() => onReproposal?.("여러 영상을 골고루")}
+                >
+                  여러 영상 골고루
+                </button>
+              </div>
             </div>
           </div>
         )}
@@ -1359,10 +1366,10 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
             disabled={appState === "analyzing"}
             placeholder={
               appState === "analyzing"
-                ? "AI 인지 분석 중에는 명령을 입력할 수 없습니다..."
-                : "예: 더 감성적으로 / 더 빠르게 / 웃긴 장면 살려 / 시장형으로 다시"
+                ? "분석 중에는 잠시만 기다려 주세요..."
+                : "편하게 말씀해 주세요. 예: 사람 중심으로 / 더 빠르게 / 풍경 줄여"
             }
-            className={`w-full bg-[#121214]/80 backdrop-blur-xl border border-white/5 rounded-full px-10 py-5 text-[14px] focus:outline-none focus:border-white/10 shadow-2xl transition-all ${appState === "analyzing" ? "opacity-40" : "placeholder:text-muted-foreground/10"
+            className={`w-full bg-[#161618] border border-white/5 rounded-full px-10 py-5 text-[14px] focus:outline-none focus:border-white/10 shadow-2xl transition-all ${appState === "analyzing" ? "opacity-40" : "placeholder:text-muted-foreground/30"
               }`}
           />
           <button
