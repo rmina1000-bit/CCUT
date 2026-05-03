@@ -117,6 +117,39 @@ const Index: React.FC = () => {
   };
   const [sourceEntries, setSourceEntries] = useState<SourceEntry[]>([]);
 
+  // [STEP 10-I.5.27-E7] Timing measurement baseline
+  const timingRef = useRef<Record<string, number>>({});
+  const isTimingReportedRef = useRef(false);
+
+  const markTiming = useCallback((key: string) => {
+    if (!timingRef.current[key]) {
+      timingRef.current[key] = performance.now();
+    }
+  }, []);
+
+  const reportTiming = useCallback((backendTiming?: any) => {
+    if (isTimingReportedRef.current) return;
+    const t = timingRef.current;
+    if (!t.user_selectable) return; // Wait until fully complete
+
+    isTimingReportedRef.current = true;
+    const diff = (end?: number, start?: number) => 
+      (end && start ? Number(((end - start) / 1000).toFixed(2)) : null);
+
+    const summary = {
+      frontend: {
+        upload_sec: diff(t.upload_done, t.upload_start),
+        analysis_wait_sec: diff(t.analysis_complete, t.generate_fragments_requested),
+        proposal_sec: diff(t.proposal_received, t.proposal_requested),
+        ui_mapping_sec: diff(t.proposal_mapped_to_ui, t.proposal_received),
+        perceived_total_sec: diff(t.user_selectable, t.upload_start),
+      },
+      backend: backendTiming || null
+    };
+
+    console.log("[PERCEIVED_TIMING]", summary);
+  }, []);
+
 // centerWidth, isDragging, containerRef moved to useWorkspaceLayout
 
   const toFullUrl = useCallback((path?: string | null) => {
@@ -161,6 +194,9 @@ const Index: React.FC = () => {
   const handleStartAnalysis = useCallback(
     async (file?: File, extraFiles?: File[]) => {
       resetAnalysisState();
+      timingRef.current = {}; // Reset timings
+      isTimingReportedRef.current = false;
+      markTiming("upload_start");
 
       setAppState("analyzing");
       setAnalyzeProgress(10);
@@ -239,6 +275,7 @@ const Index: React.FC = () => {
 
           console.log(`[UPLOAD] ${label}: source_id=${sid}`);
 
+          markTiming("generate_fragments_requested");
           const data = await videoService.generateFragments(sid);
           const initialFrags = mapFragments(data.fragments || [], label);
 
@@ -253,6 +290,7 @@ const Index: React.FC = () => {
 
           console.log(`[N-01] ${label}: ${initialFrags.length}개 초벌 조각 완료`);
         }
+        markTiming("upload_done");
 
         const today = new Date();
         const dateStrYYMMDD = `${today.getFullYear().toString().slice(2)}${String(today.getMonth() + 1).padStart(2, "0")}${String(today.getDate()).padStart(2, "0")}`;
@@ -316,6 +354,7 @@ const Index: React.FC = () => {
 
             if (allSettled || isTimeout) {
               clearInterval(pollInterval);
+              markTiming("analysis_complete");
               
               if (completedSourceIds.length === 0) {
                 setAnalyzeMessage("모든 영상 분석 실패 또는 시간 초과");
@@ -340,6 +379,7 @@ const Index: React.FC = () => {
                   console.error(`[semantic-source] ${sid} fetch error:`, err);
                 }
               }
+              markTiming("semantic_loaded");
 
               // 2. 소스 엔트리 업데이트 (Semantic으로 교체)
               let finalEditFragments: Fragment[] = [];
@@ -360,6 +400,7 @@ const Index: React.FC = () => {
               // 3. 제안 생성 요청
               let generatedProposals: Record<"A" | "B", any> = {} as any;
               let proposalData: any = null;
+              markTiming("proposal_requested");
 
               try {
                 if (completedSourceIds.length >= 2) {
@@ -382,6 +423,7 @@ const Index: React.FC = () => {
                   const res = await fetch(`${videoService.API_BASE_URL}/proposals/${sid}`, { method: "POST" });
                   if (res.ok) proposalData = await res.json();
                 }
+                markTiming("proposal_received");
 
                 if (proposalData && proposalData.proposals) {
                   proposalData.proposals.forEach((p: any) => {
@@ -429,11 +471,16 @@ const Index: React.FC = () => {
               setEditFragments(finalEditFragments);
               setSourceFragments(updatedEntries[0]?.fragments || []);
               setProposals(generatedProposals);
+              markTiming("proposal_mapped_to_ui");
+              markTiming("story_visible"); // Set at same time as proposals are mapped
               setSemanticFragments(Object.values(semanticResults).flat());
 
               setAnalyzeProgress(100);
               setAnalyzeMessage(failedSourceIds.length > 0 ? `일부 분석 실패 (${failedSourceIds.length}개), 제안 생성 완료` : "모든 영상 분석 및 제안 완료");
               setAppState("complete");
+              markTiming("user_selectable");
+
+              reportTiming(proposalData?.timing_summary);
             }
           } catch (err) {
             console.error("[Index] Multi-source polling error:", err);
@@ -767,6 +814,13 @@ const Index: React.FC = () => {
   const physicalClips = useMemo(() => {
     return buildExportClipsFromResolvedFragments(resolvedFragments);
   }, [resolvedFragments]);
+
+  // [STEP 10-I.5.27-E7] Mark first preview ready
+  useEffect(() => {
+    if (physicalClips.length > 0) {
+      markTiming("first_preview_ready");
+    }
+  }, [physicalClips.length, markTiming]);
 
   const handleEmptyTrash = useCallback(() => {
     setDeletedFragments([]);
