@@ -57,13 +57,16 @@ class ProposalEngine:
 
         # 1. Mode A (Market) 생성
         print("[PROPOSAL ENGINE] Creating Market Proposal (A)...")
-        p_a = self._create_market_proposal(project_id, fragments, target_len)
+        p_a = self._create_market_proposal(project_id, fragments, target_len, source_ids)
         
         # 2. Mode B (User) 생성
         print("[PROPOSAL ENGINE] Creating User Proposal (B)...")
+        # [STEP 10-I.5.28-E8-R1] A안 선택 ID 추출하여 중복 페널티용으로 전달
+        market_selected_ids = {f["fragment_id"] for f in p_a["sequence"]}
+        
         # Multi-source용 default intent (B모드용)
         intent = {"target_length": target_len}
-        p_b = self._create_user_proposal(project_id, fragments, target_len, intent)
+        p_b = self._create_user_proposal(project_id, fragments, target_len, intent, source_ids, market_selected_ids)
         
         # 3. A/B 차별성 보완
         if [f["fragment_id"] for f in p_a["sequence"]] == [f["fragment_id"] for f in p_b["sequence"]]:
@@ -81,13 +84,14 @@ class ProposalEngine:
                 source_ids=source_ids,
                 fragments_pool=fragments,
                 selected_sequence=p["sequence"],
-                mode=p["mode"]
+                mode=p["mode"],
+                overlap_ids=market_selected_ids if p["mode"] == "B" else None
             )
 
         print(f"[PROPOSAL ENGINE] generate_proposals_from_fragments EXIT: {project_id}")
         return proposals
 
-    def _create_market_proposal(self, source_id, fragments, target_len):
+    def _create_market_proposal(self, source_id, fragments, target_len, source_ids=None, overlap_ids=None):
         """A: Market Mode (대중적 호속력)"""
         target_len = self._safe_target_len(target_len, fragments)
         def market_score(f):
@@ -103,13 +107,28 @@ class ProposalEngine:
         is_fast_path = target_len <= 60.0
         max_frags = 12 if is_fast_path else 25
 
+        # [STEP 10-I.5.28-E8-R1] 소스 밸런싱 추적
+        source_counts = {}
+        is_multi = source_ids and len(source_ids) > 1
+
         for f in sorted_frags:
             f_dur = self._safe_duration(f)
+            f_sid = f.get("source_id")
             
             if len(selected) >= max_frags: break
+            
+            # [STEP 10-I.5.28-E8-R1] Source Soft Balance (Market: 0.9 penalty)
+            if is_multi and len(selected) > 2:
+                share = source_counts.get(f_sid, 0) / len(selected)
+                if share > 0.5:
+                    # 너무 많이 선택된 소스면 일단 건너뛰고 나중에 공간 남으면 채움 (Soft Skip)
+                    if current_len + f_dur <= target_len * 0.8: # 여유가 많을 때만 페널티 적용
+                         continue
+
             if current_len + f_dur <= target_len * 1.1:
                 selected.append(f)
                 current_len += f_dur
+                source_counts[f_sid] = source_counts.get(f_sid, 0) + 1
         
         print(f"[PROPOSAL ENGINE] Market Proposal (A) - Selected {len(selected)} fragments, total {current_len:.1f}s")
         selected, bridge_details = self._insert_bridges(selected, fragments)
@@ -149,13 +168,18 @@ class ProposalEngine:
             "fallback_reason": fallback
         }
 
-    def _create_user_proposal(self, source_id, fragments, target_len, intent):
-        """B: User Mode (User Intent 엄격 반영)"""
+    def _create_user_proposal(self, source_id, fragments, target_len, intent, source_ids=None, overlap_ids=None):
+        """B: User Mode (User Intent 엄격 반영 + A안 중복 페널티)"""
         target_len = self._safe_target_len(target_len, fragments)
-        # edit_value가 높은 순으로 정렬하여 선택 시도
+        
+        # [STEP 10-I.5.28-E8-R1] A안 중복 및 소스 밸런싱 반영 스코어링
         def edit_score(f):
-            val = f.get("structural", {}).get("edit_value")
-            return float(val) if val is not None else 0.5
+            base = float(f.get("structural", {}).get("edit_value", 0.5))
+            # A안 중복 페널티 (soft: 0.7배)
+            if overlap_ids and f.get("fragment_id") in overlap_ids:
+                base *= 0.7
+            return base
+
         sorted_frags = sorted(fragments, key=edit_score, reverse=True)
         
         selected = []
@@ -163,15 +187,29 @@ class ProposalEngine:
         is_fast_path = target_len <= 60.0
         max_frags = 12 if is_fast_path else 25
 
+        # [STEP 10-I.5.28-E8-R1] 소스 밸런싱 추적
+        source_counts = {}
+        is_multi = source_ids and len(source_ids) > 1
+
         for f in sorted_frags:
             # 엄격한 필터링: edit_value가 0.1 미만이면 제외
             if f.get("structural", {}).get("edit_value", 0.5) < 0.1: continue 
             f_dur = self._safe_duration(f)
+            f_sid = f.get("source_id")
 
             if len(selected) >= max_frags: break
+
+            # [STEP 10-I.5.28-E8-R1] Source Soft Balance (User: 0.8 penalty)
+            if is_multi and len(selected) > 2:
+                share = source_counts.get(f_sid, 0) / len(selected)
+                if share > 0.4: # 유저 모드는 조금 더 엄격하게 분산 시도
+                    if current_len + f_dur <= target_len * 0.9:
+                        continue
+
             if current_len + f_dur <= target_len * 1.1:
                 selected.append(f)
                 current_len += f_dur
+                source_counts[f_sid] = source_counts.get(f_sid, 0) + 1
 
         # [STEP 10-I.5.17] Fallback: Intent 매칭 결과가 비어있을 경우 구제 로직
         fallback = None
@@ -337,7 +375,7 @@ class ProposalEngine:
     #   [STEP 10-I.5.25] Explanation & Storyline Trace Logic
     # ═══════════════════════════════════════════════════════════════════
 
-    def _generate_explanation(self, project_id, source_ids, fragments_pool, selected_sequence, mode):
+    def _generate_explanation(self, project_id, source_ids, fragments_pool, selected_sequence, mode, overlap_ids=None):
         """사람이 읽을 수 있는 제안 근거 및 스토리라인 추적 생성"""
         
         is_multi = len(source_ids) > 1
@@ -359,8 +397,10 @@ class ProposalEngine:
         # 4. Selection Reasons
         selection_reasons = self._build_selection_reasons(selected_sequence, mode)
 
-        # 5. Quality Warnings
+        # 5. Quality Warnings (다양성 알림 추가)
         quality_warnings = self._detect_quality_warnings(source_ids, fragments_pool, selected_sequence)
+        if mode == "B" and overlap_ids:
+             quality_warnings.append("A안과의 차별화를 위해 일부 중복 조각의 우선순위를 조정했습니다.")
 
         return {
             "project_summary": summary,
@@ -369,7 +409,8 @@ class ProposalEngine:
             "selection_reasons": selection_reasons,
             "exclusion_policy": [
                 "비슷한 구도나 중복되는 장면군은 다양성을 위해 제외 시도",
-                "지나치게 짧거나 분석 신뢰도가 낮은 조각은 후순위 배치"
+                "지나치게 짧거나 분석 신뢰도가 낮은 조각은 후순위 배치",
+                "특정 영상에 편중되지 않도록 소스 균형 보정 적용 (R1)"
             ],
             "quality_warnings": quality_warnings
         }
