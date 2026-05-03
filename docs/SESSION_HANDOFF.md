@@ -52,15 +52,15 @@ User feedback:
 ## 1. 현재 기준선
 
 - **Branch:** `ccut-1.0.4-step9`
-- **SHA:** `c9e9ced4f697a0a1018bd1d5598ef1763c9978bb`
+- **SHA:** `f58fd80b4f209d5ef3d5b4fa15ae312d01dc3927`
 - **Local path:** `D:\CCUT1.0.4`
 - **Repo:** `https://github.com/rmina1000-bit/CCUT.git`
 - **Last updated:** 2026-05-03
 
-### AI Staff Strategy Build
+### AI Staff Strategy & Mock Adapter
 - AI Staff Strategy Docs (R5B) created.
-- Primary staff candidate (Qwen) defined within AI Boundary.
-- Core AI vs Core Companion policy established.
+- Mock Narrative LLM Adapter (R6) implemented with StoryIntentPatch contract.
+- Simulation tool (simulate_mock_narrative_llm.py) verified.
 
 ... (이하 기존 내역 보존)
 

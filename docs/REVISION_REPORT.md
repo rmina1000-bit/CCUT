@@ -188,3 +188,23 @@ Narrative Consultation should follow a familiar ChatGPT-style conversation form:
   - Reconfirmed that CCUT Core owns decisions, evidence, and execution.
 - Runtime impact: None.
 - Code changes: None.
+
+## STEP 10-I.5.28-E9-R2-R6 - Mock Narrative LLM Adapter
+
+- Scope: Non-runtime mock adapter and contract only
+- Created:
+  - ccut_backend/ai/contracts/story_intent_patch_contract.py
+  - ccut_backend/ai/boundary/mock_narrative_llm.py
+  - tools/simulate_mock_narrative_llm.py
+  - docs/NARRATIVE_LLM_MOCK_ADAPTER_SPEC.md
+- Updated:
+  - docs/TASK_BOARD.md
+  - docs/SESSION_HANDOFF.md
+  - docs/REVISION_REPORT.md
+- Summary:
+  - Added StoryIntentPatch and NarrativeLLMResult contract skeleton.
+  - Added mock Narrative LLM adapter returning schema-shaped results without model calls.
+  - Added standalone simulation script for contract verification.
+  - No Qwen3-Instruct, external API, frontend fetch, backend main.py, config, DB, ProposalEngine, or runtime integration was added.
+- Runtime impact: None.
+- Code changes to existing runtime paths: None.
