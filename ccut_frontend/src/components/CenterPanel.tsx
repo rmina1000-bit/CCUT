@@ -552,6 +552,9 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
     const parsedDirection = parseDirectionFromText(raw);
     if (parsedDirection) {
       onReproposal?.(parsedDirection);
+    } else {
+      // [STEP 10-I.5.28-E9-R2] Fallback to raw text for narrative intent
+      onReproposal?.(raw as any);
     }
   }, [chatValue, onAnalyze, onReproposal]);
 
@@ -743,8 +746,76 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
     return (
       <div className="flex-1 w-full px-4 pt-4 flex flex-col items-center space-y-4 overflow-y-auto no-scrollbar pb-20">
         
-        {/* [STEP 10-I.5.28-E9-R1-R1] Story Direction Adjustment Bar */}
-        {storyPlan && (
+        {/* [STEP 10-I.5.28-E9-R2] Pre-Proposal Narrative Consultation View */}
+        {storyPlan && storyPlan.consultation_status !== "confirmed" && (
+          <div className="w-full max-w-[800px] bg-card/60 border border-primary/30 rounded-3xl p-8 shadow-2xl backdrop-blur-md animate-in fade-in zoom-in duration-500 mt-4">
+            <div className="flex flex-col gap-6">
+              <div className="flex items-center gap-4">
+                <div className="w-12 h-12 rounded-2xl bg-primary/20 flex items-center justify-center">
+                  <BookOpen size={24} className="text-primary" />
+                </div>
+                <div>
+                  <h2 className="text-[18px] font-bold text-foreground">편집스토리 초안 협의</h2>
+                  <p className="text-[12px] text-muted-foreground/70">분석 데이터를 기반으로 먼저 이야기 흐름을 구성했습니다.</p>
+                </div>
+              </div>
+
+              <div className="bg-secondary/20 rounded-2xl p-6 border border-border/10 leading-relaxed text-[14px] text-foreground/90 whitespace-pre-wrap italic">
+                "{storyPlan.narrative_draft}"
+              </div>
+
+              <div className="space-y-4">
+                <p className="text-[12px] font-semibold text-primary/80 uppercase tracking-widest">이 방향이 맞을까요?</p>
+                <div className="flex flex-wrap gap-2">
+                  <button 
+                    className="px-6 py-2.5 bg-primary text-primary-foreground rounded-xl text-[13px] font-bold hover:opacity-90 shadow-xl shadow-primary/20 transition-all hover:scale-105"
+                    onClick={() => onStoryPlanConfirm?.({ ...storyPlan, consultation_status: "confirmed", confirmation_status: "confirmed" })}
+                  >
+                    좋아, 이대로 제안해줘
+                  </button>
+                  <button 
+                    className="px-5 py-2.5 bg-secondary/40 text-foreground rounded-xl text-[13px] font-medium hover:bg-secondary/60 transition-all"
+                    onClick={() => onReproposal?.("사람 중심으로")}
+                  >
+                    사람 중심
+                  </button>
+                  <button 
+                    className="px-5 py-2.5 bg-secondary/40 text-foreground rounded-xl text-[13px] font-medium hover:bg-secondary/60 transition-all"
+                    onClick={() => onReproposal?.("풍경 줄이기")}
+                  >
+                    풍경 줄이기
+                  </button>
+                  <button 
+                    className="px-5 py-2.5 bg-secondary/40 text-foreground rounded-xl text-[13px] font-medium hover:bg-secondary/60 transition-all"
+                    onClick={() => onReproposal?.("더 빠르게")}
+                  >
+                    더 빠르게
+                  </button>
+                  <button 
+                    className="px-5 py-2.5 bg-secondary/40 text-foreground rounded-xl text-[13px] font-medium hover:bg-secondary/60 transition-all"
+                    onClick={() => onReproposal?.("여러 영상을 골고루")}
+                  >
+                    여러 영상을 골고루
+                  </button>
+                </div>
+                <p className="text-[11px] text-muted-foreground/50 italic">아래 채팅창에 원하는 편집 방향을 자유롭게 말씀하셔도 됩니다.</p>
+              </div>
+
+              {storyPlan.consultation_status === "user_requested_change" && (
+                <div className="mt-4 p-4 bg-amber-500/10 border border-amber-500/20 rounded-2xl flex items-center gap-3">
+                  <AlertCircle size={18} className="text-amber-500" />
+                  <div>
+                    <p className="text-[12px] font-bold text-amber-200">의견이 반영되었습니다</p>
+                    <p className="text-[11px] text-amber-200/60">"{storyPlan.user_notes}" 방향을 고려하여 제안을 준비합니다. 완료되면 '이대로 제안해줘'라고 말씀하세요.</p>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+        
+        {/* [STEP 10-I.5.28-E9-R1-R1] Story Direction Adjustment Bar (Only after confirmed) */}
+        {storyPlan && storyPlan.consultation_status === "confirmed" && (
           <div className="w-full max-w-[800px] bg-secondary/10 border border-border/10 rounded-xl px-4 py-2.5 shadow-sm">
             <div className="flex items-center justify-between gap-4">
               <div className="flex items-center gap-2.5 overflow-hidden">
@@ -776,15 +847,6 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
                     {opt.label.replace("이대로 제안", "이대로").replace("시장형 ", "").replace("사용자친화형 ", "")}
                   </button>
                 ))}
-                
-                {storyPlan.confirmation_status === "pending" && (
-                  <button 
-                    className="ml-2 px-4 py-1 bg-primary/90 text-primary-foreground rounded-full text-[10px] font-bold hover:bg-primary shadow-sm"
-                    onClick={() => onStoryPlanConfirm?.({ ...storyPlan, selected_direction: storyPlan.default_direction, confirmation_status: "confirmed" })}
-                  >
-                    이대로
-                  </button>
-                )}
               </div>
             </div>
 
@@ -797,7 +859,9 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
           </div>
         )}
 
-        <div className="grid grid-cols-2 gap-4 w-full">
+        {/* [STEP 10-I.5.28-E9-R2] Proposals Grid (Visible only after confirmation) */}
+        {storyPlan?.consultation_status === "confirmed" && (
+          <div className="grid grid-cols-2 gap-4 w-full">
           <div className="flex flex-col items-center space-y-4">
             <div
               className="relative w-full aspect-[16/8] rounded-2xl bg-black overflow-hidden border border-white/8 cursor-pointer group/player"
@@ -1268,9 +1332,11 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
 
         {guidanceMessage && (
           <div className="animate-in fade-in slide-in-from-bottom-2 duration-500">
-            <p className="text-[11px] font-bold text-primary/60 border-l border-primary/20 pl-4 uppercase tracking-widest">
-              {guidanceMessage}
-            </p>
+            <div className="border-l border-primary/20 pl-4">
+              <p className="text-[11px] font-bold text-primary/60 uppercase tracking-widest">
+                {guidanceMessage}
+              </p>
+            </div>
           </div>
         )}
       </div>

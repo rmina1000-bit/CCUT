@@ -55,6 +55,12 @@ export type StoryDirectionOption = {
   description: string;
 };
 
+export type NarrativeConsultationStatus =
+  | "pending"
+  | "draft_ready"
+  | "user_requested_change"
+  | "confirmed";
+
 export type StoryPlanPreview = {
   story_plan_id: string;
   project_type: string;
@@ -70,4 +76,15 @@ export type StoryPlanPreview = {
   }>;
   confirmation_status: "pending" | "confirmed" | "adjusted";
   selected_direction?: string;
+  consultation_status?: NarrativeConsultationStatus;
+  narrative_draft?: string;
+  user_notes?: string;
+  story_intent?: {
+    pace?: "slow" | "medium" | "fast";
+    mood?: "calm" | "warm" | "emotional" | "dynamic";
+    focus?: "people" | "landscape" | "balanced" | "memory";
+    coverage?: "quality_first" | "balanced_sources" | "user_priority";
+    avoid?: string[];
+    emphasize?: string[];
+  };
 };

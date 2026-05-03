@@ -526,8 +526,6 @@ const Index: React.FC = () => {
   useEffect(() => {
     if (appState !== "complete" || !proposals || storyPlan) return;
 
-    console.log("[StoryPlan] Generating StoryPlan v0 skeleton...");
-    
     const sourceCount = (sourceEntries ?? []).length;
     const isMulti = sourceCount >= 3;
     
@@ -548,20 +546,34 @@ const Index: React.FC = () => {
         }
     });
 
+    // 3. Narrative Draft 생성 (A/B 구분 없이)
+    const sourceNames = (sourceEntries ?? []).map(e => e.label).join(", ");
+    const totalDuration = (sourceEntries ?? []).reduce((acc, e) => acc + (e.duration_sec ?? 0), 0);
+    const draft = `이 프로젝트는 ${sourceCount}개의 영상(${sourceNames})을 기반으로 하며, 총 길이는 약 ${Math.floor(totalDuration)}초입니다. 
+분석 결과, ${isMulti ? "여러 장소와 상황이 교차되는 복합적인 기록" : "특정 상황에 집중된 하이라이트"} 형태의 편집이 적합해 보입니다.
+
+초반에는 영상의 분위기를 환기시키는 장면으로 시작하여, 중반에는 주요 인물이나 동작이 명확한 조각들을 중심으로 리듬감 있게 배치하고, 마지막은 여운이 남는 장면으로 마무리하는 흐름을 추천합니다.
+특히 ${sourceNames} 영상들 사이의 자연스러운 연결을 위해 맥락이 닿는 조각들을 우선적으로 고려할 예정입니다.
+
+이 방향이 맞을까요? 원하시면 '더 빠르게', '사람 중심으로', '감성적으로', '여러 영상 골고루'와 같이 말씀해 주세요.`;
+
     const newPlan: StoryPlanPreview = {
         story_plan_id: `STP_${Date.now()}`,
         project_type: projectType,
         detected_theme: detectedTheme,
         default_direction: isMulti ? "user_memory" : "market_highlight",
         direction_options: [
-            { id: "market_highlight", label: "시장형 하이라이트", description: "강한 장면 위주의 빠른 전개" },
-            { id: "user_memory", label: "사용자친화형 기록", description: "현장감을 살린 자연스러운 구성" },
+            { id: "market_highlight", label: "하이라이트", description: "강한 장면 위주의 빠른 전개" },
+            { id: "user_memory", label: "자연스러운 기록", description: "현장감을 살린 자연스러운 구성" },
             { id: "fast", label: "더 빠르게", description: "핵심만 골라 템포 조절" },
             { id: "emotional", label: "더 감성적으로", description: "분위기 있는 장면 위주" }
         ],
-        source_roles: {}, // Skeleton에서는 빈 값
+        source_roles: {}, 
         risk_sources: riskSources,
-        confirmation_status: "pending"
+        confirmation_status: "pending",
+        consultation_status: "draft_ready",
+        narrative_draft: draft,
+        story_intent: {}
     };
 
     setStoryPlan(newPlan);
@@ -938,7 +950,39 @@ const Index: React.FC = () => {
           onPreviewProposal={handleProposalPreview}
           onCommitProposal={handleProposalCommit}
           onExport={handleExport}
-          onReproposal={handleReproposal}
+          onReproposal={(dir: any) => {
+            // [STEP 10-I.5.28-E9-R2] Narrative Consultation Intent Handling
+            if (storyPlan && storyPlan.consultation_status !== "confirmed") {
+                const text = typeof dir === "string" ? dir : ""; 
+                const lower = text.toLowerCase();
+                
+                if (lower.includes("이대로") || lower.includes("좋아") || lower.includes("진행") || lower.includes("제안해")) {
+                    setStoryPlan({
+                        ...storyPlan,
+                        consultation_status: "confirmed",
+                        confirmation_status: "confirmed"
+                    });
+                    return;
+                }
+
+                // Keyword based intent extraction
+                const intent: any = { ...storyPlan.story_intent };
+                if (lower.includes("빠르게") || lower.includes("템포")) intent.pace = "fast";
+                if (lower.includes("감성") || lower.includes("따뜻")) intent.mood = "warm";
+                if (lower.includes("사람") || lower.includes("가족")) intent.focus = "people";
+                if (lower.includes("풍경") || lower.includes("배경")) intent.focus = "landscape";
+                if (lower.includes("골고루")) intent.coverage = "balanced_sources";
+
+                setStoryPlan({
+                    ...storyPlan,
+                    story_intent: intent,
+                    consultation_status: "user_requested_change",
+                    user_notes: text
+                });
+                return;
+            }
+            handleReproposal(dir);
+          }}
           fragments={resolvedFragments}
           exportClips={physicalClips}
           storyPlan={storyPlan}
