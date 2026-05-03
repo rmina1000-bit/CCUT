@@ -22,6 +22,7 @@
 - R10-A Qwen Model Inventory and Path Hygiene Review
 - R10-B Qwen3-Instruct Acquisition and Ollama Registration Plan
 - R10-C Qwen3 4B Ollama Candidate Install Plan
+- R10-D Ollama Timeout / keep_alive / num_predict / JSON Response Stabilization
 
 ### HOLD / REWORK ⏸
 - E9-R2-R1 Narrative Chat History Repair
@@ -30,7 +31,8 @@
 > **Reason:** The structure works, but UX does not yet match the desired ChatGPT-form conversational model.
 
 ### NEXT 📋
-- R10-D Ollama Timeout / keep_alive / num_predict / JSON Response Stabilization
+- R10-E qwen3:4b Baseline Validation with Stabilization Probe
+- R10-F Narrative Provider Adapter Contract Harness
 - E9-R2-R3 ChatGPT Form Narrative Chat Repair
 - E9-R3 StoryIntent → Proposal Request connection
 - E10 Transition Coherence / Scene Order improvement

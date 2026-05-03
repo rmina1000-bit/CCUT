@@ -52,18 +52,17 @@ User feedback:
 ## 1. 현재 기준선
 
 - **Branch:** `ccut-1.0.4-step9`
-- **SHA:** `603c46861d0817e4f47e6539545b0eb3a3c3bc24`
+- **SHA:** `e4f4581362690c59e7dca7d8e7a1ce2fe573de44`
 - **Local path:** `D:\CCUT1.0.4`
 - **Repo:** `https://github.com/rmina1000-bit/CCUT.git`
 - **Last updated:** 2026-05-04
 
-### Room Close: AI Boundary & Narrative LLM Readiness
-- R5A ~ R10-C completed: AI Boundary, Swappable Provider, Hardware Probe, Qwen Inventory, and 4B Baseline plan.
-- Qwen3-Instruct (4B) is set as the validation baseline.
-- `qwen3:0.6b` manually installed and tested; smoke-test revealed 10s timeout finding.
-- Ollama identified as primary local runtime.
-- `config.yaml` still references legacy 1.0.3 ASR paths (documented as debt).
-- Next: R10-D (Ollama stabilization).
+### R10-D: Ollama Stabilization Probe
+- R10-D completed: `tools/probe_ollama_timeout_stabilization.py` implemented.
+- Evaluated `timeout`, `num_predict`, and `keep_alive` parameters using `qwen3:0.6b`.
+- Established safe failure statuses: `MODEL_CALL_TIMEOUT`, `JSON_PARSE_FAILED`, etc.
+- Confirmed JSON contract validation for `StoryIntentPatch`.
+- Next: R10-E (4B Validation).
 
 ... (이하 기존 내역 보존)
 

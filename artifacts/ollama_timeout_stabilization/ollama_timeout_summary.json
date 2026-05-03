@@ -1,0 +1,7 @@
+{
+    "model": "qwen3:0.6b",
+    "timestamp": "2026-05-04 02:31:01",
+    "total_cases": 4,
+    "success_count": 4,
+    "timeout_count": 0
+}
