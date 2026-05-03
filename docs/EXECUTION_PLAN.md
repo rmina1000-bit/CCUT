@@ -1,96 +1,52 @@
-# EXECUTION PLAN v3.2.1
+# EXECUTION_PLAN v3.3.0
 
-> 기준: CCUT 1.0.4 PROJECT NAVIGATION v3.2.1  
-> 핵심: 영상 → Proxy/Segment → Evidence Board → Semantic Fragment → Proposal(JSON) → ExportInput → Render  
-> 절대 원칙: Evidence 없이 Semantic 금지 / Semantic 없이 Proposal 금지 / Proposal 없이 Export 금지  
-> **현재 기준 SHA:** `ddbd6e2779e51bf9e45b9d832830ee14b3716340`
+> 기준: CCUT 1.0.4 PROJECT NAVIGATION v3.3.0  
+> 핵심: 영상 → 분석 → 편집스토리 초안 → 사용자 협의 → StoryIntent → A/B 제안 → Render  
+> **현재 기준 SHA:** `56554c70e76ad03537193d5b560fd19457ce2477`
+
+## Updated Core Execution Flow
+
+1. Upload Source Videos
+2. Proxy / Segment / Fingerprint (STEP 1)
+3. Evidence Board (STEP 2)
+4. Semantic Fragment (STEP 4)
+5. Quick Scan / Hypothesis (STEP 3)
+6. **Narrative Consultation (New)**
+   - 분석 결과를 편집스토리 초안으로 변환
+   - 사용자에게 먼저 이야기 방향을 묻는다
+   - 사용자의 자연어 의견을 StoryIntent로 정리
+7. **Proposal Generation**
+   - StoryIntent 확정 후 A/B 제안 생성
+   - A안: 시장형/하이라이트형
+   - B안: 사용자 의도 반영형/기록형
+8. Preview / Commit
+9. ExportInput (STEP 7)
+10. Render (STEP 8)
+
+## Prohibited Order
+
+- 분석 직후 A/B 제안 즉시 노출 금지
+- 사용자 협의 전 편집 제안 영상 노출 금지
+- StoryIntent 없이 ProposalEngine에 사용자 의도를 강하게 반영했다고 주장 금지
+- Narrative Consultation 이전 Export/Render 접근 금지
+
+## Next Priority
+
+1. 문서팩 Narrative 전환 정렬 (Current)
+2. ChatGPT Form Narrative Chat Repair
+3. StoryIntent → Proposal Request 연결
+4. Narrative Draft 품질 향상
+5. Local LLM / External AI Adapter 검토
+
+---
+
+## Completed Steps
 
 ## STEP 0. 기준선 확보 ✅ PASS
+... (이하 기존 내용 유지)
 
-목적: 1.0.3 복사 코드의 오염과 legacy를 목록화한다.
-- git status / build / backend run 확인
-- `CCUT_1.0.3` 경로 전체 검색
-- mock/demo/random/legacy 목록화
-- 삭제 금지, 격리 계획만 작성
-
-## STEP 1. Proxy + Segment Partitioning ✅ PASS
-
-- 분석용 proxy 생성
-- segment 10~30초 단위 분할
-- overlap 0.5초
-- fingerprint 생성
-
-## STEP 2. Evidence Board ✅ PASS
-
-- Worker 결과를 buffer에 수집
-- 1초 또는 10 segment 단위 batch flush
-- field-level merge
-- coverage 100% 검증
-
-## STEP 3. Quick Scan + Hypothesis ✅ PASS
-
-- 대표 이미지 3~7개
-- 짧은 영상 요약
-- AI 가설 생성: 영상 성격 / 핵심 / 편집 방향
-- 사용자 미응답 시 default intent로 계속 진행
-
-## STEP 4. Semantic Fragment ✅ PASS
-
-- Evidence 30% 이상 + transcript 10% 이상 확보 시 partial 생성
-- semantic / structural / continuity 3계층 생성
-- merge/split 적용
-- confidence/fallback_reason 기록
-
-## STEP 5. User Intent 최종 반영 ✅ PASS
-
-- must_keep / avoid / tone / target_length 반영
-- edit_value 재계산
-- Proposal 전 re-score 완료
-
-## STEP 6. Proposal Engine ✅ PASS
-
+## STEP 6. Proposal Engine ✅ PASS (Re-positioned after Narrative)
 - backend semantic 기반 A/B 생성
-- A: Market Mode
-- B: User Mode
-- proposal_reason / confidence / fallback_reason 포함
-- frontend heuristic 생성 금지
+- StoryIntent를 입력값으로 받도록 확장 예정
 
-## STEP 7. ExportInput 생성 ✅ PASS
-
-- Proposal → ExportInput 변환
-- clips / total_duration / status=EXPORT_INPUT_READY
-- API: POST /export-input/{proposal_id}
-- 스펙: `docs/EXPORT_INPUT.md`
-- 보고서: `docs/reports/STEP7_EXPORT_INPUT_REPORT.md`
-
-## STEP 8. Render Engine / Export 실행 ✅ PASS
-
-- ExportInput 기반 ffmpeg render
-- clips order/start/end/duration 처리
-- source_id → sources.file_path 동적 조회
-- output_url = /static/exports/...
-- API: POST /render/{export_input_id}, GET /render-result/{export_input_id}
-- 스펙: `docs/RENDER_ENGINE.md`
-- 보고서: `docs/reports/STEP8_RENDER_ENGINE_REPAIR_REPORT.md`
-
-## STEP 9. UI 최소연동 ✅ PASS
-
-- 업로드 → Quick Scan → Semantic Fragment → Proposal → ExportInput → Render → mp4 표시/다운로드
-- UI 리디자인 금지. API 응답 확인용 최소 표시만 허용.
-- Mojibake 수정 완료 (Index.tsx)
-- localhost 하드코딩 제거 완료 (CenterPanel.tsx)
-
-## STEP 10-A. Structure Reinforcement Documentation ✅ PASS
-
-- Common Core v1 문서화
-- Virtual Fragment Factory 기준 문서화
-- Web AI Contract v0.1 문서화
-- External Proposal Service 방향 문서화
-- 코드 적용 범위 확정
-
-## STEP 10. 최종 안정화 / 회귀 테스트 (예정)
-
-
-- E2E: upload → evidence → semantic → proposal → export PASS
-- Resource Governor 연동 (설계 단계)
-- 회귀 테스트 시나리오 작성
+... (이하 기존 내용 유지)

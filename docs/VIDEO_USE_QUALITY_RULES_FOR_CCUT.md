@@ -1,4 +1,4 @@
-# Video-use Quality Rules for CCUT (V1.0)
+# Video-use Quality Rules for CCUT (V3.3.0)
 
 Video-use 프로젝트에서 검증된 편집 품질 규칙을 CCUT 아키텍처에 맞게 재정의합니다.
 
@@ -46,13 +46,7 @@ Video-use 프로젝트에서 검증된 편집 품질 규칙을 CCUT 아키텍처
 - **무료 포함**: **YES**
 - **주의점**: STEP 10-B의 Logical Room 단위로 폴더 구조화.
 
-### 1.8. 편집 전 사용자 방향 확인 (User Intent Pre-check)
-- **필요성**: AI가 제멋대로 편집하는 것이 아니라 사용자의 의도(길이, 톤)를 먼저 묻고 시작.
-- **적용**: Quick Scan 후 User Intent 반영 단계.
-- **무료 포함**: **YES**
-- **주의점**: 사용자가 "확인" 버튼을 누르기 전에는 대규모 렌더링을 시작하지 않음.
-
-### 1.9. 결과물 제공 전 컷 경계 검수 (Pre-render Boundary QA)
+### 1.8. 결과물 제공 전 컷 경계 검수 (Pre-render Boundary QA)
 - **필요성**: 최종 렌더링 전 논리적 오류(중복 구간, 잘린 문장)를 자동 검수.
 - **적용**: Proposal Engine 및 ExportInput 생성 단계.
 - **무료 포함**: **YES**
@@ -62,3 +56,37 @@ Video-use 프로젝트에서 검증된 편집 품질 규칙을 CCUT 아키텍처
 무료버전은 외부 고성능 AI(GPT-4 등) 없이도 **"사고 없는 결과물"**을 보장해야 합니다.
 - **포함**: 규칙 1, 2, 3, 4, 5, 6 (필수 물리 품질 및 자막 싱크)
 - **유료 확장**: 규칙 9의 딥러닝 기반 정밀 검수, 외부 AI를 통한 문맥적 자막 교정 등.
+
+## 3. Quality Gate in Narrative Consultation
+
+Before proposal generation, CCUT may classify sources as:
+
+- USABLE
+- WEAK
+- RISKY
+- JUNK_SUSPECT
+- EXCLUDED
+
+This classification does not permanently delete or hide the source.  
+It only affects automatic proposal selection.
+
+## 4. User Explanation Rule
+
+If CCUT excludes or avoids a source, it should explain the reason in plain language.
+
+Example:
+“이 영상은 흔들림과 반복 구간이 많아서 자동 제안에서는 적게 쓰는 편이 좋겠습니다. 그래도 꼭 넣고 싶다면 말씀해 주세요.”
+
+## 5. Deep Re-analysis Rule
+
+If the user insists on using a weak or junk-suspect source:
+1. accept the user’s intention
+2. warn about the risk
+3. optionally perform deeper sampling or request confirmation
+4. then include the best available fragment if possible
+
+---
+
+## Legacy Reference
+(기존 1.8 편집 전 사용자 방향 확인 항목을 Narrative Consultation으로 공식화함)
+- 사용자가 "확인" 버튼을 누르기 전에는 대규모 렌더링을 시작하지 않음.

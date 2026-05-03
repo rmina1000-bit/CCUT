@@ -130,3 +130,39 @@
 - STEP 10-I.3 Fragment Count Simplification & Fast Path
 - STEP 10 최종 안정화 / 회귀 테스트
 - 문서 구조 고정 및 방이전 자동화 체계 운영 시작
+
+## Revision — Narrative Consultation Architecture Transition
+
+### Date
+2026-05-03
+
+### Summary
+CCUT1.0.4 introduced a pre-proposal narrative consultation structure.
+
+### Before
+Upload -> Analysis -> A/B Proposal
+
+### After
+Upload -> Analysis -> Narrative Draft -> User Consultation -> StoryIntent -> A/B Proposal
+
+### Meaning
+This revision changes CCUT from a direct automatic edit proposal tool into a local AI editing system that first interprets video data as a story, consults with the user in natural language, and only then generates A/B edit proposals.
+
+### Stable Reference
+E9-R2 stable commit:
+56554c70e76ad03537193d5b560fd19457ce2477
+
+### Remaining Work
+The current Chat History / ChatGPT-like UX attempts are not accepted as final.
+Next required work:
+STEP 10-I.5.28-E9-R2-R3 — ChatGPT Form Narrative Chat Repair
+
+### UX Requirement
+CCUT must not invent a new chat grammar.
+Narrative Consultation should follow a familiar ChatGPT-style conversation form:
+- natural line wrapping
+- accumulated message history
+- calm white/gray-centered user and assistant messages
+- minimal color emphasis
+- input-first conversation
+- suggestion chips only as secondary aids

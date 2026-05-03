@@ -1,40 +1,68 @@
-# USER INTENT v3.2.1
-> 기준: CCUT 1.0.4 PROJECT NAVIGATION v3.2.1  
-> 핵심: 영상 → Proxy/Segment → Evidence Board → Semantic Fragment → Proposal(JSON) → ExportInput → Render  
-> 절대 원칙: Evidence 없이 Semantic 금지 / Semantic 없이 Proposal 금지 / Proposal 없이 Export 금지
+# USER INTENT v3.3.0
 
-## 구조
+> 기준: CCUT 1.0.4 PROJECT NAVIGATION v3.3.0  
+
+# StoryIntent
+
+StoryIntent is the structured editing intention extracted from the user's narrative consultation.
+
+It is created after:
+- analysis
+- narrative draft
+- user natural-language feedback
+
+It should be created before:
+- A/B proposal generation
+- final proposal selection
+- export
+
+## StoryIntent v0 Fields
+
+```json
+{
+  "pace": "slow | medium | fast",
+  "mood": "calm | warm | emotional | dynamic",
+  "focus": "people | landscape | balanced | memory",
+  "coverage": "quality_first | balanced_sources | user_priority",
+  "avoid": ["shaky", "dark", "long_landscape", "repetition"],
+  "emphasize": ["people", "child", "family", "emotion", "place"],
+  "notes": ""
+}
+```
+
+## Natural Language Mapping Examples
+
+“더 빠르게”
+→ pace: fast
+
+“사람 중심으로”
+→ focus: people
+
+“풍경 줄여”
+→ avoid: ["long_landscape"]
+
+“여러 영상 골고루”
+→ coverage: balanced_sources
+
+“감성적으로”
+→ mood: emotional
+
+“아이 장면 살려”
+→ emphasize: ["child", "people"]
+
+## User Override
+
+If the user explicitly asks to include a source or fragment, the system should treat that as stronger than automatic exclusion, while still warning about quality risks.
+
+---
+
+## Legacy User Intent Structure (Reference)
 ```json
 {
   "source_id": "SRC_001",
   "must_keep": ["바닷가", "웃는 장면"],
   "avoid": ["흔들린 장면"],
   "tone": "감성형",
-  "target_length": 60,
-  "priority_axis": {
-    "visual": 1.4,
-    "speech": 0.8,
-    "emotion": 1.2
-  }
+  "target_length": 60
 }
 ```
-
-## 적용 시점
-### P3-pre
-Quick Scan에서 받은 must_keep/avoid/tone/target_length를 Semantic Fragment 생성 전 score seed로 반영.
-
-### P3-post
-Fragment 50% 이상 생성 후 edit_value 재계산.
-- must_keep: +0.2
-- avoid: -0.3
-- tone 일치: +0.1
-
-## 충돌 처리
-- 최신 지시 우선
-- 명시적 지시 우선
-- 원본 재료 한계 초과 요구는 fallback_reason에 기록
-
-## PASS
-- intent 적용 전/후 fragment score 변화
-- proposal sequence 변화
-- 사용자 미응답 시 default intent 사용

@@ -1,69 +1,52 @@
-# CCUT 1.0.4 PROJECT NAVIGATION v3.2.1
+# CCUT 1.0.4 PROJECT NAVIGATION v3.3.0
 
-> **현재 기준 SHA:** `ddbd6e2779e51bf9e45b9d832830ee14b3716340`  
+> **현재 기준 SHA:** `56554c70e76ad03537193d5b560fd19457ce2477`  
 > **Branch:** `ccut-1.0.4-step9`  
 > **완료 단계:** STEP 0 ~ STEP 9 모두 PASS  
-> **핵심 흐름:** 영상 → Quick Scan → Semantic Fragment → Proposal(JSON) → ExportInput → Render → UI mp4 표시  
-> **절대 원칙:** Evidence 없이 Semantic 금지 / Semantic 없이 Proposal 금지 / Proposal 없이 Export 금지
+> **핵심 흐름:** 영상 → 분석 → 편집스토리 초안 → 사용자 협의 → StoryIntent → A/B 제안 → Render  
+> **절대 원칙:** 협의 없이 제안 금지 / StoryIntent 없이 Proposal 생성 금지 / Proposal 없이 Export 금지
 
-CCUT 1.0.4 장기 구조 보강축:
-1. Common Core v1
-2. Virtual Fragment Factory
-3. Web AI Contract v0.1
-4. External Proposal Service
-5. Cognitive Signal Matrix (Official Spec)
-   - [Spec](file:///d:/CCUT1.0.4/docs/COGNITIVE_SIGNAL_MATRIX_SPEC.md)
-   - [Taxonomy](file:///d:/CCUT1.0.4/docs/COGNITIVE_SIGNAL_TAXONOMY.md)
-   - [Fragmentation Rules](file:///d:/CCUT1.0.4/docs/FRAGMENTATION_RULES_BY_SIGNAL.md)
-   - [Matrix Mode Policy](file:///d:/CCUT1.0.4/docs/MATRIX_MODE_POLICY.md)
-   - [Free/Paid Policy](file:///d:/CCUT1.0.4/docs/FREE_PAID_ANALYSIS_POLICY.md)
+## Narrative Consultation Layer
 
-6. Video-use Quality Standards (Adapter Design)
-   - [Quality Rules](file:///d:/CCUT1.0.4/docs/VIDEO_USE_QUALITY_RULES_FOR_CCUT.md)
-   - [Word Snap Spec](file:///d:/CCUT1.0.4/docs/WORD_BOUNDARY_SNAP_SPEC.md)
-   - [Render QA Rules](file:///d:/CCUT1.0.4/docs/RENDER_QA_RULES.md)
-   - [Adapter Policy](file:///d:/CCUT1.0.4/docs/VIDEO_USE_ADAPTER_POLICY.md)
+CCUT1.0.4는 분석 완료 후 A/B 제안을 즉시 노출하지 않는다.  
+분석 결과는 먼저 편집스토리 초안으로 변환되고, 사용자는 이 초안을 보고 자연어로 의견을 제공한다.  
+CCUT은 사용자의 자연어 의견을 StoryIntent로 정리한 뒤, 그 StoryIntent를 기준으로 A/B 편집 제안을 생성한다.
 
-7. Free User Edit Form (Design)
-   - [Form Spec](file:///d:/CCUT1.0.4/docs/FREE_EDIT_FORM_SPEC.md)
-   - [Instruction Contract](file:///d:/CCUT1.0.4/docs/FORM_TO_EDIT_INSTRUCTION_CONTRACT.md)
-   - [Presets](file:///d:/CCUT1.0.4/docs/FREE_EDIT_FORM_PRESETS.md)
-   - [User Flow](file:///d:/CCUT1.0.4/docs/FREE_EDIT_USER_FLOW.md)
+기존 흐름:
+영상 → 분석 → A/B 제안
 
-8. Free Version MVP & Policy (Final)
-   - [MVP Spec](file:///d:/CCUT1.0.4/docs/FREE_VERSION_MVP_SPEC.md)
-   - [Feature Boundary](file:///d:/CCUT1.0.4/docs/FREE_VERSION_FEATURE_BOUNDARY.md)
-   - [Paid Policy](file:///d:/CCUT1.0.4/docs/PAID_FEATURE_POLICY.md)
-   - [API Cost Governance](file:///d:/CCUT1.0.4/docs/API_COST_GOVERNANCE_POLICY.md)
+새 흐름:
+영상 → 분석 → 편집스토리 초안 → 사용자 협의 → StoryIntent → A/B 제안
 
-9. Free Form UI Design (Monochrome Dark)
-   - [UI Minimum Spec](file:///d:/CCUT1.0.4/docs/FREE_FORM_UI_MINIMUM_SPEC.md)
-   - [Layout Guide](file:///d:/CCUT1.0.4/docs/FREE_FORM_UI_LAYOUT_GUIDE.md)
-   - [Style Guide](file:///d:/CCUT1.0.4/docs/FREE_FORM_UI_STYLE_GUIDE.md)
-   - [Component Map](file:///d:/CCUT1.0.4/docs/FREE_FORM_UI_COMPONENT_MAP.md)
-10. Video-use Helper Structure Analysis
-   - [Structure Analysis Report](file:///d:/CCUT1.0.4/docs/reports/VIDEO_USE_HELPER_STRUCTURE_ANALYSIS.md)
+이 구조는 CCUT을 단순 자동편집툴이 아니라, 영상 데이터를 이해하고 편집 전 사용자와 이야기 방향을 합의하는 로컬 AI 편집 시스템으로 정의한다.
 
-이 9개는 STEP 10 이후 구조 보강 핵심이며,
-STEP 0~9 PASS 파이프라인을 깨지 않는다.
+## Roadmap: STEP 10-I.5.28-E9 계열
 
+- E9-PRE: Story Direction Confirmation 설계 (PASS)
+- E9-R1: Story Direction Preview Skeleton (PASS)
+- E9-R1-R1: Story Direction Card Placement Repair (PASS)
+- E9-R2: Pre-Proposal Narrative Consultation Flow (PASS)
+- E9-R2-R1/R2: Chat History / ChatGPT-like UX 시도 (HOLD/REWORK)
+- E9-R2-R3 예정: ChatGPT Form Narrative Chat Repair
+- E9-R3 예정: StoryIntent → Proposal Request 연결
 
+> **주의:** E9-R2는 기능적으로 PASS이나, E9-R2-R1/R2의 채팅 UX는 최종 PASS가 아니다. 다음 작업은 ChatGPT식 익숙한 대화 폼으로 Narrative Consultation UI를 재정렬하는 것이다.
+
+---
 
 ## 0. 프로젝트 정의
-CCUT 1.0.4는 **영상 데이터를 의미 데이터로 변환하는 로컬 AI 시스템**이다. 기존 Fragment-first 구조를 Evidence/Semantic-first 구조로 전환한다.
+CCUT 1.0.4는 **영상 데이터를 의미/이야기 데이터로 해석하고, 편집 전 사용자와 대화해 방향을 합의한 뒤 편집 제안을 생성하는 로컬 AI 시스템**이다.
 
 ```text
 기존: 영상 → 조각 → 편집
-목표: 영상 → Evidence Board → Semantic Fragment → Proposal → ExportInput → Render
+변경: 영상 → 분석 → 편집스토리 초안 → 사용자 협의 → StoryIntent → A/B 제안
 ```
 
 ## 1. 최상위 원칙
 - 사용자가 최종 결정한다.
 - AI는 편집하지 않고 의미를 만든 뒤 제안만 한다.
-- CPU/GPU/RAM/Disk를 적극 사용하되 Resource Governor로 통제한다.
+- **편집 전 사용자와의 이야기 방향 협의(Narrative Consultation)가 제안의 전제조건이다.**
 - 모든 산출물은 재사용 가능한 데이터로 저장한다.
-- 사용자 응답 대기로 전체 분석을 멈추지 않는다.
-- Partial Evidence / Fragment / Proposal을 즉시 표시한다.
 
 ## 2. 전체 흐름
 1. 영상 입력
@@ -72,20 +55,22 @@ CCUT 1.0.4는 **영상 데이터를 의미 데이터로 변환하는 로컬 AI �
 4. Worker 병렬 분석
 5. Evidence Board 생성
 6. Quick Scan + Hypothesis 생성
-7. User Intent 선반영
-8. Semantic Fragment 생성
-9. User Intent 최종 재반영 및 re-score
-10. Proposal 전 방향 설명
-11. A/B Proposal 생성(JSON)
-12. Partial/Final 결과 표시
-13. Preview 시 영상 로딩
-14. ExportInput 생성
-15. 원본 기반 최종 Export 1회
-16. Archive 저장
-17. SNS 업로드
-18. 주간/월간 보고서 생성
+7. **Narrative Consultation (New)**
+   - 분석 데이터를 편집스토리 초안으로 변환
+   - 사용자 자연어 의견 수집
+   - StoryIntent 확정
+8. **A/B Proposal 생성 (Guided by StoryIntent)**
+9. Partial/Final 결과 표시
+10. Preview 시 영상 로딩
+11. ExportInput 생성
+12. 원본 기반 최종 Export 1회
+13. Archive 저장
 
 ## 3. 절대 금지
+- 분석 직후 A/B 제안 즉시 노출 금지
+- 사용자 협의 전 편집 제안 영상 노출 금지
+- StoryIntent 없이 ProposalEngine에 사용자 의도를 강하게 반영했다고 주장 금지
+- Narrative Consultation 이전 Export/Render 접근 금지
 - 코드 먼저 작성 금지
 - UI 선행 금지
 - 기존 코드 삭제 금지: 1차는 격리만 허용
