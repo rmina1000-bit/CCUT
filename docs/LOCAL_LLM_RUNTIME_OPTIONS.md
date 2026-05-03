@@ -1,4 +1,4 @@
-# Local LLM Runtime Options
+﻿# Local LLM Runtime Options
 
 ## 1. Overview
 CCUT targets local execution of Narrative LLMs. Several runtime options are available for hosting GGUF or other optimized model formats.
@@ -13,8 +13,9 @@ CCUT targets local execution of Narrative LLMs. Several runtime options are avai
 ### B. Ollama
 - **Pros**: One-click installation on Windows, automatic model management, clean REST API.
 - **Cons**: Background daemon required, slightly more abstraction than raw llama-server.
-- **Suitability**: High. (Current status: Primary candidate / R9 probe detected qwen2:latest). 
-- **Note**: Baseline testing with qwen2 showed high latency (timeout finding on Dev-PC). Qwen3-Instruct requires proper installation and resource allocation.
+- **Suitability**: High. (Current status: Primary candidate / R9-R10 probe detected qwen2 and qwen3:0.6b).
+- **Validation Target**: `qwen3:4b` (R10-C Baseline).
+- **Note**: Experimental probe of `qwen3:0.6b` showed 10s timeout on Dev-PC. 4B requires validation for both quality and latency.
 
 ### C. vLLM
 - **Pros**: High-throughput inference, production-grade features.

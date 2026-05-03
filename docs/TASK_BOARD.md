@@ -21,6 +21,7 @@
 - E9-R2-R9 Ollama Local Narrative Provider Probe
 - R10-A Qwen Model Inventory and Path Hygiene Review
 - R10-B Qwen3-Instruct Acquisition and Ollama Registration Plan
+- R10-C Qwen3 4B Ollama Candidate Install Plan
 
 ### HOLD / REWORK ⏸
 - E9-R2-R1 Narrative Chat History Repair

@@ -5,10 +5,10 @@ Qwen3-Instruct is the **Primary Candidate** for the Narrative LLM provider. Its 
 
 ## 2. Modality Coverage
 - **Qwen3-ASR**: Specialized for audio-to-text transcription.
-- **Qwen3-Instruct**: Handles Narrative Chat and generates `StoryIntentPatch` JSON. (Primary candidate, requires registration).
-- **Qwen-VL**: (Future) Targeted for frame understanding and vision-based analysis.
-- **Qwen-Coder**: (Future) Potential candidate for automated script or code-related tasks.
-- **Qwen2 (Legacy)**: Currently in Ollama registry but reserved for baseline testing only.
+- **Qwen3-4B-Instruct**: Primary validation baseline for Narrative Chat. (R10-C focus).
+- **Qwen3-0.6B/1.7B**: Experimental low-resource candidates. (0.6B tested; timeout finding recorded).
+- **Qwen3-8B-Instruct**: Target candidate for product viability.
+- **Qwen-VL / Qwen-Coder**: (Future) Modalities for vision and automation tasks.
 
 ## 3. Avoid Hard Dependencies
 When implementing the Qwen provider, the following must be avoided:

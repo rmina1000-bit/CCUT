@@ -4,7 +4,8 @@
 
 | Candidate | License Safety | Korean Proficiency | JSON Compliance | Runtime | VRAM Req | Status |
 |-----------|----------------|--------------------|-----------------|---------|----------|--------|
-| **Qwen3-Instruct** | Apache-2.0* | High | High | Ollama/llama | 4GB - 12GB | **Primary** |
+| **Qwen3-4B-Instruct** | Apache-2.0* | High | High | Ollama/llama | 4GB - 8GB | **Primary Validation** |
+| **Qwen3-8B-Instruct** | Apache-2.0* | High | High | Ollama/llama | 8GB - 12GB | **Product Target** |
 | **Mistral-7B-v0.3** | Apache-2.0 | Medium | High | Ollama/llama | 6GB - 10GB | **Secondary** |
 | **Gemma-2-9B** | **CAUTION** | Medium/High | Medium | Ollama | 8GB - 14GB | **Caution** |
 | **Llama-3.1-8B** | **CAUTION** | High | High | Ollama/llama | 6GB - 10GB | **Caution** |

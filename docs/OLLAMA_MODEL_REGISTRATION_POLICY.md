@@ -5,9 +5,12 @@ As of the current audit, the only model registered in Ollama is `qwen2:latest`. 
 
 ## 2. Registration Principles
 - **No Auto-Pull**: The CCUT backend shall never execute `ollama pull` without user intervention.
-- **Explicit Inventory**: The `narrative_provider_registry.py` defines the expected model names. If a required model (e.g., `qwen3-instruct`) is missing, the system reports `NO_QWEN3_MODEL_AVAILABLE`.
-- **Manual Registration**: Users or setup scripts must use standard commands:
-  - `ollama pull qwen3-instruct`
+- **Explicit Inventory**: The `narrative_provider_registry.py` defines the expected model names.
+- **Manual Registration Candidates**:
+  - `qwen3:4b` (Primary Validation Target)
+  - `qwen3:0.6b` (Experimental/Tested)
+- **Manual Registration Command**:
+  - `ollama pull qwen3:4b`
   - `ollama list` (to verify)
   - `ollama show <model>` (to check parameters)
 

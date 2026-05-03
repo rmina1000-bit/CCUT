@@ -8,9 +8,9 @@ Qwen3-Instruct is classified as an **AI Staff Provider**, not a core dependency.
 - **Manual Acquisition**: Models are NOT automatically downloaded by the CCUT backend.
 - **User Approval**: Installation occurs only after explicit user approval via a manual command or setup wizard.
 - **Candidate Variants**:
-  - **Qwen3 4B-Instruct**: Primary candidate for development and low-resource verification.
+  - **Qwen3 0.6B/1.7B**: Experimental low-resource candidates. (0.6B tested; baseline probe timeout recorded).
+  - **Qwen3 4B-Instruct**: **Primary Validation Baseline** for R10-C.
   - **Qwen3 8B-Instruct**: Target candidate for high-end creator laptops (RTX 4090/5090).
-  - **Qwen3 14B+**: Reserved for high-fidelity experiments on ultra-high-end workstations.
 
 ## 3. Deployment Runtimes
 - **Primary**: **Ollama** (via `ollama pull` or custom `Modelfile` registration).

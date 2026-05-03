@@ -280,3 +280,29 @@ Narrative Consultation should follow a familiar ChatGPT-style conversation form:
   - This is not a product viability failure; it is a developer machine/runtime timeout finding.
   - No model pull, external API call, frontend connection, main.py API wiring, config change, or runtime integration was added.
 - Runtime impact: None.
+
+## STEP 10-I.5.28-E9-R2-R10-C - Qwen3 4B Ollama Candidate Install Plan
+
+- Scope: Documentation and validation protocol only
+- Created:
+  - docs/QWEN3_4B_OLLAMA_INSTALL_PLAN.md
+  - docs/QWEN3_4B_VALIDATION_PROTOCOL.md
+  - docs/NARRATIVE_LLM_MODEL_BASELINE.md
+- Updated:
+  - docs/QWEN3_INSTRUCT_ACQUISITION_PLAN.md
+  - docs/OLLAMA_MODEL_REGISTRATION_POLICY.md
+  - docs/NARRATIVE_MODEL_SELECTION_MATRIX.md
+  - docs/QWEN_PROVIDER_CANDIDATE_PLAN.md
+  - docs/LOCAL_LLM_RUNTIME_OPTIONS.md
+  - docs/TASK_BOARD.md
+  - docs/SESSION_HANDOFF.md
+  - docs/REVISION_REPORT.md
+- Summary:
+  - Set qwen3:4b as the first Narrative LLM validation baseline.
+  - Recorded qwen3:0.6b as a manually installed smoke-test model.
+  - Recorded qwen3:0.6b timeout as a timeout-policy finding, not a model adoption result.
+  - Kept qwen2:latest as legacy/test-only.
+  - Kept Qwen3-ASR as ASR-only.
+  - Kept qwen3:8b as the high-end product candidate.
+- Runtime impact: None.
+- Model download or execution in this step: None.
