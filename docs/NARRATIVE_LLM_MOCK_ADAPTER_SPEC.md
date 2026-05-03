@@ -24,10 +24,10 @@ class StoryIntentPatch:
     constraints: List[str]
 ```
 
-## 4. Fallback Relationship
-- The Mock Adapter is a **FUTURE_PROVIDER** candidate.
-- In production, if the primary LLM fails, the system falls back to the **RULE_BASED_FALLBACK** (frontend `buildConsultationReply`).
-- The Mock Adapter simulates the successful path without model latency or resource overhead.
+## 4. Provider Swap Architecture Integration
+- The Mock Adapter is the first **ACTIVE_MOCK** implementation of the `NarrativeLLMProvider` protocol.
+- It serves as a test double to verify that the CCUT Core can interact with any provider conforming to the contract.
+- In production, the system can swap between this mock, Qwen, or other models defined in the `narrative_provider_registry`.
 
 ## 5. Mock Logic Details
 The current mock implementation (`mock_narrative_llm.py`) uses simple keyword matching to populate the patch fields:

@@ -208,3 +208,25 @@ Narrative Consultation should follow a familiar ChatGPT-style conversation form:
   - No Qwen3-Instruct, external API, frontend fetch, backend main.py, config, DB, ProposalEngine, or runtime integration was added.
 - Runtime impact: None.
 - Code changes to existing runtime paths: None.
+
+## STEP 10-I.5.28-E9-R2-R7 - Swappable Local Narrative LLM Provider Design
+
+- Scope: Provider interface, candidate registry, and swap policy documentation
+- Created:
+  - ccut_backend/ai/contracts/narrative_llm_provider.py
+  - ccut_backend/ai/boundary/narrative_provider_registry.py
+  - docs/NARRATIVE_LLM_PROVIDER_SWAP_POLICY.md
+  - docs/LOCAL_LLM_RUNTIME_OPTIONS.md
+  - docs/QWEN_PROVIDER_CANDIDATE_PLAN.md
+- Updated:
+  - docs/NARRATIVE_LLM_MOCK_ADAPTER_SPEC.md
+  - docs/TASK_BOARD.md
+  - docs/SESSION_HANDOFF.md
+  - docs/REVISION_REPORT.md
+- Summary:
+  - Defined NarrativeLLMProvider protocol for provider abstraction.
+  - Added swappable provider candidate registry.
+  - Kept Qwen3-Instruct as primary candidate, not hard dependency.
+  - Preserved CCUT Core dependency only on StoryIntentPatch and NarrativeLLMResult contracts.
+  - No actual AI model call, config change, API wiring, frontend fetch, or runtime integration was added.
+- Runtime impact: None.

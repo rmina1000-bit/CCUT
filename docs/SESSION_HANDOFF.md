@@ -52,15 +52,15 @@ User feedback:
 ## 1. 현재 기준선
 
 - **Branch:** `ccut-1.0.4-step9`
-- **SHA:** `f58fd80b4f209d5ef3d5b4fa15ae312d01dc3927`
+- **SHA:** `b0de27717fc5d3a91291e4ef436d94cd5b53d742`
 - **Local path:** `D:\CCUT1.0.4`
 - **Repo:** `https://github.com/rmina1000-bit/CCUT.git`
 - **Last updated:** 2026-05-03
 
-### AI Staff Strategy & Mock Adapter
+### AI Staff Strategy & Swappable Provider
 - AI Staff Strategy Docs (R5B) created.
-- Mock Narrative LLM Adapter (R6) implemented with StoryIntentPatch contract.
-- Simulation tool (simulate_mock_narrative_llm.py) verified.
+- Mock Narrative LLM Adapter (R6) implemented.
+- Swappable Provider Design (R7) completed with interface and candidate registry.
 
 ... (이하 기존 내역 보존)
 
