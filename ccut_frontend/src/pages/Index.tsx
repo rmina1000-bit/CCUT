@@ -19,7 +19,7 @@ import {
 import { assignShortDisplayIds, getUid, recalcDisplayIds } from "@/lib/fragmentIdentity";
 import { videoService } from "@/services/videoService";
 
-import { Direction, DirectionSnapshot, Proposal } from "@/proposal/proposalTypes";
+import { Direction, DirectionSnapshot, Proposal, StoryPlanPreview } from "@/proposal/proposalTypes";
 import {
   createInitialSnapshot,
   createNextSnapshot,
@@ -100,6 +100,8 @@ const Index: React.FC = () => {
     setProposals,
     directionSnapshot,
     setDirectionSnapshot,
+    storyPlan,
+    setStoryPlan,
     handleProposalPreview,
     handleProposalCommit,
     handleReproposal,
@@ -520,7 +522,52 @@ const Index: React.FC = () => {
     [logProposalPair, resetAnalysisState, toFullUrl]
   );
 
-// handleProposalPreview, handleProposalCommit moved to useProposalState
+  // [STEP 10-I.5.28-E9-R1] StoryPlanPreview 자동 생성 (Skeleton)
+  useEffect(() => {
+    if (appState !== "complete" || !proposals || storyPlan) return;
+
+    console.log("[StoryPlan] Generating StoryPlan v0 skeleton...");
+    
+    const sourceCount = (sourceEntries ?? []).length;
+    const isMulti = sourceCount >= 3;
+    
+    // 1. Project Type & Theme
+    const projectType = isMulti ? "multi_source_memory" : "highlight_collection";
+    const detectedTheme = isMulti ? "여러 영상 기반 기록형 프로젝트" : "짧은 하이라이트형 프로젝트";
+    
+    // 2. Risk Sources (analyzed_fragment_count 기반)
+    const riskSources: any[] = [];
+    (sourceEntries ?? []).forEach(entry => {
+        if (entry.fragments.length <= 1) {
+            riskSources.push({
+                source_id: entry.source_id,
+                label: entry.label,
+                reason: "분석된 의미 조각이 매우 적음",
+                status: "JUNK_SUSPECT"
+            });
+        }
+    });
+
+    const newPlan: StoryPlanPreview = {
+        story_plan_id: `STP_${Date.now()}`,
+        project_type: projectType,
+        detected_theme: detectedTheme,
+        default_direction: isMulti ? "user_memory" : "market_highlight",
+        direction_options: [
+            { id: "market_highlight", label: "시장형 하이라이트", description: "강한 장면 위주의 빠른 전개" },
+            { id: "user_memory", label: "사용자친화형 기록", description: "현장감을 살린 자연스러운 구성" },
+            { id: "fast", label: "더 빠르게", description: "핵심만 골라 템포 조절" },
+            { id: "emotional", label: "더 감성적으로", description: "분위기 있는 장면 위주" }
+        ],
+        source_roles: {}, // Skeleton에서는 빈 값
+        risk_sources: riskSources,
+        confirmation_status: "pending"
+    };
+
+    setStoryPlan(newPlan);
+  }, [appState, proposals, sourceEntries, storyPlan, setStoryPlan]);
+
+  // handleProposalPreview, handleProposalCommit moved to useProposalState
 
 // handleReproposal moved to useProposalState
 
@@ -894,6 +941,8 @@ const Index: React.FC = () => {
           onReproposal={handleReproposal}
           fragments={resolvedFragments}
           exportClips={physicalClips}
+          storyPlan={storyPlan}
+          onStoryPlanConfirm={setStoryPlan}
           guidanceMessage={
             semanticFragments.length > 0
               ? "Semantic " + semanticFragments.length + " / Quick Scan " + (quickScanData?.status ?? "READY")

@@ -48,3 +48,26 @@ export interface Proposal {
     template_id: string;
     slot_trace: ProposalSlotTrace[];
 }
+
+export type StoryDirectionOption = {
+  id: "market_highlight" | "user_memory" | "fast" | "emotional" | "balanced";
+  label: string;
+  description: string;
+};
+
+export type StoryPlanPreview = {
+  story_plan_id: string;
+  project_type: string;
+  detected_theme: string;
+  default_direction: "market_highlight" | "user_memory";
+  direction_options: StoryDirectionOption[];
+  source_roles: Record<string, string>;
+  risk_sources: Array<{
+    source_id: string;
+    label: string;
+    reason: string;
+    status: "WEAK" | "JUNK_SUSPECT" | "EXCLUDE_RECOMMENDED";
+  }>;
+  confirmation_status: "pending" | "confirmed" | "adjusted";
+  selected_direction?: string;
+};

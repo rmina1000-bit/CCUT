@@ -9,6 +9,7 @@ export const useProposalState = (sourceFragments: Fragment[]) => {
   const [committedProposalId, setCommittedProposalId] = useState<string | null>(null);
   const [proposals, setProposals] = useState<Record<"A" | "B", Proposal> | null>(null);
   const [directionSnapshot, setDirectionSnapshot] = useState<DirectionSnapshot | null>(null);
+  const [storyPlan, setStoryPlan] = useState<any | null>(null); // StoryPlanPreview
 
   const logProposalPair = useCallback(
     (pair: Record<"A" | "B", Proposal>, label: string) => {
@@ -82,6 +83,8 @@ export const useProposalState = (sourceFragments: Fragment[]) => {
     setProposals,
     directionSnapshot,
     setDirectionSnapshot,
+    storyPlan,
+    setStoryPlan,
     handleProposalPreview,
     handleProposalCommit,
     handleReproposal,

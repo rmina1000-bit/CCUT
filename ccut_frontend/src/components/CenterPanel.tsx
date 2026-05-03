@@ -2,7 +2,7 @@ import React, { useRef, useEffect, useState, useCallback, useMemo } from "react"
 import { Upload, Play, Loader2, Send, CheckCircle2, Package, BookOpen, List, ChevronDown, AlertCircle } from "lucide-react";
 import { Fragment } from "@/data/fragmentData";
 import { videoService } from "@/services/videoService";
-import { Direction } from "@/proposal/proposalTypes";
+import { Direction, StoryPlanPreview } from "@/proposal/proposalTypes";
 import { PhysicalClip, validateExportClips } from "@/utils/exportClipBuilder";
 
 type AppState = "empty" | "analyzing" | "complete";
@@ -43,6 +43,8 @@ interface CenterPanelProps {
   sourceEntries?: SourceEntry[];
   fragments?: Fragment[];
   exportClips?: PhysicalClip[];
+  storyPlan?: StoryPlanPreview | null;
+  onStoryPlanConfirm?: (plan: StoryPlanPreview) => void;
 }
 
 function parseDirectionFromText(text: string): Direction | null {
@@ -163,6 +165,8 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
   sourceEntries = [],
   fragments = [],
   exportClips = [],
+  storyPlan,
+  onStoryPlanConfirm,
 }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const videoRefA = useRef<HTMLVideoElement>(null);
@@ -738,6 +742,81 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
 
     return (
       <div className="flex-1 w-full px-4 pt-4 flex flex-col items-center space-y-4 overflow-y-auto no-scrollbar pb-20">
+        
+        {/* [STEP 10-I.5.28-E9-R1] Story Direction Confirmation Card */}
+        {storyPlan && (
+          <div className="w-full max-w-[800px] bg-card/40 border border-primary/20 rounded-2xl p-4 shadow-lg backdrop-blur-sm">
+            <div className="flex items-start gap-3">
+              <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center flex-shrink-0">
+                <BookOpen size={20} className="text-primary" />
+              </div>
+              <div className="flex-1 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className="text-[14px] font-bold text-foreground">이야기 방향 확인</h3>
+                    <p className="text-[11px] text-muted-foreground/70">AI가 분석한 프로젝트 성격: <span className="text-primary/80 font-medium">{storyPlan.detected_theme}</span></p>
+                  </div>
+                  {storyPlan.confirmation_status !== "pending" && (
+                    <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-primary/10 border border-primary/20">
+                      <CheckCircle2 size={12} className="text-primary" />
+                      <span className="text-[10px] font-bold text-primary">확인됨</span>
+                    </div>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-2 gap-2">
+                  {storyPlan.direction_options.slice(0, 2).map((opt) => (
+                    <div 
+                      key={opt.id}
+                      className={`p-3 rounded-xl border transition-all cursor-pointer group ${
+                        storyPlan.selected_direction === opt.id 
+                        ? 'bg-primary/10 border-primary/40 shadow-inner' 
+                        : 'bg-secondary/20 border-border/10 hover:border-primary/30'
+                      }`}
+                      onClick={() => onStoryPlanConfirm?.({ ...storyPlan, selected_direction: opt.id, confirmation_status: "confirmed" })}
+                    >
+                      <p className="text-[12px] font-bold text-foreground group-hover:text-primary transition-colors">{opt.label}</p>
+                      <p className="text-[10px] text-muted-foreground/60 leading-tight mt-1">{opt.description}</p>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="flex items-center gap-2">
+                  {storyPlan.direction_options.slice(2).map((opt) => (
+                    <button
+                      key={opt.id}
+                      className={`px-3 py-1.5 rounded-lg text-[10px] font-medium border transition-all ${
+                        storyPlan.selected_direction === opt.id
+                        ? 'bg-primary text-primary-foreground border-primary'
+                        : 'bg-secondary/40 text-muted-foreground hover:text-foreground border-transparent hover:bg-secondary/60'
+                      }`}
+                      onClick={() => onStoryPlanConfirm?.({ ...storyPlan, selected_direction: opt.id, confirmation_status: "adjusted" })}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                  
+                  {storyPlan.confirmation_status === "pending" && (
+                    <button 
+                      className="ml-auto px-5 py-2 bg-primary text-primary-foreground rounded-xl text-[11px] font-bold hover:opacity-90 shadow-lg shadow-primary/20"
+                      onClick={() => onStoryPlanConfirm?.({ ...storyPlan, selected_direction: storyPlan.default_direction, confirmation_status: "confirmed" })}
+                    >
+                      이대로 제안 생성
+                    </button>
+                  )}
+                </div>
+
+                {storyPlan.confirmation_status === "adjusted" && (
+                  <div className="flex items-center gap-2 px-3 py-2 bg-amber-500/10 border border-amber-500/20 rounded-xl">
+                    <AlertCircle size={14} className="text-amber-500" />
+                    <p className="text-[10px] text-amber-200/80">선택한 방향은 다음 재제안 단계에서 반영됩니다.</p>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
         <div className="grid grid-cols-2 gap-4 w-full">
           <div className="flex flex-col items-center space-y-4">
             <div
