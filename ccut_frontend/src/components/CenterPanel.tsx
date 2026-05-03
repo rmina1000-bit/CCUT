@@ -25,6 +25,7 @@ interface CenterPanelProps {
   ) => Promise<{ status: string; file_url?: string; ai_msg?: string; message?: string }>;
   onFileSelect?: (file: File) => void;
   onReproposal?: (direction: Direction) => void;
+  onConsultation?: (text: string) => void;
   appState: AppState;
   onAppStateChange: (state: AppState) => void;
   analyzeProgress: number;
@@ -153,6 +154,7 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
   onExport,
   onFileSelect,
   onReproposal,
+  onConsultation,
   appState,
   analyzeProgress,
   analyzeMessage,
@@ -172,16 +174,40 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
   const videoRefA = useRef<HTMLVideoElement>(null);
   const videoRefB = useRef<HTMLVideoElement>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
+  const consultationTextareaRef = useRef<HTMLTextAreaElement | null>(null);
 
   const [activePlayer, setActivePlayer] = useState<"A" | "B" | null>(null);
   const activePlayerRef = useRef<"A" | "B" | null>(null);
+  const [consultationInput, setConsultationInput] = useState("");
 
-  // Auto scroll for consultation chat
-  useEffect(() => {
-    if (storyPlan?.messages && storyPlan.consultation_status !== "confirmed") {
-        chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  const resizeConsultationTextarea = useCallback((textarea?: HTMLTextAreaElement | null) => {
+    if (!textarea) return;
+    textarea.style.height = "auto";
+    textarea.style.height = `${Math.min(textarea.scrollHeight, 160)}px`;
+  }, []);
+
+  const resetConsultationTextarea = useCallback(() => {
+    requestAnimationFrame(() => {
+      if (consultationTextareaRef.current) {
+        consultationTextareaRef.current.style.height = "auto";
+      }
+    });
+  }, []);
+
+  const handleSubmitConsultation = useCallback(() => {
+    const text = consultationInput.trim();
+    if (!text) return;
+    setConsultationInput("");
+    resetConsultationTextarea();
+    if (onConsultation) {
+      onConsultation(text);
     }
-  }, [storyPlan?.messages, storyPlan?.consultation_status]);
+  }, [consultationInput, onConsultation, resetConsultationTextarea]);
+
+  // Auto scroll for consultation chat — always run when messages change
+  useEffect(() => {
+    chatEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+  }, [storyPlan?.messages?.length]);
 
   const setActivePlayerSafe = useCallback((player: "A" | "B" | null) => {
     activePlayerRef.current = player;
@@ -754,13 +780,13 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
     return (
       <div className="flex-1 w-full px-4 pt-4 flex flex-col items-center space-y-4 overflow-y-auto no-scrollbar pb-20">
         
-        {/* [STEP 10-I.5.28-E9-R2-R3] ChatGPT Form Narrative Consultation Chat History */}
-        {storyPlan && storyPlan.consultation_status !== "confirmed" && (
+        {/* [STEP 10-I.5.28-E9-R2-R3-R2] ChatGPT Form Narrative Consultation — always visible */}
+        {storyPlan && (storyPlan.messages || []).length > 0 && (
           <div className="w-full max-w-[800px] flex flex-col gap-6 py-8 animate-in fade-in duration-700">
-            
-            {/* Message History */}
+
+            {/* Message History — persists even after confirmed */}
             <div className="flex flex-col gap-8">
-              {(storyPlan.messages || []).map((msg, idx) => (
+              {(storyPlan.messages || []).map((msg) => (
                 <div key={msg.id} className={`flex ${msg.sender === "user" ? "justify-end" : "justify-start"} animate-in fade-in slide-in-from-bottom-2 duration-500`}>
                   <div className={`flex gap-4 max-w-[85%] ${msg.sender === "user" ? "flex-row-reverse" : "flex-row"}`}>
                     <div className={`w-8 h-8 rounded-lg flex-shrink-0 flex items-center justify-center mt-1 ${msg.sender === "ai" ? "bg-primary/10 text-primary" : "bg-secondary/40 text-muted-foreground"}`}>
@@ -768,8 +794,8 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
                     </div>
                     <div className={`flex flex-col gap-1.5 ${msg.sender === "user" ? "items-end" : "items-start"}`}>
                       <div className={`px-5 py-3.5 rounded-2xl leading-relaxed text-[14px] whitespace-pre-wrap break-words ${
-                        msg.sender === "user" 
-                          ? "bg-[#161618] border border-white/5 text-foreground/90 rounded-tr-none" 
+                        msg.sender === "user"
+                          ? "bg-[#161618] border border-white/5 text-foreground/90 rounded-tr-none"
                           : "bg-secondary/10 border border-border/5 text-foreground/90 rounded-tl-none"
                       }`}>
                         {msg.text}
@@ -782,42 +808,44 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
               <div ref={chatEndRef} />
             </div>
 
-            {/* Suggestion Chips (Secondary) */}
-            <div className="flex flex-col gap-3 mt-4 border-t border-white/5 pt-8">
-              <p className="text-[11px] font-bold text-muted-foreground/40 uppercase tracking-widest px-1">의견 제안</p>
-              <div className="flex flex-wrap gap-2">
-                <button 
-                  className="px-4 py-2 bg-primary/20 text-primary border border-primary/20 rounded-full text-[12px] font-bold hover:bg-primary hover:text-primary-foreground transition-all"
-                  onClick={() => onStoryPlanConfirm?.({ ...storyPlan, consultation_status: "confirmed", confirmation_status: "confirmed" })}
-                >
-                  이대로 제안해줘
-                </button>
-                <button 
-                  className="px-4 py-2 bg-secondary/30 text-muted-foreground border border-white/5 rounded-full text-[12px] font-medium hover:bg-secondary/50 hover:text-foreground transition-all"
-                  onClick={() => onReproposal?.("사람 중심으로")}
-                >
-                  사람 중심으로
-                </button>
-                <button 
-                  className="px-4 py-2 bg-secondary/30 text-muted-foreground border border-white/5 rounded-full text-[12px] font-medium hover:bg-secondary/50 hover:text-foreground transition-all"
-                  onClick={() => onReproposal?.("풍경은 줄여줘")}
-                >
-                  풍경은 줄이고
-                </button>
-                <button 
-                  className="px-4 py-2 bg-secondary/30 text-muted-foreground border border-white/5 rounded-full text-[12px] font-medium hover:bg-secondary/50 hover:text-foreground transition-all"
-                  onClick={() => onReproposal?.("더 빠르게")}
-                >
-                  더 빠르게
-                </button>
-                <button 
-                  className="px-4 py-2 bg-secondary/30 text-muted-foreground border border-white/5 rounded-full text-[12px] font-medium hover:bg-secondary/50 hover:text-foreground transition-all"
-                  onClick={() => onReproposal?.("여러 영상을 골고루")}
-                >
-                  여러 영상 골고루
-                </button>
+            {/* Suggestion Chips — hidden after confirmed */}
+            {storyPlan.consultation_status !== "confirmed" && (
+              <div className="flex flex-col gap-3 mt-4 border-t border-white/5 pt-6">
+                <p className="text-[11px] font-bold text-muted-foreground/40 uppercase tracking-widest px-1">의견 제안</p>
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    className="px-4 py-2 bg-secondary/30 text-muted-foreground border border-white/5 rounded-full text-[12px] font-medium hover:bg-secondary/50 hover:text-foreground transition-all"
+                    onClick={() => onConsultation?.("이대로 제안해줘")}
+                  >
+                    이대로 제안해줘
+                  </button>
+                  <button
+                    className="px-4 py-2 bg-secondary/30 text-muted-foreground border border-white/5 rounded-full text-[12px] font-medium hover:bg-secondary/50 hover:text-foreground transition-all"
+                    onClick={() => onConsultation?.("사람 중심으로")}
+                  >
+                    사람 중심으로
+                  </button>
+                  <button
+                    className="px-4 py-2 bg-secondary/30 text-muted-foreground border border-white/5 rounded-full text-[12px] font-medium hover:bg-secondary/50 hover:text-foreground transition-all"
+                    onClick={() => onConsultation?.("풍경은 줄여줘")}
+                  >
+                    풍경은 줄이고
+                  </button>
+                  <button
+                    className="px-4 py-2 bg-secondary/30 text-muted-foreground border border-white/5 rounded-full text-[12px] font-medium hover:bg-secondary/50 hover:text-foreground transition-all"
+                    onClick={() => onConsultation?.("더 빠르게")}
+                  >
+                    더 빠르게
+                  </button>
+                  <button
+                    className="px-4 py-2 bg-secondary/30 text-muted-foreground border border-white/5 rounded-full text-[12px] font-medium hover:bg-secondary/50 hover:text-foreground transition-all"
+                    onClick={() => onConsultation?.("여러 영상 골고루")}
+                  >
+                    여러 영상 골고루
+                  </button>
+                </div>
               </div>
-            </div>
+            )}
           </div>
         )}
         
@@ -868,6 +896,7 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
 
         {/* [STEP 10-I.5.28-E9-R2] Proposals Grid (Visible only after confirmation) */}
         {storyPlan?.consultation_status === "confirmed" && (
+          <>
           <div className="grid grid-cols-2 gap-4 w-full">
           <div className="flex flex-col items-center space-y-4">
             <div
@@ -1336,6 +1365,8 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
             {exportError && <p className="text-[11px] text-red-400/80">{exportError}</p>}
           </div>
         )}
+          </>
+        )}
 
         {guidanceMessage && (
           <div className="animate-in fade-in slide-in-from-bottom-2 duration-500">
@@ -1354,32 +1385,71 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
     <div className="flex flex-col h-full w-full bg-[#0a0a0b] items-center overflow-hidden relative">
       {renderContent()}
 
-      <div className="absolute bottom-10 w-full max-w-3xl px-8 pointer-events-none z-50">
-        <div className="relative flex items-center pointer-events-auto">
-          <input
-            type="text"
-            value={chatValue}
-            onChange={(e) => setChatValue(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") handleSendFull();
-            }}
-            disabled={appState === "analyzing"}
-            placeholder={
-              appState === "analyzing"
-                ? "분석 중에는 잠시만 기다려 주세요..."
-                : "편하게 말씀해 주세요. 예: 사람 중심으로 / 더 빠르게 / 풍경 줄여"
-            }
-            className={`w-full bg-[#161618] border border-white/5 rounded-full px-10 py-5 text-[14px] focus:outline-none focus:border-white/10 shadow-2xl transition-all ${appState === "analyzing" ? "opacity-40" : "placeholder:text-muted-foreground/30"
-              }`}
-          />
-          <button
-            onClick={handleSendFull}
-            className="absolute right-3 p-2.5 rounded-full bg-primary/20 text-primary hover:bg-primary hover:text-primary-foreground transition-all"
-          >
-            <Send size={20} />
-          </button>
+      {/* [STEP 10-I.5.28-E9-R2-R3-R2] ChatGPT-style auto-grow Composer */}
+      {storyPlan && storyPlan.consultation_status !== "confirmed" && (
+        <div className="sticky bottom-0 z-20 w-full border-t border-zinc-800/70 bg-black/90 px-5 py-4">
+          <div className="mx-auto flex w-full max-w-3xl items-end gap-3 rounded-[28px] border border-zinc-700/70 bg-zinc-900/80 px-5 py-3 shadow-sm">
+            <textarea
+              ref={consultationTextareaRef}
+              value={consultationInput}
+              rows={1}
+              placeholder="편하게 말씀해 주세요. 예: 사람 중심으로 / 더 빠르게 / 풍경 줄여"
+              disabled={appState === "analyzing"}
+              onChange={(e) => {
+                setConsultationInput(e.target.value);
+                resizeConsultationTextarea(e.currentTarget);
+              }}
+              onKeyDown={(e) => {
+                if (e.nativeEvent.isComposing) return;
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  handleSubmitConsultation();
+                }
+              }}
+              className="min-h-[44px] max-h-[160px] flex-1 resize-none overflow-y-auto bg-transparent py-2 text-sm leading-relaxed text-zinc-100 outline-none placeholder:text-zinc-500 whitespace-pre-wrap break-words disabled:opacity-40"
+            />
+            <button
+              type="button"
+              onClick={handleSubmitConsultation}
+              disabled={!consultationInput.trim() || appState === "analyzing"}
+              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-zinc-100 text-zinc-950 disabled:opacity-30 transition-opacity"
+              aria-label="의견 보내기"
+            >
+              <Send size={16} />
+            </button>
+          </div>
         </div>
-      </div>
+      )}
+
+      {/* Legacy global chat bar (non-consultation states) */}
+      {(!storyPlan || storyPlan.consultation_status === "confirmed") && (
+        <div className="absolute bottom-10 w-full max-w-3xl px-8 pointer-events-none z-50">
+          <div className="relative flex items-center pointer-events-auto">
+            <input
+              type="text"
+              value={chatValue}
+              onChange={(e) => setChatValue(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") handleSendFull();
+              }}
+              disabled={appState === "analyzing"}
+              placeholder={
+                appState === "analyzing"
+                  ? "분석 중에는 잠시만 기다려 주세요..."
+                  : "편하게 말씀해 주세요. 예: 사람 중심으로 / 더 빠르게 / 풍경 줄여"
+              }
+              className={`w-full bg-[#161618] border border-white/5 rounded-full px-10 py-5 text-[14px] focus:outline-none focus:border-white/10 shadow-2xl transition-all ${appState === "analyzing" ? "opacity-40" : "placeholder:text-muted-foreground/30"
+                }`}
+            />
+            <button
+              onClick={handleSendFull}
+              className="absolute right-3 p-2.5 rounded-full bg-primary/20 text-primary hover:bg-primary hover:text-primary-foreground transition-all"
+            >
+              <Send size={20} />
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

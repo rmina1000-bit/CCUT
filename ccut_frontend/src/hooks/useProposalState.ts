@@ -74,44 +74,90 @@ export const useProposalState = (sourceFragments: Fragment[]) => {
     [directionSnapshot, logProposalPair, sourceFragments]
   );
 
-  const handleConsultation = useCallback((text: string) => {
-    if (!storyPlan || storyPlan.consultation_status === "confirmed") return;
+  const buildConsultationReply = useCallback((input: string): string => {
+    const normalized = input.trim();
 
-    const lower = text.toLowerCase();
-    const userMsg = { id: `user_${Date.now()}`, sender: "user" as const, text, timestamp: Date.now() };
-    let aiResponse = "";
-    let nextStatus = storyPlan.consultation_status;
-
-    if (lower.includes("이대로") || lower.includes("좋아") || lower.includes("진행") || lower.includes("제안해")) {
-      aiResponse = "좋습니다. 이제 이 기준으로 두 가지 편집안을 만들어볼게요.";
-      nextStatus = "confirmed";
-    } else {
-      if (lower.includes("빠르게") || lower.includes("템포")) aiResponse = "네, 핵심 위주로 템포를 빠르게 가져가며 속도감을 살려보겠습니다.";
-      else if (lower.includes("감성") || lower.includes("따뜻")) aiResponse = "분위기 있고 감성적인 장면들을 우선적으로 배치해서 여운을 줄게요.";
-      else if (lower.includes("사람") || lower.includes("가족")) aiResponse = "좋습니다. 사람과 표정, 동작이 중심이 되도록 무게를 좀 더 둘게요.";
-      else if (lower.includes("풍경") || lower.includes("배경")) aiResponse = "풍경과 배경의 미학을 살려서 시각적으로 시원한 전개를 만들어볼게요.";
-      else if (lower.includes("골고루")) aiResponse = "여러 영상을 골고루 활용해서 전체적인 기록이 잘 드러나게 할게요.";
-      else aiResponse = "의견 감사합니다. 말씀하신 방향을 잘 반영해서 준비해볼게요.";
-      nextStatus = "user_requested_change";
+    if (!normalized) {
+      return "말씀을 조금 더 입력해 주시면 그 방향을 편집 의도에 반영하겠습니다.";
     }
 
-    const aiMsg = { id: `ai_${Date.now() + 1}`, sender: "ai" as const, text: aiResponse, timestamp: Date.now() + 1 };
-    const nextIntent: any = { ...storyPlan.story_intent };
-    if (lower.includes("빠르게") || lower.includes("템포")) nextIntent.pace = "fast";
-    if (lower.includes("감성") || lower.includes("따뜻")) nextIntent.mood = "warm";
-    if (lower.includes("사람") || lower.includes("가족")) nextIntent.focus = "people";
-    if (lower.includes("풍경") || lower.includes("배경")) nextIntent.focus = "landscape";
-    if (lower.includes("골고루")) nextIntent.coverage = "balanced_sources";
+    if (/빠르게|템포|속도|지루|짧게/.test(normalized)) {
+      return "좋습니다. 장면 전환을 더 촘촘하게 잡고, 반복되는 구간은 줄이는 방향으로 편집 의도를 조정하겠습니다.";
+    }
 
-    setStoryPlan({
-      ...storyPlan,
-      story_intent: nextIntent,
-      consultation_status: nextStatus,
-      confirmation_status: nextStatus === "confirmed" ? "confirmed" : storyPlan.confirmation_status,
-      user_notes: text,
-      messages: [...(storyPlan.messages || []), userMsg, aiMsg]
+    if (/사람|인물|표정|대화|관계|가족/.test(normalized)) {
+      return "알겠습니다. 인물의 동작, 표정, 상호작용이 잘 보이는 조각을 우선 배치하는 방향으로 맞추겠습니다.";
+    }
+
+    if (/감성|분위기|여운|잔잔|따뜻/.test(normalized)) {
+      return "좋습니다. 빠른 정보 전달보다 분위기와 여운이 살아나는 장면을 중심으로 편집 방향을 잡겠습니다.";
+    }
+
+    if (/풍경|배경|장소|공간/.test(normalized)) {
+      return "알겠습니다. 장소와 배경은 필요한 만큼만 남기고, 이야기 흐름을 해치지 않도록 균형을 맞추겠습니다.";
+    }
+
+    if (/골고루|균형|전체|여러 영상|모두/.test(normalized)) {
+      return "좋습니다. 특정 영상에 치우치지 않도록 여러 원본의 조각을 균형 있게 섞는 방향으로 준비하겠습니다.";
+    }
+
+    if (/이대로|제안|만들어|진행|좋아|오케이|ok/i.test(normalized)) {
+      return "네, 지금까지의 대화 내용을 기준으로 A/B 편집 제안을 준비하겠습니다.";
+    }
+
+    if (/[?？]$|알아듣|이해/.test(normalized)) {
+      return "네, 말씀하신 내용을 편집 방향으로 해석하고 있습니다. 지금까지의 대화는 StoryIntent에 누적하고, 그 기준으로 A/B 제안을 준비하겠습니다.";
+    }
+
+    return `알겠습니다. 말씀하신 "${normalized.slice(0, 40)}${normalized.length > 40 ? "..." : ""}" 방향을 반영해서 편집 의도를 조정하겠습니다.`;
+  }, []);
+
+  const handleConsultation = useCallback((text: string) => {
+    if (!storyPlan) return;
+
+    const lower = text.toLowerCase();
+    const shouldConfirm =
+      lower.includes("이대로") ||
+      lower.includes("진행") ||
+      lower.includes("제안해") ||
+      /ok$/i.test(lower) ||
+      lower.includes("오케이");
+
+    const userMsg = {
+      id: `user_${Date.now()}`,
+      sender: "user" as const,
+      text,
+      timestamp: Date.now(),
+    };
+
+    const aiMsg = {
+      id: `ai_${Date.now() + 1}`,
+      sender: "ai" as const,
+      text: buildConsultationReply(text),
+      timestamp: Date.now() + 1,
+    };
+
+    const nextIntent: any = { ...(storyPlan.story_intent || {}) };
+    if (/빠르게|템포|속도/.test(lower)) nextIntent.pace = "fast";
+    if (/감성|따뜻|여운/.test(lower)) nextIntent.mood = "warm";
+    if (/사람|인물|가족/.test(lower)) nextIntent.focus = "people";
+    if (/풍경|배경|장소/.test(lower)) nextIntent.focus = "landscape";
+    if (/골고루|균형/.test(lower)) nextIntent.coverage = "balanced_sources";
+
+    const nextStatus = shouldConfirm ? "confirmed" : "user_requested_change";
+
+    setStoryPlan((prev: any) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        story_intent: nextIntent,
+        consultation_status: nextStatus,
+        confirmation_status: nextStatus === "confirmed" ? "confirmed" : prev.confirmation_status,
+        user_notes: text,
+        messages: [...(prev.messages ?? []), userMsg, aiMsg],
+      };
     });
-  }, [storyPlan]);
+  }, [storyPlan, buildConsultationReply]);
 
   return {
     selectedProposalId,

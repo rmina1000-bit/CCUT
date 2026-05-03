@@ -954,11 +954,8 @@ const Index: React.FC = () => {
           onPreviewProposal={handleProposalPreview}
           onCommitProposal={handleProposalCommit}
           onExport={handleExport}
+          onConsultation={handleConsultation}
           onReproposal={(dir: any) => {
-            if (storyPlan && storyPlan.consultation_status !== "confirmed") {
-                handleConsultation(typeof dir === "string" ? dir : "");
-                return;
-            }
             handleReproposal(dir);
           }}
           fragments={resolvedFragments}
