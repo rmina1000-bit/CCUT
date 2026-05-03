@@ -14,6 +14,7 @@
 - E9-R1 Story Direction Preview Skeleton
 - E9-R1-R1 Story Direction Card Placement Repair
 - E9-R2 Pre-Proposal Narrative Consultation Flow
+- E9-R2-R5B AI Staff Strategy Docs Creation
 
 ### HOLD / REWORK ⏸
 - E9-R2-R1 Narrative Chat History Repair

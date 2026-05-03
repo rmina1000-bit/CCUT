@@ -166,3 +166,25 @@ Narrative Consultation should follow a familiar ChatGPT-style conversation form:
 - minimal color emphasis
 - input-first conversation
 - suggestion chips only as secondary aids
+
+## STEP 10-I.5.28-E9-R2-R5B - AI Staff Strategy Docs
+
+- Baseline SHA: c9e9ced4f697a0a1018bd1d5598ef1763c9978bb
+- Scope: Documentation only
+- Created:
+  - docs/ADOPTED_OPEN_SOURCE_AI_STRATEGY.md
+  - docs/QWEN_AS_PRIMARY_AI_FAMILY_REVIEW.md
+  - docs/CORE_AI_VS_CORE_COMPANION_POLICY.md
+  - docs/CCUT_MODEL_TRAINING_STRATEGY.md
+- Updated:
+  - docs/TASK_BOARD.md
+  - docs/SESSION_HANDOFF.md
+  - docs/REVISION_REPORT.md
+- Summary:
+  - Defined AI as AI Staff / Core Companion, not CCUT Core.
+  - Classified Qwen as Primary AI Staff candidate.
+  - Classified Mistral as Secondary AI Staff candidate.
+  - Classified Gemma and Llama as Caution AI Staff due to non-Apache model-specific terms.
+  - Reconfirmed that CCUT Core owns decisions, evidence, and execution.
+- Runtime impact: None.
+- Code changes: None.

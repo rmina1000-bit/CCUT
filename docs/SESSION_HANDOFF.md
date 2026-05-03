@@ -52,10 +52,15 @@ User feedback:
 ## 1. 현재 기준선
 
 - **Branch:** `ccut-1.0.4-step9`
-- **SHA:** `56554c70e76ad03537193d5b560fd19457ce2477`
+- **SHA:** `c9e9ced4f697a0a1018bd1d5598ef1763c9978bb`
 - **Local path:** `D:\CCUT1.0.4`
 - **Repo:** `https://github.com/rmina1000-bit/CCUT.git`
 - **Last updated:** 2026-05-03
+
+### AI Staff Strategy Build
+- AI Staff Strategy Docs (R5B) created.
+- Primary staff candidate (Qwen) defined within AI Boundary.
+- Core AI vs Core Companion policy established.
 
 ... (이하 기존 내역 보존)
 
