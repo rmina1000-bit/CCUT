@@ -17,6 +17,7 @@
 - E9-R2-R5B AI Staff Strategy Docs Creation
 - E9-R2-R6 Mock Narrative LLM Adapter Implementation
 - E9-R2-R7 Swappable Local Narrative LLM Provider Design
+- E9-R2-R8 Target Hardware Profile and Compatibility Probe
 
 ### HOLD / REWORK ⏸
 - E9-R2-R1 Narrative Chat History Repair

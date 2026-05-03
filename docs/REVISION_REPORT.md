@@ -230,3 +230,24 @@ Narrative Consultation should follow a familiar ChatGPT-style conversation form:
   - Preserved CCUT Core dependency only on StoryIntentPatch and NarrativeLLMResult contracts.
   - No actual AI model call, config change, API wiring, frontend fetch, or runtime integration was added.
 - Runtime impact: None.
+
+## STEP 10-I.5.28-E9-R2-R8 - Target Hardware Profile and Compatibility Probe
+
+- Scope: Hardware tier definition and environment diagnostic tool
+- Created:
+  - ccut_backend/ai/boundary/hardware_profile.py
+  - tools/inspect_local_ai_environment.py
+  - docs/TARGET_HARDWARE_PROFILE.md
+  - docs/DEVELOPER_MACHINE_POLICY.md
+  - docs/HIGH_END_LAPTOP_AI_REQUIREMENTS.md
+  - docs/LOCAL_LLM_COMPATIBILITY_PROBE.md
+- Updated:
+  - docs/TASK_BOARD.md
+  - docs/SESSION_HANDOFF.md
+  - docs/REVISION_REPORT.md
+- Summary:
+  - Established distinct hardware profiles: Developer Machine, Target High-End Laptop, and Minimum Supported Laptop.
+  - Clarified that the developer machine is for verification, not product performance benchmarking.
+  - Set high-end creator laptop class as the product viability reference for local LLM work.
+  - Added a non-runtime diagnostic probe that does not load models or call external APIs.
+- Runtime impact: None.

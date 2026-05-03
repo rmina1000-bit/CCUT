@@ -52,15 +52,16 @@ User feedback:
 ## 1. 현재 기준선
 
 - **Branch:** `ccut-1.0.4-step9`
-- **SHA:** `b0de27717fc5d3a91291e4ef436d94cd5b53d742`
+- **SHA:** `06ccb244c11b7d2d1645a2961a8b0a71ef17ac1d`
 - **Local path:** `D:\CCUT1.0.4`
 - **Repo:** `https://github.com/rmina1000-bit/CCUT.git`
-- **Last updated:** 2026-05-03
+- **Last updated:** 2026-05-04
 
-### AI Staff Strategy & Swappable Provider
-- AI Staff Strategy Docs (R5B) created.
-- Mock Narrative LLM Adapter (R6) implemented.
-- Swappable Provider Design (R7) completed with interface and candidate registry.
+### AI Staff & Hardware Readiness
+- AI Staff Strategy (R5B) & Swappable Provider (R7) docs completed.
+- Mock Narrative LLM Adapter (R6) verified.
+- Target Hardware Profiles (R8) defined: Developer vs. High-End Laptop.
+- System Compatibility Probe tool (inspect_local_ai_environment.py) added.
 
 ... (이하 기존 내역 보존)
 
