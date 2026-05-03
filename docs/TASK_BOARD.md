@@ -18,6 +18,7 @@
 - E9-R2-R6 Mock Narrative LLM Adapter Implementation
 - E9-R2-R7 Swappable Local Narrative LLM Provider Design
 - E9-R2-R8 Target Hardware Profile and Compatibility Probe
+- E9-R2-R9 Ollama Local Narrative Provider Probe
 
 ### HOLD / REWORK ⏸
 - E9-R2-R1 Narrative Chat History Repair

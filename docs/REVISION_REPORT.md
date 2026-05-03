@@ -251,3 +251,32 @@ Narrative Consultation should follow a familiar ChatGPT-style conversation form:
   - Set high-end creator laptop class as the product viability reference for local LLM work.
   - Added a non-runtime diagnostic probe that does not load models or call external APIs.
 - Runtime impact: None.
+
+## STEP 10-I.5.28-E9-R2-R9 - Ollama Local Narrative Provider Probe
+
+- Scope: Ollama runtime diagnostic and connectivity verification
+- Created:
+  - ccut_backend/ai/boundary/ollama_provider_probe.py
+  - tools/probe_ollama_narrative_provider.py
+  - docs/OLLAMA_PROVIDER_PROBE.md
+  - docs/OLLAMA_LOCAL_RUNTIME_POLICY.md
+- Updated:
+  - docs/LOCAL_LLM_RUNTIME_OPTIONS.md
+  - docs/QWEN_PROVIDER_CANDIDATE_PLAN.md
+  - docs/TASK_BOARD.md
+  - docs/SESSION_HANDOFF.md
+  - docs/REVISION_REPORT.md
+- Probe result:
+  - ollama_running: true
+  - models_found: qwen2:latest
+  - selected_model: qwen2:latest
+  - probe_status: MODEL_CALL_FAILED
+  - error: timed out
+  - latency_ms: 10004
+- Summary:
+  - Ollama server detection passed.
+  - Model inventory detection passed.
+  - First model call timed out on the developer machine.
+  - This is not a product viability failure; it is a developer machine/runtime timeout finding.
+  - No model pull, external API call, frontend connection, main.py API wiring, config change, or runtime integration was added.
+- Runtime impact: None.

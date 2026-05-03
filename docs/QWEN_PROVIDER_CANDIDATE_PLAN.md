@@ -25,3 +25,4 @@ When implementing the Qwen provider, the following must be avoided:
 1. Define the Qwen adapter in `ccut_backend/ai/adapters/qwen3_llm_adapter.py`.
 2. Map the adapter in the Narrative Provider Registry.
 3. Use the unified AI Boundary to toggle between the Mock provider and the Qwen provider.
+4. (R9 Update) Use the Ollama Provider Probe to detect local Qwen model availability before activation.

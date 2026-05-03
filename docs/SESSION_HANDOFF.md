@@ -52,16 +52,16 @@ User feedback:
 ## 1. 현재 기준선
 
 - **Branch:** `ccut-1.0.4-step9`
-- **SHA:** `06ccb244c11b7d2d1645a2961a8b0a71ef17ac1d`
+- **SHA:** `a4701e304d5079b80f4058826cec681008c55f7d`
 - **Local path:** `D:\CCUT1.0.4`
 - **Repo:** `https://github.com/rmina1000-bit/CCUT.git`
 - **Last updated:** 2026-05-04
 
-### AI Staff & Hardware Readiness
+### AI Staff, Hardware & Runtime Readiness
 - AI Staff Strategy (R5B) & Swappable Provider (R7) docs completed.
 - Mock Narrative LLM Adapter (R6) verified.
-- Target Hardware Profiles (R8) defined: Developer vs. High-End Laptop.
-- System Compatibility Probe tool (inspect_local_ai_environment.py) added.
+- Target Hardware Profiles (R8) & System Compatibility Probe added.
+- Ollama Provider Probe (R9) implemented for local runtime detection.
 
 ... (이하 기존 내역 보존)
 
