@@ -52,16 +52,17 @@ User feedback:
 ## 1. 현재 기준선
 
 - **Branch:** `ccut-1.0.4-step9`
-- **SHA:** `f730161918f3b99a8363fdc8641ce73e87108c11`
+- **SHA:** `72f5b0cf241283f7bc44436660467a7ce7bb0351`
 - **Local path:** `D:\CCUT1.0.4`
 - **Repo:** `https://github.com/rmina1000-bit/CCUT.git`
 - **Last updated:** 2026-05-04
 
-### AI Staff & Qwen Model Readiness
+### AI Staff & Qwen3 Transition
 - AI Staff Strategy (R5B) & Swappable Provider (R7) docs completed.
 - Target Hardware Profiles (R8) & Ollama Probe (R9) implemented.
-- Qwen Model Inventory (R10-A) completed: **Qwen3-Instruct is missing**; only Qwen3-ASR and legacy Qwen2 (Ollama) exist.
-- Path Hygiene Audit (R10-A): **Cross-directory dependency detected** (1.0.4 config depends on 1.0.3 models/tools).
+- Qwen Model Inventory (R10-A) & Acquisition Plan (R10-B) completed.
+- Qwen3-Instruct identified as Primary Candidate for Narrative LLM.
+- Ollama registration policy and license checklist established.
 
 ... (이하 기존 내역 보존)
 

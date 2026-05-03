@@ -34,7 +34,9 @@ Used for Narrative Consultation and StoryIntentPatch generation.
 | D:\CCUT1.0.4\...\ai_models | qwen3-asr-1.7b | GGUF | 1.7B |
 | D:\CCUT_1.0.3\...\ai_models | qwen3-asr-0.6b | GGUF | 0.6B |
 | D:\CCUT_1.0.3\...\ai_models | qwen3-asr-1.7b | GGUF | 1.7B |
-| Ollama Registry | qwen2 | Ollama | latest |
+| Ollama Registry | qwen2 | Ollama | latest (Legacy/Test-only) |
 
 ## 4. Conclusion
-The current inventory confirms that CCUT has **ASR-specialized Qwen3 models** but lacks the **Instruct-specialized Qwen3 models** required for meaningful Narrative Consultation. R10-B must address the strategy for acquiring and registering Qwen3-Instruct models.
+The current inventory confirms that CCUT has **ASR-specialized Qwen3 models** but lacks the **Instruct-specialized Qwen3 models** required for meaningful Narrative Consultation.
+
+**Next Required Action**: Execute the **Qwen3-Instruct Acquisition Plan (R10-B)** to secure a conversational model for the Narrative LLM provider.

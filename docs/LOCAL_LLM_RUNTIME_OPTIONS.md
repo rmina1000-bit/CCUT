@@ -13,7 +13,8 @@ CCUT targets local execution of Narrative LLMs. Several runtime options are avai
 ### B. Ollama
 - **Pros**: One-click installation on Windows, automatic model management, clean REST API.
 - **Cons**: Background daemon required, slightly more abstraction than raw llama-server.
-- **Suitability**: High. Excellent for user-friendly local deployment. (Current status: Primary candidate / R9 probe implemented)
+- **Suitability**: High. (Current status: Primary candidate / R9 probe detected qwen2:latest). 
+- **Note**: Baseline testing with qwen2 showed high latency (timeout finding on Dev-PC). Qwen3-Instruct requires proper installation and resource allocation.
 
 ### C. vLLM
 - **Pros**: High-throughput inference, production-grade features.

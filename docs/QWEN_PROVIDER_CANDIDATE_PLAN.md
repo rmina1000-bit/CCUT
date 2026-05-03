@@ -3,11 +3,12 @@
 ## 1. Role Definition
 Qwen3-Instruct is the **Primary Candidate** for the Narrative LLM provider. Its role is to interpret user messages and generate `StoryIntentPatch` JSON objects.
 
-## 2. Separation from ASR
-Qwen3-ASR and Qwen3-Instruct serve different purposes:
-- **ASR**: Real-time transcription of audio fragments.
-- **Instruct**: Conversational reasoning and intent modeling.
-They should be managed as separate provider instances, even if they share the same model family or runtime binary.
+## 2. Modality Coverage
+- **Qwen3-ASR**: Specialized for audio-to-text transcription.
+- **Qwen3-Instruct**: Handles Narrative Chat and generates `StoryIntentPatch` JSON. (Primary candidate, requires registration).
+- **Qwen-VL**: (Future) Targeted for frame understanding and vision-based analysis.
+- **Qwen-Coder**: (Future) Potential candidate for automated script or code-related tasks.
+- **Qwen2 (Legacy)**: Currently in Ollama registry but reserved for baseline testing only.
 
 ## 3. Avoid Hard Dependencies
 When implementing the Qwen provider, the following must be avoided:
