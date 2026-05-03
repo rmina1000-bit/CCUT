@@ -411,22 +411,6 @@ const FragmentMap: React.FC<FragmentMapProps> = ({
           })}
         </div>
 
-        <div className="px-2 pb-1.5">
-          <div className="flex items-center h-3">
-            {visibleFragments.map(({ fragment: f, realIndex }, i) => (
-              <div
-                key={getUid(f)}
-                className="flex items-center justify-between h-full text-[7px] text-muted-foreground/40 border-t border-border/20"
-                style={{ width: Math.max(48, f.duration * 0.7) }}
-              >
-                <span className="pl-0.5">F{boundaries[realIndex]}</span>
-                {i === visibleFragments.length - 1 && (
-                  <span className="pr-0.5">F{boundaries[realIndex + 1]}</span>
-                )}
-              </div>
-            ))}
-          </div>
-        </div>
       </div>
     </TooltipProvider>
   );
