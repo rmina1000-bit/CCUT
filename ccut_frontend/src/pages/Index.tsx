@@ -191,6 +191,16 @@ const Index: React.FC = () => {
     setSemanticFragments([]);
   }, []);
 
+  // [STEP 10-I.5.27-E7-M2] Debug Log Guard
+  const DEBUG_FRAGMENT_MAP = useMemo(() => 
+    import.meta.env.DEV && localStorage.getItem("CCUT_DEBUG_FRAGMENT_MAP") === "1"
+  , []);
+
+  const debugFragmentMap = useCallback((...args: unknown[]) => {
+    if (!DEBUG_FRAGMENT_MAP) return;
+    console.log(...args);
+  }, [DEBUG_FRAGMENT_MAP]);
+
   const handleStartAnalysis = useCallback(
     async (file?: File, extraFiles?: File[]) => {
       resetAnalysisState();
@@ -790,7 +800,7 @@ const Index: React.FC = () => {
   const resolverResult = useMemo(() => {
     if (!committedProposalId || !proposals) {
       if (appState === "complete") {
-        console.log("[fragmentmap-debug] No committedProposalId or proposals. committedProposalId:", committedProposalId, "proposals:", !!proposals);
+        debugFragmentMap("[fragmentmap-debug] No committedProposalId or proposals. committedProposalId:", committedProposalId, "proposals:", !!proposals);
       }
       return { resolvedFragments: [], diagnostics: null };
     }
@@ -798,16 +808,23 @@ const Index: React.FC = () => {
     const result = resolveProposalFragments(proposal, editFragments);
     
     // [STEP 10-I.5.12] Diagnostic Logging
-    console.log("[fragmentmap-debug] committedProposalId:", committedProposalId);
-    console.log("[fragmentmap-debug] proposals keys:", proposals ? Object.keys(proposals) : null);
-    console.log("[fragmentmap-debug] active proposal keys (first 10):", proposal?.key_fragments?.slice(0, 10));
-    console.log("[fragmentmap-debug] editFragments count:", editFragments.length);
-    console.log("[fragmentmap-debug] editFragments ids (first 10):", editFragments.slice(0, 10).map(f => f.fragment_id));
-    console.log("[fragmentmap-debug] resolvedFragments count:", result.resolvedFragments.length);
-    console.log("[fragmentmap-debug] resolved ids (first 10):", result.resolvedFragments.slice(0, 10).map(f => f.fragment_id));
+    debugFragmentMap("[fragmentmap-debug] committedProposalId:", committedProposalId);
+    debugFragmentMap("[fragmentmap-debug] proposals keys:", proposals ? Object.keys(proposals) : null);
+    debugFragmentMap("[fragmentmap-debug] active proposal keys sample:", {
+      count: proposal?.key_fragments?.length || 0,
+      first10: proposal?.key_fragments?.slice(0, 10)
+    });
+    debugFragmentMap("[fragmentmap-debug] editFragments summary:", {
+      count: editFragments.length,
+      first10Ids: editFragments.slice(0, 10).map(f => f.fragment_id)
+    });
+    debugFragmentMap("[fragmentmap-debug] resolvedFragments summary:", {
+      count: result.resolvedFragments.length,
+      first10Ids: result.resolvedFragments.slice(0, 10).map(f => f.fragment_id)
+    });
 
     return result;
-  }, [committedProposalId, editFragments, proposals, appState]);
+  }, [committedProposalId, editFragments, proposals, appState, debugFragmentMap]);
 
   const resolvedFragments = useMemo(() => resolverResult.resolvedFragments, [resolverResult]);
 

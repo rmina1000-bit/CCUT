@@ -1,6 +1,10 @@
 import { Fragment } from "@/data/fragmentData";
 import { Proposal } from "@/proposal/proposalTypes";
 
+// [STEP 10-I.5.27-E7-M2] Debug Log Guard
+const DEBUG_PROPOSAL_RESOLVER =
+  import.meta.env.DEV && localStorage.getItem("CCUT_DEBUG_PROPOSAL_RESOLVER") === "1";
+
 /**
  * [STEP 10-I.2] Proposal Fragment Resolver
  * Proposal ID(또는 sequence)를 실제 Fragment 객체 배열로 해석합니다.
@@ -162,7 +166,7 @@ export const resolveProposalFragments = (
   };
 
   // [STEP 10-I.5.12] Diagnostic Logging
-  if (editFragments.length > 0) {
+  if (DEBUG_PROPOSAL_RESOLVER && editFragments.length > 0) {
     console.log("[proposalResolver] Summary:");
     console.log(`  - Key Count: ${diagnostics.proposalCount}`);
     console.log(`  - Edit Count: ${editFragments.length}`);
@@ -170,7 +174,7 @@ export const resolveProposalFragments = (
     console.log(`  - Time Fallback: ${diagnostics.timeFallbackMatched}`);
     console.log(`  - Missing: ${diagnostics.missingIds.length}`);
     if (diagnostics.missingIds.length > 0) {
-      console.log(`  - Unmatched Ids (first 10): ${diagnostics.missingIds.slice(0, 10)}`);
+      console.log(`  - Unmatched Ids (first 10):`, diagnostics.missingIds.slice(0, 10));
     }
     if (aliases.length > 0) {
       console.log(`  - Aliases Sample (first 3):`, aliases.slice(0, 3));
