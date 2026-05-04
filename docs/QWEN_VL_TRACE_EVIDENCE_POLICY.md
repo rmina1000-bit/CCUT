@@ -6,6 +6,9 @@ Current testing of `qwen3-vl:4b` via Ollama reveals that the model is configured
 **Official Stance (Step 10-J-R4) - PASS:**
 CCUT adopts **Thinking Trace-based Visual Evidence Extraction** (v0) as the primary multi-modal bridge.
 
+**Deployment Strategy (Step 10-K):**
+Qwen3-VL is officially deployed in **Stage 5 (Deep Visual Analysis Stage)**. It functions as a non-blocking background worker to refine cognitive fragments after initial proposals are generated.
+
 ## Verification Result (2026-05-04)
 - **Batch Test**: 5/5 images processed successfully.
 - **Success Rate**: 100% (OK_TRACE_VISUAL).

@@ -25,15 +25,20 @@ This session successfully integrated `qwen3:4b` for narrative intent interpretat
 
 ## Next Steps
 
-### 1. Visual Evidence Integration (STEP 10-K)
-- Bridge the gap between `Visual Evidence` and `Cognitive Fragments`.
-- Integrate visual analysis into the `Proposal Engine` for A/B generation.
+### 1. Intent Pipeline Bridge (STEP 10-K-B2/R1 DONE)
+- Successfully bridged the gap between Frontend `story_intent` and Backend `ProposalEngine`.
+- Implemented `StoryTemplateResolver` to map intent (e.g., `balanced_sources`) to templates and techniques.
+- Extended `ProjectProposalRequest` (Pydantic) with `user_intent` and `template_id`.
+- **Refined Response**: Included `resolved_story_template` in all response paths of `/proposals/project`, ensuring visibility even when no semantic fragments are found (`NO_SEMANTIC_DATA`).
+- Passed `resolved_story_template` context to the `ProposalEngine` for future scoring integration.
 
-### 2. Cache & Performance (STEP 10-J-R5)
-- Implement a persistent cache for visual analysis results to prevent redundant 26s+ inference calls.
+### 2. Story Direction Template & Technique Registry
+- Completed `story_direction_templates.json`, `editing_techniques.json`, and `production_hard_rules.json`.
+- Established the **Technique Pack & Hard Rule** binding logic for intent-driven editing.
+- Analyzed and absorbed `video-use` editing methodologies into CCUT standards.
 
-### 3. Narrative UX Finalization
-- Finalize ChatGPT-style interaction UI (bubbles, natural wrapping, input focus).
+### 3. Deep Visual Analysis Stage (STEP 10-K-C)
+- Integrate `Visual Evidence` results into the `Cognitive Fragments` scoring loop.
 
 ---
 
@@ -43,3 +48,9 @@ This session successfully integrated `qwen3:4b` for narrative intent interpretat
 - **Local path:** `D:\CCUT1.0.4`
 - **Ollama Models**: `qwen3:4b`, `qwen3-vl:4b`
 - **Operational Parameters**: Resize 384px, Timeout 120s (for VL).
+
+### 4. Deep Visual Analysis Stage (STEP 10-K DOING)
+- Defined the 7-stage analysis factory.
+- Established mandatory caching and non-blocking worker policies.
+- Implemented `tools/probe_deep_visual_analysis_stage.py` for verification.
+- **STEP 10-K-A**: Completed Source Diversity Audit. Identified major disconnect between Frontend Intent and Backend Proposal Engine. Recorded in `docs/reports/SOURCE_DIVERSITY_AUDIT_REPORT.md` (and artifact).

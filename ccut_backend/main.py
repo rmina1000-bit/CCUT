@@ -1,8 +1,11 @@
 import os
 import time
 import uuid
+import logging
 from pathlib import Path
 from typing import Optional
+
+logger = logging.getLogger(__name__)
 
 from fastapi import FastAPI, Depends, BackgroundTasks, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
@@ -25,6 +28,7 @@ from engine.llm_engine import llm_pd
 from engine.generative_engine import generative_engine
 from ai import get_registry
 from engine.video_engine import VideoEngine
+from engine.story_template_resolver import StoryTemplateResolver
 
 from auth.manager import user_manager
 from report.generator import report_gen
@@ -44,6 +48,7 @@ UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
 # Global Engine Initialization with STORAGE_DIR
 video_engine = VideoEngine(storage_path=STORAGE_DIR)
+template_resolver = StoryTemplateResolver()
 
 
 def build_static_url(*parts: str) -> str:
@@ -1023,6 +1028,10 @@ class ProjectProposalRequest(BaseModel):
     project_id: str
     source_ids: list[str]
     target_length: float = 60.0
+    user_intent: Optional[dict] = None
+    template_id: Optional[str] = None
+
+# [FORCE_RELOAD_STEP_10_K_B2_R1]
 
 @app.post("/proposals/project")
 async def post_generate_project_proposals(req: ProjectProposalRequest):
@@ -1044,9 +1053,22 @@ async def post_generate_project_proposals(req: ProjectProposalRequest):
             seen.add(sid)
             
     target_len = req.target_length
+    user_intent = req.user_intent
+    req_template_id = req.template_id
+
+    # [STEP 10-K-B2] Resolve Story Template
+    resolved_story_template = template_resolver.resolve_story_template(
+        user_intent=user_intent, 
+        template_id=req_template_id
+    )
+    logger.info(f"[PROPOSAL] Resolved Template: {resolved_story_template.get('template_id')} (via {req_template_id or 'intent'})")
 
     if not source_ids:
-        return {"status": "ERROR", "message": "source_ids 배열이 비어있습니다."}
+        return {
+            "status": "ERROR", 
+            "message": "source_ids 배열이 비어있습니다.",
+            "resolved_story_template": resolved_story_template # [STEP 10-K-B2-R1]
+        }
 
     all_fragments = []
     warnings = []
@@ -1071,6 +1093,7 @@ async def post_generate_project_proposals(req: ProjectProposalRequest):
             "project_id": project_id,
             "source_ids": source_ids,
             "message": "제안을 생성할 유효한 Semantic 조각이 없습니다.",
+            "resolved_story_template": resolved_story_template, # [STEP 10-K-B2-R1]
             "warnings": warnings
         }
 
@@ -1080,7 +1103,8 @@ async def post_generate_project_proposals(req: ProjectProposalRequest):
             project_id=project_id,
             source_ids=source_ids,
             fragments=all_fragments,
-            target_len=target_len
+            target_len=target_len,
+            story_context=resolved_story_template # [STEP 10-K-B2]
         )
 
         # Source Usage 진단 (제안 A/B 통합)
@@ -1097,6 +1121,7 @@ async def post_generate_project_proposals(req: ProjectProposalRequest):
             "semantic_count": len(all_fragments),
             "proposals": proposals,
             "source_usage": source_usage,
+            "resolved_story_template": resolved_story_template, # [STEP 10-K-B2-R1]
             "warnings": warnings if warnings else None
         }
 

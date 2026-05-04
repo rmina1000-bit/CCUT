@@ -1,5 +1,19 @@
 # CCUT Task Board
 
+## STEP 10-K — Deep Visual Analysis Stage (DOING 🚀)
+- [x] Stage 0-7 Factory Layer Definition
+- [x] VL Factory Stage Policy established
+- [x] Visual Evidence Cache Policy defined
+- [x] Deep Stage Probe tool implemented
+- [x] **STEP 10-K-A**: Proposal Intent / Source Diversity Audit (Reported: Disconnect identified)
+- [x] **STEP 10-K-B1**: Story Direction Template Registry (Minimal Contract)
+- [x] **STEP 10-K-B1-R1**: Editing Technique Library & Hard Rules Binding (DONE)
+- [x] **STEP 10-K-B2**: Intent Pipeline Bridge / balanced_sources Connection (DONE)
+- [x] **STEP 10-K-B2-R1**: Resolver Metadata on Early Return (DONE)
+- [ ] **STEP 10-K-C**: Visual Evidence Scoring Integration (TODO)
+- [ ] Integration with Semantic Fragment Board (Stage 6)
+- [ ] Production Cache Layer verification
+
 ## STEP 10-I.5.28 — Narrative Consultation Transition
 
 ### DONE ✅
@@ -22,20 +36,17 @@
 - R10-A Qwen Model Inventory and Path Hygiene Review
 - R10-B Qwen3-Instruct Acquisition and Ollama Registration Plan
 - R10-C Qwen3 4B Ollama Candidate Install Plan
-- R10-E qwen3:4b Baseline Validation (think:false + JSON Schema confirmed OK)
-- R10-F Narrative Provider Adapter Contract Harness (Isolation validation PASS)
-- R10-G Narrative Provider Adapter Dry Run (PASS 5/5)
-- R10-H Narrative Provider UI Limited Integration (AI Interpreter connected)
-- STEP 10-J Qwen3-VL Visual Evidence Worker Strategy (Transitioned to Trace-based)
-- STEP 10-J-R1 Qwen3-VL Smoke Ladder Probe (Trace analysis confirmed)
-- STEP 10-J-R4 Qwen3-VL Trace Evidence Batch Validation (PASS 5/5)
+- R10-D Ollama Timeout / keep_alive / num_predict / JSON Response Stabilization
 
 ### HOLD / REWORK ⏸
 - E9-R2-R1 Narrative Chat History Repair
 - E9-R2-R2 ChatGPT-like Conversation UX Repair
 
-- R10-G Narrative Provider Adapter Dry Run (PASS 5/5)
-- R10-H Narrative Provider UI Limited Integration (AI Interpreter connected)
+> **Reason:** The structure works, but UX does not yet match the desired ChatGPT-form conversational model.
+
+### NEXT 📋
+- R10-E qwen3:4b Baseline Validation with Stabilization Probe
+- R10-F Narrative Provider Adapter Contract Harness
 - E9-R2-R3 ChatGPT Form Narrative Chat Repair
 - E9-R3 StoryIntent → Proposal Request connection
 - E10 Transition Coherence / Scene Order improvement

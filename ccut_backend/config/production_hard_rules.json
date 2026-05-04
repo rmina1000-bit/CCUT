@@ -1,0 +1,103 @@
+{
+  "rules": [
+    {
+      "rule_id": "no_mid_word_cut",
+      "description": "단어 중간에서 컷이 발생하는 것을 엄격히 금지",
+      "severity": "hard",
+      "applies_to": ["all_cuts"],
+      "failure_mode": "invalid_proposal",
+      "ccut_enforcement_point": "ProposalEngine.validate_sequence"
+    },
+    {
+      "rule_id": "word_boundary_snap_required",
+      "description": "모든 컷은 반드시 단어 경계로 스냅되어야 함",
+      "severity": "hard",
+      "applies_to": ["all_cuts"],
+      "failure_mode": "automatic_correction",
+      "ccut_enforcement_point": "EditDecisionList.add_clip"
+    },
+    {
+      "rule_id": "audio_fade_30ms_at_cut",
+      "description": "모든 컷 연결부에는 최소 30ms의 오디오 페이드를 적용",
+      "severity": "hard",
+      "applies_to": ["render_engine"],
+      "failure_mode": "render_error",
+      "ccut_enforcement_point": "FFmpegCommandGenerator"
+    },
+    {
+      "rule_id": "subtitle_last_in_filter_chain",
+      "display_name": "자막 필터 후처리",
+      "description": "자막은 반드시 모든 영상 효과 처리 후 마지막 단계에서 오버레이",
+      "severity": "hard",
+      "applies_to": ["render_engine"],
+      "failure_mode": "render_warning",
+      "ccut_enforcement_point": "FilterGraphBuilder"
+    },
+    {
+      "rule_id": "transcript_cache_required",
+      "description": "분석 속도 향상을 위해 프로젝트 단위의 트랜스크립트 캐시를 반드시 사용",
+      "severity": "hard",
+      "applies_to": ["analysis_pipeline"],
+      "failure_mode": "performance_warning",
+      "ccut_enforcement_point": "WhisperWorker"
+    },
+    {
+      "rule_id": "edl_before_render",
+      "description": "실제 파일 생성 전 반드시 JSON 형태의 EDL을 먼저 생성하고 검증",
+      "severity": "hard",
+      "applies_to": ["export_service"],
+      "failure_mode": "halt_execution",
+      "ccut_enforcement_point": "VideoService.export_project"
+    },
+    {
+      "rule_id": "render_self_eval_required",
+      "description": "렌더링 완료 후 결과물에 대한 AI 자동 품질 검사 수행 필수",
+      "severity": "hard",
+      "applies_to": ["export_service"],
+      "failure_mode": "mark_as_corrupted",
+      "ccut_enforcement_point": "ExportFinalizer"
+    },
+    {
+      "rule_id": "source_files_untouched",
+      "description": "원본 소스 파일은 어떠한 경우에도 수정하거나 이동하지 않음 (Read-only)",
+      "severity": "hard",
+      "applies_to": ["all_engines"],
+      "failure_mode": "system_panic",
+      "ccut_enforcement_point": "StorageManager"
+    },
+    {
+      "rule_id": "output_path_sandboxed",
+      "description": "모든 출력물은 지정된 샌드박스 경로 이외에는 저장할 수 없음",
+      "severity": "hard",
+      "applies_to": ["all_engines"],
+      "failure_mode": "access_denied",
+      "ccut_enforcement_point": "PathResolver"
+    },
+    {
+      "rule_id": "strategy_confirm_before_render",
+      "description": "사용자 또는 시스템에 의해 편집 전략이 확정되지 않은 상태에서 렌더링 불가",
+      "severity": "hard",
+      "applies_to": ["workflow"],
+      "failure_mode": "state_error",
+      "ccut_enforcement_point": "ProjectController"
+    },
+    {
+      "rule_id": "fast_path_not_blocked_by_deep_visual",
+      "description": "심층 시각 분석(VL)은 초기 분석 및 제안 생성을 블로킹하지 않아야 함",
+      "severity": "hard",
+      "applies_to": ["analysis_pipeline"],
+      "failure_mode": "latency_violation",
+      "ccut_enforcement_point": "TaskScheduler"
+    },
+    {
+      "rule_id": "visual_on_demand_only",
+      "description": "리소스를 많이 사용하는 시각 분석은 최종 선택된 후보군에만 한정적으로 적용",
+      "severity": "hard",
+      "applies_to": ["analysis_pipeline"],
+      "failure_mode": "resource_leak",
+      "ccut_enforcement_point": "VisionEngine.on_demand_request"
+    }
+  ],
+  "version": "1.0.0",
+  "last_updated": "2026-05-04"
+}

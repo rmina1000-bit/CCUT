@@ -1,0 +1,15 @@
+{
+  "stage": "deep_visual_analysis",
+  "model": "qwen3-vl:4b",
+  "resize_max": 384,
+  "timeout_sec": 120,
+  "total_candidates": 3,
+  "ok_count": 3,
+  "failed_count": 0,
+  "cache_hit_count": 3,
+  "cache_miss_count": 0,
+  "total_elapsed_ms": 86924,
+  "avg_elapsed_ms": 28974.666666666668,
+  "fast_path_blocked": false,
+  "cognitive_fragment_refined_count": 3
+}

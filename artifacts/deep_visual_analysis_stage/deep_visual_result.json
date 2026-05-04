@@ -1,0 +1,41 @@
+[
+  {
+    "fragment_id": "VF100_SRC_4B7DFECE",
+    "visual_summary": "식당에서 식사를 하는 장면이 감지됨",
+    "scene_type": "restaurant",
+    "semantic_tags": [
+      "person",
+      "elderly person",
+      "kimchi",
+      "bowl"
+    ],
+    "evidence_grade": "trace_visual_candidate",
+    "cache_hit": true,
+    "latency_ms": 30114
+  },
+  {
+    "fragment_id": "VF100_SRC_52E20C15",
+    "visual_summary": "식당에서 식사를 하는 장면이 감지됨",
+    "scene_type": "restaurant",
+    "semantic_tags": [
+      "person",
+      "elderly person",
+      "kimchi",
+      "bowl"
+    ],
+    "evidence_grade": "trace_visual_candidate",
+    "cache_hit": true,
+    "latency_ms": 30114
+  },
+  {
+    "fragment_id": "VF100_SRC_789199EE",
+    "visual_summary": "시각적 분석 (thinking trace): Got it, let's analyze this image. First, the main elements: there's a person beh...",
+    "scene_type": "unknown",
+    "semantic_tags": [
+      "person"
+    ],
+    "evidence_grade": "trace_visual_candidate",
+    "cache_hit": true,
+    "latency_ms": 26696
+  }
+]

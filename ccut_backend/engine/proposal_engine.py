@@ -27,7 +27,8 @@ class ProposalEngine:
             project_id=source_id, 
             source_ids=[source_id], 
             fragments=fragments, 
-            target_len=target_len_raw
+            target_len=target_len_raw,
+            story_context={"user_intent": user_intent} # [STEP 10-K-B2] Minimal bridge
         )
         
         # 5. 저장 (generate_proposals_from_fragments는 저장을 수행하지 않으므로 여기서 수행)
@@ -36,7 +37,7 @@ class ProposalEngine:
         print(f"[PROPOSAL ENGINE] generate_proposals EXIT: {source_id}")
         return proposals
 
-    def generate_proposals_from_fragments(self, project_id, source_ids, fragments, target_len=60.0):
+    def generate_proposals_from_fragments(self, project_id, source_ids, fragments, target_len=60.0, story_context=None):
         """
         [STEP 10-I.5.24] 여러 소스의 조각 Pool에서 A/B 제안 생성
         """
@@ -64,8 +65,8 @@ class ProposalEngine:
         # [STEP 10-I.5.28-E8-R1] A안 선택 ID 추출하여 중복 페널티용으로 전달
         market_selected_ids = {f["fragment_id"] for f in p_a["sequence"]}
         
-        # Multi-source용 default intent (B모드용)
-        intent = {"target_length": target_len}
+        # [STEP 10-K-B2] Replaced hardcoded intent with story_context
+        intent = story_context.get("user_intent", {"target_length": target_len}) if story_context else {"target_length": target_len}
         p_b = self._create_user_proposal(project_id, fragments, target_len, intent, source_ids, market_selected_ids)
         
         # 3. A/B 차별성 보완

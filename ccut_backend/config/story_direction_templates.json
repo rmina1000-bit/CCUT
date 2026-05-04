@@ -1,0 +1,150 @@
+{
+  "templates": [
+    {
+      "template_id": "balanced_multi_source_record",
+      "display_name": "여러 영상 골고루 기록형",
+      "user_triggers": ["여러 영상 골고루", "골고루", "전체 영상", "다양하게", "모든 클립"],
+      "story_intent_match": {
+        "coverage": "balanced_sources"
+      },
+      "hard_constraints": {
+        "min_source_coverage_ratio": 0.6,
+        "min_fragments_per_selected_source": 1,
+        "max_single_source_clip_ratio": 0.35
+      },
+      "soft_scoring": {
+        "edit_value": 0.25,
+        "source_diversity": 0.35,
+        "visual_variety": 0.15,
+        "narrative_flow": 0.15,
+        "continuity": 0.10
+      },
+      "editing_technique_packs": [
+        "source_rotation",
+        "source_diversity_guard",
+        "establishing_context_open",
+        "wide_medium_close_sequence",
+        "cutaway_bridge"
+      ],
+      "production_hard_rules": [
+        "no_mid_word_cut",
+        "word_boundary_snap_required",
+        "audio_fade_30ms_at_cut",
+        "edl_before_render"
+      ],
+      "sequence_pattern": ["establishing", "context", "action", "reaction", "payoff"],
+      "qa_checks": [
+        "min_source_count_met",
+        "single_source_dominance_check",
+        "duplicate_thumbnail_avoidance",
+        "description_sequence_match_check"
+      ],
+      "fallback_policy": "safe_default"
+    },
+    {
+      "template_id": "people_emotion_focus",
+      "display_name": "인물 및 감정 중심형",
+      "user_triggers": ["사람 중심으로", "인물", "표정", "가족", "감정"],
+      "story_intent_match": {
+        "focus": "people",
+        "mood": "emotional"
+      },
+      "hard_constraints": {
+        "min_people_visibility_ratio": 0.5,
+        "min_fragment_duration": 3.0
+      },
+      "soft_scoring": {
+        "edit_value": 0.30,
+        "emotion_score": 0.40,
+        "narrative_flow": 0.20,
+        "continuity": 0.10
+      },
+      "editing_technique_packs": [
+        "face_visibility_boost",
+        "emotion_peak_selection",
+        "human_presence_boost",
+        "reaction_shot_priority",
+        "gentle_pacing"
+      ],
+      "production_hard_rules": [
+        "no_mid_word_cut",
+        "audio_fade_30ms_at_cut"
+      ],
+      "sequence_pattern": ["intro", "interaction", "emotion_peak", "closing"],
+      "qa_checks": [
+        "people_presence_check",
+        "duplicate_thumbnail_avoidance"
+      ],
+      "fallback_policy": "safe_default"
+    },
+    {
+      "template_id": "shorts_hook_fast",
+      "display_name": "숏츠 훅-패스트형",
+      "user_triggers": ["더 빠르게", "숏츠", "강렬하게", "빠른 템포"],
+      "story_intent_match": {
+        "pace": "fast"
+      },
+      "hard_constraints": {
+        "max_fragment_duration": 10.0,
+        "min_hook_score": 0.7
+      },
+      "soft_scoring": {
+        "edit_value": 0.20,
+        "hook_score": 0.50,
+        "motion_score": 0.20,
+        "continuity": 0.10
+      },
+      "editing_technique_packs": [
+        "hook_first",
+        "dead_air_removal",
+        "fast_pacing",
+        "captionability_boost",
+        "payoff_early",
+        "audio_fade_30ms"
+      ],
+      "production_hard_rules": [
+        "no_mid_word_cut",
+        "subtitle_last_in_filter_chain"
+      ],
+      "sequence_pattern": ["hook", "fast_cut", "fast_cut", "payoff"],
+      "qa_checks": [
+        "hook_efficiency_check"
+      ],
+      "fallback_policy": "safe_default"
+    },
+    {
+      "template_id": "safe_default",
+      "display_name": "기본 밸런스형",
+      "user_triggers": ["기본", "이대로", "적당히"],
+      "story_intent_match": {},
+      "hard_constraints": {
+        "min_fragment_duration": 2.0,
+        "max_fragment_duration": 20.0
+      },
+      "soft_scoring": {
+        "edit_value": 0.50,
+        "narrative_flow": 0.30,
+        "continuity": 0.20
+      },
+      "editing_technique_packs": [
+        "word_boundary_snap",
+        "sentence_boundary_cut",
+        "pause_compression",
+        "chronological_soft_order"
+      ],
+      "production_hard_rules": [
+        "no_mid_word_cut",
+        "edl_before_render",
+        "render_self_eval_required"
+      ],
+      "sequence_pattern": ["intro", "main", "closing"],
+      "qa_checks": [
+        "factual_integrity_guard",
+        "description_sequence_match_check"
+      ],
+      "fallback_policy": null
+    }
+  ],
+  "version": "1.2.0",
+  "last_updated": "2026-05-04"
+}

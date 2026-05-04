@@ -3,7 +3,7 @@
 ## Strategy Overview
 CCUT 1.0.4 utilizes **Visual Evidence-driven** grounding for its cognitive editing engine. 
 
-- **Qwen3-VL (Local/Edge)**: Functions as the core **Visual Evidence Worker**. Due to current model configurations, it operates primarily via **Thinking Trace-based Visual Evidence Extraction** (see `docs/QWEN_VL_TRACE_EVIDENCE_POLICY.md`).
+- **Qwen3-VL (Local/Edge)**: Functions as the core **Visual Evidence Worker**. It is deployed as a **non-blocking Deep Worker** in Stage 5 of the analysis factory. Due to current model configurations, it operates primarily via **Thinking Trace-based Visual Evidence Extraction** (see `docs/QWEN_VL_TRACE_EVIDENCE_POLICY.md`).
 - **Grounding Pillar**: Visual evidence is a mandatory pillar for both free and paid editing modes, providing semantic tags, emotion detection, and scene categorization.
 
 ## Operational Constraints
