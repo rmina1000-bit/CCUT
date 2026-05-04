@@ -57,13 +57,13 @@ User feedback:
 - **Repo:** `https://github.com/rmina1000-bit/CCUT.git`
 - **Last updated:** 2026-05-04
 
-### R10-D: Ollama Stabilization Probe
-- R10-D completed: `tools/probe_ollama_timeout_stabilization.py` implemented.
-- Evaluated `timeout`, `num_predict`, and `keep_alive` parameters using `qwen3:0.6b`.
-- Established safe failure statuses: `MODEL_CALL_TIMEOUT`, `JSON_PARSE_FAILED`, etc.
-- R10-F PASS: Narrative Provider Contract Harness verified with 3 user scenarios.
-- R10-G DOING: Narrative Provider Adapter implemented and ready for Dry Run.
-- Next: Run Dry Run to verify adapter logic with 5 extended scenarios.
+### R10-D/G/H: Narrative AI Integration
+- R10-D PASS: Ollama parameter stabilization (`keep_alive`, `timeout`) confirmed.
+- R10-E/R1/R2 PASS: `qwen3:4b` forced to `think:false` + `format:json` for strict contract adherence.
+- R10-F PASS: Narrative Provider Contract Harness (Isolation test) verified.
+- R10-G PASS: Narrative Provider Adapter Dry Run (5/5 scenarios) successful.
+- R10-H PASS: UI Limited Integration. CenterPanel Narrative Chat now uses `qwen3:4b` for intent interpretation in real-time.
+- Next: E9-R3 StoryIntent → Proposal Request connection (Closing the loop).
 
 ... (이하 기존 내역 보존)
 

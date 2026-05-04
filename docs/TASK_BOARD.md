@@ -29,11 +29,8 @@
 - E9-R2-R1 Narrative Chat History Repair
 - E9-R2-R2 ChatGPT-like Conversation UX Repair
 
-### DOING 🔄
-- R10-G Narrative Provider Adapter Dry Run (End-to-end logic without UI)
-
-### NEXT 📋
-- R10-H CenterPanel Narrative Chat integration
+- R10-G Narrative Provider Adapter Dry Run (PASS 5/5)
+- R10-H Narrative Provider UI Limited Integration (AI Interpreter connected)
 - E9-R2-R3 ChatGPT Form Narrative Chat Repair
 - E9-R3 StoryIntent → Proposal Request connection
 - E10 Transition Coherence / Scene Order improvement

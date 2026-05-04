@@ -798,6 +798,12 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
                           ? "bg-[#161618] border border-white/5 text-foreground/90 rounded-tr-none"
                           : "bg-secondary/10 border border-border/5 text-foreground/90 rounded-tl-none"
                       }`}>
+                        {msg.isInterpreting && (
+                          <div className="flex items-center gap-2 mb-2 text-primary/60">
+                            <Loader2 size={14} className="animate-spin" />
+                            <span className="text-[11px] font-medium animate-pulse">AI 해석 중...</span>
+                          </div>
+                        )}
                         {msg.text}
                       </div>
                       <span className="text-[10px] text-muted-foreground/40 px-1">{new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>

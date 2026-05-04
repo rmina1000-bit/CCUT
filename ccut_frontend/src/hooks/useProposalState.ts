@@ -3,6 +3,7 @@ import { Proposal, Direction, DirectionSnapshot } from "@/proposal/proposalTypes
 import { createNextSnapshot } from "@/proposal/directionSnapshot";
 import { generateProposals } from "@/proposal/proposalOrchestrator";
 import { Fragment } from "@/data/fragmentData";
+import { narrativeService } from "@/services/narrativeService";
 
 export const useProposalState = (sourceFragments: Fragment[]) => {
   const [selectedProposalId, setSelectedProposalId] = useState<string | null>(null);
@@ -112,7 +113,7 @@ export const useProposalState = (sourceFragments: Fragment[]) => {
     return `알겠습니다. 말씀하신 "${normalized.slice(0, 40)}${normalized.length > 40 ? "..." : ""}" 방향을 반영해서 편집 의도를 조정하겠습니다.`;
   }, []);
 
-  const handleConsultation = useCallback((text: string) => {
+  const handleConsultation = useCallback(async (text: string) => {
     if (!storyPlan) return;
 
     const lower = text.toLowerCase();
@@ -123,28 +124,71 @@ export const useProposalState = (sourceFragments: Fragment[]) => {
       /ok$/i.test(lower) ||
       lower.includes("오케이");
 
+    const userMsgId = `user_${Date.now()}`;
+    const aiMsgId = `ai_${Date.now() + 1}`;
+
     const userMsg = {
-      id: `user_${Date.now()}`,
+      id: userMsgId,
       sender: "user" as const,
       text,
       timestamp: Date.now(),
     };
 
+    // Immediate AI feedback (Interpreting...)
     const aiMsg = {
-      id: `ai_${Date.now() + 1}`,
+      id: aiMsgId,
       sender: "ai" as const,
-      text: buildConsultationReply(text),
+      text: "편집 방향을 해석하고 있습니다...",
       timestamp: Date.now() + 1,
+      isInterpreting: true
     };
 
+    setStoryPlan((prev: any) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        messages: [...(prev.messages ?? []), userMsg, aiMsg],
+      };
+    });
+
+    // Background Narrative AI call with 15s timeout
+    const startTime = Date.now();
+    let result: any = { status: "TIMEOUT", patch: null, latency_ms: 0, error: "Frontend 15s timeout" };
+    try {
+      const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error("TIMEOUT")), 15000)
+      );
+      
+      result = await Promise.race([
+        narrativeService.interpretIntent(text),
+        timeoutPromise
+      ]);
+    } catch (err: any) {
+      console.warn("[NarrativeAI] Safe fallback triggered:", err.message);
+    }
+
+    const latency = Date.now() - startTime;
+    if (result.status !== "OK") {
+      console.log(`[NarrativeAI] Fallback (Status: ${result.status}, Latency: ${latency}ms)`);
+    }
+
     const nextIntent: any = { ...(storyPlan.story_intent || {}) };
-    if (/빠르게|템포|속도/.test(lower)) nextIntent.pace = "fast";
-    if (/감성|따뜻|여운/.test(lower)) nextIntent.mood = "warm";
-    if (/사람|인물|가족/.test(lower)) nextIntent.focus = "people";
-    if (/풍경|배경|장소/.test(lower)) nextIntent.focus = "landscape";
-    if (/골고루|균형/.test(lower)) nextIntent.coverage = "balanced_sources";
+    
+    // AI Success: Apply StoryIntentPatch
+    if (result.status === "OK" && result.patch) {
+      // Merge patch into story_intent
+      Object.assign(nextIntent, result.patch);
+    } else {
+      // AI Fallback: Rule-based simple intent extraction
+      if (/빠르게|템포|속도/.test(lower)) nextIntent.pace = "fast";
+      if (/감성|따뜻|여운/.test(lower)) nextIntent.mood = "warm";
+      if (/사람|인물|가족/.test(lower)) nextIntent.focus = "people";
+      if (/풍경|배경|장소/.test(lower)) nextIntent.focus = "landscape";
+      if (/골고루|균형/.test(lower)) nextIntent.coverage = "balanced_sources";
+    }
 
     const nextStatus = shouldConfirm ? "confirmed" : "user_requested_change";
+    const finalAiText = buildConsultationReply(text);
 
     setStoryPlan((prev: any) => {
       if (!prev) return prev;
@@ -154,7 +198,9 @@ export const useProposalState = (sourceFragments: Fragment[]) => {
         consultation_status: nextStatus,
         confirmation_status: nextStatus === "confirmed" ? "confirmed" : prev.confirmation_status,
         user_notes: text,
-        messages: [...(prev.messages ?? []), userMsg, aiMsg],
+        messages: (prev.messages ?? []).map((m: any) => 
+          m.id === aiMsgId ? { ...m, text: finalAiText, isInterpreting: false } : m
+        ),
       };
     });
   }, [storyPlan, buildConsultationReply]);

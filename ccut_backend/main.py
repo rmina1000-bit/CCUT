@@ -907,8 +907,37 @@ async def get_semantic_fragments(source_id: str):
     }
 
 # ═══════════════════════════════════════════════════════════════════
-#   [STEP 5] User Intent Reflections
+#   [STEP 5] User Intent Reflections & Narrative AI
 # ═══════════════════════════════════════════════════════════════════
+
+class NarrativeIntentRequest(BaseModel):
+    message: str
+    source_id: Optional[str] = None
+
+@app.post("/api/narrative/intent")
+@app.post("/narrative/intent")
+async def post_narrative_intent(req: NarrativeIntentRequest):
+    """
+    [STEP 10-I.5.28-H] Narrative LLM (qwen3:4b) 연동
+    사용자의 자연어를 StoryIntentPatch JSON으로 해석합니다.
+    """
+    from ai.boundary.narrative_provider_adapter import NarrativeProviderAdapter
+    try:
+        adapter = NarrativeProviderAdapter()
+        result = adapter.get_story_intent_patch(req.message)
+        
+        # Result mapping to dict for FastAPI response
+        return {
+            "status": result.status,
+            "patch": vars(result.patch) if result.patch else None,
+            "latency_ms": result.latency_ms,
+            "error": result.error_message
+        }
+    except Exception as e:
+        return {
+            "status": "ADAPTER_ERROR",
+            "error": str(e)
+        }
 
 @app.post("/user-intent/{source_id}")
 async def post_user_intent(source_id: str, intent: dict):
