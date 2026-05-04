@@ -1,0 +1,74 @@
+[
+    {
+        "input_text": "더 빠르게, 사람 중심으로 편집해줘",
+        "status": "OK",
+        "latency_ms": 10187,
+        "model": "qwen3:4b",
+        "response_json_ok": true,
+        "contract_valid": true,
+        "patch": {
+            "patch_type": "story_intent_patch",
+            "tone": "concise and urgent",
+            "target_length": "short",
+            "must_keep": [
+                "human-centered",
+                "speed"
+            ],
+            "avoid": [
+                "complex sentences",
+                "excessive detail",
+                "passive voice"
+            ],
+            "reason": "User requested faster, human-centered editing. Need to keep focus on people and speed while avoiding complexity and passive language to maintain brevity and urgency."
+        },
+        "error_message": ""
+    },
+    {
+        "input_text": "모든 영상에서 한 조각씩은 반드시 써줘",
+        "status": "OK",
+        "latency_ms": 9729,
+        "model": "qwen3:4b",
+        "response_json_ok": true,
+        "contract_valid": true,
+        "patch": {
+            "patch_type": "story_intent_patch",
+            "tone": "concise",
+            "target_length": "short",
+            "must_keep": [
+                "모든 영상에서 한 조각씩은 반드시 써줘"
+            ],
+            "avoid": [
+                "long sentences",
+                "complex structures",
+                "additional explanations"
+            ],
+            "reason": "The user's message is a concise instruction to provide one segment at a time from all videos. The patch should maintain this direct and brief instruction without adding extra content or explanations."
+        },
+        "error_message": ""
+    },
+    {
+        "input_text": "감성적으로, 가족기록처럼 보이게 해줘",
+        "status": "OK",
+        "latency_ms": 19436,
+        "model": "qwen3:4b",
+        "response_json_ok": true,
+        "contract_valid": true,
+        "patch": {
+            "patch_type": "story_intent_patch",
+            "tone": "감성적이고 가족기록처럼 보이게 하려는 요청",
+            "target_length": "중간 길이 (약 100-150자)",
+            "must_keep": [
+                "감성적",
+                "가족기록처럼 보이게",
+                "개인적 경험을 강조"
+            ],
+            "avoid": [
+                "과도한 기술적 용어",
+                "공식적인 표현",
+                "외부 정보의 과도한 추가"
+            ],
+            "reason": "사용자가 '감성적으로, 가족기록처럼 보이게 해줘'라고 요청했으므로, 감성적이고 개인적인 이야기를 가족기록처럼 보이게 하는 데 집중해야 합니다. 이는 사용자가 가족의 추억이나 개인적 경험을 감성적으로 표현하고자 하는 데 초점을 맞추는 것을 의미합니다. 따라서 중간 길이의 문장이 적절하며, 기술적 용어나 공식적인 표현을 피해야 합니다."
+        },
+        "error_message": ""
+    }
+]

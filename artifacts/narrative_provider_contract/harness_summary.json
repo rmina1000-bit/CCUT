@@ -1,0 +1,7 @@
+{
+    "timestamp": "2026-05-04 11:50:38",
+    "model": "qwen3:4b",
+    "total": 3,
+    "ok_count": 3,
+    "avg_latency_ms": 13117
+}

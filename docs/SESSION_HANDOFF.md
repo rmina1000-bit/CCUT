@@ -61,9 +61,9 @@ User feedback:
 - R10-D completed: `tools/probe_ollama_timeout_stabilization.py` implemented.
 - Evaluated `timeout`, `num_predict`, and `keep_alive` parameters using `qwen3:0.6b`.
 - Established safe failure statuses: `MODEL_CALL_TIMEOUT`, `JSON_PARSE_FAILED`, etc.
-- Confirmed JSON contract validation for `StoryIntentPatch`.
-- R10-E (4B Validation) is on HOLD: Model `qwen3:4b` not installed. Probe script prepared.
-- Next: User manually pulls `qwen3:4b`, then run Probe.
+- R10-E PASS: `qwen3:4b` validated with `think: false` and JSON Schema.
+- R10-F DOING: Narrative Provider Contract Harness implemented.
+- Next: Run Harness to verify 3 user scenarios.
 
 ... (이하 기존 내역 보존)
 

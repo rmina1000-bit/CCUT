@@ -23,14 +23,17 @@
 - R10-B Qwen3-Instruct Acquisition and Ollama Registration Plan
 - R10-C Qwen3 4B Ollama Candidate Install Plan
 - R10-D Ollama Timeout / keep_alive / num_predict / JSON Response Stabilization
+- R10-E qwen3:4b Baseline Validation (think:false + JSON Schema confirmed OK)
 
 ### HOLD / REWORK ⏸
-- R10-E qwen3:4b Baseline Validation (Reason: Model not installed in Ollama)
 - E9-R2-R1 Narrative Chat History Repair
 - E9-R2-R2 ChatGPT-like Conversation UX Repair
 
-### NEXT 📋
+### DOING 🔄
 - R10-F Narrative Provider Adapter Contract Harness
+
+### NEXT 📋
+- R10-G Narrative Provider Adapter → UI Dry Run
 - E9-R2-R3 ChatGPT Form Narrative Chat Repair
 - E9-R3 StoryIntent → Proposal Request connection
 - E10 Transition Coherence / Scene Order improvement
