@@ -1,0 +1,14 @@
+[
+  {
+    "mode": "chat",
+    "status": "OK",
+    "elapsed_ms": 12990,
+    "content": ""
+  },
+  {
+    "mode": "generate",
+    "status": "OK",
+    "elapsed_ms": 6178,
+    "content": ""
+  }
+]

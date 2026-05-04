@@ -1,0 +1,11 @@
+{
+  "timestamp": "2026-05-04T10:10:41Z",
+  "counts": {
+    "total": 5,
+    "ok": 0,
+    "failed": 5,
+    "total_latency_ms": 0
+  },
+  "average_latency_ms": 0,
+  "model": "qwen3-vl:4b"
+}

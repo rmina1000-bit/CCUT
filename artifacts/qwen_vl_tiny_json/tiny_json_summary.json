@@ -1,0 +1,25 @@
+{
+  "timestamp": "2026-05-04T11:14:53Z",
+  "judgement": "PARTIAL",
+  "image": "VF100_SRC_4B7DFECE.jpg",
+  "results": [
+    {
+      "num_predict": 128,
+      "status": "THINKING_ONLY",
+      "elapsed_ms": 17840,
+      "content": "",
+      "thinking": "{\n    \"visual_summary\": \"An elderly woman is eating at a restaurant. She is wearing a dark blue jacket and has her hair tied back. She is using a spoon to eat from a black bowl. On the table, there are several dishes including a bowl of kimchi, a bowl of what appears to be tofu, and a small dish of sauce. The restaurant has a traditional Korean decor with wooden furniture and a sign in Korean that reads '부산이특' (Busan Itok).\",\n    \"scene_type\": \"Restaurant\",\n    \"has_person\": true\n}",
+      "parsed": null,
+      "done_reason": "stop"
+    },
+    {
+      "num_predict": 256,
+      "status": "THINKING_ONLY",
+      "elapsed_ms": 11153,
+      "content": "",
+      "thinking": "{\n    \"visual_summary\": \"An elderly woman is eating at a restaurant. She is wearing a dark blue jacket and has her hair tied back. She is using a spoon to eat from a black bowl. On the table, there are several dishes including a bowl of kimchi, a bowl of what appears to be tofu, and a small dish of sauce. The restaurant has a traditional Korean decor with wooden furniture and a sign in Korean that reads '부산이특' (Busan Itok).\",\n    \"scene_type\": \"Restaurant\",\n    \"has_person\": true\n}",
+      "parsed": null,
+      "done_reason": "stop"
+    }
+  ]
+}

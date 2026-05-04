@@ -1,0 +1,159 @@
+[
+  {
+    "image_name": "VF100_SRC_52E20C15.jpg",
+    "status": "OK_TRACE_VISUAL",
+    "latency_ms": 28437,
+    "visual_summary": "식당에서 식사를 하는 장면이 감지됨",
+    "scene_type": "restaurant",
+    "visible_people_count": 1,
+    "semantic_tags": [
+      "person",
+      "elderly person",
+      "kimchi",
+      "bowl"
+    ],
+    "edit_value": 0.75,
+    "cognitive_role_hint": "context",
+    "evidence_grade": "trace_visual_candidate",
+    "diag": {
+      "image_path": "D:\\CCUT1.0.4\\tools\\..\\ccut_backend\\storage\\thumbnails\\VF100_SRC_52E20C15.jpg",
+      "image_exists": true,
+      "image_size_bytes": 281216,
+      "original_width": 1080,
+      "original_height": 1920,
+      "resized_width": 216,
+      "resized_height": 384,
+      "resized_size_bytes": 18534,
+      "base64_length": 24712,
+      "request_mode": "generate",
+      "timeout_sec": 120,
+      "exception_type": null,
+      "exception_message": null,
+      "elapsed_ms": 28437
+    }
+  },
+  {
+    "image_name": "VF100_SRC_4B7DFECE.jpg",
+    "status": "OK_TRACE_VISUAL",
+    "latency_ms": 23443,
+    "visual_summary": "식당에서 식사를 하는 장면이 감지됨",
+    "scene_type": "restaurant",
+    "visible_people_count": 1,
+    "semantic_tags": [
+      "person",
+      "elderly person",
+      "kimchi",
+      "bowl"
+    ],
+    "edit_value": 0.75,
+    "cognitive_role_hint": "context",
+    "evidence_grade": "trace_visual_candidate",
+    "diag": {
+      "image_path": "D:\\CCUT1.0.4\\tools\\..\\ccut_backend\\storage\\thumbnails\\VF100_SRC_4B7DFECE.jpg",
+      "image_exists": true,
+      "image_size_bytes": 281216,
+      "original_width": 1080,
+      "original_height": 1920,
+      "resized_width": 216,
+      "resized_height": 384,
+      "resized_size_bytes": 18534,
+      "base64_length": 24712,
+      "request_mode": "generate",
+      "timeout_sec": 120,
+      "exception_type": null,
+      "exception_message": null,
+      "elapsed_ms": 23443
+    }
+  },
+  {
+    "image_name": "VF100_SRC_789199EE.jpg",
+    "status": "OK_TRACE_VISUAL",
+    "latency_ms": 26338,
+    "visual_summary": "시각적 분석 (thinking trace): Got it, let's analyze this image. First, the main elements: there's a person beh...",
+    "scene_type": "unknown",
+    "visible_people_count": 1,
+    "semantic_tags": [
+      "person"
+    ],
+    "edit_value": 0.5,
+    "cognitive_role_hint": "context",
+    "evidence_grade": "trace_visual_candidate",
+    "diag": {
+      "image_path": "D:\\CCUT1.0.4\\tools\\..\\ccut_backend\\storage\\thumbnails\\VF100_SRC_789199EE.jpg",
+      "image_exists": true,
+      "image_size_bytes": 160899,
+      "original_width": 1920,
+      "original_height": 1080,
+      "resized_width": 384,
+      "resized_height": 216,
+      "resized_size_bytes": 11566,
+      "base64_length": 15424,
+      "request_mode": "generate",
+      "timeout_sec": 120,
+      "exception_type": null,
+      "exception_message": null,
+      "elapsed_ms": 26338
+    }
+  },
+  {
+    "image_name": "VF100_SRC_F0F2F653.jpg",
+    "status": "OK_TRACE_VISUAL",
+    "latency_ms": 26250,
+    "visual_summary": "시각적 분석 (thinking trace): Got it, let's analyze the image. First, the scene is a playground. There's a swi...",
+    "scene_type": "unknown",
+    "visible_people_count": 0,
+    "semantic_tags": [],
+    "edit_value": 0.5,
+    "cognitive_role_hint": "context",
+    "evidence_grade": "trace_visual_candidate",
+    "diag": {
+      "image_path": "D:\\CCUT1.0.4\\tools\\..\\ccut_backend\\storage\\thumbnails\\VF100_SRC_F0F2F653.jpg",
+      "image_exists": true,
+      "image_size_bytes": 460967,
+      "original_width": 1920,
+      "original_height": 1080,
+      "resized_width": 384,
+      "resized_height": 216,
+      "resized_size_bytes": 19068,
+      "base64_length": 25424,
+      "request_mode": "generate",
+      "timeout_sec": 120,
+      "exception_type": null,
+      "exception_message": null,
+      "elapsed_ms": 26250
+    }
+  },
+  {
+    "image_name": "VF101_SRC_4B7DFECE.jpg",
+    "status": "OK",
+    "latency_ms": 26338,
+    "visual_summary": "시각적 분석 (thinking trace): {\n  \"summary\": \"An elderly person is seated at a wooden table in a casual Korean...",
+    "scene_type": "restaurant",
+    "visible_people_count": 1,
+    "semantic_tags": [
+      "person",
+      "elderly person",
+      "kimchi",
+      "bowl"
+    ],
+    "edit_value": 0.5,
+    "cognitive_role_hint": "context",
+    "evidence_grade": "trace_visual_candidate",
+    "diag": {
+      "image_path": "D:\\CCUT1.0.4\\tools\\..\\ccut_backend\\storage\\thumbnails\\VF101_SRC_4B7DFECE.jpg",
+      "image_exists": true,
+      "image_size_bytes": 282717,
+      "original_width": 1080,
+      "original_height": 1920,
+      "resized_width": 216,
+      "resized_height": 384,
+      "resized_size_bytes": 18695,
+      "base64_length": 24928,
+      "request_mode": "generate",
+      "timeout_sec": 120,
+      "exception_type": null,
+      "exception_message": null,
+      "elapsed_ms": 26338
+    }
+  }
+]

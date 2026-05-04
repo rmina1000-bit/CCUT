@@ -1,0 +1,26 @@
+{
+  "timestamp": "2026-05-04T11:10:07Z",
+  "status": "OK_DIAGNOSTIC_EVIDENCE",
+  "image": "VF100_SRC_4B7DFECE.jpg",
+  "source_channel": "thinking",
+  "num_predict": 256,
+  "extracted_fields": [
+    "visual_summary",
+    "scene_type",
+    "main_subjects",
+    "visible_people_count",
+    "face_visibility",
+    "human_presence_score",
+    "emotion",
+    "action_level",
+    "camera_quality",
+    "edit_value",
+    "must_keep_candidates",
+    "avoid_candidates",
+    "cognitive_role_hint",
+    "reason",
+    "source_channel",
+    "production_usable",
+    "diagnostic_visual_seen"
+  ]
+}

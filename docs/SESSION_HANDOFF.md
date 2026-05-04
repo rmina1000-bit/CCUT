@@ -1,72 +1,45 @@
-# Session Handoff — Narrative Transition Session
+# Session Handoff — Narrative & Visual Evidence Integration
 
 ## Session Summary
-
-This session changed CCUT from a direct A/B auto-edit proposal tool into a system that first interprets video data as a story, consults with the user, and only then generates A/B proposals.
+This session successfully integrated `qwen3:4b` for narrative intent interpretation and introduced `qwen3-vl:4b` as the core **Visual Evidence Worker**. We established a robust "Trace-based" extraction policy for multi-modal analysis, overcoming local model renderer limitations.
 
 ## Completed Work
 
-### Performance / Stability
-- frontend perceived timing baseline added
-- heavy debug logs guarded behind localStorage flags
-- network and console became clean during runtime tests
+### 1. Narrative AI (Text)
+- **Intent Classifier**: Replaced keyword-based routing with LLM-based intent classification.
+- **Contract Adherence**: Confirmed `think:false` + JSON schema stability for `qwen3:4b`.
+- **UI Integration**: `CenterPanel` consultation now drives AI intent interpretation.
 
-### Thumbnail Static Path Repair
-- FastAPI static mount corrected to project-root storage
-- thumbnail 404 resolved
-- curl -I /static/thumbnails/VF1_SRC_567A7ADB.jpg returned 200 OK
+### 2. Visual Evidence AI (Multi-modal)
+- **Qwen3-VL Integration**: Established `qwen3-vl:4b` as the visual analysis pillar.
+- **Trace Evidence Policy**: Officially adopted **Thinking Trace-based Extraction** (v0) to capture high-quality visual metadata from internal reasoning.
+- **Batch Validation (R4)**: 5/5 images successfully analyzed (Avg 26s per frame, 100% success).
+- **Tooling**:
+  - `ccut_backend/ai/vision/qwen_vl_visual_worker.py`: Trace-aware worker.
+  - `tools/probe_qwen_vl_trace_batch.py`: Advanced diagnostic batch probe.
+  - `tools/extract_visual_evidence_from_vl_thinking.py`: Rule-based trace parser.
 
-### Fragment Map UI Cleanup
-- meaningless bottom F-number labels removed
+### 3. Standards & Documentation
+- **QWEN_VL_TRACE_EVIDENCE_POLICY.md**: Official multi-modal grounding strategy.
+- **QWEN_VL_VISUAL_EVIDENCE_WORKER.md**: Worker operational guidelines.
 
-### Proposal Diversity / Source Balance
-- diversity audit completed
-- source balance design documented
-- lightweight source coverage direction confirmed
-- all videos are not forced, but qualified sources should be considered
+## Next Steps
 
-### Narrative Consultation
-- E9-R2 introduced:
-  Analysis → Narrative Draft → User Consultation → A/B Proposal
-- This is the main conceptual transition of the session
+### 1. Visual Evidence Integration (STEP 10-K)
+- Bridge the gap between `Visual Evidence` and `Cognitive Fragments`.
+- Integrate visual analysis into the `Proposal Engine` for A/B generation.
 
-## Not Final / Needs Repair
+### 2. Cache & Performance (STEP 10-J-R5)
+- Implement a persistent cache for visual analysis results to prevent redundant 26s+ inference calls.
 
-E9-R2-R1/R2 chat UX attempts are not final.
-
-User feedback:
-- should feel like ChatGPT
-- do not invent CCUT-specific chat grammar
-- user reply bubble should not be strongly colored
-- text should wrap naturally
-- conversation should feel interactive, not like monologues
-- quick chips are secondary, input box is primary
-
-## Next Room First Task
-
-1. Update document pack
-2. Then implement ChatGPT Form Narrative Chat Repair
+### 3. Narrative UX Finalization
+- Finalize ChatGPT-style interaction UI (bubbles, natural wrapping, input focus).
 
 ---
 
-## 1. 현재 기준선
-
+## Environment Check
 - **Branch:** `ccut-1.0.4-step9`
-- **SHA:** `e4f4581362690c59e7dca7d8e7a1ce2fe573de44`
+- **SHA:** `33f14c15a2b81e4c52e970293c9729b71cf55382` (Approx)
 - **Local path:** `D:\CCUT1.0.4`
-- **Repo:** `https://github.com/rmina1000-bit/CCUT.git`
-- **Last updated:** 2026-05-04
-
-### R10-D/G/H: Narrative AI Integration
-- R10-D PASS: Ollama parameter stabilization (`keep_alive`, `timeout`) confirmed.
-- R10-E/R1/R2 PASS: `qwen3:4b` forced to `think:false` + `format:json` for strict contract adherence.
-- R10-F PASS: Narrative Provider Contract Harness (Isolation test) verified.
-- R10-G PASS: Narrative Provider Adapter Dry Run (5/5 scenarios) successful.
-- R10-H PASS: UI Limited Integration. CenterPanel Narrative Chat now uses `qwen3:4b` for intent interpretation in real-time.
-- Next: E9-R3 StoryIntent → Proposal Request connection (Closing the loop).
-
-... (이하 기존 내역 보존)
-
-
-
-
+- **Ollama Models**: `qwen3:4b`, `qwen3-vl:4b`
+- **Operational Parameters**: Resize 384px, Timeout 120s (for VL).

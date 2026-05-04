@@ -24,6 +24,11 @@
 - R10-C Qwen3 4B Ollama Candidate Install Plan
 - R10-E qwen3:4b Baseline Validation (think:false + JSON Schema confirmed OK)
 - R10-F Narrative Provider Adapter Contract Harness (Isolation validation PASS)
+- R10-G Narrative Provider Adapter Dry Run (PASS 5/5)
+- R10-H Narrative Provider UI Limited Integration (AI Interpreter connected)
+- STEP 10-J Qwen3-VL Visual Evidence Worker Strategy (Transitioned to Trace-based)
+- STEP 10-J-R1 Qwen3-VL Smoke Ladder Probe (Trace analysis confirmed)
+- STEP 10-J-R4 Qwen3-VL Trace Evidence Batch Validation (PASS 5/5)
 
 ### HOLD / REWORK ⏸
 - E9-R2-R1 Narrative Chat History Repair

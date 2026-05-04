@@ -1,0 +1,8 @@
+{
+  "timestamp": "2026-05-04T11:19:56Z",
+  "status": "OK_COGNITIVE_FRAGMENT_CANDIDATE",
+  "fragment_id": "VF100_SRC_4B7DFECE",
+  "edit_role": "context",
+  "edit_value": 0.75,
+  "evidence_grade": "diagnostic_visual"
+}

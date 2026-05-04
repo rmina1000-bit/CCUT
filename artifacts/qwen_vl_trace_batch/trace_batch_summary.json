@@ -1,0 +1,18 @@
+{
+  "total": 5,
+  "ok_count": 5,
+  "ok_trace_visual_count": 5,
+  "failed_count": 0,
+  "timeout_count": 0,
+  "model_call_failed_count": 0,
+  "total_elapsed_ms": 130806,
+  "total_latency_ms": 130806,
+  "avg_elapsed_ms": 26161.2,
+  "max_elapsed_ms": 28437,
+  "scene_type_distribution": {
+    "restaurant": 3,
+    "unknown": 2
+  },
+  "human_presence_avg": 0.4800000000000001,
+  "cognitive_fragment_candidate_count": 5
+}

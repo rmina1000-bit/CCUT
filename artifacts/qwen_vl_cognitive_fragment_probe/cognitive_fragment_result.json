@@ -1,0 +1,27 @@
+{
+  "fragment_id": "VF100_SRC_4B7DFECE",
+  "cognitive_summary": "식당에서 한 어르신이 식사를 하고 있는 장면",
+  "semantic_tags": [
+    "kimchi",
+    "person",
+    "bowl",
+    "medium",
+    "restaurant",
+    "elderly person",
+    "utensils",
+    "side dishes",
+    "table"
+  ],
+  "edit_role": "context",
+  "edit_value": 0.75,
+  "human_presence_score": 0.85,
+  "visual_scene_type": "restaurant",
+  "must_keep_reason": "Clear human activity and relevant scene objects detected visually.",
+  "avoid_reason": "",
+  "evidence_refs": {
+    "visual_evidence": "artifacts/qwen_vl_thinking_evidence/thinking_evidence_result.json",
+    "source_channel": "thinking"
+  },
+  "evidence_grade": "diagnostic_visual",
+  "production_usable": false
+}

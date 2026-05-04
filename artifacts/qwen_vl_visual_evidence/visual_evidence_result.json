@@ -1,0 +1,37 @@
+[
+  {
+    "image_name": "VF100_SRC_4B7DFECE.jpg",
+    "result": {
+      "status": "MODEL_CALL_FAILED",
+      "error": "timed out"
+    }
+  },
+  {
+    "image_name": "VF100_SRC_52E20C15.jpg",
+    "result": {
+      "status": "MODEL_CALL_FAILED",
+      "error": "timed out"
+    }
+  },
+  {
+    "image_name": "VF100_SRC_789199EE.jpg",
+    "result": {
+      "status": "MODEL_CALL_FAILED",
+      "error": "timed out"
+    }
+  },
+  {
+    "image_name": "VF100_SRC_F0F2F653.jpg",
+    "result": {
+      "status": "MODEL_CALL_FAILED",
+      "error": "timed out"
+    }
+  },
+  {
+    "image_name": "VF101_SRC_4B7DFECE.jpg",
+    "result": {
+      "status": "MODEL_CALL_FAILED",
+      "error": "timed out"
+    }
+  }
+]

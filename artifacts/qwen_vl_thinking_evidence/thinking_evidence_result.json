@@ -1,0 +1,27 @@
+{
+  "visual_summary": "식당에서 한 어르신이 식사를 하고 있는 장면",
+  "scene_type": "restaurant",
+  "main_subjects": [
+    "bowl",
+    "utensils",
+    "kimchi",
+    "side dishes",
+    "table",
+    "person",
+    "elderly person"
+  ],
+  "visible_people_count": 1,
+  "face_visibility": "unknown",
+  "human_presence_score": 0.85,
+  "emotion": "warm",
+  "action_level": "medium",
+  "camera_quality": "good",
+  "edit_value": 0.75,
+  "must_keep_candidates": [],
+  "avoid_candidates": [],
+  "cognitive_role_hint": "context",
+  "reason": "Rule-based extraction from thinking trace text",
+  "source_channel": "thinking",
+  "production_usable": false,
+  "diagnostic_visual_seen": true
+}
