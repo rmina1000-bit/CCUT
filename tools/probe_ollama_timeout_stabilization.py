@@ -18,6 +18,7 @@ class StabilizationResult:
     MODEL_CALL_FAILED = "MODEL_CALL_FAILED"
     JSON_PARSE_FAILED = "JSON_PARSE_FAILED"
     CONTRACT_INVALID = "CONTRACT_INVALID"
+    THINKING_JSON_ONLY = "THINKING_JSON_ONLY"
 
 def call_ollama_stabilization(
     model: str, 
@@ -25,20 +26,30 @@ def call_ollama_stabilization(
     timeout: int, 
     num_predict: int, 
     keep_alive: str = "5m", 
+    format: Any = None,
+    think: bool = None,
+    temperature: float = None,
     base_url: str = "http://127.0.0.1:11434"
 ) -> Dict[str, Any]:
     url = f"{base_url}/api/generate"
     
+    options = {
+        "num_predict": num_predict
+    }
+    if temperature is not None:
+        options["temperature"] = temperature
+
     payload = {
         "model": model,
         "prompt": prompt,
         "stream": False,
-        "format": "json",
         "keep_alive": keep_alive,
-        "options": {
-            "num_predict": num_predict
-        }
+        "options": options
     }
+    if format:
+        payload["format"] = format
+    if think is not None:
+        payload["think"] = think
     
     start_time = time.time()
     try:
@@ -53,7 +64,8 @@ def call_ollama_stabilization(
             return {
                 "status": StabilizationResult.OK,
                 "latency_ms": int(latency),
-                "response": resp_data.get("response"),
+                "response": resp_data.get("response", ""),
+                "thinking": resp_data.get("thinking", ""),
                 "raw": resp_data
             }
     except urllib.error.URLError as e:
@@ -65,17 +77,22 @@ def call_ollama_stabilization(
             return {"status": StabilizationResult.MODEL_CALL_TIMEOUT, "error": str(e)}
         return {"status": StabilizationResult.MODEL_CALL_FAILED, "error": str(e)}
 
-def validate_json_contract(response_text: str) -> str:
+def validate_json_contract(response_text: str) -> bool:
     if not response_text:
-        return StabilizationResult.JSON_PARSE_FAILED
+        return False
+    # Handle potential extra characters around JSON if format was not strictly json
+    text = response_text.strip()
+    if "```json" in text:
+        text = text.split("```json")[1].split("```")[0].strip()
+    elif "```" in text:
+        text = text.split("```")[1].split("```")[0].strip()
+        
     try:
-        data = json.loads(response_text)
+        data = json.loads(text)
         required_keys = ["patch_type", "tone", "target_length", "must_keep", "avoid", "reason"]
-        if all(k in data for k in required_keys):
-            return StabilizationResult.OK
-        return StabilizationResult.CONTRACT_INVALID
+        return all(k in data for k in required_keys)
     except:
-        return StabilizationResult.JSON_PARSE_FAILED
+        return False
 
 def check_ollama_model_exists(model: str, base_url: str = "http://127.0.0.1:11434") -> bool:
     """Check if the model exists in Ollama by calling /api/tags."""
@@ -99,6 +116,8 @@ def run_stabilization_probe():
     parser.add_argument("--model", type=str, default="qwen3:0.6b", help="Model name to probe")
     parser.add_argument("--output-dir", type=str, default="artifacts/ollama_timeout_stabilization", help="Directory to save results")
     parser.add_argument("--base-url", type=str, default="http://127.0.0.1:11434", help="Ollama API base URL")
+    parser.add_argument("--r1-json-repair", action="store_true", help="Run R1 repair CASEs")
+    parser.add_argument("--r2-think-false", action="store_true", help="Run R2 repair CASEs (think:false)")
     args = parser.parse_args()
 
     model = args.model
@@ -107,74 +126,117 @@ def run_stabilization_probe():
     
     print(f"--- Ollama Timeout Stabilization Probe (Model: {model}) ---")
 
-    # [STEP 10-I.5.28-E9-R2-R10-E] Pre-check: Does the model exist?
     if not check_ollama_model_exists(model, base_url):
-        # Try a quick test call to see if it's OLLAMA_NOT_RUNNING or just MODEL_NOT_FOUND
         try:
             urllib.request.urlopen(base_url, timeout=2)
-            print(f"ERROR: Model '{model}' not found in Ollama tags.")
-            print(f"Please run 'ollama pull {model}' first.")
-            # We still proceed to create a "not found" result artifact if possible
+            print(f"ERROR: Model '{model}' not found.")
+            return
         except:
-            print("ERROR: Ollama server is not running or unreachable.")
+            print("ERROR: Ollama server not running.")
             return
 
-    prompt = """Return a JSON patch for narrative intent. 
+    default_prompt = """Return a JSON patch for narrative intent. 
 User message: '더 빠르게 해줘'
 Format: {"patch_type": "story_intent_patch", "tone": "fast", "target_length": "short", "must_keep": [], "avoid": [], "reason": "short test"}"""
     
-    # Adjust timeouts based on model weight (heuristics)
-    if "4b" in model.lower():
+    cases = []
+    if args.r2_think_false:
+        schema = {
+            "type": "object",
+            "properties": {
+                "patch_type": { "type": "string" },
+                "tone": { "type": "string" },
+                "target_length": { "type": "string" },
+                "must_keep": { "type": "array", "items": { "type": "string" } },
+                "avoid": { "type": "array", "items": { "type": "string" } },
+                "reason": { "type": "string" }
+            },
+            "required": ["patch_type", "tone", "target_length", "must_keep", "avoid", "reason"]
+        }
         cases = [
-            {"id": "CASE 1", "timeout": 20, "num_predict": 64, "keep_alive": "5m"},
-            {"id": "CASE 2", "timeout": 30, "num_predict": 64, "keep_alive": "5m"},
-            {"id": "CASE 3", "timeout": 45, "num_predict": 128, "keep_alive": "5m"},
-            {"id": "CASE 4", "timeout": 60, "num_predict": 128, "keep_alive": "10m"},
+            {"id": "CASE 8", "timeout": 45, "num_predict": 128, "keep_alive": "10m", 
+             "think": False, "format": "json", "temperature": 0},
+            {"id": "CASE 9", "timeout": 60, "num_predict": 256, "keep_alive": "10m", 
+             "think": False, "format": "json", "temperature": 0},
+            {"id": "CASE 10", "timeout": 60, "num_predict": 256, "keep_alive": "10m", 
+             "think": False, "format": schema, "temperature": 0},
+        ]
+    elif args.r1_json_repair:
+        cases = [
+            {"id": "CASE 5", "timeout": 45, "num_predict": 128, "keep_alive": "10m", 
+             "prompt": default_prompt + "\nDo not think. Return only final JSON."},
+            {"id": "CASE 6", "timeout": 45, "num_predict": 128, "keep_alive": "10m", 
+             "prompt": "/no_think\n" + default_prompt},
+            {"id": "CASE 7", "timeout": 45, "num_predict": 128, "keep_alive": "10m", 
+             "prompt": default_prompt, "format": "json"},
         ]
     else:
-        cases = [
-            {"id": "CASE 1", "timeout": 10, "num_predict": 64, "keep_alive": "5m"},
-            {"id": "CASE 2", "timeout": 20, "num_predict": 64, "keep_alive": "5m"},
-            {"id": "CASE 3", "timeout": 30, "num_predict": 128, "keep_alive": "5m"},
-            {"id": "CASE 4", "timeout": 30, "num_predict": 128, "keep_alive": "5m"},
-        ]
+        if "4b" in model.lower():
+            cases = [
+                {"id": "CASE 1", "timeout": 20, "num_predict": 64, "keep_alive": "5m"},
+                {"id": "CASE 2", "timeout": 30, "num_predict": 64, "keep_alive": "5m"},
+                {"id": "CASE 3", "timeout": 45, "num_predict": 128, "keep_alive": "5m"},
+                {"id": "CASE 4", "timeout": 60, "num_predict": 128, "keep_alive": "10m"},
+            ]
+        else:
+            cases = [
+                {"id": "CASE 1", "timeout": 10, "num_predict": 64, "keep_alive": "5m"},
+                {"id": "CASE 2", "timeout": 20, "num_predict": 64, "keep_alive": "5m"},
+                {"id": "CASE 3", "timeout": 30, "num_predict": 128, "keep_alive": "5m"},
+                {"id": "CASE 4", "timeout": 30, "num_predict": 128, "keep_alive": "5m"},
+            ]
     
     results = []
-    
     for case in cases:
-        print(f"Running {case['id']} (timeout={case['timeout']}s, num_predict={case['num_predict']})...")
+        print(f"Running {case['id']}...")
         res = call_ollama_stabilization(
             model=model,
-            prompt=prompt,
+            prompt=case.get("prompt", default_prompt),
             timeout=case['timeout'],
             num_predict=case['num_predict'],
             keep_alive=case['keep_alive'],
+            format=case.get("format"),
+            think=case.get("think"),
+            temperature=case.get("temperature"),
             base_url=base_url
         )
         
-        # If model is not found, Ollama returns 404 which might trigger MODEL_CALL_FAILED
-        # or we might have caught it in the pre-check.
+        diag = {
+            "response_empty": not res.get("response"),
+            "thinking_present": bool(res.get("thinking")),
+            "response_json_ok": validate_json_contract(res.get("response")),
+            "thinking_json_ok": validate_json_contract(res.get("thinking")),
+        }
         
+        status = res["status"]
+        if status == StabilizationResult.OK:
+            if diag["response_json_ok"]:
+                status = StabilizationResult.OK
+            elif diag["thinking_json_ok"]:
+                status = StabilizationResult.THINKING_JSON_ONLY
+            else:
+                status = StabilizationResult.JSON_PARSE_FAILED
+
         case_result = {
             "case_id": case['id'],
             "params": case,
-            "result": res
+            "result": {**res, "status": status},
+            "diagnostics": diag
         }
-        
-        if res["status"] == StabilizationResult.OK:
-            contract_status = validate_json_contract(res["response"])
-            case_result["contract_validation"] = contract_status
-            print(f"  -> Latency: {res['latency_ms']}ms, Contract: {contract_status}")
-        else:
-            print(f"  -> Failed: {res['status']}")
-            
+        print(f"  -> Status: {status}, Latency: {res.get('latency_ms', 0)}ms")
         results.append(case_result)
 
-    # Save results
     os.makedirs(output_dir, exist_ok=True)
+    if args.r2_think_false:
+        suffix = "_r2"
+    elif args.r1_json_repair:
+        suffix = "_r1"
+    else:
+        suffix = ""
     
-    model_safe_name = model.replace(":", "_")
-    with open(f"{output_dir}/{model_safe_name}_result.json", "w", encoding="utf-8") as f:
+    model_safe = model.replace(":", "_")
+    
+    with open(f"{output_dir}/{model_safe}{suffix}_result.json", "w", encoding="utf-8") as f:
         json.dump(results, f, indent=4, ensure_ascii=False)
         
     summary = {
@@ -182,16 +244,14 @@ Format: {"patch_type": "story_intent_patch", "tone": "fast", "target_length": "s
         "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
         "total_cases": len(cases),
         "success_count": sum(1 for r in results if r["result"]["status"] == StabilizationResult.OK),
-        "timeout_count": sum(1 for r in results if r["result"]["status"] == StabilizationResult.MODEL_CALL_TIMEOUT),
-        "model_not_found": any("not found" in str(r["result"].get("error", "")).lower() for r in results)
+        "thinking_only_count": sum(1 for r in results if r["result"]["status"] == StabilizationResult.THINKING_JSON_ONLY),
+        "failure_count": sum(1 for r in results if r["result"]["status"] == StabilizationResult.JSON_PARSE_FAILED)
     }
     
-    with open(f"{output_dir}/{model_safe_name}_summary.json", "w", encoding="utf-8") as f:
+    with open(f"{output_dir}/{model_safe}{suffix}_summary.json", "w", encoding="utf-8") as f:
         json.dump(summary, f, indent=4, ensure_ascii=False)
     
     print(f"\nResults saved to {output_dir}/")
 
 if __name__ == "__main__":
     run_stabilization_probe()
-
-

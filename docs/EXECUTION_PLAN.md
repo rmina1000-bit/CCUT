@@ -32,10 +32,10 @@
 
 ## Next Priority
 
-1. R10-D: Ollama Timeout / keep_alive / JSON Stabilization (Current)
-2. ChatGPT Form Narrative Chat Repair
-3. StoryIntent → Proposal Request 연결
-4. AI Boundary Integration with main.py (Non-runtime to Runtime)
+1. R10-E: qwen3:4b Baseline Validation with Stabilization Probe (DOING)
+2. R10-F: Narrative Provider Adapter Contract Harness
+3. ChatGPT Form Narrative Chat Repair
+4. StoryIntent → Proposal Request 연결
 
 ---
 

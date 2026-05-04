@@ -1,0 +1,8 @@
+{
+    "model": "qwen3:4b",
+    "timestamp": "2026-05-04 11:37:35",
+    "total_cases": 3,
+    "success_count": 0,
+    "thinking_only_count": 1,
+    "failure_count": 2
+}
