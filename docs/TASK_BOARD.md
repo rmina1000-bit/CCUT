@@ -22,18 +22,18 @@
 - R10-A Qwen Model Inventory and Path Hygiene Review
 - R10-B Qwen3-Instruct Acquisition and Ollama Registration Plan
 - R10-C Qwen3 4B Ollama Candidate Install Plan
-- R10-D Ollama Timeout / keep_alive / num_predict / JSON Response Stabilization
 - R10-E qwen3:4b Baseline Validation (think:false + JSON Schema confirmed OK)
+- R10-F Narrative Provider Adapter Contract Harness (Isolation validation PASS)
 
 ### HOLD / REWORK ⏸
 - E9-R2-R1 Narrative Chat History Repair
 - E9-R2-R2 ChatGPT-like Conversation UX Repair
 
 ### DOING 🔄
-- R10-F Narrative Provider Adapter Contract Harness
+- R10-G Narrative Provider Adapter Dry Run (End-to-end logic without UI)
 
 ### NEXT 📋
-- R10-G Narrative Provider Adapter → UI Dry Run
+- R10-H CenterPanel Narrative Chat integration
 - E9-R2-R3 ChatGPT Form Narrative Chat Repair
 - E9-R3 StoryIntent → Proposal Request connection
 - E10 Transition Coherence / Scene Order improvement

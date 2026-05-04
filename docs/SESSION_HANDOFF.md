@@ -61,9 +61,9 @@ User feedback:
 - R10-D completed: `tools/probe_ollama_timeout_stabilization.py` implemented.
 - Evaluated `timeout`, `num_predict`, and `keep_alive` parameters using `qwen3:0.6b`.
 - Established safe failure statuses: `MODEL_CALL_TIMEOUT`, `JSON_PARSE_FAILED`, etc.
-- R10-E PASS: `qwen3:4b` validated with `think: false` and JSON Schema.
-- R10-F DOING: Narrative Provider Contract Harness implemented.
-- Next: Run Harness to verify 3 user scenarios.
+- R10-F PASS: Narrative Provider Contract Harness verified with 3 user scenarios.
+- R10-G DOING: Narrative Provider Adapter implemented and ready for Dry Run.
+- Next: Run Dry Run to verify adapter logic with 5 extended scenarios.
 
 ... (이하 기존 내역 보존)
 

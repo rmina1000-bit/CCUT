@@ -1,0 +1,86 @@
+[
+    {
+        "input": "더 빠르게, 사람 중심으로 편집해줘",
+        "status": "OK",
+        "latency_ms": 10043,
+        "patch": {
+            "patch_type": "story_intent_patch",
+            "tone": "fast",
+            "target_length": "short",
+            "must_keep": [],
+            "avoid": [],
+            "reason": "The user requested to edit 'more quickly' and 'focus on people', so the tone should be fast and the target length should be short."
+        },
+        "response_json_ok": true,
+        "contract_valid": true,
+        "error": ""
+    },
+    {
+        "input": "모든 영상에서 한 조각씩은 반드시 써줘",
+        "status": "OK",
+        "latency_ms": 7113,
+        "patch": {
+            "patch_type": "story_intent_patch",
+            "tone": "natural",
+            "target_length": "short",
+            "must_keep": [],
+            "avoid": [],
+            "reason": "The user's message translates to 'Give me one piece at a time from all videos.' This implies a need for concise, natural storytelling that focuses on short, sequential segments without overwhelming detail."
+        },
+        "response_json_ok": true,
+        "contract_valid": true,
+        "error": ""
+    },
+    {
+        "input": "감성적으로, 가족기록처럼 보이게 해줘",
+        "status": "OK",
+        "latency_ms": 7668,
+        "patch": {
+            "patch_type": "story_intent_patch",
+            "tone": "emotional",
+            "target_length": "short",
+            "must_keep": [],
+            "avoid": [],
+            "reason": "The user wants the video to feel emotionally resonant and like family records, so the tone is set to emotional. The target length is short to keep it concise and impactful, as family records often have brief, meaningful moments."
+        },
+        "response_json_ok": true,
+        "contract_valid": true,
+        "error": ""
+    },
+    {
+        "input": "너무 길면 안 되고 쇼츠처럼 빠르게 해줘",
+        "status": "OK",
+        "latency_ms": 7178,
+        "patch": {
+            "patch_type": "story_intent_patch",
+            "tone": "fast",
+            "target_length": "short",
+            "must_keep": [],
+            "avoid": [],
+            "reason": "The user wants the video to be short and fast-paced like a short video (쇼츠), so the tone is set to 'fast' and the target length is 'short'."
+        },
+        "response_json_ok": true,
+        "contract_valid": true,
+        "error": ""
+    },
+    {
+        "input": "말이 없는 장면은 줄이고 표정이 잘 보이는 장면을 살려줘",
+        "status": "OK",
+        "latency_ms": 7319,
+        "patch": {
+            "patch_type": "story_intent_patch",
+            "tone": "natural",
+            "target_length": "short",
+            "must_keep": [
+                "표정이 잘 보이는 장면"
+            ],
+            "avoid": [
+                "말이 없는 장면"
+            ],
+            "reason": "User wants to remove scenes without dialogue and keep scenes where expressions are clearly visible."
+        },
+        "response_json_ok": true,
+        "contract_valid": true,
+        "error": ""
+    }
+]
