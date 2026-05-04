@@ -930,6 +930,7 @@ async def post_narrative_intent(req: NarrativeIntentRequest):
         return {
             "status": result.status,
             "patch": vars(result.patch) if result.patch else None,
+            "classification": vars(result.classification) if result.classification else None,
             "latency_ms": result.latency_ms,
             "error": result.error_message
         }

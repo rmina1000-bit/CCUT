@@ -75,13 +75,43 @@ export const useProposalState = (sourceFragments: Fragment[]) => {
     [directionSnapshot, logProposalPair, sourceFragments]
   );
 
-  const buildConsultationReply = useCallback((input: string): string => {
-    const normalized = input.trim();
+  const classifyConsultationInput = useCallback((text: string) => {
+    const lower = text.toLowerCase().trim();
+    if (!lower) return "unknown";
 
-    if (!normalized) {
-      return "말씀을 조금 더 입력해 주시면 그 방향을 편집 의도에 반영하겠습니다.";
+    if (/안녕|반가워|하이|hello|hi/.test(lower)) return "greeting";
+    if (/누구|뭐하는|뭐 하는|기능|할 수 있는|정체/.test(lower)) return "system_question";
+    if (/이대로|진행|좋아|오케이|ok|맞아|응|네|제안해/.test(lower)) return "confirmation";
+    if (/안 돼|안돼|이상해|모르겠|못 알아|대화가 안|답답/.test(lower)) return "complaint_or_confusion";
+
+    // editing_instruction keywords
+    if (/빠르게|템포|속도|감성|따뜻|여운|사람|인물|가족|풍경|배경|장소|골고루|균형|줄여|늘려|길게|짧게|촘촘|여백|중심|위주/.test(lower)) {
+      return "editing_instruction";
     }
 
+    return "unknown";
+  }, []);
+
+  const buildConsultationReply = useCallback((input: string, intent: string): string => {
+    const normalized = input.trim();
+
+    if (intent === "greeting") {
+      return "안녕하세요. 편집 방향을 말씀해 주시면 그 기준으로 제안을 준비하겠습니다.";
+    }
+    if (intent === "system_question") {
+      return "저는 이 프로젝트의 영상을 분석하고, 편집 방향을 정리해 A/B 제안을 준비하는 CCUT 편집 보조입니다.";
+    }
+    if (intent === "complaint_or_confusion") {
+      return "지금 대화가 자연스럽지 않게 느껴질 수 있습니다. 편집 방향을 짧게 말씀해 주시면 그 기준으로 다시 정리하겠습니다.";
+    }
+    if (intent === "unknown") {
+      return "편집 방향을 조금 더 구체적으로 말씀해 주세요. 예: 더 빠르게, 사람 중심으로, 감성적으로.";
+    }
+    if (intent === "confirmation") {
+      return "네, 지금까지의 대화 내용을 기준으로 A/B 편집 제안을 준비하겠습니다.";
+    }
+
+    // Default or editing_instruction
     if (/빠르게|템포|속도|지루|짧게/.test(normalized)) {
       return "좋습니다. 장면 전환을 더 촘촘하게 잡고, 반복되는 구간은 줄이는 방향으로 편집 의도를 조정하겠습니다.";
     }
@@ -102,27 +132,15 @@ export const useProposalState = (sourceFragments: Fragment[]) => {
       return "좋습니다. 특정 영상에 치우치지 않도록 여러 원본의 조각을 균형 있게 섞는 방향으로 준비하겠습니다.";
     }
 
-    if (/이대로|제안|만들어|진행|좋아|오케이|ok/i.test(normalized)) {
-      return "네, 지금까지의 대화 내용을 기준으로 A/B 편집 제안을 준비하겠습니다.";
-    }
-
-    if (/[?？]$|알아듣|이해/.test(normalized)) {
-      return "네, 말씀하신 내용을 편집 방향으로 해석하고 있습니다. 지금까지의 대화는 StoryIntent에 누적하고, 그 기준으로 A/B 제안을 준비하겠습니다.";
-    }
-
     return `알겠습니다. 말씀하신 "${normalized.slice(0, 40)}${normalized.length > 40 ? "..." : ""}" 방향을 반영해서 편집 의도를 조정하겠습니다.`;
   }, []);
 
   const handleConsultation = useCallback(async (text: string) => {
     if (!storyPlan) return;
 
+    const intent = classifyConsultationInput(text);
     const lower = text.toLowerCase();
-    const shouldConfirm =
-      lower.includes("이대로") ||
-      lower.includes("진행") ||
-      lower.includes("제안해") ||
-      /ok$/i.test(lower) ||
-      lower.includes("오케이");
+    const shouldConfirm = intent === "confirmation";
 
     const userMsgId = `user_${Date.now()}`;
     const aiMsgId = `ai_${Date.now() + 1}`;
@@ -134,13 +152,13 @@ export const useProposalState = (sourceFragments: Fragment[]) => {
       timestamp: Date.now(),
     };
 
-    // Immediate AI feedback (Interpreting...)
+    // Immediate AI feedback
     const aiMsg = {
       id: aiMsgId,
       sender: "ai" as const,
-      text: "편집 방향을 해석하고 있습니다...",
+      text: intent === "editing_instruction" ? "편집 방향을 해석하고 있습니다..." : "의도를 파악하고 있습니다...",
       timestamp: Date.now() + 1,
-      isInterpreting: true
+      isInterpreting: intent === "editing_instruction"
     };
 
     setStoryPlan((prev: any) => {
@@ -151,9 +169,14 @@ export const useProposalState = (sourceFragments: Fragment[]) => {
       };
     });
 
-    // Background Narrative AI call with 15s timeout
+    let nextIntent: any = { ...(storyPlan.story_intent || {}) };
+    let finalAiText = "";
+    let finalIntentStr = intent;
+
+    // Background Narrative AI call (LLM-based Classification + Patch)
     const startTime = Date.now();
-    let result: any = { status: "TIMEOUT", patch: null, latency_ms: 0, error: "Frontend 15s timeout" };
+    let result: any = { status: "TIMEOUT", patch: null, classification: null, latency_ms: 0 };
+    
     try {
       const timeoutPromise = new Promise((_, reject) => 
         setTimeout(() => reject(new Error("TIMEOUT")), 15000)
@@ -164,31 +187,37 @@ export const useProposalState = (sourceFragments: Fragment[]) => {
         timeoutPromise
       ]);
     } catch (err: any) {
-      console.warn("[NarrativeAI] Safe fallback triggered:", err.message);
+      console.warn("[NarrativeAI] LLM interpretation failed, falling back to keywords:", err.message);
     }
 
-    const latency = Date.now() - startTime;
-    if (result.status !== "OK") {
-      console.log(`[NarrativeAI] Fallback (Status: ${result.status}, Latency: ${latency}ms)`);
-    }
+    const totalLatency = Date.now() - startTime;
 
-    const nextIntent: any = { ...(storyPlan.story_intent || {}) };
-    
-    // AI Success: Apply StoryIntentPatch
-    if (result.status === "OK" && result.patch) {
-      // Merge patch into story_intent
-      Object.assign(nextIntent, result.patch);
+    if (result.status === "OK" && result.classification) {
+      const clf = result.classification;
+      console.log(`[NarrativeAI] LLM Intent: ${clf.input_type} (Needs Patch: ${clf.needs_story_patch}) Latency: ${totalLatency}ms`);
+      
+      finalAiText = clf.short_reply;
+      finalIntentStr = clf.input_type;
+
+      if (clf.needs_story_patch && result.patch) {
+        Object.assign(nextIntent, result.patch);
+      }
     } else {
-      // AI Fallback: Rule-based simple intent extraction
-      if (/빠르게|템포|속도/.test(lower)) nextIntent.pace = "fast";
-      if (/감성|따뜻|여운/.test(lower)) nextIntent.mood = "warm";
-      if (/사람|인물|가족/.test(lower)) nextIntent.focus = "people";
-      if (/풍경|배경|장소/.test(lower)) nextIntent.focus = "landscape";
-      if (/골고루|균형/.test(lower)) nextIntent.coverage = "balanced_sources";
+      // AI Fallback: Rule-based keyword classification
+      console.log(`[NarrativeAI] Fallback to keywords (Status: ${result.status}, Latency: ${totalLatency}ms)`);
+      finalAiText = buildConsultationReply(text, intent);
+      
+      if (intent === "editing_instruction") {
+        const lower = text.toLowerCase();
+        if (/빠르게|템포|속도/.test(lower)) nextIntent.pace = "fast";
+        if (/감성|따뜻|여운/.test(lower)) nextIntent.mood = "warm";
+        if (/사람|인물|가족/.test(lower)) nextIntent.focus = "people";
+        if (/풍경|배경|장소/.test(lower)) nextIntent.focus = "landscape";
+        if (/골고루|균형/.test(lower)) nextIntent.coverage = "balanced_sources";
+      }
     }
 
-    const nextStatus = shouldConfirm ? "confirmed" : "user_requested_change";
-    const finalAiText = buildConsultationReply(text);
+    const nextStatus = finalIntentStr === "confirmation" || finalIntentStr === "proposal_request" ? "confirmed" : "user_requested_change";
 
     setStoryPlan((prev: any) => {
       if (!prev) return prev;
@@ -203,7 +232,7 @@ export const useProposalState = (sourceFragments: Fragment[]) => {
         ),
       };
     });
-  }, [storyPlan, buildConsultationReply]);
+  }, [storyPlan, buildConsultationReply, classifyConsultationInput]);
 
   return {
     selectedProposalId,

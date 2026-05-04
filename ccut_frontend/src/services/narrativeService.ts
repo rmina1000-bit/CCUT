@@ -9,9 +9,19 @@ export interface StoryIntentPatch {
   reason: string;
 }
 
+export interface ConversationIntent {
+  input_type: string;
+  confidence: number;
+  needs_story_patch: boolean;
+  reply_type: string;
+  short_reply: string;
+  reason: string;
+}
+
 export interface NarrativeIntentResponse {
   status: string;
   patch?: StoryIntentPatch;
+  classification?: ConversationIntent;
   latency_ms?: number;
   response_json_ok?: boolean;
   contract_valid?: boolean;
