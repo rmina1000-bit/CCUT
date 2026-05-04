@@ -62,7 +62,8 @@ User feedback:
 - Evaluated `timeout`, `num_predict`, and `keep_alive` parameters using `qwen3:0.6b`.
 - Established safe failure statuses: `MODEL_CALL_TIMEOUT`, `JSON_PARSE_FAILED`, etc.
 - Confirmed JSON contract validation for `StoryIntentPatch`.
-- Next: R10-E (4B Validation).
+- R10-E (4B Validation) is on HOLD: Model `qwen3:4b` not installed. Probe script prepared.
+- Next: User manually pulls `qwen3:4b`, then run Probe.
 
 ... (이하 기존 내역 보존)
 

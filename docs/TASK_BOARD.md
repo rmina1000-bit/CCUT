@@ -25,13 +25,11 @@
 - R10-D Ollama Timeout / keep_alive / num_predict / JSON Response Stabilization
 
 ### HOLD / REWORK ⏸
+- R10-E qwen3:4b Baseline Validation (Reason: Model not installed in Ollama)
 - E9-R2-R1 Narrative Chat History Repair
 - E9-R2-R2 ChatGPT-like Conversation UX Repair
 
-> **Reason:** The structure works, but UX does not yet match the desired ChatGPT-form conversational model.
-
 ### NEXT 📋
-- R10-E qwen3:4b Baseline Validation with Stabilization Probe
 - R10-F Narrative Provider Adapter Contract Harness
 - E9-R2-R3 ChatGPT Form Narrative Chat Repair
 - E9-R3 StoryIntent → Proposal Request connection
