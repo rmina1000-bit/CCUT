@@ -185,3 +185,31 @@
 .synthetic-seam-hover {
   background: hsl(var(--ccut-amber) / 0.06);
 }
+
+/* Proposal Seekbar - Hide Thumb */
+.proposal-seekbar {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 4px;
+  width: 100%;
+  background: transparent;
+  cursor: pointer;
+  outline: none;
+}
+
+.proposal-seekbar::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 0;
+  height: 0;
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+}
+
+.proposal-seekbar::-moz-range-thumb {
+  width: 0;
+  height: 0;
+  background: transparent;
+  border: 0;
+}

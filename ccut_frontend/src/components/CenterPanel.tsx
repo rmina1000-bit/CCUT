@@ -1,3 +1,4 @@
+// CCUT 1.0.4 - R9.1 Rollback Verified
 import React, { useRef, useEffect, useState, useCallback, useMemo } from "react";
 import { Upload, Play, Loader2, Send, CheckCircle2, Package, BookOpen, List, ChevronDown, AlertCircle } from "lucide-react";
 import { Fragment } from "@/data/fragmentData";
@@ -46,6 +47,7 @@ interface CenterPanelProps {
   exportClips?: PhysicalClip[];
   storyPlan?: StoryPlanPreview | null;
   onStoryPlanConfirm?: (plan: StoryPlanPreview) => void;
+  onActiveFragmentChange?: (id: string | null) => void;
 }
 
 function parseDirectionFromText(text: string): Direction | null {
@@ -169,6 +171,7 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
   exportClips = [],
   storyPlan,
   onStoryPlanConfirm,
+  onActiveFragmentChange,
 }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const videoRefA = useRef<HTMLVideoElement>(null);
@@ -217,8 +220,8 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
   const [isPlayingA, setIsPlayingA] = useState(false);
   const [isPlayingB, setIsPlayingB] = useState(false);
   const [chatValue, setChatValue] = useState("");
-  const [progressA, setProgressA] = useState(0);
-  const [progressB, setProgressB] = useState(0);
+  const [proposalTimeA, setProposalTimeA] = useState(0);
+  const [proposalTimeB, setProposalTimeB] = useState(0);
   const [, setDurationA] = useState(0);
   const [, setDurationB] = useState(0);
   const [, setExportedProgramId] = useState<string | null>(null);
@@ -274,9 +277,24 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
   const seqElapsedSecARef = useRef<number>(0);
   const seqTotalSecBRef = useRef<number>(0);
   const seqElapsedSecBRef = useRef<number>(0);
+  const isUserSeekingARef = useRef(false);
+  const isUserSeekingBRef = useRef(false);
+  const isDraggingProposalSeekARef = useRef(false);
+  const isDraggingProposalSeekBRef = useRef(false);
 
-  const isSeekingARef = useRef<boolean>(false);
-  const isSeekingBRef = useRef<boolean>(false);
+  const [playerSrcA, setPlayerSrcA] = useState<string | null>(null);
+  const [playerSrcB, setPlayerSrcB] = useState<string | null>(null);
+  const pendingLocalTimeARef = useRef<number | null>(null);
+  const pendingLocalTimeBRef = useRef<number | null>(null);
+
+  const lastReportedActiveIdRef = useRef<string | null>(null);
+
+  const reportActiveId = useCallback((id: string | null) => {
+    if (id !== lastReportedActiveIdRef.current) {
+      lastReportedActiveIdRef.current = id;
+      onActiveFragmentChange?.(id);
+    }
+  }, [onActiveFragmentChange]);
 
   const cleanupPendingLoadHandler = useCallback((player: "A" | "B") => {
     const ref = player === "A" ? videoRefA : videoRefB;
@@ -340,13 +358,16 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
     [proposals, allSourceFragments]
   );
 
+
   const playFrag = useCallback(
     (
       player: "A" | "B",
       frag: Fragment,
-      endSecRef: React.MutableRefObject<number>
+      endSecRef: React.MutableRefObject<number>,
+      seekOffset: number = 0
     ) => {
-      const ref = player === "A" ? videoRefA : videoRefB;
+      const isA = player === "A";
+      const ref = isA ? videoRefA : videoRefB;
       if (!ref.current) return;
 
       const fragUrl = getVideoUrlForFrag(frag.fragment_id) ?? videoUrl ?? undefined;
@@ -358,31 +379,24 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
 
       const doSeekPlay = () => {
         if (!ref.current) return;
-        ref.current.currentTime = startSec;
+        ref.current.currentTime = startSec + seekOffset;
         ref.current.play().catch(() => { });
       };
 
-      cleanupPendingLoadHandler(player);
-
       if (fragUrl && !sameVideoSource(ref.current.currentSrc || ref.current.src, fragUrl)) {
-        ref.current.pause();
-        ref.current.src = fragUrl;
-
-        const onLoaded = () => {
-          cleanupPendingLoadHandler(player);
-          doSeekPlay();
-        };
-
-        if (player === "A") pendingLoadHandlerARef.current = onLoaded;
-        else pendingLoadHandlerBRef.current = onLoaded;
-
-        ref.current.addEventListener("loadeddata", onLoaded);
-        ref.current.load();
+        // [STEP 10-K-C1-R11] Unify src control via state instead of ref.current.src
+        if (isA) {
+          pendingLocalTimeARef.current = startSec + seekOffset;
+          setPlayerSrcA(fragUrl);
+        } else {
+          pendingLocalTimeBRef.current = startSec + seekOffset;
+          setPlayerSrcB(fragUrl);
+        }
       } else {
         doSeekPlay();
       }
     },
-    [cleanupPendingLoadHandler, getVideoUrlForFrag, sameVideoSource, videoUrl]
+    [getVideoUrlForFrag, sameVideoSource, videoUrl]
   );
 
   const stopSeq = useCallback(
@@ -402,8 +416,10 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
         videoRefB.current?.pause();
         setIsPlayingB(false);
       }
+
+      reportActiveId(null);
     },
-    [cleanupPendingLoadHandler]
+    [cleanupPendingLoadHandler, reportActiveId]
   );
 
   const startSeq = useCallback((player: "A" | "B") => {
@@ -412,12 +428,12 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
     const frags = buildSeqFrags(player);
     if (frags.length === 0) return;
 
-    // 전체 시퀀스 길이 계산
-    const totalSec = frags.reduce((acc, f) => {
+    let totalSec = 0;
+    frags.forEach(f => {
       const s = (f.start_frame ?? 0) / 30;
       const e = (f.end_frame ?? 0) / 30;
-      return acc + Math.max(e - s, 1);
-    }, 0);
+      totalSec += Math.max(e - s, 1);
+    });
 
     if (isA) {
       stopSeq("B");
@@ -428,7 +444,7 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
       isSeqARef.current = true;
       setActivePlayerSafe("A");
       setIsPlayingA(true);
-      setProgressA(0);
+      reportActiveId(frags[0].fragment_id);
       playFrag("A", frags[0], seqEndARef);
     } else {
       stopSeq("A");
@@ -439,10 +455,113 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
       isSeqBRef.current = true;
       setActivePlayerSafe("B");
       setIsPlayingB(true);
-      setProgressB(0);
+      reportActiveId(frags[0].fragment_id);
       playFrag("B", frags[0], seqEndBRef);
     }
-  }, [buildSeqFrags, playFrag, setActivePlayerSafe, stopSeq]);
+  }, [buildSeqFrags, playFrag, stopSeq, reportActiveId, setActivePlayerSafe]);
+ 
+  const reSyncSequence = useCallback((player: "A" | "B", time: number) => {
+    const frags = player === "A" ? seqFragsARef.current : seqFragsBRef.current;
+    const idxRef = player === "A" ? seqIdxARef : seqIdxBRef;
+    const endRef = player === "A" ? seqEndARef : seqEndBRef;
+    if (!frags.length) return;
+    
+    const foundIdx = frags.findIndex(f => {
+      const s = (f.start_frame ?? 0) / 30;
+      const e = (f.end_frame ?? 0) / 30;
+      return time >= s && time < e;
+    });
+    
+    if (foundIdx !== -1) {
+      idxRef.current = foundIdx;
+      const f = frags[foundIdx];
+      endRef.current = (f.end_frame ?? 0) / 30;
+      reportActiveId(f.fragment_id);
+      
+      let newElapsed = 0;
+      for(let i=0; i < foundIdx; i++) {
+        const pf = frags[i];
+        const s = (pf.start_frame ?? 0) / 30;
+        const e = (pf.end_frame ?? 0) / 30;
+        newElapsed += Math.max(e - s, 1);
+      }
+      if (player === "A") seqElapsedSecARef.current = newElapsed;
+      else seqElapsedSecBRef.current = newElapsed;
+    }
+  }, [reportActiveId]);
+
+  const resolveProposalTime = useCallback((frags: Fragment[], targetGlobalTime: number) => {
+    let acc = 0;
+    for (let i = 0; i < frags.length; i++) {
+      const f = frags[i];
+      const s = (f.start_frame ?? 0) / 30;
+      const e = (f.end_frame ?? 0) / 30;
+      const dur = Math.max(e - s, 1);
+      const next = acc + dur;
+      if (targetGlobalTime < next) {
+        return {
+          index: i,
+          offset: targetGlobalTime - acc,
+          globalTime: targetGlobalTime,
+          prevAccumulated: acc
+        };
+      }
+      acc = next;
+    }
+    
+    // [STEP 10-K-C1-R11] Clamp to the end of last fragment instead of resetting to 0
+    const lastIdx = Math.max(0, frags.length - 1);
+    if (frags.length > 0) {
+      const lf = frags[lastIdx];
+      const ls = (lf.start_frame ?? 0) / 30;
+      const le = (lf.end_frame ?? 0) / 30;
+      const ldur = Math.max(le - ls, 1);
+      return {
+        index: lastIdx,
+        offset: ldur,
+        globalTime: targetGlobalTime,
+        prevAccumulated: acc - ldur
+      };
+    }
+    return { index: 0, offset: 0, globalTime: 0, prevAccumulated: 0 };
+  }, []);
+
+  const seekProposal = useCallback((player: "A" | "B", targetGlobalTime: number) => {
+    const isA = player === "A";
+    const frags = isA ? seqFragsARef.current : seqFragsBRef.current;
+    if (frags.length === 0) return;
+
+    const resolved = resolveProposalTime(frags, targetGlobalTime);
+    const video = isA ? videoRefA : videoRefB;
+    const isPlaying = isA ? isPlayingA : isPlayingB;
+
+    if (!video.current) return;
+
+    // Update sequence refs
+    if (isA) {
+      seqIdxARef.current = resolved.index;
+      seqElapsedSecARef.current = resolved.prevAccumulated;
+      setProposalTimeA(targetGlobalTime);
+    } else {
+      seqIdxBRef.current = resolved.index;
+      seqElapsedSecBRef.current = resolved.prevAccumulated;
+      setProposalTimeB(targetGlobalTime);
+    }
+
+    reportActiveId(frags[resolved.index].fragment_id);
+
+    // Fragment change might require src change
+    const targetFrag = frags[resolved.index];
+    const targetUrl = getVideoUrlForFrag(targetFrag.fragment_id) ?? videoUrl ?? undefined;
+    
+    if (targetUrl && !sameVideoSource(video.current.currentSrc || video.current.src, targetUrl)) {
+      playFrag(player, targetFrag, isA ? seqEndARef : seqEndBRef, resolved.offset);
+    } else {
+      const startSec = (targetFrag.start_frame ?? 0) / 30;
+      video.current.currentTime = startSec + resolved.offset;
+      if (isPlaying) video.current.play().catch(() => {});
+    }
+  }, [resolveProposalTime, isPlayingA, isPlayingB, getVideoUrlForFrag, videoUrl, sameVideoSource, playFrag, reportActiveId]);
 
   useEffect(() => {
     if (appState !== "complete") return;
@@ -481,25 +600,8 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
 
       const performSeek = () => {
         if (!ref.current) return;
-        if (isA) isSeekingARef.current = true; else isSeekingBRef.current = true;
-        if (isA) setProgressA(0); else setProgressB(0);
-
         ref.current.currentTime = seekTime;
         console.log(`[seek-sync] ${player} seek to ${seekTime}`);
-
-        const timer1 = setTimeout(() => {
-          if (isA) setProgressA(0); else setProgressB(0);
-          const timer2 = setTimeout(() => {
-            if (isA) {
-              setProgressA(0);
-              isSeekingARef.current = false;
-            } else {
-              setProgressB(0);
-              isSeekingBRef.current = false;
-            }
-            console.log(`[seek-sync] ${player} unlocked`);
-          }, 100);
-        }, 50);
       };
 
       if (targetUrl && !sameVideoSource(ref.current.currentSrc || ref.current.src, targetUrl)) {
@@ -518,11 +620,6 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
     const t = setTimeout(() => {
       setThumbnailPosition(videoRefA, "A");
       setThumbnailPosition(videoRefB, "B");
-      // thumbnail seek로 인한 progress bar 오염 방지
-      setTimeout(() => {
-        setProgressA(0);
-        setProgressB(0);
-      }, 100);
     }, 300);
 
     return () => clearTimeout(t);
@@ -538,6 +635,7 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
     const endRef = player === "B" ? seqEndBRef : seqEndARef;
 
     setActivePlayerSafe(player);
+    reportActiveId(selectedFragment.fragment_id);
     playFrag(player, selectedFragment, endRef);
 
     if (player === "B") {
@@ -558,8 +656,6 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
       
       setExportUrl(null);
       setExportError(null);
-      setProgressA(0);
-      setProgressB(0);
 
       if (onFileSelect) onFileSelect(files[0]);
       if (onAnalyze) {
@@ -922,7 +1018,7 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
                 <>
                   <video
                     ref={videoRefA}
-                    src={playerVideoUrlA ?? videoUrl ?? undefined}
+                    src={playerSrcA ?? playerVideoUrlA ?? videoUrl ?? undefined}
                     poster={getProposalPoster("A")}
                     className="w-full h-full object-contain bg-black"
                     onPlay={() => {
@@ -931,18 +1027,16 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
                     }}
                     onPause={() => setIsPlayingA(false)}
                     onTimeUpdate={(e) => {
-                      if (isSeekingARef.current) return;
+                      if (isUserSeekingARef.current || isDraggingProposalSeekARef.current) return;
                       const v = e.currentTarget;
                       if (isSeqARef.current && seqTotalSecARef.current > 0) {
                         const fragStart = (seqFragsARef.current[seqIdxARef.current]?.start_frame ?? 0) / 30;
-                        const elapsed = seqElapsedSecARef.current + Math.max(0, v.currentTime - fragStart);
-                        setProgressA((elapsed / seqTotalSecARef.current) * 100);
-                      } else if (v.duration) {
-                        setProgressA((v.currentTime / v.duration) * 100);
+                        const global = seqElapsedSecARef.current + Math.max(0, v.currentTime - fragStart);
+                        setProposalTimeA(global);
                       }
 
                       const near =
-                        seqEndARef.current > 0 && v.currentTime >= seqEndARef.current - 0.08;
+                        seqEndARef.current > 0 && v.currentTime >= seqEndARef.current;
                       if (!near) return;
 
                       if (isSeqARef.current) {
@@ -950,11 +1044,14 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
                         const frags = seqFragsARef.current;
 
                         if (nextIdx < frags.length) {
-                          const curFragA = seqFragsARef.current[seqIdxARef.current];
-                          const csA = (curFragA?.start_frame ?? 0) / 30;
-                          const ceA = (curFragA?.end_frame ?? 0) / 30;
-                          seqElapsedSecARef.current += Math.max(ceA - csA, 1);
+                          const curFrag = frags[seqIdxARef.current];
+                          const cs = (curFrag.start_frame ?? 0) / 30;
+                          const ce = (curFrag.end_frame ?? 0) / 30;
+                          
+                          seqElapsedSecARef.current += Math.max(ce - cs, 1);
                           seqIdxARef.current = nextIdx;
+                          setProposalTimeA(seqElapsedSecARef.current);
+                          reportActiveId(frags[nextIdx].fragment_id);
                           playFrag("A", frags[nextIdx], seqEndARef);
                         } else {
                           isSeqARef.current = false;
@@ -962,14 +1059,25 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
                           seqEndARef.current = -1;
                           v.pause();
                           setIsPlayingA(false);
+                          reportActiveId(null);
                         }
-                      } else {
-                        v.pause();
-                        setIsPlayingA(false);
-                        seqEndARef.current = -1;
                       }
                     }}
-                    onLoadedMetadata={(e) => setDurationA(e.currentTarget.duration)}
+                    onSeeking={() => {
+                      isUserSeekingARef.current = true;
+                    }}
+                    onSeeked={() => {
+                      isUserSeekingARef.current = false;
+                    }}
+                    onLoadedMetadata={(e) => {
+                      setDurationA(e.currentTarget.duration);
+                      const pending = pendingLocalTimeARef.current;
+                      if (pending !== null) {
+                        e.currentTarget.currentTime = pending;
+                        pendingLocalTimeARef.current = null;
+                        e.currentTarget.play().catch(() => {});
+                      }
+                    }}
                     preload="auto"
                     playsInline
                   />
@@ -995,10 +1103,33 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
                 </span>
               </div>
 
-              <div className="absolute bottom-0 left-0 right-0 h-1 bg-white/10 z-30">
-                <div
-                  className="h-full bg-primary/70 transition-all duration-100"
-                  style={{ width: `${progressA}%` }}
+              <div 
+                className="absolute bottom-0 left-0 right-0 h-6 z-40 flex items-end px-2 pb-1"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <input
+                  type="range"
+                  min={0}
+                  max={seqTotalSecARef.current || 100}
+                  step={0.01}
+                  value={proposalTimeA}
+                  onPointerDown={(e) => {
+                    e.stopPropagation();
+                    isDraggingProposalSeekARef.current = true;
+                  }}
+                  onChange={(e) => {
+                    e.stopPropagation();
+                    setProposalTimeA(Number(e.target.value));
+                  }}
+                  onPointerUp={(e) => {
+                    e.stopPropagation();
+                    isDraggingProposalSeekARef.current = false;
+                    seekProposal("A", Number(e.currentTarget.value));
+                  }}
+                  className="proposal-seekbar w-full h-1 bg-white/20 accent-primary cursor-pointer appearance-none hover:h-1.5 transition-all rounded-full"
+                  style={{
+                    background: `linear-gradient(to right, hsl(var(--primary)) 0%, hsl(var(--primary)) ${(proposalTimeA / (seqTotalSecARef.current || 1)) * 100}%, rgba(255,255,255,0.1) ${(proposalTimeA / (seqTotalSecARef.current || 1)) * 100}%, rgba(255,255,255,0.1) 100%)`
+                  }}
                 />
               </div>
             </div>
@@ -1039,7 +1170,7 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
                 <>
                   <video
                     ref={videoRefB}
-                    src={playerVideoUrlB ?? videoUrl ?? undefined}
+                    src={playerSrcB ?? playerVideoUrlB ?? videoUrl ?? undefined}
                     poster={getProposalPoster("B")}
                     className="w-full h-full object-contain bg-black"
                     onPlay={() => {
@@ -1048,18 +1179,16 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
                     }}
                     onPause={() => setIsPlayingB(false)}
                     onTimeUpdate={(e) => {
-                      if (isSeekingBRef.current) return;
+                      if (isUserSeekingBRef.current || isDraggingProposalSeekBRef.current) return;
                       const v = e.currentTarget;
                       if (isSeqBRef.current && seqTotalSecBRef.current > 0) {
                         const fragStart = (seqFragsBRef.current[seqIdxBRef.current]?.start_frame ?? 0) / 30;
-                        const elapsed = seqElapsedSecBRef.current + Math.max(0, v.currentTime - fragStart);
-                        setProgressB((elapsed / seqTotalSecBRef.current) * 100);
-                      } else if (v.duration) {
-                        setProgressB((v.currentTime / v.duration) * 100);
+                        const global = seqElapsedSecBRef.current + Math.max(0, v.currentTime - fragStart);
+                        setProposalTimeB(global);
                       }
 
                       const near =
-                        seqEndBRef.current > 0 && v.currentTime >= seqEndBRef.current - 0.08;
+                        seqEndBRef.current > 0 && v.currentTime >= seqEndBRef.current;
                       if (!near) return;
 
                       if (isSeqBRef.current) {
@@ -1067,11 +1196,14 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
                         const frags = seqFragsBRef.current;
 
                         if (nextIdx < frags.length) {
-                          const curFragB = seqFragsBRef.current[seqIdxBRef.current];
-                          const csB = (curFragB?.start_frame ?? 0) / 30;
-                          const ceB = (curFragB?.end_frame ?? 0) / 30;
-                          seqElapsedSecBRef.current += Math.max(ceB - csB, 1);
+                          const curFrag = frags[seqIdxBRef.current];
+                          const cs = (curFrag.start_frame ?? 0) / 30;
+                          const ce = (curFrag.end_frame ?? 0) / 30;
+
+                          seqElapsedSecBRef.current += Math.max(ce - cs, 1);
                           seqIdxBRef.current = nextIdx;
+                          setProposalTimeB(seqElapsedSecBRef.current);
+                          reportActiveId(frags[nextIdx].fragment_id);
                           playFrag("B", frags[nextIdx], seqEndBRef);
                         } else {
                           isSeqBRef.current = false;
@@ -1079,14 +1211,25 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
                           seqEndBRef.current = -1;
                           v.pause();
                           setIsPlayingB(false);
+                          reportActiveId(null);
                         }
-                      } else {
-                        v.pause();
-                        setIsPlayingB(false);
-                        seqEndBRef.current = -1;
                       }
                     }}
-                    onLoadedMetadata={(e) => setDurationB(e.currentTarget.duration)}
+                    onSeeking={() => {
+                      isUserSeekingBRef.current = true;
+                    }}
+                    onSeeked={() => {
+                      isUserSeekingBRef.current = false;
+                    }}
+                    onLoadedMetadata={(e) => {
+                      setDurationB(e.currentTarget.duration);
+                      const pending = pendingLocalTimeBRef.current;
+                      if (pending !== null) {
+                        e.currentTarget.currentTime = pending;
+                        pendingLocalTimeBRef.current = null;
+                        e.currentTarget.play().catch(() => {});
+                      }
+                    }}
                     preload="auto"
                     playsInline
                   />
@@ -1112,10 +1255,33 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
                 </span>
               </div>
 
-              <div className="absolute bottom-0 left-0 right-0 h-1 bg-white/10 z-30">
-                <div
-                  className="h-full bg-ccut-indigo/70 transition-all duration-100"
-                  style={{ width: `${progressB}%` }}
+              <div 
+                className="absolute bottom-0 left-0 right-0 h-6 z-40 flex items-end px-2 pb-1"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <input
+                  type="range"
+                  min={0}
+                  max={seqTotalSecBRef.current || 100}
+                  step={0.01}
+                  value={proposalTimeB}
+                  onPointerDown={(e) => {
+                    e.stopPropagation();
+                    isDraggingProposalSeekBRef.current = true;
+                  }}
+                  onChange={(e) => {
+                    e.stopPropagation();
+                    setProposalTimeB(Number(e.target.value));
+                  }}
+                  onPointerUp={(e) => {
+                    e.stopPropagation();
+                    isDraggingProposalSeekBRef.current = false;
+                    seekProposal("B", Number(e.currentTarget.value));
+                  }}
+                  className="proposal-seekbar w-full h-1 bg-white/20 accent-ccut-indigo cursor-pointer appearance-none hover:h-1.5 transition-all rounded-full"
+                  style={{
+                    background: `linear-gradient(to right, #6366f1 0%, #6366f1 ${(proposalTimeB / (seqTotalSecBRef.current || 1)) * 100}%, rgba(255,255,255,0.1) ${(proposalTimeB / (seqTotalSecBRef.current || 1)) * 100}%, rgba(255,255,255,0.1) 100%)`
+                  }}
                 />
               </div>
             </div>
@@ -1138,8 +1304,10 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
             </button>
           </div>
         </div>
+      </>
+    )}
 
-        <div className="w-full grid grid-cols-2 gap-4">
+      <div className="w-full grid grid-cols-2 gap-4">
           {proposals ? (
             Object.entries(proposals).map(([key, p]: [string, any]) => (
               <div
@@ -1370,8 +1538,6 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
 
             {exportError && <p className="text-[11px] text-red-400/80">{exportError}</p>}
           </div>
-        )}
-          </>
         )}
 
         {guidanceMessage && (
