@@ -50,4 +50,8 @@ Story Direction Template Registry는 사용자의 추상적인 편집 의도(Sto
 - **Reference Code**: `ccut_backend/engine/proposal_engine.py` (도입 예정)
 
 ---
-**Status**: Initial Contract Established (STEP 10-K-B1)
+**Status**: Intent Bridge Complete (STEP 10-K-B2)
+- [x] Template Registry established in `story_direction_templates.json`
+- [x] Intent-to-Template mapping logic implemented in `StoryTemplateResolver`
+- [x] Resolved metadata passed to Proposal Engine via `/proposals/project` API
+- [x] Verification PASS: `balanced_sources` intent correctly maps to `balanced_multi_source_record` template.

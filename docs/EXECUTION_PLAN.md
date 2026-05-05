@@ -2,7 +2,7 @@
 
 > 기준: CCUT 1.0.4 PROJECT NAVIGATION v3.3.0  
 > 핵심: 영상 → 분석 → 편집스토리 초안 → 사용자 협의 → StoryIntent → A/B 제안 → Render  
-> **현재 기준 SHA:** `56554c70e76ad03537193d5b560fd19457ce2477`
+> **현재 기준 SHA:** `0fa1e85e62fe7ce43e6209bbd0def2283dba5289`
 
 ## Updated Core Execution Flow
 
@@ -32,10 +32,9 @@
 
 ## Next Priority
 
-1. R10-E: qwen3:4b Baseline Validation with Stabilization Probe (DOING)
-2. R10-F: Narrative Provider Adapter Contract Harness
-3. ChatGPT Form Narrative Chat Repair
-4. StoryIntent → Proposal Request 연결
+1. STEP 10-K-B3: Balanced Sources Proposal Constraint
+2. Integration with Semantic Fragment Board (Stage 6)
+3. Visual Evidence Scoring Implementation
 
 ---
 

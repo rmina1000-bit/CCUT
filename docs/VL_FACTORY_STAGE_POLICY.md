@@ -35,3 +35,4 @@ The worker outputs a grounded evidence object:
 - **Max Batch Size**: 5 concurrent/sequential images.
 - **Image Pre-processing**: Forced resize to 384px.
 - **Failure Tolerance**: If VL fails, the system falls back to Stage 3 (Semantic) metadata.
+- **Status**: **PASS (STEP 10-K)**. Policy verified via `probe_deep_visual_analysis_stage.py`.

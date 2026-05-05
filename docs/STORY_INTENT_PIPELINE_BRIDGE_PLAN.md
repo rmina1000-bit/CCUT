@@ -38,4 +38,9 @@
 - 하드코딩된 제안 로직에서 데이터 중심(Template Registry)의 제안 로직으로 전환.
 
 ---
-**Status**: Bridge Plan Defined (Next: STEP 10-K-B2 Implementation)
+**Status**: Bridge Implementation Complete (STEP 10-K-B2 PASS)
+- [x] Backend Model Update: `ProjectProposalRequest` now accepts `user_intent` and `template_id`.
+- [x] StoryTemplateResolver: Implemented logic to map intent to templates/techniques.
+- [x] Engine Signature Update: `ProposalEngine` now receives `resolved_story_template` context.
+- [x] Metadata Return: `resolved_story_template` is returned in the API response.
+- [x] Verification: Confirmed runtime mapping of `balanced_sources` to `balanced_multi_source_record`.

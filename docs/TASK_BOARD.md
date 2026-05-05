@@ -1,6 +1,6 @@
 # CCUT Task Board
 
-## STEP 10-K — Deep Visual Analysis Stage (DOING 🚀)
+## STEP 10-K — Deep Visual Analysis Stage (PASS ✅)
 - [x] Stage 0-7 Factory Layer Definition
 - [x] VL Factory Stage Policy established
 - [x] Visual Evidence Cache Policy defined
@@ -10,6 +10,7 @@
 - [x] **STEP 10-K-B1-R1**: Editing Technique Library & Hard Rules Binding (DONE)
 - [x] **STEP 10-K-B2**: Intent Pipeline Bridge / balanced_sources Connection (DONE)
 - [x] **STEP 10-K-B2-R1**: Resolver Metadata on Early Return (DONE)
+- [ ] **STEP 10-K-B3**: Balanced Sources Proposal Constraint (NEXT 📋)
 - [ ] **STEP 10-K-C**: Visual Evidence Scoring Integration (TODO)
 - [ ] Integration with Semantic Fragment Board (Stage 6)
 - [ ] Production Cache Layer verification
@@ -45,11 +46,11 @@
 > **Reason:** The structure works, but UX does not yet match the desired ChatGPT-form conversational model.
 
 ### NEXT 📋
-- R10-E qwen3:4b Baseline Validation with Stabilization Probe
-- R10-F Narrative Provider Adapter Contract Harness
-- E9-R2-R3 ChatGPT Form Narrative Chat Repair
-- E9-R3 StoryIntent → Proposal Request connection
-- E10 Transition Coherence / Scene Order improvement
+- STEP 10-K-B3: Balanced Sources Proposal Constraint
+- STEP 10-K-C: Visual Evidence Scoring Integration
+- Integration with Semantic Fragment Board (Stage 6)
+- Production Cache Layer verification
+- E9-R2-R3: ChatGPT Form Narrative Chat Repair (on hold)
 
 ---
 

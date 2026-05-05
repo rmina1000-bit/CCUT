@@ -37,4 +37,8 @@ graph LR
 - **Signal-Aware**: 분석 데이터(Evidence)가 부족한 경우, 해당 기술은 자동으로 비활성화되거나 Fallback 처리됩니다.
 
 ---
-**Status**: Library Contract Defined (STEP 10-K-B1-R1)
+**Status**: Techniques Integrated (STEP 10-K-B2 PASS)
+- [x] Full library established in `editing_techniques.json`.
+- [x] `video-use` rule absorption completed.
+- [x] Successfully linked to `StoryTemplateResolver`.
+- [x] Technique packs (e.g., `source_rotation`) now resolvable from intent.

@@ -1,56 +1,34 @@
-# Session Handoff — Narrative & Visual Evidence Integration
+# Session Handoff — AI Transition & Story Resolver Milestone
 
 ## Session Summary
-This session successfully integrated `qwen3:4b` for narrative intent interpretation and introduced `qwen3-vl:4b` as the core **Visual Evidence Worker**. We established a robust "Trace-based" extraction policy for multi-modal analysis, overcoming local model renderer limitations.
+This session successfully transitioned CCUT into an AI-driven intent system. We integrated `qwen3-vl:4b` for deep visual analysis and implemented the `StoryTemplateResolver` to bridge user intent with actual editing techniques and production rules.
 
 ## Completed Work
 
-### 1. Narrative AI (Text)
-- **Intent Classifier**: Replaced keyword-based routing with LLM-based intent classification.
-- **Contract Adherence**: Confirmed `think:false` + JSON schema stability for `qwen3:4b`.
-- **UI Integration**: `CenterPanel` consultation now drives AI intent interpretation.
+### 1. Story Intent Pipeline Bridge (STEP 10-K-B2)
+- **StoryTemplateResolver**: Backend logic to map `user_intent` or `template_id` to `resolved_story_template`.
+- **Technique Registry**: Defined `story_direction_templates.json`, `editing_techniques.json`, and `production_hard_rules.json`.
+- **Metadata Flow**: Extended `/proposals/project` response to include `resolved_story_template` for frontend visibility and backend scoring.
+- **Validation**: Confirmed `balanced_sources` -> `balanced_multi_source_record` mapping works with technique packs (source_rotation, etc.).
 
-### 2. Visual Evidence AI (Multi-modal)
-- **Qwen3-VL Integration**: Established `qwen3-vl:4b` as the visual analysis pillar.
-- **Trace Evidence Policy**: Officially adopted **Thinking Trace-based Extraction** (v0) to capture high-quality visual metadata from internal reasoning.
-- **Batch Validation (R4)**: 5/5 images successfully analyzed (Avg 26s per frame, 100% success).
-- **Tooling**:
-  - `ccut_backend/ai/vision/qwen_vl_visual_worker.py`: Trace-aware worker.
-  - `tools/probe_qwen_vl_trace_batch.py`: Advanced diagnostic batch probe.
-  - `tools/extract_visual_evidence_from_vl_thinking.py`: Rule-based trace parser.
+### 2. Deep Visual Analysis & Qwen3-VL (STEP 10-J)
+- **Qwen3-VL Integration**: Established `qwen3-vl:4b` as the core visual evidence worker.
+- **Trace Evidence Policy**: Implemented "Thinking Trace-based Extraction" to capture high-quality visual metadata.
+- **Batch Validation**: Passed Trace Evidence 5-image batch test (Avg 26s per frame).
+- **Stage Factory**: Defined the 7-stage Deep Visual Analysis factory (Stage 0-7).
 
-### 3. Standards & Documentation
-- **QWEN_VL_TRACE_EVIDENCE_POLICY.md**: Official multi-modal grounding strategy.
-- **QWEN_VL_VISUAL_EVIDENCE_WORKER.md**: Worker operational guidelines.
+### 3. Registry & Standards
+- Absorbed `video-use` editing methodologies into `editing_techniques.json`.
+- Established `production_hard_rules.json` for snapping, fading, and EDL constraints.
 
-## Next Steps
-
-### 1. Intent Pipeline Bridge (STEP 10-K-B2/R1 DONE)
-- Successfully bridged the gap between Frontend `story_intent` and Backend `ProposalEngine`.
-- Implemented `StoryTemplateResolver` to map intent (e.g., `balanced_sources`) to templates and techniques.
-- Extended `ProjectProposalRequest` (Pydantic) with `user_intent` and `template_id`.
-- **Refined Response**: Included `resolved_story_template` in all response paths of `/proposals/project`, ensuring visibility even when no semantic fragments are found (`NO_SEMANTIC_DATA`).
-- Passed `resolved_story_template` context to the `ProposalEngine` for future scoring integration.
-
-### 2. Story Direction Template & Technique Registry
-- Completed `story_direction_templates.json`, `editing_techniques.json`, and `production_hard_rules.json`.
-- Established the **Technique Pack & Hard Rule** binding logic for intent-driven editing.
-- Analyzed and absorbed `video-use` editing methodologies into CCUT standards.
-
-### 3. Deep Visual Analysis Stage (STEP 10-K-C)
-- Integrate `Visual Evidence` results into the `Cognitive Fragments` scoring loop.
+## Next Room Goal: STEP 10-K-B3 Balanced Sources Proposal Constraint
+Implement the `hard_constraints` from the resolved template into the `ProposalEngine` fragment selection loop to ensure true source diversity.
 
 ---
 
 ## Environment Check
 - **Branch:** `ccut-1.0.4-step9`
-- **SHA:** `33f14c15a2b81e4c52e970293c9729b71cf55382` (Approx)
-- **Local path:** `D:\CCUT1.0.4`
+- **SHA:** `0fa1e85e62fe7ce43e6209bbd0def2283dba5289`
+- **Commit:** `Connect story intent to template and technique resolver`
 - **Ollama Models**: `qwen3:4b`, `qwen3-vl:4b`
-- **Operational Parameters**: Resize 384px, Timeout 120s (for VL).
-
-### 4. Deep Visual Analysis Stage (STEP 10-K DOING)
-- Defined the 7-stage analysis factory.
-- Established mandatory caching and non-blocking worker policies.
-- Implemented `tools/probe_deep_visual_analysis_stage.py` for verification.
-- **STEP 10-K-A**: Completed Source Diversity Audit. Identified major disconnect between Frontend Intent and Backend Proposal Engine. Recorded in `docs/reports/SOURCE_DIVERSITY_AUDIT_REPORT.md` (and artifact).
+- **Remaining Untracked**: `tools/quality_audit_collector.py` (for next room review)

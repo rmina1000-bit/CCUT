@@ -29,12 +29,19 @@ B proposal:
 - more natural flow
 - respects StoryIntent more strongly
 
-## Current Limitation
+## StoryIntent Resolver Bridge (PASS ✅)
 
-As of E9-R2, StoryIntent is collected in the frontend consultation flow, but full backend ProposalEngine weighting is not yet complete.
+As of STEP 10-K-B2, the bridge between `story_intent` and `ProposalEngine` is complete.
+The `StoryTemplateResolver` takes the `user_intent` (or explicit `template_id`) and returns a `resolved_story_template` which includes:
+- `template_id`
+- `editing_technique_ids` (Technique Packs)
+- `production_hard_rule_ids` (Hard Rules)
+- `hard_constraints` (e.g., `min_source_coverage_ratio`)
+
+This resolved metadata is passed to the `ProposalEngine` for scoring and fragment selection.
 
 Next:
-E9-R3 should connect StoryIntent to proposal request or proposal scoring.
+STEP 10-K-B3 will implement the actual enforcement of `hard_constraints` in the proposal generation loop.
 
 ## Source Coverage Policy
 

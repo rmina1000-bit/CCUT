@@ -21,3 +21,4 @@ The cache key is a composite hash of:
 ## Mandatory Implementation
 - All production calls to `QwenVLVisualWorker` must pass through the `VisualEvidenceCacheLayer`.
 - The `skip-existing` flag in probe tools simulates this policy.
+- **Status**: **PASS (STEP 10-K)**. Policy defined and integrated into worker logic.

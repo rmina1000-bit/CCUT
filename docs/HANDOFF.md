@@ -6,24 +6,21 @@
 - local path: D:\CCUT1.0.4
 
 ## Confirmed Stable Commit (AI Boundary Closure)
-- latest SHA: `603c46861d0817e4f47e6539545b0eb3a3c3bc24`
-- commit message: Update handoff docs for AI boundary and Qwen baseline
+- latest SHA: `0fa1e85e62fe7ce43e6209bbd0def2283dba5289`
+- commit message: Connect story intent to template and technique resolver
 
-## Current Status: AI Boundary & Narrative LLM Preparation
-CCUT 1.0.4 has completed the foundational design for swappable local AI providers.
+## Current Status: Story Intent Resolver Bridge & Visual Evidence
+CCUT 1.0.4 has completed the bridge between user intent and actual editing strategies.
 
-1. **AI Boundary Implementation**: All AI services are now decoupled from the CCUT Core via an AI Boundary.
-2. **Qwen Baseline**: `qwen3:4b` is designated as the primary validation baseline for Narrative LLM.
-3. **Ollama Integration**: Ollama is the primary local runtime candidate. `qwen3:0.6b` was tested (smoke-test) but showed latency issues.
-4. **Separation of Concerns**:
-   - Qwen3-ASR: Specialized for audio transcription (ASR-only).
-   - Qwen3-Instruct: Specialized for narrative consultation (Narrative LLM).
-   - qwen2:latest: Legacy/Test-only.
+1. **Story Intent Resolver**: Implemented `StoryTemplateResolver` to map frontend intent to technique packs.
+2. **Visual Evidence AI**: Integrated `qwen3-vl:4b` for deep visual analysis using Trace-based extraction.
+3. **Template Registry**: Established `story_direction_templates.json` as the contract for intent mapping.
+4. **Validation**: Verified `balanced_sources` intent correctly resolves to `balanced_multi_source_record` template.
 
 ## Next Required Step
-**R10-D: Ollama Timeout / keep_alive / num_predict / JSON Response Stabilization**
+**STEP 10-K-B3: Balanced Sources Proposal Constraint**
 
-This step will address the latency/timeout issues observed during the `qwen3:0.6b` smoke test and stabilize the JSON output format for the `StoryIntentPatch` contract.
+Implement logic to enforce `hard_constraints` (e.g., `min_source_coverage_ratio`) within the `ProposalEngine` fragment selection loop.
 
 ## Antigravity 고정 지시
 모든 작업 전후 반드시 `PROJECT_NAVIGATION.md`를 확인하고, 현재 작업이 전체 흐름 중 어디인지 표시한다.

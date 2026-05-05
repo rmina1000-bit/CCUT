@@ -67,7 +67,7 @@ class ProposalEngine:
         
         # [STEP 10-K-B2] Replaced hardcoded intent with story_context
         intent = story_context.get("user_intent", {"target_length": target_len}) if story_context else {"target_length": target_len}
-        p_b = self._create_user_proposal(project_id, fragments, target_len, intent, source_ids, market_selected_ids)
+        p_b = self._create_user_proposal(project_id, fragments, target_len, intent, source_ids, market_selected_ids, story_context=story_context)
         
         # 3. A/B 차별성 보완
         if [f["fragment_id"] for f in p_a["sequence"]] == [f["fragment_id"] for f in p_b["sequence"]]:
@@ -169,7 +169,7 @@ class ProposalEngine:
             "fallback_reason": fallback
         }
 
-    def _create_user_proposal(self, source_id, fragments, target_len, intent, source_ids=None, overlap_ids=None):
+    def _create_user_proposal(self, source_id, fragments, target_len, intent, source_ids=None, overlap_ids=None, story_context=None):
         """B: User Mode (User Intent 엄격 반영 + A안 중복 페널티)"""
         target_len = self._safe_target_len(target_len, fragments)
         
@@ -239,6 +239,28 @@ class ProposalEngine:
 
         print(f"[PROPOSAL ENGINE] User Proposal (B) - Selected {len(selected)} fragments, total {current_len:.1f}s")
         selected, bridge_details = self._insert_bridges(selected, fragments)
+        
+        # [STEP 10-K-B3] Balanced Source Constraint 적용
+        balance_info = {"applied": False, "template_id": None, "warnings": []}
+        source_dist = self._calculate_source_distribution(selected)
+        
+        template_id = story_context.get("template_id") if story_context else None
+        if template_id == "balanced_multi_source_record":
+            hard_constraints = story_context.get("hard_constraints", {})
+            constraints = {
+                "min_source_coverage_ratio": hard_constraints.get("min_source_coverage_ratio", 0.6),
+                "min_fragments_per_selected_source": hard_constraints.get("min_fragments_per_selected_source", 1),
+                "max_single_source_clip_ratio": hard_constraints.get("max_single_source_clip_ratio", 0.35)
+            }
+            selected, b_warnings = self._apply_balanced_source_constraints(selected, fragments, constraints)
+            balance_info.update({
+                "applied": True,
+                "template_id": template_id,
+                "warnings": b_warnings
+            })
+            # 보정 후 분포 재계산
+            source_dist = self._calculate_source_distribution(selected)
+
         current_len = sum(self._safe_duration(f) for f in selected)
         
         status = "within_range"
@@ -271,7 +293,9 @@ class ProposalEngine:
             "proposal_reason": reason_data,
             "proposal_story": story_data,
             "confidence": 0.85,
-            "fallback_reason": fallback
+            "fallback_reason": fallback,
+            "source_distribution": source_dist,
+            "balance_policy": balance_info if balance_info["applied"] else None
         }
 
     def _insert_bridges(self, selected, all_fragments):
@@ -319,6 +343,105 @@ class ProposalEngine:
         
         print(f"[PROPOSAL ENGINE] _insert_bridges EXIT: final={len(res)}, bridges={len(bridge_details)}")
         return res, bridge_details
+
+    # ═══════════════════════════════════════════════════════════════════
+    #   [STEP 10-K-B3] Balanced Source Constraint Helpers
+    # ═══════════════════════════════════════════════════════════════════
+
+    def _calculate_source_distribution(self, sequence):
+        """[STEP 10-K-B3] 소스별 분포 계산"""
+        if not sequence:
+            return {"source_count": 0, "total_fragments": 0, "by_source": {}, "max_single_source_ratio": 0.0}
+        
+        counts = {}
+        for f in sequence:
+            sid = f.get("source_id", "UNKNOWN")
+            counts[sid] = counts.get(sid, 0) + 1
+            
+        total = len(sequence)
+        dist = {
+            "source_count": len(counts),
+            "total_fragments": total,
+            "by_source": {},
+            "max_single_source_ratio": 0.0
+        }
+        
+        max_ratio = 0.0
+        for sid, count in counts.items():
+            ratio = count / total
+            dist["by_source"][sid] = {
+                "count": count,
+                "ratio": round(ratio, 3)
+            }
+            if ratio > max_ratio:
+                max_ratio = ratio
+        
+        dist["max_single_source_ratio"] = round(max_ratio, 3)
+        return dist
+
+    def _apply_balanced_source_constraints(self, selected, candidates, hard_constraints):
+        """
+        [STEP 10-K-B3] Balanced Source Constraint 보정 로직
+        """
+        warnings = []
+        if not selected:
+            return selected, warnings
+            
+        min_coverage = hard_constraints.get("min_source_coverage_ratio", 0.6)
+        # min_frags = hard_constraints.get("min_fragments_per_selected_source", 1) # Reserved for more complex logic
+        max_ratio_limit = hard_constraints.get("max_single_source_clip_ratio", 0.35)
+        
+        # 1. 현재 소스 분포 계산
+        dist = self._calculate_source_distribution(selected)
+        current_sources = set(dist["by_source"].keys())
+        
+        # 전체 후보 소스 목록
+        all_candidate_sources = set(f.get("source_id") for f in candidates if f.get("source_id"))
+        target_source_count = max(1, int(len(all_candidate_sources) * min_coverage))
+        
+        # 2. 부족한 소스 보충 (Coverage 보장)
+        if len(current_sources) < target_source_count:
+            missing_sources = all_candidate_sources - current_sources
+            # 점수 높은 순으로 후보 정렬 (edit_value 기준)
+            sorted_candidates = sorted(candidates, key=lambda x: x.get("structural", {}).get("edit_value", 0.0), reverse=True)
+            
+            for sid in missing_sources:
+                if len(current_sources) >= target_source_count:
+                    break
+                # 해당 소스의 가장 좋은 조각 하나 선택
+                for f in sorted_candidates:
+                    if f.get("source_id") == sid:
+                        selected.append(f)
+                        current_sources.add(sid)
+                        break
+            
+            if len(current_sources) < target_source_count:
+                warnings.append("insufficient_source_count")
+
+        # 3. Max Ratio 체크
+        dist = self._calculate_source_distribution(selected)
+        if dist["max_single_source_ratio"] > max_ratio_limit:
+             warnings.append("max_single_source_clip_ratio_exceeded")
+
+        # 4. Source Rotation (간단한 정렬 보정)
+        balanced_seq = []
+        if selected:
+            # 시간순 정렬된 상태에서 시작
+            temp_list = sorted(selected, key=lambda x: x.get("start", 0))
+            last_sid = None
+            while temp_list:
+                found = False
+                for i, f in enumerate(temp_list):
+                    if f.get("source_id") != last_sid:
+                        balanced_seq.append(temp_list.pop(i))
+                        last_sid = balanced_seq[-1].get("source_id")
+                        found = True
+                        break
+                if not found:
+                    balanced_seq.append(temp_list.pop(0))
+                    last_sid = balanced_seq[-1].get("source_id")
+                    
+        return balanced_seq, warnings
 
     def _generate_story(self, mode, sequence):
         """

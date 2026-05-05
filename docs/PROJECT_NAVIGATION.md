@@ -1,9 +1,9 @@
 # CCUT 1.0.4 PROJECT NAVIGATION v3.4.0
 
-> **현재 기준 SHA:** `603c46861d0817e4f47e6539545b0eb3a3c3bc24`  
+> **현재 기준 SHA:** `0fa1e85e62fe7ce43e6209bbd0def2283dba5289`  
 > **Branch:** `ccut-1.0.4-step9`  
-> **완료 단계:** R5A ~ R10-C 모두 PASS (AI Boundary & Baseline 정렬)  
-> **핵심 흐름:** 영상 → 분석 → 편집스토리 초안 → 사용자 협의 → StoryIntent → A/B 제안 → Render  
+> **완료 단계:** R10-C -> AI Transition Room (Qwen3-VL, Story Resolver) PASS  
+> **핵심 흐름:** 영상 → 분석 → 편집스토리 초안 → 사용자 협의 → StoryIntent → Template/Technique Resolver → A/B 제안 → Render  
 > **절대 원칙:** 협의 없이 제안 금지 / StoryIntent 없이 Proposal 생성 금지 / Proposal 없이 Export 금지
 
 ## Narrative Consultation Layer
@@ -32,7 +32,12 @@ CCUT은 사용자의 자연어 의견을 StoryIntent로 정리한 뒤, 그 Story
 - R10-A: Qwen Model Inventory & Path Hygiene Review (PASS)
 - R10-B: Qwen3-Instruct Acquisition & Ollama Registration Plan (PASS)
 - R10-C: Qwen3 4B Ollama Candidate Install Plan (PASS)
-- R10-D 예정: Ollama Timeout / keep_alive / JSON Response Stabilization
+- R10-D: Ollama Timeout / keep_alive / JSON Response Stabilization (PASS)
+- STEP 10-J-R4: Qwen3-VL Trace Evidence Batch Validation (PASS)
+- STEP 10-K: Deep Visual Analysis Stage 정의 (PASS)
+- STEP 10-K-B1: Story Direction Template Registry (PASS)
+- STEP 10-K-B2: Story Intent -> Template -> Technique Resolver Bridge (PASS)
+- STEP 10-K-B3 예정: Balanced Sources Proposal Constraint (Next Room)
 
 > **주의:** AI는 CCUT Core가 아니라 AI Staff / Boundary Provider로 정의한다. CCUT Core는 StoryIntentPatch 계약을 통해서만 AI의 조언을 수용하며, 최종 제안 생성 로직(ProposalEngine)은 Core가 직접 소유한다.
 

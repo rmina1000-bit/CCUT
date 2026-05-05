@@ -43,6 +43,7 @@ It should be created before:
 
 “여러 영상 골고루”
 → coverage: balanced_sources
+→ template_id: balanced_multi_source_record (via StoryTemplateResolver)
 
 “감성적으로”
 → mood: emotional

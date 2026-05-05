@@ -28,4 +28,7 @@ CCUT 1.0.4의 편집 엔진은 예술적 창의성을 허용하되, 방송 송�
 3.  **Halt Execution**: 시스템 무결성을 해칠 우려가 있는 경우 프로세스를 즉시 중단합니다.
 
 ---
-**Status**: Production Rules Codified (STEP 10-K-B1-R1)
+**Status**: Rules Integrated (STEP 10-K-B2 PASS)
+- [x] Hard rules defined in `production_hard_rules.json`.
+- [x] Successfully linked to templates via `StoryTemplateResolver`.
+- [x] Rule enforcement points identified in `ProposalEngine`.

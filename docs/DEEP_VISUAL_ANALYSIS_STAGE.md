@@ -22,3 +22,4 @@ The **Deep Visual Analysis Stage** (Stage 5) is the factory layer where `Qwen3-V
 - **Target Selection**: Only analyze high-value candidates (Proposal members, high edit_value, user-requested topics).
 - **Graceful Failure**: Timeout or inference failure in Stage 5 must NOT trigger UI errors or block the export pipeline.
 - **Evidence Grade**: `trace_visual_candidate` (v0).
+- **Status**: **PASS (STEP 10-K)**. Layer defined and verified with batch probe.

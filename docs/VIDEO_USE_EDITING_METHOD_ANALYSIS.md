@@ -34,4 +34,7 @@ CCUT 1.0.4가 벤치마킹하는 `video-use` 방식은 단순히 "AI가 알아�
 CCUT은 `video-use`의 무질서해 보이는 유연성 이면에 숨겨진 **"Hard Production Rules"**를 데이터화하여, AI 편집의 결과가 항상 방송 송출 수준의 품질을 유지하도록 설계합니다.
 
 ---
-**Status**: Method Analysis Complete (STEP 10-K-B1-R1)
+**Status**: Absorption Complete (STEP 10-K-B2 PASS)
+- [x] Methodology successfully mapped to `editing_techniques.json`.
+- [x] Narrative-first approach implemented via `StoryTemplateResolver`.
+- [x] Fast Path vs Deep Stage isolation policy established.
