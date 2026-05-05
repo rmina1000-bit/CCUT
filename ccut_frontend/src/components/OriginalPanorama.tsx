@@ -21,7 +21,7 @@ interface OriginalPanoramaProps {
   boundaryHighlightIds?: string[];
   onBoundaryClick?: (leftIndex: number, rightIndex: number) => void;
   sourceFragments?: Fragment[];
-  sources?: { source_id: string; file_path?: string; video_url?: string }[];
+  sources?: { source_id: string; label?: string; file_path?: string; video_url?: string }[];
 }
 
 const OriginalPanorama: React.FC<OriginalPanoramaProps> = ({
@@ -84,9 +84,9 @@ const OriginalPanorama: React.FC<OriginalPanoramaProps> = ({
               {sources && Array.isArray(sources) && sources.map((s) => (
                 <button
                   key={s.source_id}
-                  onClick={() => onSourceChange(s.source_id)}
+                  onClick={() => onSourceChange(s.label || s.source_id)}
                   className={`px-2 py-0.5 rounded-[3px] text-[9px] font-medium transition-all flex-shrink-0
-                    ${s.source_id === activeSource
+                    ${(s.label || s.source_id) === activeSource
                       ? "bg-primary/20 text-primary"
                       : "text-muted-foreground/60 hover:text-foreground/70 hover:bg-secondary/40"
                     }`}
