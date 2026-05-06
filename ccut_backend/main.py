@@ -883,7 +883,7 @@ def inject_semantic_thumbnails(fragments: list):
             continue
 
         # 1. R42: Check if SF-specific thumbnail exists
-        sf_thumb_filename = f"SF_{fid}_{sid}.jpg"
+        sf_thumb_filename = f"{fid}.jpg"
         if sf_thumb_filename in available_thumbs:
             url = f"/static/thumbnails/{sf_thumb_filename}"
             f["thumbnail_url"] = url
@@ -907,7 +907,7 @@ def inject_semantic_thumbnails(fragments: list):
                 # Extract at exact start_frame (start_sec)
                 extract_sec = max(0, start_frame / fps)
                 # Output name format: SF_{fid}_{sid}
-                video_engine.extract_thumbnail(source_data.file_path, extract_sec, f"SF_{fid}_{sid}")
+                video_engine.extract_thumbnail(source_data.file_path, extract_sec, fid)
                 
                 url = f"/static/thumbnails/{sf_thumb_filename}"
                 f["thumbnail_url"] = url

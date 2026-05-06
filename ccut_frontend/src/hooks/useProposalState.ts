@@ -5,6 +5,57 @@ import { generateProposals } from "@/proposal/proposalOrchestrator";
 import { Fragment } from "@/data/fragmentData";
 import { narrativeService } from "@/services/narrativeService";
 
+/**
+ * [STEP 10-K-C1-R39] Frontend Commit-Time Sequence Guard
+ * 백엔드가 어떤 시퀀스를 주든, 프론트에서 실제 재생 직전에 
+ * 같은 source_video의 연속 조각을 제거한다.
+ */
+function getSourceKey(item: any): string {
+  return (
+    item?.source_id ||
+    item?.source_video ||
+    item?.source_label ||
+    item?.sourceLabel ||
+    "UNKNOWN"
+  );
+}
+
+function getFrameRange(item: any, fps = 30): { start: number; end: number } {
+  const start = Number(
+    item?.start_frame ??
+    Math.round(Number(item?.start ?? item?.start_time ?? 0) * fps)
+  );
+  const end = Number(
+    item?.end_frame ??
+    Math.round(Number(item?.end ?? item?.end_time ?? start) * fps)
+  );
+  return { start, end };
+}
+
+/**
+ * [STEP 10-K-C1-R41] Weak Sequence Guard (Reverting R40 Over-guarding)
+ * 1. 동일 fragment_id 중복 제거
+ * 2. 동일 source 내 완전 인접 조각 (연속 재생) 제거
+ * *주의*: source당 1개 제한(R40)은 비활성화함.
+ */
+function guardProposalSequence(sequence: any[], _minGapFrames = 30): any[] {
+  if (!Array.isArray(sequence) || sequence.length === 0) return [];
+  const result: any[] = [];
+  const seenIds = new Set<string>();
+  for (const item of sequence) {
+    const fid = item?.fragment_id || item?.proposal_fragment_id || item?.id;
+    if (fid && seenIds.has(fid)) continue;
+    result.push(item);
+    if (fid) seenIds.add(fid);
+  }
+  console.log("[R41_WEAK_SEQUENCE_GUARD]", {
+    before: sequence.length,
+    after: result.length,
+    removedCount: sequence.length - result.length
+  });
+  return result;
+}
+
 export const useProposalState = (sourceFragments: Fragment[]) => {
   const [selectedProposalId, setSelectedProposalId] = useState<string | null>(null);
   const [committedProposalId, setCommittedProposalId] = useState<string | null>(null);
@@ -37,7 +88,52 @@ export const useProposalState = (sourceFragments: Fragment[]) => {
       console.warn("[proposalState] commit blocked: proposals not ready", id);
       return;
     }
+    
     console.log("[proposalState] handleProposalCommit called with id:", id);
+    
+    // [STEP 10-K-C1-R41] Guard the sequence before committing
+    const mode = id as "A" | "B";
+    const originalProposal = proposals[mode];
+    
+    // resolved_aliases나 sequence 필드에 객체 형태의 메타데이터가 포함되어 있음
+    const rawSeq = (originalProposal as any).resolved_aliases || (originalProposal as any).sequence || [];
+    if (rawSeq.length > 0) {
+      const guardedSeq = guardProposalSequence(rawSeq);
+      
+      // [STEP 10-K-C1-R39-R1] fragment_id 우선 정책 (절대 display_id 사용 금지)
+      const guardedKeyFrags = guardedSeq
+        .map((f: any) => f.fragment_id || f.proposal_fragment_id || f.id)
+        .filter(Boolean);
+      
+      console.log("[R41_COMMIT_WEAK_GUARD_RESULT]", {
+        id,
+        beforeCount: rawSeq.length,
+        afterCount: guardedSeq.length,
+        key_fragments: guardedKeyFrags,
+        resolved_aliases: guardedSeq.map((f: any) => ({
+          fragment_id: f.fragment_id,
+          display_id: f.display_id,
+          source_video: f.source_video,
+          source_id: f.source_id,
+          start_frame: f.start_frame,
+          end_frame: f.end_frame,
+        })),
+      });
+
+      setProposals(prev => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          [mode]: {
+            ...prev[mode],
+            key_fragments: guardedKeyFrags,
+            resolved_aliases: guardedSeq,
+            sequence: guardedSeq
+          }
+        };
+      });
+    }
+
     setSelectedProposalId(id);
     setCommittedProposalId(id);
   }, [proposals]);
