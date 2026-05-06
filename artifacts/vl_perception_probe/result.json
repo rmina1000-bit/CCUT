@@ -1,0 +1,8 @@
+{
+  "image": "VF100_SRC_4B7DFECE.jpg",
+  "status": "OK",
+  "scene_type": "restaurant",
+  "focus": "unknown",
+  "summary": "식당에서 식사를 하는 장면이 감지됨",
+  "latency_ms": 29419
+}

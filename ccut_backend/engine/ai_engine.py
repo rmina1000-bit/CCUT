@@ -55,34 +55,62 @@ HIGH_HOOK_KEYWORDS = [
 
 
 def transcribe_full_then_split(model, video_path: str, fragments: list) -> dict:
-    """영상 전체 한 번 전사 후 조각별 분리 및 원본 세그먼트 보존."""
+    """영상 전체 한 번 전사 후 조각별 분리 및 원본 세그먼트 보존.
+
+    [R1] word_timestamps=True 결과의 segment["words"]를 보존한다.
+    기존 fragment_transcripts / all_segments 인터페이스는 그대로 유지하고
+    각 segment에 words 필드를 추가한 뒤, 조각별/전체 word 객체를
+    fragment_words / words 키로 반환한다.
+    """
     try:
         result = model.transcribe(video_path, language="ko", word_timestamps=True)
     except Exception as e:
         print(f"[Whisper] 전체 전사 실패: {e}")
         return {
             "fragment_transcripts": {frag["fragment_id"]: "" for frag in fragments},
-            "all_segments": []
+            "all_segments": [],
+            "fragment_words": {frag["fragment_id"]: [] for frag in fragments},
+            "words": [],
         }
 
-    all_segments = result.get("segments", [])
+    raw_segments = result.get("segments", [])
+
+    # [R1] segments_out: 각 segment에 words 배열을 보존하여 그대로 통과
+    segments_out = []
+    all_words = []
+    for segment in raw_segments:
+        seg_words = segment.get("words", []) or []
+        all_words.extend(seg_words)
+        segments_out.append({
+            "start": segment.get("start"),
+            "end":   segment.get("end"),
+            "text":  segment.get("text", "").strip(),
+            "words": seg_words,
+        })
+
     fragment_transcripts = {}
+    fragment_words = {}
     for frag in fragments:
         frag_id = frag["fragment_id"]
         start   = float(frag.get("start_time", 0))
         end     = float(frag.get("end_time", 0))
-        words   = []
-        for segment in all_segments:
+        text_parts = []
+        frag_word_list = []
+        for segment in segments_out:
             seg_start = float(segment["start"])
             seg_end   = float(segment["end"])
             if seg_end <= start or seg_start >= end:
                 continue
-            words.append(segment["text"].strip())
-        fragment_transcripts[frag_id] = " ".join(words).strip()
-    
+            text_parts.append(segment["text"])
+            frag_word_list.extend(segment.get("words", []))
+        fragment_transcripts[frag_id] = " ".join(text_parts).strip()
+        fragment_words[frag_id] = frag_word_list
+
     return {
-        "fragment_transcripts": fragment_transcripts,
-        "all_segments": all_segments
+        "fragment_transcripts": fragment_transcripts,  # 기존 유지 (main.py 호환)
+        "all_segments": segments_out,                   # 기존 유지 + 각 segment에 words 포함
+        "fragment_words": fragment_words,               # [R1] 신규: 조각별 word objects
+        "words": all_words,                             # [R1] 신규: 전체 word objects (flat)
     }
 
 
