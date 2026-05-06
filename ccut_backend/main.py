@@ -438,7 +438,55 @@ def _background_whisper(source_id: str, video_path: str, fragments: list):
             _fragment_job_registry[source_id]["status"] = "FAILED"
             _fragment_job_registry[source_id]["error"] = str(e)
 
+    _background_vl_perception(source_id, fragments)
 
+
+def _background_vl_perception(source_id: str, fragments: list, max_fragments: int = 3):
+    print("[PIPELINE] VL Perception pipeline STARTED")
+    try:
+        from ai.vision.qwen_vl_visual_worker import QwenVLVisualWorker
+        worker = QwenVLVisualWorker()
+
+        processed = 0
+        for frag in fragments:
+            if processed >= max_fragments:
+                break
+
+            frag_id = frag.get("fragment_id") or frag.get("id")
+            thumb_path = (
+                frag.get("thumbnail_path")
+                or frag.get("thumb_path")
+                or frag.get("thumbnail_url")
+                or frag.get("thumb_url")
+            )
+
+            if not thumb_path or not os.path.exists(str(thumb_path)):
+                print(f"[VL_PERCEPTION] skip {frag_id}: no local thumbnail")
+                continue
+
+            result = worker.analyze_image(
+                thumb_path,
+                resize_max=384,
+                timeout_sec=120
+            )
+
+            if result.get("status") == "OK":
+                existing_intelligence = frag.get("intelligence") or {}
+                if not isinstance(existing_intelligence, dict):
+                    existing_intelligence = {}
+                existing_intelligence["perception"] = result
+
+                if hasattr(bams, "update_fragment_intelligence"):
+                    bams.update_fragment_intelligence(frag_id, existing_intelligence)
+                    print(f"[VL_PERCEPTION] SAVED {frag_id} scene={result.get('scene_type')}")
+                else:
+                    print(f"[VL_PERCEPTION] OK {frag_id} artifact-only")
+                processed += 1
+            else:
+                print(f"[VL_PERCEPTION] FAIL {frag_id} status={result.get('status')}")
+
+    except Exception as e:
+        print(f"[VL_PERCEPTION] ERROR: {e}")
 
 
 def _background_panorama(source_id: str, video_path: str, fragments: list):
@@ -814,7 +862,9 @@ async def get_quick_scan(source_id: str):
 
 def inject_semantic_thumbnails(fragments: list):
     """
-    [STEP 10-I.5.22-C] Inject parent VF thumbnails into semantic fragments safely.
+    [STEP 10-K-C1-R42] Generate unique thumbnails for each Semantic Fragment.
+    If SF specific thumbnail doesn't exist, extract it from source video.
+    Falls back to parent VF thumbnail if extraction fails.
     """
     if not fragments:
         return fragments
@@ -826,38 +876,77 @@ def inject_semantic_thumbnails(fragments: list):
         available_thumbs = set()
 
     for f in fragments:
-        # 1. Skip if already has thumbnail_url in either format
+        fid = f.get("fragment_id")
+        sid = f.get("source_id")
+        
+        if not fid or not sid:
+            continue
+
+        # 1. R42: Check if SF-specific thumbnail exists
+        sf_thumb_filename = f"SF_{fid}_{sid}.jpg"
+        if sf_thumb_filename in available_thumbs:
+            url = f"/static/thumbnails/{sf_thumb_filename}"
+            f["thumbnail_url"] = url
+            if not isinstance(f.get("thumbnail"), dict): f["thumbnail"] = {}
+            f["thumbnail"]["thumbnail_url"] = url
+            # intelligence.thumb_url 보전
+            if not isinstance(f.get("intelligence"), dict): f["intelligence"] = {}
+            f["intelligence"]["thumb_url"] = url
+            continue
+            
+        # 2. R42: Try to generate unique thumbnail for SF
+        source_data = bams.get_source(sid)
+        if source_data and source_data.file_path:
+            fps = getattr(source_data, 'fps', 30.0) or 30.0
+            start_frame = f.get("start_frame")
+            if start_frame is None:
+                start_sec = f.get("start") or f.get("start_time") or 0.0
+                start_frame = int(float(start_sec) * fps)
+            
+            try:
+                # Extract at exact start_frame (start_sec)
+                extract_sec = max(0, start_frame / fps)
+                # Output name format: SF_{fid}_{sid}
+                video_engine.extract_thumbnail(source_data.file_path, extract_sec, f"SF_{fid}_{sid}")
+                
+                url = f"/static/thumbnails/{sf_thumb_filename}"
+                f["thumbnail_url"] = url
+                if not isinstance(f.get("thumbnail"), dict): f["thumbnail"] = {}
+                f["thumbnail"]["thumbnail_url"] = url
+                if not isinstance(f.get("intelligence"), dict): f["intelligence"] = {}
+                f["intelligence"]["thumb_url"] = url
+                
+                # Update cache
+                available_thumbs.add(sf_thumb_filename)
+                continue
+            except Exception as e:
+                print(f"[R42] Thumbnail extraction failed for {fid}: {e}")
+
+        # 3. Fallback to parent VF thumbnail (Legacy)
+        # Skip if already has thumbnail_url in either format
         if f.get("thumbnail_url") or (isinstance(f.get("thumbnail"), dict) and f["thumbnail"].get("thumbnail_url")):
             continue
             
         parent_vf_id = None
-        
-        # 2. Priority for parent candidates
         candidates = []
-        # a. semantic object refs
         sem = f.get("semantic")
         if isinstance(sem, dict):
             candidates.extend(sem.get("evidence_refs", []))
             candidates.extend(sem.get("transcript_refs", []))
-        # b. top level refs
         candidates.extend(f.get("evidence_refs", []))
         candidates.extend(f.get("transcript_refs", []))
         
-        # 3. Find first valid VF ID
         for cand in candidates:
             if isinstance(cand, str) and cand.startswith("VF") and "_SRC_" in cand:
                 parent_vf_id = cand
                 break
         
-        # 4. Apply fallback if file exists
         if parent_vf_id:
             thumb_filename = f"{parent_vf_id}.jpg"
             if thumb_filename in available_thumbs:
                 fallback_url = f"/static/thumbnails/{thumb_filename}"
                 f["thumbnail_url"] = fallback_url
-                # Ensure thumbnail object also exists for frontend compatibility
-                if not isinstance(f.get("thumbnail"), dict):
-                    f["thumbnail"] = {}
+                if not isinstance(f.get("thumbnail"), dict): f["thumbnail"] = {}
                 f["thumbnail"]["thumbnail_url"] = fallback_url
     
     return fragments
@@ -1032,6 +1121,68 @@ class ProjectProposalRequest(BaseModel):
     template_id: Optional[str] = None
 
 # [FORCE_RELOAD_STEP_10_K_B2_R1]
+def _response_level_sequence_guard(sequence, min_gap_frames=30):
+    if not sequence:
+        return sequence
+
+    result = []
+
+    for frag in sequence:
+        source_key = (
+            frag.get("source_id")
+            or frag.get("source_video")
+            or frag.get("source_label")
+            or "UNKNOWN"
+        )
+
+        start_frame = frag.get("start_frame")
+        end_frame = frag.get("end_frame")
+
+        if start_frame is None:
+            start = frag.get("start") or frag.get("start_time") or 0
+            start_frame = int(round(float(start) * 30))
+
+        if end_frame is None:
+            end = frag.get("end") or frag.get("end_time") or 0
+            end_frame = int(round(float(end) * 30))
+
+        blocked = False
+
+        for prev in result:
+            prev_source_key = (
+                prev.get("source_id")
+                or prev.get("source_video")
+                or prev.get("source_label")
+                or "UNKNOWN"
+            )
+
+            if prev_source_key != source_key:
+                continue
+
+            prev_start = prev.get("start_frame")
+            prev_end = prev.get("end_frame")
+
+            if prev_start is None:
+                ps = prev.get("start") or prev.get("start_time") or 0
+                prev_start = int(round(float(ps) * 30))
+
+            if prev_end is None:
+                pe = prev.get("end") or prev.get("end_time") or 0
+                prev_end = int(round(float(pe) * 30))
+
+            # 같은 source에서 바로 붙거나 1초 이내로 가까우면 제거
+            if abs(int(start_frame) - int(prev_end)) <= min_gap_frames:
+                blocked = True
+                break
+
+            if abs(int(prev_start) - int(end_frame)) <= min_gap_frames:
+                blocked = True
+                break
+
+        if not blocked:
+            result.append(frag)
+
+    return result
 
 @app.post("/proposals/project")
 async def post_generate_project_proposals(req: ProjectProposalRequest):
@@ -1110,6 +1261,16 @@ async def post_generate_project_proposals(req: ProjectProposalRequest):
         # Source Usage 진단 (제안 A/B 통합)
         source_usage = {}
         for p in proposals:
+            # [STEP 10-K-C1-R38] Response-Level Hard Guard
+            before = len(p.get("sequence", []))
+            p["sequence"] = _response_level_sequence_guard(p.get("sequence", []))
+            after = len(p.get("sequence", []))
+            p["duration"] = round(sum(
+                float(f.get("duration_sec") or f.get("duration") or 0)
+                for f in p["sequence"]
+            ), 2)
+            print(f"[R38_RESPONSE_GUARD] proposal={p.get('mode')} before={before} after={after}")
+
             for frag in p.get("sequence", []):
                 sid = frag.get("source_id", "UNKNOWN")
                 source_usage[sid] = source_usage.get(sid, 0) + 1
