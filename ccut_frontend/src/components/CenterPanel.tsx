@@ -350,7 +350,20 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
   const buildSeqFrags = useCallback(
     (proposalKey: "A" | "B"): Fragment[] => {
       const p = proposals?.[proposalKey];
-      const ids: string[] = p?.key_fragments ?? p?.sequence ?? [];
+      if (!p) return [];
+
+      // [STEP 10-K-C1-R39-R1] resolved_aliases가 있으면 우선적으로 사용하여 가드가 적용된 데이터를 재생에 반영
+      const resolved = (p as any).resolved_aliases;
+      if (Array.isArray(resolved) && resolved.length > 0) {
+        return resolved
+          .map((item: any) => {
+            const fid = item.fragment_id || item.proposal_fragment_id || item.id;
+            return allSourceFragments.find((f) => f.fragment_id === fid);
+          })
+          .filter(Boolean) as Fragment[];
+      }
+
+      const ids: string[] = p.key_fragments ?? p.sequence ?? [];
       return ids
         .map((id) => allSourceFragments.find((f) => f.fragment_id === id))
         .filter(Boolean) as Fragment[];
@@ -371,11 +384,40 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
       if (!ref.current) return;
 
       const fragUrl = getVideoUrlForFrag(frag.fragment_id) ?? videoUrl ?? undefined;
-      const startSec = (frag.start_frame ?? 0) / 30;
-      const rawEndSec = (frag.end_frame ?? 0) / 30;
+      const startSec = (frag as any).start_sec
+        ?? (frag as any).start
+        ?? (frag.start_frame ?? 0) / 30;
+      const rawEndSec = (frag as any).end_sec
+        ?? (frag as any).end
+        ?? (frag.end_frame ?? 0) / 30;
       const endSec = rawEndSec > startSec ? rawEndSec : startSec + 1;
 
       endSecRef.current = endSec;
+
+      console.log(
+        "[FPS_AUDIT_PLAYFRAG_JSON]\n" +
+        JSON.stringify(
+          {
+            player,
+            fragment_id: frag.fragment_id,
+            display_id: (frag as any).display_id,
+            source_video: (frag as any).source_video,
+            start_frame: frag.start_frame,
+            end_frame: frag.end_frame,
+            calculated_startSec_30fps: startSec,
+            calculated_endSec_30fps: endSec,
+            duration_frames: ((frag.end_frame ?? 0) - (frag.start_frame ?? 0)),
+            duration_sec_30fps: (((frag.end_frame ?? 0) - (frag.start_frame ?? 0)) / 30),
+            fragment_duration_field: (frag as any).duration,
+            thumbnail_url: (frag as any).thumbnail?.thumbnail_url,
+            direct_thumbnail_url: (frag as any).thumbnail_url,
+            intelligence_thumb: (frag as any).intelligence?.thumb_url,
+            video_url: getVideoUrlForFrag(frag.fragment_id),
+          },
+          null,
+          2
+        )
+      );
 
       const doSeekPlay = () => {
         if (!ref.current) return;
@@ -427,6 +469,25 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
     const ref = isA ? videoRefA : videoRefB;
     const frags = buildSeqFrags(player);
     if (frags.length === 0) return;
+
+    console.log(
+      `[SEQ_FRAGS_AUDIT_JSON] ${player}\n` +
+      JSON.stringify(
+        frags.map((f: any) => ({
+          fragment_id: f.fragment_id,
+          display_id: f.display_id,
+          source_video: f.source_video,
+          start_frame: f.start_frame,
+          end_frame: f.end_frame,
+          duration: f.duration,
+          thumb: f.thumbnail?.thumbnail_url,
+          direct_thumb: f.thumbnail_url,
+          intelligence_thumb: f.intelligence?.thumb_url,
+        })),
+        null,
+        2
+      )
+    );
 
     let totalSec = 0;
     frags.forEach(f => {
@@ -563,67 +624,7 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
     }
   }, [resolveProposalTime, isPlayingA, isPlayingB, getVideoUrlForFrag, videoUrl, sameVideoSource, playFrag, reportActiveId]);
 
-  useEffect(() => {
-    if (appState !== "complete") return;
 
-    stopSeq("A");
-    stopSeq("B");
-
-    if (videoRefA.current) {
-      videoRefA.current.load();
-      videoRefA.current.currentTime = 0;
-    }
-
-    if (videoRefB.current) {
-      videoRefB.current.load();
-      videoRefB.current.currentTime = 0;
-    }
-  }, [appState, playerVideoUrlA, playerVideoUrlB, stopSeq]);
-
-  useEffect(() => {
-    if (appState !== "complete" || !proposals) return;
-
-    const setThumbnailPosition = (
-      ref: React.RefObject<HTMLVideoElement>,
-      player: "A" | "B"
-    ) => {
-      const p = proposals[player];
-      const firstFragId = p?.key_fragments?.[0] ?? p?.sequence?.[0];
-      if (!ref.current || !firstFragId) return;
-
-      const firstFrag = allSourceFragments.find((f: any) => f.fragment_id === firstFragId);
-      if (!firstFrag) return;
-
-      const targetUrl = getVideoUrlForProposal(player);
-      const seekTime = (firstFrag.start_frame ?? 0) / 30;
-      const isA = player === "A";
-
-      const performSeek = () => {
-        if (!ref.current) return;
-        ref.current.currentTime = seekTime;
-        console.log(`[seek-sync] ${player} seek to ${seekTime}`);
-      };
-
-      if (targetUrl && !sameVideoSource(ref.current.currentSrc || ref.current.src, targetUrl)) {
-        ref.current.src = targetUrl;
-        ref.current.load();
-        const onLoaded = () => {
-          performSeek();
-          ref.current?.removeEventListener("loadeddata", onLoaded);
-        };
-        ref.current.addEventListener("loadeddata", onLoaded);
-      } else {
-        performSeek();
-      }
-    };
-
-    const t = setTimeout(() => {
-      setThumbnailPosition(videoRefA, "A");
-      setThumbnailPosition(videoRefB, "B");
-    }, 300);
-
-    return () => clearTimeout(t);
-  }, [appState, proposals, allSourceFragments, getVideoUrlForProposal, sameVideoSource]);
 
   useEffect(() => {
     if (!selectedFragment) return;
@@ -1027,7 +1028,7 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
                     }}
                     onPause={() => setIsPlayingA(false)}
                     onTimeUpdate={(e) => {
-                      if (isUserSeekingARef.current || isDraggingProposalSeekARef.current) return;
+                      if (isDraggingProposalSeekARef.current) return;
                       const v = e.currentTarget;
                       if (isSeqARef.current && seqTotalSecARef.current > 0) {
                         const fragStart = (seqFragsARef.current[seqIdxARef.current]?.start_frame ?? 0) / 30;
@@ -1062,12 +1063,6 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
                           reportActiveId(null);
                         }
                       }
-                    }}
-                    onSeeking={() => {
-                      isUserSeekingARef.current = true;
-                    }}
-                    onSeeked={() => {
-                      isUserSeekingARef.current = false;
                     }}
                     onLoadedMetadata={(e) => {
                       setDurationA(e.currentTarget.duration);
@@ -1179,7 +1174,7 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
                     }}
                     onPause={() => setIsPlayingB(false)}
                     onTimeUpdate={(e) => {
-                      if (isUserSeekingBRef.current || isDraggingProposalSeekBRef.current) return;
+                      if (isDraggingProposalSeekBRef.current) return;
                       const v = e.currentTarget;
                       if (isSeqBRef.current && seqTotalSecBRef.current > 0) {
                         const fragStart = (seqFragsBRef.current[seqIdxBRef.current]?.start_frame ?? 0) / 30;
@@ -1214,12 +1209,6 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
                           reportActiveId(null);
                         }
                       }
-                    }}
-                    onSeeking={() => {
-                      isUserSeekingBRef.current = true;
-                    }}
-                    onSeeked={() => {
-                      isUserSeekingBRef.current = false;
                     }}
                     onLoadedMetadata={(e) => {
                       setDurationB(e.currentTarget.duration);
@@ -1558,7 +1547,7 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
       {renderContent()}
 
       {/* [STEP 10-I.5.28-E9-R2-R3-R2] ChatGPT-style auto-grow Composer */}
-      {storyPlan && storyPlan.consultation_status !== "confirmed" && (
+      {storyPlan && (
         <div className="sticky bottom-0 z-20 w-full border-t border-zinc-800/70 bg-black/90 px-5 py-4">
           <div className="mx-auto flex w-full max-w-3xl items-end gap-3 rounded-[28px] border border-zinc-700/70 bg-zinc-900/80 px-5 py-3 shadow-sm">
             <textarea
