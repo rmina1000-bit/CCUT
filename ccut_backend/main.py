@@ -330,6 +330,7 @@ def _background_whisper(source_id: str, video_path: str, fragments: list):
         
         transcripts  = whisper_res.get("fragment_transcripts", {})
         all_segments = whisper_res.get("all_segments", [])
+        fragment_words = whisper_res.get("fragment_words", {})
 
         # [STEP 10-I.5.3] Store raw segments as evidence for Text-first Semantic Path
         for i, seg in enumerate(all_segments):
@@ -357,6 +358,7 @@ def _background_whisper(source_id: str, video_path: str, fragments: list):
                 "hook_score": hook_score,
                 "transcript": transcript,
                 "role":       role,
+                "words":      fragment_words.get(frag_id, []),
             }
 
             print(f"[ASR BG] {frag_id} | hook={hook_score:.3f} | role={role} | transcript={transcript[:20]!r}")
