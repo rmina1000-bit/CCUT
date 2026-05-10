@@ -128,23 +128,28 @@ class BAMSManager:
 
     def update_fragment_thumb(self, fragment_id: str, thumb_path: str):
         """[STEP 2] 썸네일 경로를 Frag intelligence 및 Evidence Board에 동기화"""
+        filename = os.path.basename(thumb_path)
+        thumb_url = f"/static/thumbnails/{filename}"
+
         with SessionLocal() as db:
             frag = db.query(FragmentTable).filter_by(fragment_id=fragment_id).first()
             if frag:
-                # [STEP 10-I.5.27-E6-R3] Stop hardcoded speculative URLs in DB
-                # thumb_url = f"http://localhost:8000/static/thumbnails/{fragment_id}.jpg"
-                # frag.intelligence = {**(frag.intelligence or {}), "thumb_url": thumb_url}
+                # [STEP 10-I.5.27-E6-R3] Restore relative thumb URL
+                frag.intelligence = {
+                    **(frag.intelligence or {}),
+                    "thumb_url": thumb_url
+                }
                 db.commit()
                 
                 # [STEP 2] Evidence Board sync (Keep local path or relative)
                 self.update_evidence(fragment_id, {
                     "worker_name": "keyframe",
-                    "keyframe": f"/static/thumbnails/{fragment_id}.jpg",
+                    "keyframe": thumb_url,
                     "confidence": 1.0,
                     "fallback_reason": None
                 })
                 self.flush_evidence(fragment_id)
-                print(f"[BAMS][REPAIR] Evidence Keyframe Updated: {fragment_id}")
+                print(f"[BAMS][REPAIR] Evidence Keyframe Updated: {fragment_id} -> {thumb_url}")
 
     def get_fragments_by_source(self, source_id: str):
         with SessionLocal() as db:
