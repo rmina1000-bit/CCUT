@@ -858,6 +858,11 @@ class ProposalEngine:
                 prev_start = float(prev.get("start", prev.get("start_time", 0.0)) or 0.0)
                 prev_end = float(prev.get("end", prev.get("end_time", prev_start)) or prev_start)
 
+                # [TEMPORAL_REGRESSION_GUARD] 같은 source 안에서 시간 역행 차단
+                if start + 0.5 < prev_start:
+                    blocked = True
+                    break
+
                 # 1. 바로 붙은 조각 차단 (Threshold)
                 if abs(start - prev_end) < threshold:
                     blocked = True
