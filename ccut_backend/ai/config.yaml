@@ -13,9 +13,9 @@ providers:
   qwen3_asr:
     adapter: Qwen3ASRAdapter
     config:
-      server_binary: D:/CCUT_1.0.3/tools/llama.cpp-vulkan/llama-server.exe
-      model_path: D:/CCUT_1.0.3/ccut_backend/ai_models/qwen3-asr-1.7b/Qwen3-ASR-1.7B-Q8_0.gguf
-      mmproj_path: D:/CCUT_1.0.3/ccut_backend/ai_models/qwen3-asr-1.7b/mmproj-Qwen3-ASR-1.7B-Q8_0.gguf
+      server_binary: D:/CCUT1.0.4/tools/llama.cpp-vulkan/llama-server.exe
+      model_path: D:/CCUT1.0.4/ccut_backend/ai_models/qwen3-asr-1.7b/Qwen3-ASR-1.7B-Q8_0.gguf
+      mmproj_path: D:/CCUT1.0.4/ccut_backend/ai_models/qwen3-asr-1.7b/mmproj-Qwen3-ASR-1.7B-Q8_0.gguf
       port: 8091
       ctx_size: 4096
       n_gpu_layers: 99
