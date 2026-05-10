@@ -252,7 +252,7 @@ export const useProposalState = (sourceFragments: Fragment[]) => {
     let result: any = { status: "TIMEOUT", patch: null, latency_ms: 0, error: "Frontend 15s timeout" };
     try {
       const timeoutPromise = new Promise((_, reject) => 
-        setTimeout(() => reject(new Error("TIMEOUT")), 15000)
+        setTimeout(() => reject(new Error("TIMEOUT")), 30000)
       );
       
       result = await Promise.race([
