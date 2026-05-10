@@ -256,11 +256,32 @@ const Index: React.FC = () => {
                 role: f.intelligence?.role || f.structural?.role || "Main",
                 description: f.intelligence?.description || f.intelligence?.visual_description || f.semantic?.summary || "",
               },
+              // [PREVIEW_CLIP] Backend-generated clip URL — pass through verbatim
+              preview_clip_url: f.preview_clip_url ?? null,
             } as any;
           });
 
           if (mapped.length > 0) {
             console.log(`[mapFragments] ${label} (${mapped.length} frags) first thumb:`, mapped[0].thumbnail?.thumbnail_url);
+            
+            console.log(
+              `[THUMB_AUDIT_ALL_JSON] ${label}\n` +
+              JSON.stringify(
+                mapped.map((f: any) => ({
+                  fragment_id: f.fragment_id,
+                  display_id: f.display_id,
+                  source_video: f.source_video,
+                  start_frame: f.start_frame,
+                  end_frame: f.end_frame,
+                  duration: f.duration,
+                  thumb: f.thumbnail?.thumbnail_url,
+                  thumb_direct: f.thumbnail_url,
+                  intelligence_thumb: f.intelligence?.thumb_url,
+                })),
+                null,
+                2
+              )
+            );
           }
           return assignShortDisplayIds(recalcDisplayIds(mapped as any));
         };
@@ -399,8 +420,115 @@ const Index: React.FC = () => {
               const updatedEntries = collectedEntries.map(entry => {
                 const sid = entry.source_id;
                 const rows = semanticResults[sid] || [];
+                
                 if (rows.length > 0) {
-                  const mapped = mapFragments(rows, entry.label);
+                  // [STEP 10-K-C1-R29] 초벌 조각 메타데이터 보존을 위한 매핑
+                  const baseById = new Map(entry.fragments.map((f: any) => [f.fragment_id, f]));
+
+                  const toFrameFromUnknown = (value: any, fps = 30): number | null => {
+                    if (value === undefined || value === null) return null;
+                    const n = Number(value);
+                    if (!Number.isFinite(n)) return null;
+                    return Math.round(n);
+                  };
+
+                  const resolveSfFrameRange = (sf: any, fps = 30) => {
+                    const directStartFrame = toFrameFromUnknown(sf.start_frame, fps);
+                    const directEndFrame = toFrameFromUnknown(sf.end_frame, fps);
+                    if (directStartFrame !== null && directEndFrame !== null) {
+                      return { startFrame: directStartFrame, endFrame: directEndFrame, unitSource: "start_frame/end_frame" };
+                    }
+                    const startSec = Number(sf.start_time ?? sf.start ?? 0);
+                    const endSec = Number(sf.end_time ?? sf.end ?? 0);
+                    return { startFrame: Math.round(startSec * fps), endFrame: Math.round(endSec * fps), unitSource: "seconds_to_frames" };
+                  };
+
+                  const findParentVFByTimeOverlap = (sf: any, baseFragments: any[], fps = 30) => {
+                    const { startFrame, endFrame, unitSource } = resolveSfFrameRange(sf, fps);
+                    const sfSourceId = sf.source_id ?? sf.sourceId;
+                    const candidates = baseFragments.filter((vf) => {
+                      const vfSourceId = vf.source_id ?? vf.sourceId;
+                      const sameSource = vfSourceId === sfSourceId || vf.fragment_id?.includes(sfSourceId);
+                      const vfStart = Number(vf.start_frame ?? 0);
+                      const vfEnd = Number(vf.end_frame ?? 0);
+                      return sameSource && startFrame >= vfStart && startFrame < vfEnd;
+                    });
+                    return { parentVF: candidates[0] ?? null, startFrame, endFrame, unitSource };
+                  };
+
+                  console.log(
+                    `[R41_SF_LINEAGE_AUDIT] ${entry.label}\n` +
+                    JSON.stringify(
+                      rows.map((row: any) => {
+                        const { parentVF, startFrame, endFrame, unitSource } = findParentVFByTimeOverlap(row, entry.fragments);
+                        return {
+                          semantic_fragment_id: row.fragment_id,
+                          semantic_source_id: row.source_id,
+                          resolved_start_frame: startFrame,
+                          resolved_end_frame: endFrame,
+                          unit_source: unitSource,
+                          parent_vf_found: !!parentVF,
+                          parent_vf_id: parentVF?.fragment_id,
+                          parent_vf_range: parentVF ? [parentVF.start_frame, parentVF.end_frame] : null,
+                          raw_fields: {
+                            start: row.start,
+                            end: row.end,
+                            start_time: row.start_time,
+                            end_time: row.end_time,
+                            start_frame: row.start_frame,
+                            end_frame: row.end_frame,
+                          }
+                        };
+                      }),
+                      null,
+                      2
+                    )
+                  );
+
+                  const enrichedRows = rows.map((row: any) => {
+                    const { parentVF, startFrame, endFrame, unitSource } = findParentVFByTimeOverlap(row, entry.fragments);
+                    
+                    if (!parentVF) return {
+                      ...row,
+                      start_frame: startFrame,
+                      end_frame: endFrame,
+                      lineage_match_method: "time_overlap_failed",
+                      lineage_unit_source: unitSource
+                    };
+
+                    return {
+                      ...row,
+                      // [R41] Lineage 보존
+                      start_frame: startFrame,
+                      end_frame: endFrame,
+                      parent_vf_id: parentVF.fragment_id,
+                      lineage_match_method: "source_id_time_overlap",
+                      lineage_unit_source: unitSource,
+                      
+                      // 썸네일 보존 (R42 이전까지는 VF 썸네일 사용)
+                      thumbnail_url:
+                        row.thumbnail_url ||
+                        parentVF.thumbnail?.thumbnail_url ||
+                        parentVF.thumbnail_url ||
+                        parentVF.intelligence?.thumb_url,
+                      thumb:
+                        row.thumb ||
+                        parentVF.thumbnail?.thumbnail_url ||
+                        parentVF.thumbnail_url ||
+                        parentVF.intelligence?.thumb_url,
+                      intelligence: {
+                        ...(row.intelligence || {}),
+                        ...(parentVF.intelligence || {}),
+                        thumb_url:
+                          row.intelligence?.thumb_url ||
+                          parentVF.thumbnail?.thumbnail_url ||
+                          parentVF.thumbnail_url ||
+                          parentVF.intelligence?.thumb_url,
+                      },
+                    };
+                  });
+
+                  const mapped = mapFragments(enrichedRows, entry.label);
                   finalEditFragments = [...finalEditFragments, ...mapped];
                   return { ...entry, fragments: mapped };
                 }
@@ -449,12 +577,15 @@ const Index: React.FC = () => {
                       desc: p.proposal_reason?.mode_reason || "백엔드 분석 기반 추천 편집안입니다.",
                       score: String(Math.round(p.confidence * 100)) + "%",
                       key_fragments: p.sequence.map((s: any) => s.fragment_id),
-                      proposal_story: p.proposal_story, // 스토리 보존
-                      proposal_explanation: p.proposal_explanation, // [STEP 10-I.5.25-A] 설명 데이터 추가
+                      proposal_story: p.proposal_story,
+                      proposal_explanation: p.proposal_explanation,
                       direction: {},
                       snapshot_id: "R1",
                       template_id: p.mode,
-                      slot_trace: []
+                      slot_trace: [],
+                      // [PROPOSAL_PREVIEW] 백엔드 preview_url 보존
+                      preview_url: p.preview_url ?? null,
+                      preview_duration: p.preview_duration ?? 0,
                     };
                     
                     if (generatedProposals[mode].key_fragments.length > 0) {

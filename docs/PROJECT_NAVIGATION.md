@@ -37,7 +37,13 @@ CCUT은 사용자의 자연어 의견을 StoryIntent로 정리한 뒤, 그 Story
 - STEP 10-K: Deep Visual Analysis Stage 정의 (PASS)
 - STEP 10-K-B1: Story Direction Template Registry (PASS)
 - STEP 10-K-B2: Story Intent -> Template -> Technique Resolver Bridge (PASS)
+- **2026-05-10: Proposal Preview Render 전환 (PRODUCT PASS)**
+  - currentTime seek 방식 폐기
+  - `proposal_preview_engine.py` 신규
+  - A/B preview mp4 backend 생성 → frontend 재생
+  - 상세: `docs/PROPOSAL_PREVIEW_RENDER_POLICY.md`
 - STEP 10-K-B3 예정: Balanced Sources Proposal Constraint (Next Room)
+- **NEXT: 전체 파이프라인 Runtime Audit (PART A~D)**
 
 > **주의:** AI는 CCUT Core가 아니라 AI Staff / Boundary Provider로 정의한다. CCUT Core는 StoryIntentPatch 계약을 통해서만 AI의 조언을 수용하며, 최종 제안 생성 로직(ProposalEngine)은 Core가 직접 소유한다.
 

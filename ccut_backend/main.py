@@ -953,6 +953,126 @@ def inject_semantic_thumbnails(fragments: list):
     
     return fragments
 
+def inject_preview_clips(fragments: list, background: bool = True) -> list:
+    """
+    [PREVIEW_CLIP_INJECT] 각 Semantic Fragment에 preview_clip_url 필드를 주입.
+    clip 파일이 없으면 ffmpeg로 생성(background=True 시 비동기), 있으면 재사용.
+    video_url fallback 금지 — 생성 실패 시 preview_clip_url = None.
+    """
+    if not fragments:
+        return fragments
+
+    from engine.preview_clip_engine import ensure_preview_clip
+    import threading
+
+    def _make_clip(f: dict):
+        fid = f.get("fragment_id")
+        sid = f.get("source_id")
+        if not fid:
+            return
+
+        # 이미 주입된 경우 스킵
+        if f.get("preview_clip_url"):
+            return
+
+        # 시작/종료 초 결정
+        start = (
+            f.get("start")
+            or f.get("start_time")
+            or 0.0
+        )
+        end = (
+            f.get("end")
+            or f.get("end_time")
+            or 0.0
+        )
+        if not isinstance(start, (int, float)):
+            start = 0.0
+        if not isinstance(end, (int, float)) or end <= start:
+            return
+
+        # 원본 파일 경로 결정
+        source_data = bams.get_source(sid) if sid else None
+        source_path = source_data.file_path if source_data else None
+        if not source_path or not os.path.exists(source_path):
+            print(f"[PREVIEW_CLIP_INJECT] source_path missing for {fid}")
+            return
+
+        result = ensure_preview_clip(
+            fragment_id=fid,
+            source_path=source_path,
+            start=float(start),
+            end=float(end),
+            storage_dir=STORAGE_DIR,
+            app_base_url=APP_BASE_URL,
+        )
+        clip_url = result.get("preview_clip_url")
+        f["preview_clip_url"] = clip_url
+        print(
+            f"[PREVIEW_CLIP_INJECT] {fid} status={result['status']} "
+            f"url={clip_url}"
+        )
+
+    if background:
+        threads = []
+        for f in fragments:
+            t = threading.Thread(target=_make_clip, args=(f,), daemon=True)
+            t.start()
+            threads.append(t)
+        # 최대 30초 대기 (응답 블로킹 방지 겸 첫 클립은 완료 보장)
+        for t in threads:
+            t.join(timeout=30)
+    else:
+        for f in fragments:
+            _make_clip(f)
+
+    return fragments
+
+
+def inject_proposal_previews(proposals: list) -> list:
+    """
+    [PROPOSAL_PREVIEW_INJECT] proposals 배열의 각 제안에 preview_url을 주입.
+    proposal.sequence -> clips -> ensure_proposal_preview -> preview_url.
+    preview_url이 없으면 None (fallback 금지).
+    """
+    if not proposals:
+        return proposals
+
+    from engine.proposal_preview_engine import ensure_proposal_preview
+
+    for p in proposals:
+        variant     = (p.get("mode") or "A").upper()
+        proposal_id = p.get("proposal_id") or p.get("id") or "UNKNOWN"
+        sequence    = p.get("sequence", [])
+
+        # sequence -> clips [{source_path, start, end}]
+        clips = []
+        for frag in sequence:
+            sid   = frag.get("source_id") or ""
+            start = float(frag.get("start_sec") or frag.get("start") or frag.get("start_time") or 0.0)
+            end   = float(frag.get("end_sec")   or frag.get("end")   or frag.get("end_time")   or 0.0)
+            if not sid or end <= start:
+                continue
+            source_data = bams.get_source(sid)
+            source_path = source_data.file_path if source_data else None
+            if not source_path or not os.path.exists(source_path):
+                print(f"[PROPOSAL_PREVIEW_INJECT] source_path missing for {sid}")
+                continue
+            clips.append({"source_path": source_path, "start": start, "end": end})
+
+        if not clips:
+            p["preview_url"] = None
+            print(f"[PROPOSAL_PREVIEW_INJECT] {proposal_id}/{variant}: clips 없음 -> preview_url=None")
+            continue
+
+        result = ensure_proposal_preview(proposal_id=proposal_id, variant=variant, clips=clips)
+        p["preview_url"]      = result.get("preview_url")
+        p["preview_duration"] = result.get("duration", 0.0)
+        print(f"[PROPOSAL_PREVIEW_INJECT] {proposal_id}/{variant} status={result['status']} url={p['preview_url']}")
+
+    return proposals
+
+
 @app.post("/semantic-fragments/{source_id}")
 async def generate_semantic_fragments(source_id: str):
     """[STEP 4] Evidence Board 기반 Semantic Fragment 생성"""
@@ -964,6 +1084,9 @@ async def generate_semantic_fragments(source_id: str):
     
     # [STEP 10-I.5.22-C] Inject thumbnails
     fragments = inject_semantic_thumbnails(fragments)
+
+    # [PREVIEW_CLIP] Inject preview_clip_url
+    fragments = inject_preview_clips(fragments, background=True)
     
     # Role 분산 통계 계산
     role_dist = {}
@@ -986,6 +1109,9 @@ async def get_semantic_fragments(source_id: str):
     
     # [STEP 10-I.5.22-C] Inject thumbnails
     fragments = inject_semantic_thumbnails(fragments)
+
+    # [PREVIEW_CLIP] Inject preview_clip_url
+    fragments = inject_preview_clips(fragments, background=True)
     
     role_dist = {}
     for f in fragments:
@@ -1277,6 +1403,9 @@ async def post_generate_project_proposals(req: ProjectProposalRequest):
                 sid = frag.get("source_id", "UNKNOWN")
                 source_usage[sid] = source_usage.get(sid, 0) + 1
 
+        # [PROPOSAL_PREVIEW_INJECT] preview_url 주입 (동기, 렌더 후 응답)
+        proposals = inject_proposal_previews(proposals)
+
         return {
             "status": "PROPOSAL_READY",
             "project_id": project_id,
@@ -1287,6 +1416,7 @@ async def post_generate_project_proposals(req: ProjectProposalRequest):
             "resolved_story_template": resolved_story_template, # [STEP 10-K-B2-R1]
             "warnings": warnings if warnings else None
         }
+
 
     except Exception as e:
         print(f"[PROJECT PROPOSAL ERROR] {str(e)}")
@@ -1338,6 +1468,9 @@ async def post_generate_proposals(source_id: str):
             if "sequence" in p:
                 p["sequence"] = inject_semantic_thumbnails(p["sequence"])
         
+        # [PROPOSAL_PREVIEW_INJECT] preview_url 주입
+        proposals = inject_proposal_previews(proposals)
+
         return {
             "status": "PROPOSAL_READY",
             "source_id": source_id,

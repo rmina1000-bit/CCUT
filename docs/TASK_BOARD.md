@@ -1,5 +1,22 @@
 # CCUT Task Board
 
+## 2026-05-10 — Proposal Preview Render (PRODUCT PASS ✅)
+- [x] `proposal_preview_engine.py` 신규 생성
+- [x] `inject_proposal_previews()` main.py 연결
+- [x] `proposalTypes.ts` preview_url 타입 추가
+- [x] `Index.tsx` proposal 매핑 시 preview_url 보존
+- [x] `CenterPanel.tsx` previewUrlA/B 우선 재생 (currentTime=0, seek 없음)
+- [x] faststart 일괄 적용 (55/57)
+- [x] `PROPOSAL_PREVIEW_RENDER_POLICY.md` 문서화
+
+## NEXT — 전체 파이프라인 Runtime Audit 📋
+- [ ] **PART A** — 인지조각 생성 감사 (signal_processor, semantic_engine)
+- [ ] **PART B** — 편집 파이프라인 감사 (export_engine, render_engine)
+- [ ] **PART C** — A/B 제안 품질 감사 (proposal_engine, story_template_resolver)
+- [ ] **PART D** — 오픈소스 AI 런타임 감사 (ASR, VL, Narrative, Factory/Governor)
+
+---
+
 ## STEP 10-K — Deep Visual Analysis Stage (PASS ✅)
 - [x] Stage 0-7 Factory Layer Definition
 - [x] VL Factory Stage Policy established

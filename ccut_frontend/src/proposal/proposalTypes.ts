@@ -47,6 +47,9 @@ export interface Proposal {
     snapshot_id: string;
     template_id: string;
     slot_trace: ProposalSlotTrace[];
+    // [PROPOSAL_PREVIEW] 백엔드 렌더링된 preview mp4 URL
+    preview_url?: string | null;
+    preview_duration?: number;
 }
 
 export type StoryDirectionOption = {

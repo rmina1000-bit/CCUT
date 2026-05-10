@@ -287,6 +287,10 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
   const pendingLocalTimeARef = useRef<number | null>(null);
   const pendingLocalTimeBRef = useRef<number | null>(null);
 
+  // [DUAL_PLAY_GUARD] stale event 방지용 세션 ID
+  const playSessionARef = useRef<number>(0);
+  const playSessionBRef = useRef<number>(0);
+
   const lastReportedActiveIdRef = useRef<string | null>(null);
 
   const reportActiveId = useCallback((id: string | null) => {
@@ -303,6 +307,35 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
     if (ref.current && pending.current) {
       ref.current.removeEventListener("loadeddata", pending.current);
       pending.current = null;
+    }
+  }, []);
+
+  // [DUAL_PLAY_GUARD] 반대편 player 즉시 hard-stop
+  const stopOtherPlayer = useCallback((active: "A" | "B") => {
+    if (active === "A") {
+      // B를 완전 정지
+      playSessionBRef.current += 1;          // invalidate stale B events
+      pendingLocalTimeBRef.current = null;   // pending seek 무효화
+      isSeqBRef.current = false;
+      seqIdxBRef.current = -1;
+      seqEndBRef.current = -1;
+      if (videoRefB.current && !videoRefB.current.paused) {
+        videoRefB.current.pause();
+        console.log("[DUAL_PLAY_GUARD] B paused by A");
+      }
+      setIsPlayingB(false);
+    } else {
+      // A를 완전 정지
+      playSessionARef.current += 1;          // invalidate stale A events
+      pendingLocalTimeARef.current = null;   // pending seek 무효화
+      isSeqARef.current = false;
+      seqIdxARef.current = -1;
+      seqEndARef.current = -1;
+      if (videoRefA.current && !videoRefA.current.paused) {
+        videoRefA.current.pause();
+        console.log("[DUAL_PLAY_GUARD] A paused by B");
+      }
+      setIsPlayingA(false);
     }
   }, []);
 
@@ -344,8 +377,16 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
     [proposals, getVideoUrlForFrag, videoUrl]
   );
 
-  const playerVideoUrlA = getVideoUrlForProposal("A") ?? videoUrl ?? null;
-  const playerVideoUrlB = getVideoUrlForProposal("B") ?? videoUrl ?? null;
+  // [PROPOSAL_PREVIEW] proposal.preview_url 우선, 없으면 fragment URL fallback
+  const previewUrlA: string | null = (proposals?.A as any)?.preview_url
+    ? normalizeMediaUrl((proposals.A as any).preview_url)
+    : null;
+  const previewUrlB: string | null = (proposals?.B as any)?.preview_url
+    ? normalizeMediaUrl((proposals.B as any).preview_url)
+    : null;
+
+  const playerVideoUrlA = previewUrlA ?? getVideoUrlForProposal("A") ?? videoUrl ?? null;
+  const playerVideoUrlB = previewUrlB ?? getVideoUrlForProposal("B") ?? videoUrl ?? null;
 
   const buildSeqFrags = useCallback(
     (proposalKey: "A" | "B"): Fragment[] => {
@@ -383,6 +424,13 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
       const ref = isA ? videoRefA : videoRefB;
       if (!ref.current) return;
 
+      // [DUAL_PLAY_GUARD] 다른 플레이어 즉시 정지 + 세션 ID 증가
+      stopOtherPlayer(player);
+      if (isA) playSessionARef.current += 1;
+      else     playSessionBRef.current += 1;
+      // mySession: 향후 stale event 검증에 사용 예정
+      void (isA ? playSessionARef.current : playSessionBRef.current);
+
       const fragUrl = getVideoUrlForFrag(frag.fragment_id) ?? videoUrl ?? undefined;
       const startSec = (frag as any).start_sec
         ?? (frag as any).start
@@ -393,6 +441,22 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
       const endSec = rawEndSec > startSec ? rawEndSec : startSec + 1;
 
       endSecRef.current = endSec;
+
+      console.log("[PLAYFRAG]", {
+        player,
+        fragment_id: frag?.fragment_id,
+        display_id: (frag as any)?.display_id,
+        source_video: (frag as any)?.source_video,
+        start_frame: frag?.start_frame,
+        end_frame: frag?.end_frame,
+        duration_frames: (frag as any)?.duration_frames,
+        startSec,
+        endSec,
+        fps_used: 30,
+        frag_fps: (frag as any)?.fps ?? (frag as any)?.source_fps ?? (frag as any)?.metadata?.fps ?? "없음",
+        currentTime_before_seek: ref?.current?.currentTime ?? "N/A",
+        target_seek: startSec
+      });
 
       console.log(
         "[FPS_AUDIT_PLAYFRAG_JSON]\n" +
@@ -420,25 +484,44 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
       );
 
       const doSeekPlay = () => {
-        if (!ref.current) return;
-        ref.current.currentTime = startSec + seekOffset;
-        ref.current.play().catch(() => { });
+        const v = ref.current;
+        if (!v) return;
+        v.pause();
+        v.currentTime = startSec + seekOffset;
+        v.play().catch(() => {});
       };
 
       if (fragUrl && !sameVideoSource(ref.current.currentSrc || ref.current.src, fragUrl)) {
+        console.log("[SRC_CHANGE_REQUEST]", {
+          player,
+          fragment_id: frag?.fragment_id,
+          targetTime: startSec + seekOffset,
+          fragUrl,
+          currentSrc: ref.current?.currentSrc
+        });
         // [STEP 10-K-C1-R11] Unify src control via state instead of ref.current.src
         if (isA) {
           pendingLocalTimeARef.current = startSec + seekOffset;
           setPlayerSrcA(fragUrl);
+          console.log("[PENDING_SEEK_SET]", {
+            player,
+            fragment_id: frag?.fragment_id,
+            pendingTime: startSec + seekOffset
+          });
         } else {
           pendingLocalTimeBRef.current = startSec + seekOffset;
           setPlayerSrcB(fragUrl);
+          console.log("[PENDING_SEEK_SET]", {
+            player,
+            fragment_id: frag?.fragment_id,
+            pendingTime: startSec + seekOffset
+          });
         }
       } else {
         doSeekPlay();
       }
     },
-    [getVideoUrlForFrag, sameVideoSource, videoUrl]
+    [getVideoUrlForFrag, sameVideoSource, videoUrl, stopOtherPlayer]
   );
 
   const stopSeq = useCallback(
@@ -483,6 +566,8 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
           thumb: f.thumbnail?.thumbnail_url,
           direct_thumb: f.thumbnail_url,
           intelligence_thumb: f.intelligence?.thumb_url,
+          // [PREVIEW_CLIP_GATE] preview_clip_url이 여기 있어야 STEP 5 진입 가능
+          preview_clip_url: f.preview_clip_url ?? null,
         })),
         null,
         2
@@ -1007,6 +1092,28 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
               onClick={() => {
                 if (!videoRefA.current) return;
 
+                if (previewUrlA) {
+                  // [PROPOSAL_PREVIEW_PLAY] preview mp4 직접 재생 — seek 없음
+                  stopOtherPlayer("A");
+                  setActivePlayerSafe("A");
+                  const v = videoRefA.current;
+                  if (v.paused || v.ended) {
+                    if (!sameVideoSource(v.currentSrc || v.src, previewUrlA)) {
+                      v.src = previewUrlA;
+                      v.load();
+                    }
+                    v.currentTime = 0;
+                    v.play().catch(() => {});
+                    console.log("[PROPOSAL_PREVIEW_PLAY]", { variant: "A", preview_url: previewUrlA, currentTime: 0 });
+                  } else {
+                    v.pause();
+                  }
+                  handleProposalPreview("A");
+                  return;
+                }
+
+                // fallback: preview_url 없을 때만 fragment 시퀀스 재생
+                console.warn("[PROPOSAL_PREVIEW_MISSING]", { variant: "A", proposal_id: (proposals?.A as any)?.proposal_id });
                 if (!isSeqARef.current || videoRefA.current.paused) {
                   startSeq("A");
                   handleProposalPreview("A");
@@ -1023,11 +1130,15 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
                     poster={getProposalPoster("A")}
                     className="w-full h-full object-contain bg-black"
                     onPlay={() => {
+                      // [DUAL_PLAY_GUARD] A가 play되면 B 즉시 정지
+                      stopOtherPlayer("A");
                       setActivePlayerSafe("A");
                       setIsPlayingA(true);
                     }}
                     onPause={() => setIsPlayingA(false)}
                     onTimeUpdate={(e) => {
+                      // [DUAL_PLAY_GUARD] inactive player는 advance 차단
+                      if (activePlayerRef.current !== "A") return;
                       if (isDraggingProposalSeekARef.current) return;
                       const v = e.currentTarget;
                       if (isSeqARef.current && seqTotalSecARef.current > 0) {
@@ -1037,8 +1148,17 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
                       }
 
                       const near =
-                        seqEndARef.current > 0 && v.currentTime >= seqEndARef.current;
+                        seqEndARef.current > 0 && !v.seeking && v.currentTime >= seqEndARef.current;
                       if (!near) return;
+
+                      if (near) {
+                        console.log("[NEAR_TRUE_A]", {
+                          currentTime: v.currentTime,
+                          seqEndRef: seqEndARef.current,
+                          seqIdx: seqIdxARef.current,
+                          isSeq: isSeqARef.current
+                        });
+                      }
 
                       if (isSeqARef.current) {
                         const nextIdx = seqIdxARef.current + 1;
@@ -1062,15 +1182,57 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
                           setIsPlayingA(false);
                           reportActiveId(null);
                         }
+                      } else {
+                        v.pause();
+                        setIsPlayingA(false);
                       }
                     }}
                     onLoadedMetadata={(e) => {
                       setDurationA(e.currentTarget.duration);
+                      // [DUAL_PLAY_GUARD] inactive player는 seek+play 차단
+                      if (activePlayerRef.current !== "A") {
+                        console.log("[DUAL_PLAY_GUARD] onLoadedMetadata A skipped (inactive)");
+                        pendingLocalTimeARef.current = null;
+                        return;
+                      }
                       const pending = pendingLocalTimeARef.current;
                       if (pending !== null) {
-                        e.currentTarget.currentTime = pending;
+                        console.log("[LOADED_METADATA_PENDING]", {
+                          player: "A",
+                          pending,
+                          currentTimeBeforeSet: e.currentTarget.currentTime,
+                          duration: e.currentTarget.duration
+                        });
                         pendingLocalTimeARef.current = null;
-                        e.currentTarget.play().catch(() => {});
+                        const tgt = e.currentTarget;
+                        const target = pending;
+                        let seekDone = false;
+
+                        const onPendingSeeked = () => {
+                          if (seekDone) return;
+                          seekDone = true;
+                          tgt.removeEventListener("seeked", onPendingSeeked);
+                          if (Math.abs(tgt.currentTime - target) <= 0.5) {
+                            console.log("[PENDING_SEEKED_PLAY]", { player: "A", currentTime: tgt.currentTime, target });
+                            tgt.play().catch(() => {});
+                          } else {
+                            console.warn("[PENDING_SEEK_MISMATCH]", { player: "A", currentTime: tgt.currentTime, target });
+                          }
+                        };
+
+                        tgt.addEventListener("seeked", onPendingSeeked);
+                        tgt.currentTime = target;
+
+                        setTimeout(() => {
+                          if (seekDone) return;
+                          seekDone = true;
+                          tgt.removeEventListener("seeked", onPendingSeeked);
+                          if (Math.abs(tgt.currentTime - target) <= 0.5) {
+                            tgt.play().catch(() => {});
+                          } else {
+                            console.warn("[PENDING_SEEK_TIMEOUT_ABORT]", { player: "A", currentTime: tgt.currentTime, target });
+                          }
+                        }, 300);
                       }
                     }}
                     preload="auto"
@@ -1153,6 +1315,28 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
               onClick={() => {
                 if (!videoRefB.current) return;
 
+                if (previewUrlB) {
+                  // [PROPOSAL_PREVIEW_PLAY] preview mp4 직접 재생 — seek 없음
+                  stopOtherPlayer("B");
+                  setActivePlayerSafe("B");
+                  const v = videoRefB.current;
+                  if (v.paused || v.ended) {
+                    if (!sameVideoSource(v.currentSrc || v.src, previewUrlB)) {
+                      v.src = previewUrlB;
+                      v.load();
+                    }
+                    v.currentTime = 0;
+                    v.play().catch(() => {});
+                    console.log("[PROPOSAL_PREVIEW_PLAY]", { variant: "B", preview_url: previewUrlB, currentTime: 0 });
+                  } else {
+                    v.pause();
+                  }
+                  handleProposalPreview("B");
+                  return;
+                }
+
+                // fallback: preview_url 없을 때만 fragment 시퀀스 재생
+                console.warn("[PROPOSAL_PREVIEW_MISSING]", { variant: "B", proposal_id: (proposals?.B as any)?.proposal_id });
                 if (!isSeqBRef.current || videoRefB.current.paused) {
                   startSeq("B");
                   handleProposalPreview("B");
@@ -1169,11 +1353,15 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
                     poster={getProposalPoster("B")}
                     className="w-full h-full object-contain bg-black"
                     onPlay={() => {
+                      // [DUAL_PLAY_GUARD] B가 play되면 A 즉시 정지
+                      stopOtherPlayer("B");
                       setActivePlayerSafe("B");
                       setIsPlayingB(true);
                     }}
                     onPause={() => setIsPlayingB(false)}
                     onTimeUpdate={(e) => {
+                      // [DUAL_PLAY_GUARD] inactive player는 advance 차단
+                      if (activePlayerRef.current !== "B") return;
                       if (isDraggingProposalSeekBRef.current) return;
                       const v = e.currentTarget;
                       if (isSeqBRef.current && seqTotalSecBRef.current > 0) {
@@ -1183,8 +1371,17 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
                       }
 
                       const near =
-                        seqEndBRef.current > 0 && v.currentTime >= seqEndBRef.current;
+                        seqEndBRef.current > 0 && !v.seeking && v.currentTime >= seqEndBRef.current;
                       if (!near) return;
+
+                      if (near) {
+                        console.log("[NEAR_TRUE_B]", {
+                          currentTime: v.currentTime,
+                          seqEndRef: seqEndBRef.current,
+                          seqIdx: seqIdxBRef.current,
+                          isSeq: isSeqBRef.current
+                        });
+                      }
 
                       if (isSeqBRef.current) {
                         const nextIdx = seqIdxBRef.current + 1;
@@ -1208,15 +1405,57 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
                           setIsPlayingB(false);
                           reportActiveId(null);
                         }
+                      } else {
+                        v.pause();
+                        setIsPlayingB(false);
                       }
                     }}
                     onLoadedMetadata={(e) => {
                       setDurationB(e.currentTarget.duration);
+                      // [DUAL_PLAY_GUARD] inactive player는 seek+play 차단
+                      if (activePlayerRef.current !== "B") {
+                        console.log("[DUAL_PLAY_GUARD] onLoadedMetadata B skipped (inactive)");
+                        pendingLocalTimeBRef.current = null;
+                        return;
+                      }
                       const pending = pendingLocalTimeBRef.current;
                       if (pending !== null) {
-                        e.currentTarget.currentTime = pending;
+                        console.log("[LOADED_METADATA_PENDING]", {
+                          player: "B",
+                          pending,
+                          currentTimeBeforeSet: e.currentTarget.currentTime,
+                          duration: e.currentTarget.duration
+                        });
                         pendingLocalTimeBRef.current = null;
-                        e.currentTarget.play().catch(() => {});
+                        const tgt = e.currentTarget;
+                        const target = pending;
+                        let seekDone = false;
+
+                        const onPendingSeeked = () => {
+                          if (seekDone) return;
+                          seekDone = true;
+                          tgt.removeEventListener("seeked", onPendingSeeked);
+                          if (Math.abs(tgt.currentTime - target) <= 0.5) {
+                            console.log("[PENDING_SEEKED_PLAY]", { player: "B", currentTime: tgt.currentTime, target });
+                            tgt.play().catch(() => {});
+                          } else {
+                            console.warn("[PENDING_SEEK_MISMATCH]", { player: "B", currentTime: tgt.currentTime, target });
+                          }
+                        };
+
+                        tgt.addEventListener("seeked", onPendingSeeked);
+                        tgt.currentTime = target;
+
+                        setTimeout(() => {
+                          if (seekDone) return;
+                          seekDone = true;
+                          tgt.removeEventListener("seeked", onPendingSeeked);
+                          if (Math.abs(tgt.currentTime - target) <= 0.5) {
+                            tgt.play().catch(() => {});
+                          } else {
+                            console.warn("[PENDING_SEEK_TIMEOUT_ABORT]", { player: "B", currentTime: tgt.currentTime, target });
+                          }
+                        }, 300);
                       }
                     }}
                     preload="auto"
@@ -1583,7 +1822,7 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
       )}
 
       {/* Legacy global chat bar (non-consultation states) */}
-      {(!storyPlan || storyPlan.consultation_status === "confirmed") && (
+      {!storyPlan && (
         <div className="absolute bottom-10 w-full max-w-3xl px-8 pointer-events-none z-50">
           <div className="relative flex items-center pointer-events-auto">
             <input
