@@ -1,13 +1,18 @@
 # CCUT Task Board
 
-## 2026-05-10 — Proposal Preview Render (PRODUCT PASS ✅)
+## 2026-05-10 — Proposal Preview Render (PRODUCT PASS ✅ 최종 확정)
 - [x] `proposal_preview_engine.py` 신규 생성
 - [x] `inject_proposal_previews()` main.py 연결
 - [x] `proposalTypes.ts` preview_url 타입 추가
 - [x] `Index.tsx` proposal 매핑 시 preview_url 보존
 - [x] `CenterPanel.tsx` previewUrlA/B 우선 재생 (currentTime=0, seek 없음)
+- [x] `[PREVIEW_MODE_GUARD]` A/B onTimeUpdate fragment seq 개입 차단
+- [x] `[DUAL_PLAY_GUARD]` stopOtherPlayer A/B 동시 재생 차단
+- [x] letterbox pad filter 적용 (세로 영상 비율 정상화)
+- [x] POST/GET `/semantic-fragments` `inject_preview_clips` 제거 (ImportError→500 해소)
 - [x] faststart 일괄 적용 (55/57)
 - [x] `PROPOSAL_PREVIEW_RENDER_POLICY.md` 문서화
+- [x] **push 완료: `git push origin ccut-1.0.4-step9`** (2026-05-10)
 
 ## NEXT — 전체 파이프라인 Runtime Audit 📋
 - [ ] **PART A** — 인지조각 생성 감사 (signal_processor, semantic_engine)

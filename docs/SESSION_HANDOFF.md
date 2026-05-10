@@ -1,8 +1,32 @@
-# Session Handoff — Proposal Preview Render 해결 및 전체 파이프라인 감사 전환
+# Session Handoff — Proposal Preview Render 최종 PRODUCT PASS 확정
 
 > 날짜: 2026-05-10  
 > 이전 상태: A/B preview 조각 누적 재생 BROWSER FAIL  
-> 현재 상태: Proposal Preview Render 구조 전환 완료, PRODUCT PASS
+> 현재 상태: **PRODUCT PASS 확정 — 모든 회귀 수리 완료, push 완료**
+
+## 최종 커밋 이력 (이번 세션)
+
+| SHA | 메시지 |
+|---|---|
+| (최신) | Fix proposal preview playback and semantic fragment regression |
+| 7028b75 | Increase narrative intent frontend timeout |
+| fd9452d | Store resolved thumbnail URLs in fragment evidence |
+| 2ea7686 | Add temporal regression guard to proposal sequences |
+| 400f0fe | Fix Qwen3 ASR model paths for CCUT 1.0.4 |
+| 9584e5a | Use rendered proposal previews for A/B playback |
+
+## 최종 PRODUCT PASS 사용자 확인 항목
+
+| 항목 | 결과 |
+|---|---|
+| 조각 누적 플레이 | ✅ 없음 |
+| 중간 멈춤 | ✅ 없음 |
+| 드래그바 | ✅ 정상 추적 |
+| 조각맵 표시 | ✅ 정상 |
+| 대표이미지/썸네일 | ✅ 정상 |
+| 세로 영상 비율 | ✅ 정상 (letterbox/pillarbox) |
+| 에코 | ✅ 없음 |
+| semantic-fragments 500 | ✅ 해소 |
 
 ---
 
@@ -13,23 +37,29 @@
 **핵심 변경:**
 - `ccut_backend/engine/proposal_preview_engine.py` 신규 생성
   - `ensure_proposal_preview(proposal_id, variant, clips)` — clips → re-encode → concat → faststart mp4
+  - temp clip filter: `scale=1280:720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=30`
+  - final concat: re-encode + yuv420p + faststart + genpts + decode smoke test
   - idempotent: 존재 시 캐시 재사용
 - `ccut_backend/main.py` — `inject_proposal_previews()` 추가
   - `/proposals/project`, `/proposals/{source_id}` 응답에 `preview_url` 주입
+  - POST/GET `/semantic-fragments/{source_id}` — `inject_preview_clips()` 제거 (ImportError→500 차단)
 - `ccut_frontend/src/proposal/proposalTypes.ts` — `preview_url?`, `preview_duration?` 추가
 - `ccut_frontend/src/pages/Index.tsx` — proposal 매핑 시 `preview_url` 보존
 - `ccut_frontend/src/components/CenterPanel.tsx`
   - `previewUrlA/B` 우선 재생: `src=preview_url, currentTime=0, play()`
-  - preview_url 없을 때만 `startSeq/playFrag` fallback (console.warn 포함)
+  - `[PREVIEW_MODE_GUARD]` A/B onTimeUpdate early return (fragment seq 개입 차단)
+  - seekbar: preview mode에서 `video.currentTime` 직접 변경 (seekProposal 차단)
+  - `[DUAL_PLAY_GUARD]` stopOtherPlayer: A/B 동시 재생 차단
 
 **저장소:**
 - `storage/proposal_previews/PREV_{proposal_id}_{variant}.mp4`
 
 **검증:**
-- Backend RUNTIME PASS: PREV_PROP_A/B.mp4 생성 확인
-- Frontend CODE PASS: npm build ✅ (1700 modules)
-- Browser PASS: `[PROPOSAL_PREVIEW_PLAY]` 콘솔 확인
-- Product PASS: 조각 누적 없음, 에코 없음
+- py_compile main.py: Exit 0 ✅
+- py_compile proposal_preview_engine.py: Exit 0 ✅
+- Frontend npm build: vite v5.4.21, 1700 modules ✅
+- git push origin ccut-1.0.4-step9 ✅
+- 사용자 체감: "흠잡을 데 없이 잘 된다" → **PRODUCT PASS**
 
 ### 2. Faststart 일괄 적용
 - `tools/apply_faststart.ps1` 실행: 55/57 파일 OK (2개 빈 더미 정상 실패)
