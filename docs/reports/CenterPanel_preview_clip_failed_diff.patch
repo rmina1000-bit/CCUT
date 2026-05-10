@@ -1,0 +1,26 @@
+--- PATCH EVIDENCE: CenterPanel.tsx PREVIEW_CLIP half-applied state ---
+--- Saved before STEP 1 rollback ---
+--- Status: BROWSER FAIL — [PREVIEW_CLIP_MISSING] firing because backend clips not ready ---
+
+CHANGES APPLIED IN PREVIOUS SESSION:
+1. playFrag() — preview_clip_url 기반 재생으로 전환 (currentTime seek 제거)
+   L434-462: clipUrl = frag.preview_clip_url; if (!clipUrl) MISSING; else setPlayerSrc(clipUrl)
+
+2. onTimeUpdate — seqEndRef advance 제거 (elapsed 표시만 유지)
+   L1050-1059
+
+3. onEnded — onEnded 기반 advance 추가
+   L1060-1081
+
+4. onLoadedMetadata — 단순 play() 로 교체
+   L1082-1088
+
+ROOT CAUSE OF FAILURE:
+- Backend preview_clip_engine.py 생성됨 (ensure_preview_clip 존재)
+- inject_preview_clips() 생성됨 (main.py)
+- BUT: proposalFragmentResolver → CenterPanel seqFrags 경로에서 preview_clip_url 유실
+- SEQ_FRAGS_AUDIT_JSON에 preview_clip_url 필드 없음
+- [PREVIEW_CLIP_MISSING] 발생 → 재생 불가
+
+ROLLBACK TARGET:
+git checkout -- ccut_frontend/src/components/CenterPanel.tsx
