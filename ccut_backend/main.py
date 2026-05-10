@@ -1085,8 +1085,8 @@ async def generate_semantic_fragments(source_id: str):
     # [STEP 10-I.5.22-C] Inject thumbnails
     fragments = inject_semantic_thumbnails(fragments)
 
-    # [PREVIEW_CLIP] Inject preview_clip_url
-    fragments = inject_preview_clips(fragments, background=True)
+    # [PREVIEW_CLIP] inject_preview_clips 제거 — 최종 해결은 proposal_preview_engine이므로 fragment 단위 clip 주입 불필요
+    # (preview_clip_engine.py 미존재 시 ImportError → 500 상승 방지)
     
     # Role 분산 통계 계산
     role_dist = {}
@@ -1110,8 +1110,8 @@ async def get_semantic_fragments(source_id: str):
     # [STEP 10-I.5.22-C] Inject thumbnails
     fragments = inject_semantic_thumbnails(fragments)
 
-    # [PREVIEW_CLIP] Inject preview_clip_url
-    fragments = inject_preview_clips(fragments, background=True)
+    # [PREVIEW_CLIP] inject_preview_clips 제거 — 최종 해결은 proposal_preview_engine이뮼로 fragment 단위 clip 주입 불필요
+    # (preview_clip_engine.py 미존재 시 ImportError 상승 방지)
     
     role_dist = {}
     for f in fragments:

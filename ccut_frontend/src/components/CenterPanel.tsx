@@ -1096,6 +1096,11 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
                   // [PROPOSAL_PREVIEW_PLAY] preview mp4 직접 재생 — seek 없음
                   stopOtherPlayer("A");
                   setActivePlayerSafe("A");
+                  // [PREVIEW_MODE_GUARD] fragment seq 상태 초기화
+                  seqEndARef.current = -1;
+                  isSeqARef.current = false;
+                  seqIdxARef.current = 0;
+                  pendingLocalTimeARef.current = null;
                   const v = videoRefA.current;
                   if (v.paused || v.ended) {
                     if (!sameVideoSource(v.currentSrc || v.src, previewUrlA)) {
@@ -1140,6 +1145,11 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
                       // [DUAL_PLAY_GUARD] inactive player는 advance 차단
                       if (activePlayerRef.current !== "A") return;
                       if (isDraggingProposalSeekARef.current) return;
+                      // [PREVIEW_MODE_GUARD] preview_url 재생 중 fragment seq 개입 차단
+                      if (previewUrlA) {
+                        setProposalTimeA(e.currentTarget.currentTime);
+                        return;
+                      }
                       const v = e.currentTarget;
                       if (isSeqARef.current && seqTotalSecARef.current > 0) {
                         const fragStart = (seqFragsARef.current[seqIdxARef.current]?.start_frame ?? 0) / 30;
@@ -1267,7 +1277,7 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
                 <input
                   type="range"
                   min={0}
-                  max={seqTotalSecARef.current || 100}
+                  max={previewUrlA ? (videoRefA.current?.duration || 100) : (seqTotalSecARef.current || 100)}
                   step={0.01}
                   value={proposalTimeA}
                   onPointerDown={(e) => {
@@ -1281,11 +1291,17 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
                   onPointerUp={(e) => {
                     e.stopPropagation();
                     isDraggingProposalSeekARef.current = false;
+                    // [PREVIEW_MODE_GUARD] preview mode에서는 video.currentTime만 변경
+                    if (previewUrlA && videoRefA.current) {
+                      videoRefA.current.currentTime = Number(e.currentTarget.value);
+                      setProposalTimeA(Number(e.currentTarget.value));
+                      return;
+                    }
                     seekProposal("A", Number(e.currentTarget.value));
                   }}
                   className="proposal-seekbar w-full h-1 bg-white/20 accent-primary cursor-pointer appearance-none hover:h-1.5 transition-all rounded-full"
                   style={{
-                    background: `linear-gradient(to right, hsl(var(--primary)) 0%, hsl(var(--primary)) ${(proposalTimeA / (seqTotalSecARef.current || 1)) * 100}%, rgba(255,255,255,0.1) ${(proposalTimeA / (seqTotalSecARef.current || 1)) * 100}%, rgba(255,255,255,0.1) 100%)`
+                    background: `linear-gradient(to right, hsl(var(--primary)) 0%, hsl(var(--primary)) ${(proposalTimeA / (previewUrlA ? (videoRefA.current?.duration || 1) : (seqTotalSecARef.current || 1))) * 100}%, rgba(255,255,255,0.1) ${(proposalTimeA / (previewUrlA ? (videoRefA.current?.duration || 1) : (seqTotalSecARef.current || 1))) * 100}%, rgba(255,255,255,0.1) 100%)`
                   }}
                 />
               </div>
@@ -1319,6 +1335,11 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
                   // [PROPOSAL_PREVIEW_PLAY] preview mp4 직접 재생 — seek 없음
                   stopOtherPlayer("B");
                   setActivePlayerSafe("B");
+                  // [PREVIEW_MODE_GUARD] fragment seq 상태 초기화
+                  seqEndBRef.current = -1;
+                  isSeqBRef.current = false;
+                  seqIdxBRef.current = 0;
+                  pendingLocalTimeBRef.current = null;
                   const v = videoRefB.current;
                   if (v.paused || v.ended) {
                     if (!sameVideoSource(v.currentSrc || v.src, previewUrlB)) {
@@ -1363,6 +1384,11 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
                       // [DUAL_PLAY_GUARD] inactive player는 advance 차단
                       if (activePlayerRef.current !== "B") return;
                       if (isDraggingProposalSeekBRef.current) return;
+                      // [PREVIEW_MODE_GUARD] preview_url 재생 중 fragment seq 개입 차단
+                      if (previewUrlB) {
+                        setProposalTimeB(e.currentTarget.currentTime);
+                        return;
+                      }
                       const v = e.currentTarget;
                       if (isSeqBRef.current && seqTotalSecBRef.current > 0) {
                         const fragStart = (seqFragsBRef.current[seqIdxBRef.current]?.start_frame ?? 0) / 30;
@@ -1490,7 +1516,7 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
                 <input
                   type="range"
                   min={0}
-                  max={seqTotalSecBRef.current || 100}
+                  max={previewUrlB ? (videoRefB.current?.duration || 100) : (seqTotalSecBRef.current || 100)}
                   step={0.01}
                   value={proposalTimeB}
                   onPointerDown={(e) => {
@@ -1504,11 +1530,17 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
                   onPointerUp={(e) => {
                     e.stopPropagation();
                     isDraggingProposalSeekBRef.current = false;
+                    // [PREVIEW_MODE_GUARD] preview mode에서는 video.currentTime만 변경
+                    if (previewUrlB && videoRefB.current) {
+                      videoRefB.current.currentTime = Number(e.currentTarget.value);
+                      setProposalTimeB(Number(e.currentTarget.value));
+                      return;
+                    }
                     seekProposal("B", Number(e.currentTarget.value));
                   }}
                   className="proposal-seekbar w-full h-1 bg-white/20 accent-ccut-indigo cursor-pointer appearance-none hover:h-1.5 transition-all rounded-full"
                   style={{
-                    background: `linear-gradient(to right, #6366f1 0%, #6366f1 ${(proposalTimeB / (seqTotalSecBRef.current || 1)) * 100}%, rgba(255,255,255,0.1) ${(proposalTimeB / (seqTotalSecBRef.current || 1)) * 100}%, rgba(255,255,255,0.1) 100%)`
+                    background: `linear-gradient(to right, #6366f1 0%, #6366f1 ${(proposalTimeB / (previewUrlB ? (videoRefB.current?.duration || 1) : (seqTotalSecBRef.current || 1))) * 100}%, rgba(255,255,255,0.1) ${(proposalTimeB / (previewUrlB ? (videoRefB.current?.duration || 1) : (seqTotalSecBRef.current || 1))) * 100}%, rgba(255,255,255,0.1) 100%)`
                   }}
                 />
               </div>

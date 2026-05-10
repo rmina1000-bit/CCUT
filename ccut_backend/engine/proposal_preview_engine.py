@@ -102,7 +102,7 @@ def ensure_proposal_preview(
                 "-ss", str(clip["start"]),
                 "-to", str(clip["end"]),
                 "-i",  clip["source_path"],
-                "-vf", "scale=-2:720,fps=30",
+                "-vf", "scale=1280:720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=30",
                 "-c:v", "libx264", "-preset", "veryfast", "-crf", "28",
                 "-c:a", "aac", "-b:a", "96k",
                 "-movflags", "+faststart",
@@ -118,7 +118,8 @@ def ensure_proposal_preview(
         if not temp_clips:
             return _fail(proposal_id, variant, preview_url, "ALL_CLIPS_FAILED")
 
-        # STEP B: concat demuxer로 합성
+        # STEP B: re-encode concat 으로 단일 균질 mp4 생성
+        # [-c copy 금지] source 간 fps/codec 차이로 Chrome boundary decode 멈춤 방지
         concat_txt = os.path.join(tmpdir, "concat.txt")
         with open(concat_txt, "w", encoding="utf-8") as f:
             for tc in temp_clips:
@@ -129,12 +130,15 @@ def ensure_proposal_preview(
             "ffmpeg", "-y", "-loglevel", "error",
             "-f", "concat", "-safe", "0",
             "-i", concat_txt,
-            "-c", "copy",
+            "-fflags", "+genpts",
+            "-c:v", "libx264", "-preset", "veryfast", "-crf", "23",
+            "-pix_fmt", "yuv420p",
+            "-c:a", "aac", "-b:a", "128k",
             "-movflags", "+faststart",
             concat_out
         ]
-        print(f"[PREVIEW_RENDER] Concat {len(temp_clips)} clips → {filename}")
-        res_concat = subprocess.run(cmd_concat, capture_output=True, text=True, timeout=300)
+        print(f"[PREVIEW_RENDER] Re-encode concat {len(temp_clips)} clips → {filename}")
+        res_concat = subprocess.run(cmd_concat, capture_output=True, text=True, timeout=600)
 
         if res_concat.returncode != 0 or not os.path.exists(concat_out):
             print(f"[PREVIEW_RENDER] CONCAT FAILED: {res_concat.stderr[:300]}")
@@ -143,6 +147,17 @@ def ensure_proposal_preview(
         # STEP C: 최종 파일로 이동
         import shutil
         shutil.move(concat_out, str(output_path))
+
+    # STEP D: decode smoke test — 브라우저 decode 실패 사전 차단
+    smoke = subprocess.run(
+        ["ffmpeg", "-v", "error", "-i", str(output_path), "-f", "null", "NUL"],
+        capture_output=True, text=True, timeout=120
+    )
+    if smoke.returncode != 0 or smoke.stderr.strip():
+        err_snippet = smoke.stderr.strip()[:300]
+        print(f"[PREVIEW_RENDER] SMOKE FAIL {filename}: {err_snippet}")
+        output_path.unlink(missing_ok=True)
+        return _fail(proposal_id, variant, preview_url, f"SMOKE_FAILED: {err_snippet}")
 
     duration = _probe_duration(str(output_path))
     size_mb  = round(output_path.stat().st_size / 1024 / 1024, 1)
