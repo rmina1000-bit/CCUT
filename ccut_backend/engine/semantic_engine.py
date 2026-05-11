@@ -321,42 +321,70 @@ class SemanticFragmentGenerator:
                 res.pop(min_idx)
         
         # 2. Split (20초 초과 분할 시도)
+        # [STEP 1-R3] _S1/_S2 재귀 suffix 오염 제거 → _split_long_fragment() 위임
         final = []
         for frag in res:
-            duration = frag["structural"]["duration"]
-            if duration > 20.0:
-                # 내부 경계 탐색 (가장 중앙에 가까운 경계 찾기)
-                mid = frag["start"] + (duration / 2.0)
-                # 5초 정도의 여유를 둠 (너무 짧은 조각 방지)
-                cuts = [b for b in boundaries if frag["start"] + 5.0 < b < frag["end"] - 5.0]
-                
-                if cuts:
-                    cut = sorted(cuts, key=lambda x: abs(x - mid))[0]
-                else:
-                    # [STEP 10-I.5.9] Boundary가 전혀 없으면 강제 분할 (8~12초 가변 윈도우)
-                    # 30초 고정 반복을 깨기 위해 가변성 부여
-                    import random
-                    cut = round(frag["start"] + 10.0 + random.uniform(-2.0, 2.0), 2)
-                    if not (frag["start"] + 5.0 < cut < frag["end"] - 5.0):
-                        cut = round(mid, 2)
-                
-                f1 = frag.copy(); f1["end"] = cut; f1["structural"] = frag["structural"].copy(); f1["structural"]["duration"] = round(cut - f1["start"], 2)
-                f1["fragment_id"] = f"{frag['fragment_id']}_S1"
-                
-                f2 = frag.copy(); f2["start"] = cut; f2["structural"] = frag["structural"].copy(); f2["structural"]["duration"] = round(f2["end"] - cut, 2)
-                f2["fragment_id"] = f"{frag['fragment_id']}_S2"
-                
-                # 재귀적으로 한 번 더 체크 (40초 초과 시 등)
-                if f1["structural"]["duration"] > 20.0 or f2["structural"]["duration"] > 20.0:
-                    sub_final = self.apply_merge_split([f1, f2], boundaries, total_duration)
-                    final.extend(sub_final)
-                else:
-                    final.extend([f1, f2])
-                continue
-                
-            final.append(frag)
-                
+            if frag["structural"]["duration"] > 20.0:
+                final.extend(self._split_long_fragment(frag, boundaries))
+            else:
+                final.append(frag)
+
         return final
+
+    def _split_long_fragment(self, frag, boundaries, max_duration=20.0):
+        """[STEP 1-R3] 긴 조각을 _P001/_P002 형식으로 안정 분할.
+        _S1/_S2 suffix 재귀 누적 없음. depth limit 불필요.
+        기존 _S1/_S2 suffix가 붙어있으면 제거 후 base_id 사용."""
+        start = frag["start"]
+        end = frag["end"]
+
+        # 기존 _S1/_S2 오염 suffix 제거하여 clean base_id 확보
+        base_id = frag["fragment_id"]
+        while base_id.endswith("_S1") or base_id.endswith("_S2"):
+            base_id = base_id[:-3]
+
+        parts = []
+        cursor = start
+        index = 1
+
+        while cursor < end - 0.5:
+            # 현재 cursor부터 max_duration 이내 경계 중 구간 중앙에 가장 가까운 것 선택
+            seg_end_limit = min(cursor + max_duration, end)
+            mid = cursor + (seg_end_limit - cursor) / 2.0
+            candidates = [b for b in boundaries if cursor + 5.0 < b < seg_end_limit - 5.0]
+
+            if candidates:
+                part_end = sorted(candidates, key=lambda x: abs(x - mid))[0]
+            else:
+                part_end = round(seg_end_limit, 2)
+
+            # 마지막 조각이 3초 미만이면 현재 파트에 흡수
+            if end - part_end < 3.0:
+                part_end = end
+
+            part_end = min(round(part_end, 2), end)
+            part_duration = round(part_end - cursor, 2)
+            if part_duration < 0.2:
+                cursor = part_end
+                continue
+
+            child = dict(frag)
+            child["semantic"] = dict(frag["semantic"])
+            child["structural"] = dict(frag["structural"])
+            child["continuity"] = dict(frag.get("continuity", {}))
+            child["fragment_id"] = f"{base_id}_P{index:03d}"
+            child["start"] = round(cursor, 2)
+            child["end"] = part_end
+            child["structural"]["duration"] = part_duration
+
+            parts.append(child)
+            cursor = part_end
+            index += 1
+
+            if part_end >= end:
+                break
+
+        return parts if parts else [frag]
 
     def calculate_confidence(self, fragment):
         return 0.9 if fragment["semantic"]["summary"] != "Visual/Audio Context" else 0.7

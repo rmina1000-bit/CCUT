@@ -1074,33 +1074,55 @@ def inject_proposal_previews(proposals: list) -> list:
 
 
 @app.post("/semantic-fragments/{source_id}")
-async def generate_semantic_fragments(source_id: str):
-    """[STEP 4] Evidence Board 기반 Semantic Fragment 생성"""
+async def generate_semantic_fragments(source_id: str, refresh_proposals: bool = False):
+    """[STEP 4] Evidence Board 기반 Semantic Fragment 생성
+    
+    refresh_proposals=True 일 때만 ProposalEngine을 추가로 호출한다.
+    기본값 False — 기존 동작 완전 유지 (preview PRODUCT PASS 흐름 불변).
+    """
     from engine.semantic_engine import SemanticFragmentGenerator
     gen = SemanticFragmentGenerator(bams)
     fragments = gen.generate(source_id)
-    
+
     print(f"[SEMANTIC] /semantic-fragments/{source_id} called. Result count: {len(fragments)}")
-    
+
     # [STEP 10-I.5.22-C] Inject thumbnails
     fragments = inject_semantic_thumbnails(fragments)
 
     # [PREVIEW_CLIP] inject_preview_clips 제거 — 최종 해결은 proposal_preview_engine이므로 fragment 단위 clip 주입 불필요
     # (preview_clip_engine.py 미존재 시 ImportError → 500 상승 방지)
-    
+
     # Role 분산 통계 계산
     role_dist = {}
     for f in fragments:
         role = f["structural"].get("role", "context")
         role_dist[role] = role_dist.get(role, 0) + 1
-        
-    return {
+
+    response = {
         "status": "SEMANTIC_FRAGMENT_READY",
         "source_id": source_id,
         "fragment_count": len(fragments),
         "role_distribution": role_dist,
-        "fragments": fragments
+        "fragments": fragments,
+        "proposal_refreshed": False,
     }
+
+    # [STEP 1-R5] 명시적 요청 시에만 Proposal 재생성 — 자동 연동 금지
+    if refresh_proposals:
+        try:
+            from engine.proposal_engine import ProposalEngine
+            prop_eng = ProposalEngine(bams)
+            proposals = prop_eng.generate_proposals(source_id)
+            response["proposal_refreshed"] = True
+            response["proposal_count"] = len(proposals)
+            response["proposal_ids"] = [p.get("proposal_id") for p in proposals]
+            print(f"[SEMANTIC] Proposal refreshed for {source_id}: {len(proposals)} proposals")
+        except Exception as e:
+            response["proposal_refreshed"] = False
+            response["proposal_error"] = str(e)
+            print(f"[SEMANTIC] Proposal refresh FAILED for {source_id}: {e}")
+
+    return response
 
 @app.get("/semantic-fragments/{source_id}")
 async def get_semantic_fragments(source_id: str):
