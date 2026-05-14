@@ -5,12 +5,85 @@ audio 데이터를 base64로 담아 전사를 받는다.
 """
 
 import os
+import re
 import base64
-from typing import Optional
+from typing import Optional, Tuple
 from ..interface import ASRProvider
 from ..schemas import TranscriptResult, HealthStatus
 from ..runtimes import LlamaServerRunner
 from .base import BaseAdapter
+
+# ──────────────────────────────────────────────
+# ASR 품질 필터 상수 (나중에 config로 노출 가능)
+# ──────────────────────────────────────────────
+_ASR_MAX_TEXT_LEN        = 500   # 30초 fragment 기준 허용 최대 문자 수
+_ASR_CJK_RATIO_LIMIT     = 0.15  # CJK 한자 문자 비율 상한 (초과 시 reject)
+_ASR_CJK_COUNT_LIMIT     = 4     # CJK 한자 절대 수 상한 (이상 시 reject)
+_ASR_REPEAT_COUNT_LIMIT  = 10    # 같은 토큰 최대 반복 허용 횟수
+_ASR_UNIQUE_RATIO_LIMIT  = 0.20  # unique token 비율 하한 (미만 + 토큰 수 > 20 → reject)
+
+# CJK 통합한자 범위 — ord() 기반 (regex 인코딩 의존 제거)
+def _is_cjk_char(ch: str) -> bool:
+    code = ord(ch)
+    return (
+        0x4E00 <= code <= 0x9FFF or
+        0x3400 <= code <= 0x4DBF or
+        0xF900 <= code <= 0xFAFF
+    )
+
+
+def _count_cjk_chars(text: str) -> int:
+    return sum(1 for ch in text if _is_cjk_char(ch))
+
+
+def validate_asr_text(text: str, fragment_id: str = "") -> Tuple[bool, str]:
+    """ASR 전사 텍스트 품질 검증.
+
+    Returns:
+        (True, "")          : 정상 — 저장 허용
+        (False, reason_str) : 불량 — 저장 거부, reason_str은 rejected_fragments에 기록
+    """
+    # 1. 빈값 guard (기존 동작 유지)
+    if not text or not text.strip():
+        return False, "empty_text"
+
+    stripped = text.strip()
+
+    # 2. 길이 guard
+    if len(stripped) > _ASR_MAX_TEXT_LEN:
+        print(f"[Qwen3ASR][GUARD] length_exceeded: len={len(stripped)} fragment={fragment_id!r}")
+        return False, "length_exceeded"
+
+    # 3. 중국어(CJK 한자) 비율 guard
+    total_chars = len(stripped)
+    cjk_count = _count_cjk_chars(stripped)
+    cjk_ratio = cjk_count / total_chars if total_chars > 0 else 0.0
+    if cjk_count >= _ASR_CJK_COUNT_LIMIT or cjk_ratio > _ASR_CJK_RATIO_LIMIT:
+        print(f"[Qwen3ASR][GUARD] cjk_contamination: count={cjk_count}, ratio={cjk_ratio:.3f} fragment={fragment_id!r}")
+        return False, "cjk_contamination"
+
+    # 4. 반복 환각 guard
+    # 쉼표/공백/마침표 기준 토큰화
+    tokens = [t.strip() for t in re.split(r'[,，。.\s]+', stripped) if t.strip()]
+    if tokens:
+        from collections import Counter
+        counts = Counter(tokens)
+        max_repeat = counts.most_common(1)[0][1]
+        unique_ratio = len(counts) / len(tokens)
+
+        if max_repeat >= _ASR_REPEAT_COUNT_LIMIT:
+            print(f"[Qwen3ASR][GUARD] repetition_loop: max_repeat={max_repeat} fragment={fragment_id!r}")
+            return False, "repetition_loop"
+
+        if len(tokens) > 20 and unique_ratio < _ASR_UNIQUE_RATIO_LIMIT:
+            print(f"[Qwen3ASR][GUARD] low_unique_token_ratio: ratio={unique_ratio:.3f}, tokens={len(tokens)} fragment={fragment_id!r}")
+            return False, "low_unique_token_ratio"
+
+    # future guard: silence_contamination
+    # requires VAD/speech_activity metadata per fragment
+    # planned for STEP 2-E (Mini Factory Matrix VAD Row)
+
+    return True, ""
 
 
 class Qwen3ASRAdapter(BaseAdapter, ASRProvider):
@@ -150,13 +223,26 @@ class Qwen3ASRAdapter(BaseAdapter, ASRProvider):
         import tempfile
         import subprocess
 
-        results = {}
+        # [FIX-1 / STEP2A-R1] fragment_transcripts: WhisperAdapter 호환 contract
+        # 변경 전: {frag_id: str, ...} (flat)
+        # 변경 후: {"fragment_transcripts": {frag_id: text}, "all_segments": [], ...}
+        # main.py L331: whisper_res.get("fragment_transcripts", {}) 가 이 키를 기대함
+        fragment_transcripts = {}
+        # [STEP2A-R4] 품질 불량 fragment 사유 기록
+        rejected_fragments: dict = {}
+
         # [B2-01] 오디오 스트림 선체크 — 없으면 전체 skip
         if not self._has_audio_stream(video_path):
             print(f"[Qwen3ASR] 오디오 스트림 없음, 전사 skip: {video_path}")
-            for frag in fragments:
-                results[frag["fragment_id"]] = ""
-            return results
+            return {
+                "fragment_transcripts": {},
+                "all_segments": [],
+                "fragment_words": {},
+                "language": "unknown",
+                "provider": "qwen3_asr",
+                "provider_error": "no_audio_stream",
+                "rejected_fragments": {},
+            }
 
         for frag in fragments:
             frag_id = frag["fragment_id"]
@@ -177,17 +263,42 @@ class Qwen3ASRAdapter(BaseAdapter, ASRProvider):
                     tmp_path,
                 ], check=True, timeout=60)
                 tr = self.transcribe(tmp_path)
-                results[frag_id] = tr.full_text
+                text = tr.full_text
+
+                # [STEP2A-R4] ASR 품질 필터 적용
+                ok, reason = validate_asr_text(text, fragment_id=frag_id)
+                if ok:
+                    fragment_transcripts[frag_id] = text
+                else:
+                    rejected_fragments[frag_id] = reason
+                    print(
+                        f"[Qwen3ASR][REJECT] {frag_id} → {reason} "
+                        f"| text_preview={text[:80]!r}",
+                        flush=True,
+                    )
             except Exception as e:
                 print(f"[Qwen3ASR] frag {frag_id} 전사 실패: {e}")
-                results[frag_id] = ""
             finally:
                 try:
                     os.unlink(tmp_path)
                 except Exception:
                     pass
 
-        return results
+        if rejected_fragments:
+            print(
+                f"[Qwen3ASR][QUALITY] rejected {len(rejected_fragments)}/{len(fragments)} fragments: "
+                + ", ".join(f"{k}={v}" for k, v in rejected_fragments.items()),
+                flush=True,
+            )
+
+        return {
+            "fragment_transcripts": fragment_transcripts,
+            "all_segments": [],    # [NOTE] Qwen3 단일 fragment 호출 → 세그먼트 타임스탬프 없음
+            "fragment_words": {},  # [NOTE] word-level timestamp 미지원
+            "language": "ko",
+            "provider": "qwen3_asr",
+            "rejected_fragments": rejected_fragments,
+        }
 
     def health_check(self) -> HealthStatus:
         if self._runner and self._runner.is_healthy():
