@@ -136,7 +136,21 @@ class ProposalEngine:
         current_len = 0
         is_fast_path = target_len <= 60.0
         source_count = len(source_ids) if source_ids else 1
-        max_frags = min(source_count * 2, 40) if is_fast_path else min(source_count * 3, 60)
+
+        # [STEP2C-R2] single-source / multi-source max_frags 분리
+        # 기존: min(source_count * 2, 40) → source=1 이면 max_frags=2 고정 문제
+        if source_count == 1:
+            # 단일 source: fragment 수 기반, 최대 12개
+            max_frags = min(len(fragments), 12)
+        else:
+            # 멀티 source: diversity 보호 유지, 최솟값 6 보장
+            _base = source_count * 2 if is_fast_path else source_count * 3
+            _cap  = 40 if is_fast_path else 60
+            max_frags = min(max(_base, 6), _cap)
+
+        print(f"[PROPOSAL ENGINE][R2] Market max_frags={max_frags} "
+              f"source_count={source_count} is_fast_path={is_fast_path} "
+              f"fragment_pool={len(fragments)}")
 
         # [STEP 10-I.5.28-E8-R1] 소스 밸런싱 추적
         source_counts = {}
@@ -223,15 +237,31 @@ class ProposalEngine:
         current_len = 0
         is_fast_path = target_len <= 60.0
         source_count = len(source_ids) if source_ids else 1
-        max_frags = min(source_count * 2, 40) if is_fast_path else min(source_count * 3, 60)
+
+        # [STEP2C-R2] single-source / multi-source max_frags 분리
+        if source_count == 1:
+            max_frags = min(len(fragments), 12)
+        else:
+            _base = source_count * 2 if is_fast_path else source_count * 3
+            _cap  = 40 if is_fast_path else 60
+            max_frags = min(max(_base, 6), _cap)
+
+        print(f"[PROPOSAL ENGINE][R2] User max_frags={max_frags} "
+              f"source_count={source_count} is_fast_path={is_fast_path} "
+              f"fragment_pool={len(fragments)}")
 
         # [STEP 10-I.5.28-E8-R1] 소스 밸런싱 추적
         source_counts = {}
         is_multi = source_ids and len(source_ids) > 1
 
+        # [STEP2C-R2] B-mode edit_value<0.1 제외 카운터 (R3 진단용)
+        _low_edit_excluded = 0
+
         for f in sorted_frags:
             # 엄격한 필터링: edit_value가 0.1 미만이면 제외
-            if f.get("structural", {}).get("edit_value", 0.5) < 0.1: continue 
+            if f.get("structural", {}).get("edit_value", 0.5) < 0.1:
+                _low_edit_excluded += 1
+                continue
             f_dur = self._safe_duration(f)
             f_sid = f.get("source_id")
 
@@ -289,7 +319,8 @@ class ProposalEngine:
             selected = sorted(selected, key=lambda x: x.get("start", 0))
             current_len = sum(self._safe_duration(f) for f in selected)
 
-        print(f"[PROPOSAL ENGINE] User Proposal (B) - Selected {len(selected)} fragments, total {current_len:.1f}s")
+        print(f"[PROPOSAL ENGINE] User Proposal (B) - Selected {len(selected)} fragments, "
+              f"total {current_len:.1f}s, low_edit_excluded={_low_edit_excluded}")
         # [STEP 10-K-C1-R37] Disable Bridge Reinsertion to prevent contiguous fragment leakage
         # selected, bridge_details = self._insert_bridges(selected, fragments)
         bridge_details = []
