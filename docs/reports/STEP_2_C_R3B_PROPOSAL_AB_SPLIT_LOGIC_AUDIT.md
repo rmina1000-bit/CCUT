@@ -1,4 +1,4 @@
-# STEP 2-C-R3B: Proposal A/B Split Logic Audit
+﻿# STEP 2-C-R3B: Proposal A/B Split Logic Audit
 
 **작성일**: 2026-05-14
 **branch**: ccut-1.0.4-step9
@@ -65,7 +65,9 @@ SRC_616AEFBA의 동일한 Semantic Group (summary가 동일한 P001~P005 구간)
 | 분할 로직 존재 여부 | **확인됨** (Overlap Penalty + Contiguous Guard) |
 | 지그재그 분할 원인 | **의도된 동작** (A/B 차별화 정책의 결과) |
 | B가 2개인 이유 | P002, P004 선택 후 나머지(P001, P003, P005)는 시간상 인접하여 Guard에 의해 차단됨 |
-| 시스템 무결성 | **PASS** (버그가 아닌 정책에 따른 정교한 선택 결과임) |
+| 코드 동작 | **CODE-AS-DESIGNED** |
+| 제품 품질 | **PRODUCT HOLD** |
+| 사유 | A/B가 같은 고득점 semantic group을 홀짝 분할하므로, 기술적으로는 의도된 동작이나 사용자 체감상 A/B 다양성이 부족함 |
 
 ### 결론
 
@@ -77,4 +79,5 @@ Proposal B의 조각 수가 적은 것은 "점수 부족"이나 "에러"가 아�
 
 ---
 
-본 문서는 STEP 2-C-R3B Proposal A/B Split Logic 공식 감사 보고서입니다.
+본 문서는 STEP 2-C-R3B Proposal A/B Split Logic 공식 감사 보고서입니다. 다음 단계는 STEP 2-C-R4 Proposal Diversity Policy Fix이다.
+
