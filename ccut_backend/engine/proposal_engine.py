@@ -219,19 +219,44 @@ class ProposalEngine:
             "fallback_reason": fallback
         }
 
+    def _semantic_group_key(self, fragment_id: str) -> str:
+        """
+        [STEP 2-C-R4] SF_CD37EA_SRC_616AEFBA_P001 → SF_CD37EA_SRC_616AEFBA
+        마지막 _P001, _P002 같은 part suffix를 제거해 같은 semantic group으로 묶는다.
+        """
+        import re
+        return re.sub(r'_P\d+$', '', fragment_id or "")
+
     def _create_user_proposal(self, source_id, fragments, target_len, intent, source_ids=None, overlap_ids=None, story_context=None):
         """B: User Mode (User Intent 엄격 반영 + A안 중복 페널티)"""
-        target_len = self._safe_target_len(target_len, fragments)
-        
-        # [STEP 10-I.5.28-E8-R1] A안 중복 및 소스 밸런싱 반영 스코어링
-        def edit_score(f):
-            base = float(f.get("structural", {}).get("edit_value", 0.5))
-            # A안 중복 페널티 (soft: 0.7배)
-            if overlap_ids and f.get("fragment_id") in overlap_ids:
-                base *= 0.7
-            return base
+        # [STEP 2-C-R4] B-mode Diversity Scoring
+        # A안이 이미 선택한 group과 B가 현재 선택한 group을 추적하여 diversity 유도
+        a_fragment_ids = overlap_ids if overlap_ids else set()
+        a_group_keys = {self._semantic_group_key(fid) for fid in a_fragment_ids}
+        selected_b_group_keys = set()
 
-        sorted_frags = sorted(fragments, key=edit_score, reverse=True)
+        def edit_score(f):
+            base_val = float(f.get("structural", {}).get("edit_value", 0.5))
+            group_key = self._semantic_group_key(f.get("fragment_id"))
+            
+            score = base_val
+            
+            # Rule 2 & 3: A와 다른 semantic group 우선
+            if group_key in a_group_keys:
+                score *= 0.25   # A가 이미 쓴 group 강한 감점 (홀짝 분할 방지)
+            
+            # Rule 1: B 내부 반복 감점
+            if group_key in selected_b_group_keys:
+                score *= 0.3    # B 내부 반복 감점
+            
+            # Rule 3: 새로운 group 보너스
+            if group_key not in a_group_keys and group_key not in selected_b_group_keys:
+                score *= 1.15   # 새로운 group 보너스
+                
+            return score
+
+        # 정렬 기준: 1. b_score 내림차순, 2. start 오름차순 (결정론 유지)
+        sorted_frags = sorted(fragments, key=lambda x: (edit_score(x), -x.get("start", 0)), reverse=True)
         
         selected = []
         current_len = 0
@@ -246,7 +271,7 @@ class ProposalEngine:
             _cap  = 40 if is_fast_path else 60
             max_frags = min(max(_base, 6), _cap)
 
-        print(f"[PROPOSAL ENGINE][R2] User max_frags={max_frags} "
+        print(f"[PROPOSAL ENGINE][R4] User(Diversity) max_frags={max_frags} "
               f"source_count={source_count} is_fast_path={is_fast_path} "
               f"fragment_pool={len(fragments)}")
 
@@ -258,6 +283,10 @@ class ProposalEngine:
         _low_edit_excluded = 0
 
         for f in sorted_frags:
+            # [STEP 2-C-R4] 실시간 점수 재계산 (selected_b_group_keys 반영)
+            # 단, sorted_frags가 이미 정렬되어 있으므로 여기서는 필터링 위주로 동작
+            f_group_key = self._semantic_group_key(f.get("fragment_id"))
+            
             # 엄격한 필터링: edit_value가 0.1 미만이면 제외
             if f.get("structural", {}).get("edit_value", 0.5) < 0.1:
                 _low_edit_excluded += 1
@@ -279,8 +308,58 @@ class ProposalEngine:
                 if self._is_contiguous_to_selected(f, selected):
                     continue
                 selected.append(f)
+                selected_b_group_keys.add(f_group_key) # [R4] 그룹 추적
                 current_len += f_dur
                 source_counts[f_sid] = source_counts.get(f_sid, 0) + 1
+
+        # [STEP 2-C-R4-R1] B Exclusive Group Fallback Fix
+        b_group_keys = {self._semantic_group_key(f.get("fragment_id")) for f in selected}
+        exclusive_groups = b_group_keys - a_group_keys
+
+        if not exclusive_groups and fragments:
+            print(f"[PROPOSAL ENGINE][R4-R1] No exclusive groups in B. Attempting fallback from pool (size={len(fragments)})")
+            
+            # A에 없는 그룹 중 edit_value가 가장 높은 후보 찾기 (전체 pool 대상)
+            fallback_candidates = []
+            for f in fragments:
+                g_key = self._semantic_group_key(f.get("fragment_id"))
+                if g_key in a_group_keys:
+                    continue
+                
+                f_struct = f.get("structural") or {}
+                f_ev = float(f_struct.get("edit_value", 0.0))
+                f_dur = self._safe_duration(f)
+                
+                if f_ev >= 0.05 and f_dur > 0:
+                    fallback_candidates.append(f)
+            
+            # 정렬: edit_value 내림차순, start 오름차순
+            fallback_candidates = sorted(fallback_candidates, key=lambda x: (float(x.get("structural", {}).get("edit_value", 0.0)), -x.get("start", 0)), reverse=True)
+            
+            if fallback_candidates:
+                best_fallback = fallback_candidates[0]
+                fb_dur = self._safe_duration(best_fallback)
+                fb_id = best_fallback.get("fragment_id")
+                
+                # 1. duration cap 여유가 있으면 추가 (1.2배까지 허용)
+                if current_len + fb_dur <= target_len * 1.2:
+                     selected.append(best_fallback)
+                     print(f"[PROPOSAL ENGINE][R4-R1] Fallback added unique group fragment: {fb_id} (ev={best_fallback.get('structural', {}).get('edit_value')})")
+                # 2. 여유 없으면 가장 낮은 점수 조각과 교체 (B-mode scoring 기준)
+                elif selected:
+                    weakest_idx = 0
+                    min_score = 999.0
+                    for i, f in enumerate(selected):
+                        # edit_score는 내부함수이므로 접근 가능
+                        s = edit_score(f)
+                        if s < min_score:
+                            min_score = s
+                            weakest_idx = i
+                    
+                    print(f"[PROPOSAL ENGINE][R4-R1] Fallback replacing weakest to ensure diversity: {selected[weakest_idx].get('fragment_id')} -> {fb_id}")
+                    selected[weakest_idx] = best_fallback
+            else:
+                print("[PROPOSAL ENGINE][R4-R1] NO_EXCLUSIVE_GROUP_CANDIDATE: Could not find any fragments outside A's groups with ev >= 0.05")
 
         # [STEP 10-I.5.17] Fallback: Intent 매칭 결과가 비어있을 경우 구제 로직
         fallback = None
