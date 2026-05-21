@@ -52,9 +52,30 @@ class WhisperAdapter(BaseAdapter, ASRProvider):
 
         호출 시점에 engine 모듈을 import (순환 방지).
         """
-        self._ensure_loaded()
-        from engine.ai_engine import transcribe_full_then_split
-        return transcribe_full_then_split(self._model, video_path, fragments)
+        try:
+            self._ensure_loaded()
+            from engine.ai_engine import transcribe_full_then_split
+            result = transcribe_full_then_split(self._model, video_path, fragments)
+            provider_error = None
+        except Exception as e:
+            result = {
+                "fragment_transcripts": {f["fragment_id"]: "" for f in fragments},
+                "all_segments": [],
+                "fragment_words": {f["fragment_id"]: [] for f in fragments},
+                "words": []
+            }
+            provider_error = str(e)
+
+        rejected_fragments = {}
+        for frag_id, text in result.get("fragment_transcripts", {}).items():
+            if not text or not text.strip():
+                rejected_fragments[frag_id] = "empty_text"
+
+        result["provider"] = "whisper"
+        result["provider_error"] = provider_error
+        result["rejected_fragments"] = rejected_fragments
+
+        return result
 
     def health_check(self) -> HealthStatus:
         return HealthStatus(

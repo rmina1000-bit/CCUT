@@ -163,70 +163,37 @@ async def upload_video(background_tasks: BackgroundTasks, file: UploadFile = Fil
             source_id = existing.source_id
             print(f"[UPLOAD] Fingerprint HIT: {fingerprint} -> source_id={source_id}")
             
-            # [STEP 10-I.5.18] Registry 상태 초기화 또는 복구
-            if source_id not in _fragment_job_registry:
-                # DB에 이미 결과가 있는지 확인
-                proposals = bams.get_proposals(source_id)
-                if proposals:
+            # [STEP 2-D-R5] Smart Cache Reanalysis: 품질 체크 및 재분석 트리거
+            quality = bams.get_analysis_quality(source_id)
+            print(f"[UPLOAD] Analysis Quality check: {quality}")
+
+            if quality.get("needs_asr_reanalysis"):
+                fragments = bams.get_fragments_by_source(source_id)
+                if fragments:
+                    print(f"[UPLOAD] Triggering Smart Reanalysis for {source_id} (Reason: {quality['reason']})")
                     _fragment_job_registry[source_id] = {
-                        "status": "ANALYSIS_COMPLETE",
-                        "progress": 100,
-                        "stage": "proposal_generation",
+                        "status": "ANALYSIS_RUNNING",
+                        "progress": 30,
+                        "stage": "smart_reanalysis",
                         "source_id": source_id,
                         "error": None,
                         "timing": init_job_timing()
                     }
                     _fragment_job_registry[source_id]["timing"]["upload_start"] = time.time()
-                else:
-                    # 기존 분석 결과가 없거나 불완전한 경우 -> 재분석 트리거
-                    fragments = bams.get_fragments_by_source(source_id)
-                    if fragments:
-                        stage = bams.get_analysis_stage(source_id)
-                        print(f"[UPLOAD] Re-triggering analysis for incomplete source: {source_id} (Stage: {stage})")
-                        _fragment_job_registry[source_id] = {
-                            "status": "ANALYSIS_RUNNING",
-                            "progress": 30,
-                            "stage": f"reanalysis_{stage}",
-                            "source_id": source_id,
-                            "error": None,
-                            "timing": init_job_timing()
-                        }
-                        _fragment_job_registry[source_id]["timing"]["upload_start"] = time.time()
-                        background_tasks.add_task(_background_whisper, source_id, abs_path, fragments)
-                        background_tasks.add_task(_background_panorama, source_id, abs_path, fragments)
-                        background_tasks.add_task(_background_signal_analysis, source_id, abs_path, fragments)
-                    else:
-                        # 소스는 있지만 조각이 없는 경우 -> PENDING으로 두어 /generate-fragments 유도
-                        _fragment_job_registry[source_id] = {
-                            "status": "PENDING",
-                            "progress": 0,
-                            "source_id": source_id,
-                            "error": None,
-                            "timing": init_job_timing()
-                        }
-                        _fragment_job_registry[source_id]["timing"]["upload_start"] = time.time()
-            else:
-                # 기존에 FAILED 상태였다면 재시도를 위해 초기화 및 재실행
-                job = _fragment_job_registry[source_id]
-                if job.get("status") == "FAILED":
-                    print(f"[UPLOAD] Resetting FAILED state for reused source: {source_id}")
-                    fragments = bams.get_fragments_by_source(source_id)
-                    if fragments:
-                        job.update({
-                            "status": "ANALYSIS_RUNNING",
-                            "progress": 30,
-                            "stage": "retry_after_failure",
-                            "error": None
-                        })
-                        background_tasks.add_task(_background_whisper, source_id, abs_path, fragments)
-                        background_tasks.add_task(_background_panorama, source_id, abs_path, fragments)
-                        background_tasks.add_task(_background_signal_analysis, source_id, abs_path, fragments)
-                    else:
-                        job.update({
-                            "status": "PENDING",
-                            "progress": 0,
-                            "error": None
-                        })
+                    background_tasks.add_task(_background_whisper, source_id, abs_path, fragments)
+                    background_tasks.add_task(_background_signal_analysis, source_id, abs_path, fragments)
+                    
+                    return {
+                        "status": "SOURCE_REUSED_REANALYSIS_STARTED",
+                        "file_name": safe_name,
+                        "source_id": source_id,
+                        "hash_value": fingerprint,
+                        "cache_hit": True,
+                        "reused": True,
+                        "reanalysis": True,
+                        "quality": quality,
+                        "static_url": f"/static/uploads/{Path(existing.file_path).name}"
+                    }
 
             return {
                 "status": "SOURCE_REUSED",
@@ -331,6 +298,24 @@ def _background_whisper(source_id: str, video_path: str, fragments: list):
         transcripts  = whisper_res.get("fragment_transcripts", {})
         all_segments = whisper_res.get("all_segments", [])
         fragment_words = whisper_res.get("fragment_words", {})
+        provider = whisper_res.get("provider", "whisper")
+        provider_error = whisper_res.get("provider_error")
+        rejected_fragments = whisper_res.get("rejected_fragments", {})
+
+        # [R14] Read current model_size from config.yaml for metadata persistence
+        import yaml as _yaml
+        _config_path = os.path.join(os.path.dirname(__file__), "ai", "config.yaml")
+        try:
+            with open(_config_path, encoding="utf-8") as _f:
+                _cfg = _yaml.safe_load(_f)
+            current_model_size = (
+                _cfg.get("providers", {})
+                    .get("whisper", {})
+                    .get("config", {})
+                    .get("model_size", "unknown")
+            )
+        except Exception:
+            current_model_size = "unknown"
 
         # [STEP 10-I.5.3] Store raw segments as evidence for Text-first Semantic Path
         for i, seg in enumerate(all_segments):
@@ -370,13 +355,34 @@ def _background_whisper(source_id: str, video_path: str, fragments: list):
         for frag in fragments:
             try:
                 # [STEP 2] Evidence Board 필드 병합 (Text)
-                bams.update_evidence(frag["fragment_id"], {
+                frag_id = frag["fragment_id"]
+                transcript = frag["intelligence"]["transcript"]
+                
+                # [ASR-CONTRACT-R4] Determine fallback reason and metadata
+                fb_reason = None
+                if not transcript:
+                    if frag_id in rejected_fragments:
+                        fb_reason = "asr_rejected:" + rejected_fragments[frag_id]
+                    elif provider_error:
+                        fb_reason = "asr_provider_error:" + provider_error
+                    else:
+                        fb_reason = "asr_empty"
+
+                bams.update_evidence(frag_id, {
                     "source_id": source_id,
-                    "worker_name": "whisper",
+                    "worker_name": provider or "asr",
                     "start": frag["start_time"],
                     "end": frag["end_time"],
-                    "text": frag["intelligence"]["transcript"],
-                    "confidence": 0.9
+                    "text": transcript,
+                    "confidence": 0.9,
+                    "fallback_reason": fb_reason,
+                    "metadata_json": {
+                        "asr_provider": provider,
+                        "asr_model_size": current_model_size,  # [R14]
+                        "asr_provider_error": provider_error,
+                        "asr_rejected_reason": rejected_fragments.get(frag_id),
+                        "asr_has_text": bool(transcript)
+                    }
                 })
                 bams.flush_evidence(frag["fragment_id"])
 
@@ -706,21 +712,61 @@ async def generate_fragments(
         }
 
     if not is_new_source and proposals:
-        print(f"[GENERATE-FRAGMENTS] Already Analyzed: {source_id}")
-        existing_job = _fragment_job_registry.get(source_id)
-        upload_start = existing_job["timing"]["upload_start"] if (existing_job and "timing" in existing_job) else time.time()
-        
-        _fragment_job_registry[source_id] = {
-            "progress": 100,
-            "status": "ANALYSIS_COMPLETE",
-            "stage": "proposal_generation",
-            "source_id": source_id,
-            "fragment_count": len(fragments),
-            "analysis_mode": analysis_mode,
-            "error": None,
-            "timing": init_job_timing()
-        }
-        _fragment_job_registry[source_id]["timing"]["upload_start"] = upload_start
+        # [STEP 2-D-R5] Smart Cache Reanalysis: 캐시 히트 시에도 품질 미달이면 재분석
+        quality = bams.get_analysis_quality(source_id)
+        if quality.get("needs_asr_reanalysis"):
+            print(f"[GENERATE-FRAGMENTS] Low Quality detected ({quality['reason']}). Triggering Reanalysis.")
+            
+            existing_job = _fragment_job_registry.get(source_id)
+            upload_start = existing_job["timing"]["upload_start"] if (existing_job and "timing" in existing_job) else time.time()
+            
+            _fragment_job_registry[source_id] = {
+                "progress": 30,
+                "status": "ANALYSIS_RUNNING",
+                "stage": "smart_reanalysis",
+                "source_id": source_id,
+                "fragment_count": len(fragments),
+                "analysis_mode": analysis_mode,
+                "error": None,
+                "timing": init_job_timing()
+            }
+            _fragment_job_registry[source_id]["timing"]["upload_start"] = upload_start
+            
+            background_tasks.add_task(_background_whisper, source_id, resolved_path, fragments)
+            background_tasks.add_task(_background_signal_analysis, source_id, resolved_path, fragments)
+
+            safe_fragments = [
+                {k: v for k, v in f.items() if k != "_internal_video_path"}
+                for f in fragments
+            ]
+
+            return {
+                "status": "L1_REANALYSIS_STARTED",
+                "progress": 30,
+                "source_id": source_id,
+                "count": len(safe_fragments),
+                "fragments": safe_fragments,
+                "analysis_mode": analysis_mode,
+                "reanalysis": True,
+                "quality": quality,
+                "pipeline": "virtual_clipping_v1.0.6"
+            }
+        else:
+            print(f"[GENERATE-FRAGMENTS] Already Analyzed: {source_id}")
+            existing_job = _fragment_job_registry.get(source_id)
+            upload_start = existing_job["timing"]["upload_start"] if (existing_job and "timing" in existing_job) else time.time()
+            
+            _fragment_job_registry[source_id] = {
+                "progress": 100,
+                "status": "ANALYSIS_COMPLETE",
+                "stage": "proposal_generation",
+                "source_id": source_id,
+                "fragment_count": len(fragments),
+                "analysis_mode": analysis_mode,
+                "error": None,
+                "timing": init_job_timing()
+            }
+            _fragment_job_registry[source_id]["timing"]["upload_start"] = upload_start
     else:
         existing_job = _fragment_job_registry.get(source_id)
         upload_start = existing_job["timing"]["upload_start"] if (existing_job and "timing" in existing_job) else time.time()
@@ -767,6 +813,36 @@ async def get_fragment_analysis_status(source_id: str, background_tasks: Backgro
         # [STEP 10-I.5.18] Registry 에 없으면 DB에서 상태 복원 또는 재분석 트리거
         proposals = bams.get_proposals(source_id)
         if proposals:
+            # [STEP 2-D-R5] Smart Cache Reanalysis check during status restoration
+            quality = bams.get_analysis_quality(source_id)
+            if quality.get("needs_asr_reanalysis"):
+                fragments = bams.get_fragments_by_source(source_id)
+                source = bams.get_source(source_id)
+                if source and os.path.exists(source.file_path) and fragments:
+                    print(f"[STATUS] Low Quality detected for {source_id}. Triggering Reanalysis during restoration.")
+                    job = {
+                        "status": "ANALYSIS_RUNNING",
+                        "progress": 30,
+                        "stage": "smart_reanalysis",
+                        "source_id": source_id,
+                        "error": None,
+                        "timing": init_job_timing()
+                    }
+                    _fragment_job_registry[source_id] = job
+                    job["timing"]["upload_start"] = time.time()
+                    
+                    background_tasks.add_task(_background_whisper, source_id, source.file_path, fragments)
+                    background_tasks.add_task(_background_signal_analysis, source_id, source.file_path, fragments)
+                    
+                    return {
+                        "status": "ANALYSIS_RUNNING",
+                        "progress": 30,
+                        "stage": "smart_reanalysis",
+                        "source_id": source_id,
+                        "error": None,
+                        "quality": quality
+                    }
+
             job = {
                 "status": "ANALYSIS_COMPLETE",
                 "progress": 100,
@@ -1605,7 +1681,7 @@ async def get_render_result(export_input_id: str):
         return {"status": "NOT_FOUND", "export_input_id": export_input_id}
     return result
 
-@app.get("/generate-fragments/status/{source_id}")
+@app.get("/generate-fragments/status-legacy/{source_id}")
 async def get_fragment_status_legacy(source_id: str):
     # 하위 호환성 유지용 (필요 시)
     return await get_fragment_analysis_status(source_id)

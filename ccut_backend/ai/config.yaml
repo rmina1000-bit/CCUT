@@ -1,5 +1,5 @@
 active:
-  asr: qwen3_asr
+  asr: whisper
   vl: null
   intent: null
 
@@ -7,7 +7,7 @@ providers:
   whisper:
     adapter: WhisperAdapter
     config:
-      model_size: tiny
+      model_size: base
       device: cpu
 
   qwen3_asr:

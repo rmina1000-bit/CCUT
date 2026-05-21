@@ -237,6 +237,18 @@ class BAMSManager:
             
             # [STEP 2] Fallback Reason 정합성 보완
             incoming_fallback = data.get("fallback_reason")
+
+            # ASR 성공 시 stale asr_* fallback 제거
+            if data.get("text") and str(data.get("text")).strip():
+                current_fb = ev.fallback_reason or ""
+                if (
+                    current_fb.startswith("asr_rejected:")
+                    or current_fb.startswith("asr_provider_error:")
+                    or current_fb == "asr_empty"
+                ):
+                    ev.fallback_reason = None
+
+            # 일반 fallback 업데이트 (None이 아닐 때만)
             if incoming_fallback is not None:
                 ev.fallback_reason = incoming_fallback
             
@@ -272,6 +284,8 @@ class BAMSManager:
                     "fallback_reason": e.fallback_reason,
                     "worker_sources": e.worker_sources,
                     "metadata": e.metadata_json,
+                    "metadata_json": e.metadata_json,
+                    "worker_name": (e.worker_sources or {}).get("text") or (e.metadata_json or {}).get("asr_provider") or (e.worker_sources or {}).get("audio_energy") or "unknown",
                     "last_updated": str(e.last_updated)
                 } for e in evidences
             ]
@@ -298,6 +312,136 @@ class BAMSManager:
             
         coverage = total_covered / source.duration
         return round(min(1.0, coverage), 4)
+
+    def get_analysis_quality(self, source_id: str):
+        """[STEP 2-D-R5] 분석 품질 확인 및 재분석 필요성 판단"""
+        with SessionLocal() as db:
+            from archive.db_models import EvidenceTable, SemanticFragmentTable, ProposalTable, FragmentTable
+            
+            evidences = db.query(EvidenceTable).filter_by(source_id=source_id).all()
+            sfs = db.query(SemanticFragmentTable).filter_by(source_id=source_id).all()
+            proposals = db.query(ProposalTable).filter_by(source_id=source_id).all()
+            vfs = db.query(FragmentTable).filter_by(source_id=source_id).all()
+            
+            # Text Coverage 계산 (text가 있는 row들만 대상)
+            text_intervals = sorted([(e.start, e.end) for e in evidences if e.text and e.text.strip()])
+            text_covered = 0.0
+            last_end = 0.0
+            for start, end in text_intervals:
+                if end <= last_end: continue
+                effective_start = max(start, last_end)
+                text_covered += (end - effective_start)
+                last_end = end
+            
+            source = self.get_source(source_id)
+            text_coverage_ratio = (text_covered / source.duration) if source and source.duration else 0.0
+            
+            import yaml, os
+            config_path = os.path.join(os.path.dirname(__file__), "..", "ai", "config.yaml")
+            try:
+                with open(config_path, encoding="utf-8") as f:
+                    cfg = yaml.safe_load(f)
+                current_provider = (cfg.get("active") or {}).get("asr", "unknown")
+                # [R14] read current model_size
+                current_model_size = (
+                    cfg.get("providers", {})
+                       .get("whisper", {})
+                       .get("config", {})
+                       .get("model_size", "unknown")
+                )
+            except Exception:
+                current_provider = "unknown"
+                current_model_size = "unknown"
+
+            stored_providers = set()
+            stored_model_sizes = set()  # [R14]
+            for e in evidences:
+                meta = e.metadata_json or {}
+                p = meta.get("asr_provider")
+                if p:
+                    stored_providers.add(p)
+                m = meta.get("asr_model_size")  # [R14]
+                if m:
+                    stored_model_sizes.add(m)
+
+            # 우선순위 1: OLD_ASR_CONTRACT
+            has_old_contract = any(not e.text and e.fallback_reason is None for e in evidences)
+
+            # 우선순위 2: ASR_PROVIDER_CHANGED
+            provider_changed = (
+                current_provider != "unknown"
+                and bool(stored_providers)
+                and current_provider not in stored_providers
+                and text_coverage_ratio < 0.5
+            )
+
+            # 우선순위 3: ASR_MODEL_MISSING
+            # whisper 결과는 있지만 model_size 정보가 없는 구버전 결과
+            model_missing = (
+                current_provider == "whisper"
+                and "whisper" in stored_providers
+                and not stored_model_sizes
+                and text_coverage_ratio > 0   # text가 존재하는 경우에만 (empty는 별도 처리)
+            )
+
+            # 우선순위 4: ASR_MODEL_CHANGED
+            # model_size 정보가 있고 현재 config와 다른 경우
+            model_changed = (
+                bool(stored_model_sizes)
+                and current_model_size != "unknown"
+                and current_model_size not in stored_model_sizes
+            )
+
+            # 우선순위 5: ASR_ATTEMPTED_NO_TEXT (same provider/model) → 재분석 금지
+            asr_attempted_no_text = (
+                not has_old_contract
+                and not provider_changed
+                and not model_missing
+                and not model_changed
+                and text_coverage_ratio < 0.5
+                and any(
+                    (e.fallback_reason or "").startswith("asr_rejected")
+                    or (e.fallback_reason or "").startswith("asr_empty")
+                    or (e.fallback_reason or "").startswith("asr_provider_error")
+                    for e in evidences
+                )
+            )
+
+            needs_asr = has_old_contract or provider_changed or model_missing or model_changed
+
+            reasons = []
+            if has_old_contract:  reasons.append("OLD_ASR_CONTRACT")
+            if provider_changed:  reasons.append("ASR_PROVIDER_CHANGED")
+            if model_missing:     reasons.append("ASR_MODEL_MISSING")
+            if model_changed:     reasons.append("ASR_MODEL_CHANGED")
+            if asr_attempted_no_text and not needs_asr:
+                reasons.append("ASR_ATTEMPTED_NO_TEXT")
+
+            next_action = (
+                "REANALYZE_WITH_CURRENT_ASR_PROVIDER" if (has_old_contract or provider_changed)
+                else "REANALYZE_WITH_CURRENT_ASR_MODEL" if (model_missing or model_changed)
+                else "REVIEW_ASR_PROVIDER" if asr_attempted_no_text
+                else "OK"
+            )
+            
+            return {
+                "source_id": source_id,
+                "fragment_count": len(vfs),
+                "evidence_count": len(evidences),
+                "text_rows": len(text_intervals),
+                "text_coverage_ratio": round(text_coverage_ratio, 4),
+                "semantic_count": len(sfs),
+                "proposal_count": len(proposals),
+                "needs_asr_reanalysis": needs_asr,
+                "needs_semantic_regeneration": needs_asr,
+                "needs_proposal_regeneration": needs_asr,
+                "reason": reasons,
+                "current_provider": current_provider,
+                "stored_asr_providers": list(stored_providers),
+                "current_model_size": current_model_size,          # [R14]
+                "stored_asr_model_sizes": list(stored_model_sizes), # [R14]
+                "next_action": next_action
+            }
 
     # ═══════════════════════════════════════════════════════════════════
     #   [STEP 3] Quick Scan / Hypothesis
