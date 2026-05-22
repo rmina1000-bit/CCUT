@@ -2,6 +2,60 @@ import datetime
 import math
 import uuid
 
+def snap_fragment_end_to_sentence(
+    fragment_end_sec: float,
+    word_timestamps: list,
+    max_snap_sec: float = 2.0,
+    min_fragment_duration_sec: float = 3.0,
+    fragment_start_sec: float = 0.0
+) -> tuple:
+    """
+    fragment end를 가장 가까운 문장 끝점으로 보정한다.
+
+    Returns:
+        (adjusted_end_sec: float, snap_applied: bool)
+    """
+    SENTENCE_END_CHARS = set("。.?!…")
+    KOREAN_ENDINGS = ("다", "요", "죠", "네", "까", "나")
+
+    if not word_timestamps:
+        return fragment_end_sec, False
+
+    # 문장 끝점 후보 수집
+    candidates = []
+    for w in word_timestamps:
+        word = (w.get("word") or "").strip()
+        end = w.get("end")
+        if end is None:
+            continue
+        if word and (
+            word[-1] in SENTENCE_END_CHARS
+            or word.endswith(KOREAN_ENDINGS)
+        ):
+            candidates.append(end)
+
+    if not candidates:
+        return fragment_end_sec, False
+
+    # fragment_end_sec에 가장 가까운 후보 선택 (max_snap_sec 이내)
+    best = None
+    best_gap = float("inf")
+    for c in candidates:
+        gap = abs(fragment_end_sec - c)
+        if gap <= max_snap_sec and gap < best_gap:
+            best = c
+            best_gap = gap
+
+    if best is None:
+        return fragment_end_sec, False
+
+    # 보정 후 조각 길이 검증 (최소 길이 보장)
+    adjusted = best
+    if (adjusted - fragment_start_sec) < min_fragment_duration_sec:
+        return fragment_end_sec, False
+
+    return adjusted, True
+
 class SemanticFragmentGenerator:
     """
     [STEP 4] Semantic Fragment Generator (v3.2.1)
@@ -9,13 +63,47 @@ class SemanticFragmentGenerator:
     """
     def __init__(self, bams):
         self.bams = bams
+        self._snap_debug = {}   # ← 추가
 
     def generate(self, source_id: str):
+        _r16_loaded = True  # proof flag
         # 1. Evidence 조회
         evidences = self.bams.get_evidence_board(source_id)
         if not evidences:
             print(f"[SEMANTIC] No evidence found for {source_id}")
             return []
+
+        import json as _json
+
+        # word_map 구성 (DB 기반 조회)
+        word_map = {}
+        source_fragments = self.bams.get_fragments_by_source(source_id)
+        for vf in source_fragments:
+            fid = vf.get("fragment_id")
+            intel = vf.get("intelligence") or {}
+            if isinstance(intel, str):
+                try:
+                    intel = _json.loads(intel)
+                except Exception:
+                    intel = {}
+            word_map[fid] = intel
+
+        for ev in evidences:
+            fid = ev.get("fragment_id")
+            if fid and fid not in word_map:
+                intel = ev.get("intelligence") or {}
+                if isinstance(intel, str):
+                    try:
+                        intel = _json.loads(intel)
+                    except Exception:
+                        intel = {}
+                # Fallback if intelligence is missing
+                if not intel:
+                    intel = {
+                        "words": ev.get("words", []),
+                        "transcript": ev.get("text", "")
+                    }
+                word_map[fid] = intel
 
         # 2. Quick Scan / default_intent_seed 조회
         quick_scan = self.bams.get_quick_scan(source_id)
@@ -76,6 +164,15 @@ class SemanticFragmentGenerator:
         # 8. Merge / Split 보정 (2s ~ 60s)
         final_fragments = self.apply_merge_split(final_fragments, boundaries, total_duration)
 
+        # R16-R1: Sentence Boundary Snap 보정
+        final_fragments, snap_debug = self.apply_sentence_boundary_snap(
+            final_fragments,
+            word_map,
+            evidences=evidences,
+            total_duration=total_duration
+        )
+        self._snap_debug = snap_debug   # instance에 보관
+
         # [STEP 4 RESYNC] 최종 경계 확정 후 fallback_reason 재계산
         for frag in final_fragments:
             frag["fallback_reason"] = self.calculate_fallback_reason(frag)
@@ -90,6 +187,407 @@ class SemanticFragmentGenerator:
         print(f"[SEMANTIC] {len(final_fragments)} fragments generated for {source_id}")
         return final_fragments
 
+    def apply_sentence_boundary_snap(
+        self,
+        final_fragments: list,
+        word_map: dict,
+        evidences: list = None,
+        max_snap_sec: float = 2.0,
+        min_fragment_duration_sec: float = 3.0,
+        total_duration: float = 0.0
+    ) -> tuple:
+        snap_applied_count = 0
+        debug_rows = []
+
+        # Global candidates collection to match the audit exactly
+        puncs = ('.', '?', '!', '…', '。')
+        korean_endings = ('다', '요', '죠', '네', '까', '나')
+        all_endings = puncs + korean_endings
+
+        global_candidates = {}          # snap 허용 후보 (real_words 계열만)
+        global_candidates_derived = {}  # diagnostic 전용 (fragment_transcript_end 등)
+        global_candidate_details = []
+
+        source_id = final_fragments[0]["source_id"] if final_fragments else None
+        if source_id:
+            # 1. Fetch fragments
+            source_fragments = self.bams.get_fragments_by_source(source_id)
+            for vf in source_fragments:
+                intel = vf.get("intelligence") or {}
+                if isinstance(intel, str):
+                    try:
+                        import json as _json
+                        intel = _json.loads(intel)
+                    except Exception:
+                        intel = {}
+                
+                transcript = intel.get("transcript", "") or ""
+                words = intel.get("words", []) or []
+
+                if words:
+                    current_pos = 0
+                    word_spans = []
+                    for w in words:
+                        w_text = w.get("word", "")
+                        if not w_text:
+                            continue
+                        pos = transcript.find(w_text, current_pos)
+                        if pos != -1:
+                            word_spans.append({
+                                "word": w_text,
+                                "start_time": w.get("start"),
+                                "end_time": w.get("end"),
+                                "start_char": pos,
+                                "end_char": pos + len(w_text)
+                            })
+                            current_pos = pos + len(w_text)
+                        else:
+                            pos = transcript.find(w_text)
+                            if pos != -1:
+                                word_spans.append({
+                                    "word": w_text,
+                                    "start_time": w.get("start"),
+                                    "end_time": w.get("end"),
+                                    "start_char": pos,
+                                    "end_char": pos + len(w_text)
+                                })
+                                current_pos = pos + len(w_text)
+
+                    if not word_spans:
+                        for w in words:
+                            w_text = w.get("word", "").strip()
+                            t = w.get("end")
+                            if t is not None and w_text:
+                                is_end = w_text[-1] in all_endings or w_text[-1] in korean_endings
+                                if is_end:
+                                    rounded = round(t, 2)
+                                    if rounded not in global_candidates:
+                                        global_candidates[rounded] = t
+                                    global_candidate_details.append({
+                                        "time": round(t, 3),
+                                        "word": w_text,
+                                        "source_fragment_id": vf.get("fragment_id") or "",
+                                        "source_type": "word_ending",
+                                        "reason": "fallback_ending"
+                                    })
+                    else:
+                        for ws in word_spans:
+                            w_text = ws["word"].strip()
+                            end_char = ws["end_char"]
+                            t = ws["end_time"]
+                            if t is None:
+                                continue
+
+                            is_end = False
+                            reason_str = ""
+                            source_type = "word_ending"
+
+                            # Condition 1: Word text ends with punctuation or ending
+                            if w_text and w_text[-1] in all_endings:
+                                is_end = True
+                                reason_str = "word_ends_with_ending"
+                                source_type = "word_ending"
+
+                            # Condition 2: Followed by punctuation in transcript
+                            if not is_end:
+                                lookahead = transcript[end_char:end_char+5].strip()
+                                if lookahead and lookahead[0] in puncs:
+                                    is_end = True
+                                    reason_str = "followed_by_punctuation"
+                                    source_type = "followed_by_punctuation"
+
+                            # Condition 3: Word text ends with Korean ending
+                            if not is_end:
+                                if w_text and w_text[-1] in korean_endings:
+                                    is_end = True
+                                    reason_str = "word_ends_with_korean_ending"
+                                    source_type = "word_ending"
+
+                            if is_end:
+                                rounded = round(t, 2)
+                                if rounded not in global_candidates:
+                                    global_candidates[rounded] = t
+                                global_candidate_details.append({
+                                    "time": round(t, 3),
+                                    "word": w_text,
+                                    "source_fragment_id": vf.get("fragment_id") or "",
+                                    "source_type": source_type,
+                                    "reason": reason_str
+                                })
+
+                # B. Fragment transcript end
+                if transcript:
+                    transcript_stripped = transcript.strip()
+                    if transcript_stripped and transcript_stripped[-1] in all_endings:
+                        t = vf.get("end_time")
+                        if t is not None:
+                            rounded = round(t, 2)
+                            if rounded not in global_candidates_derived:
+                                global_candidates_derived[rounded] = t
+                            global_candidate_details.append({
+                                "time": round(t, 3),
+                                "word": transcript_stripped[-20:],
+                                "source_fragment_id": vf.get("fragment_id") or "",
+                                "source_type": "fragment_transcript_end",
+                                "reason": "fragment_transcript_end"
+                            })
+
+            # 2. Fetch evidence board text ends
+            if evidences:
+                for ev in evidences:
+                    text = ev.get("text")
+                    if text:
+                        text_stripped = text.strip()
+                        if text_stripped and text_stripped[-1] in all_endings:
+                            t = ev.get("end")
+                            if t is not None:
+                                rounded = round(t, 2)
+                                if rounded not in global_candidates_derived:
+                                    global_candidates_derived[rounded] = t
+                                global_candidate_details.append({
+                                    "time": round(t, 3),
+                                    "word": text_stripped[-20:],
+                                    "source_fragment_id": ev.get("fragment_id") or "",
+                                    "source_type": "evidence_board_text_end",
+                                    "reason": "evidence_board_text_end"
+                                })
+
+        for i, frag in enumerate(final_fragments):
+            # 이 fragment에 해당하는 words 수집 (real_words count 용)
+            words = []
+            for ref in frag.get("semantic", {}).get("evidence_refs", []):
+                intel = word_map.get(ref, {})
+                words.extend(intel.get("words", []) or [])
+            words.sort(key=lambda x: x.get("start", 0.0))
+
+            # evidence text fallback: text를 공백 분리 후 마지막 단어들을 word 후보로 추가 (debug only)
+            ev_words = []
+            if evidences:
+                for ref in frag.get("semantic", {}).get("evidence_refs", []):
+                    for ev in evidences:
+                        if ev.get("fragment_id") == ref and ev.get("text"):
+                            text = ev["text"].strip()
+                            tokens = text.split()
+                            # 각 토큰을 가상 word timestamp로 변환
+                            # start/end를 fragment 구간에 균등 분배 (근사값)
+                            if tokens:
+                                frag_dur = frag["end"] - frag["start"]
+                                step = frag_dur / len(tokens)
+                                for j, tok in enumerate(tokens):
+                                    ev_words.append({
+                                        "word": tok,
+                                        "start": round(frag["start"] + j * step, 3),
+                                        "end": round(frag["start"] + (j + 1) * step, 3)
+                                    })
+
+            # real_words 기반으로 이 fragment에 속한 sentence end 후보 계산
+            curr_candidates = []
+            for ref in frag.get("semantic", {}).get("evidence_refs", []):
+                intel = word_map.get(ref, {})
+                ref_words = intel.get("words", []) or []
+                transcript = intel.get("transcript", "") or ""
+
+                if ref_words:
+                    current_pos = 0
+                    word_spans = []
+                    for w in ref_words:
+                        w_text = w.get("word", "")
+                        if not w_text:
+                            continue
+                        pos = transcript.find(w_text, current_pos)
+                        if pos != -1:
+                            word_spans.append({
+                                "word": w_text,
+                                "start_time": w.get("start"),
+                                "end_time": w.get("end"),
+                                "start_char": pos,
+                                "end_char": pos + len(w_text)
+                            })
+                            current_pos = pos + len(w_text)
+                        else:
+                            pos = transcript.find(w_text)
+                            if pos != -1:
+                                word_spans.append({
+                                    "word": w_text,
+                                    "start_time": w.get("start"),
+                                    "end_time": w.get("end"),
+                                    "start_char": pos,
+                                    "end_char": pos + len(w_text)
+                                })
+                                current_pos = pos + len(w_text)
+
+                    if not word_spans:
+                        for w in ref_words:
+                            w_text = w.get("word", "").strip()
+                            t = w.get("end")
+                            if t is not None and w_text:
+                                is_end = w_text[-1] in all_endings or w_text[-1] in korean_endings
+                                if is_end:
+                                    curr_candidates.append(t)
+                    else:
+                        for ws in word_spans:
+                            w_text = ws["word"].strip()
+                            end_char = ws["end_char"]
+                            t = ws["end_time"]
+                            if t is None:
+                                continue
+
+                            is_end = False
+                            if w_text and w_text[-1] in all_endings:
+                                is_end = True
+                            if not is_end:
+                                lookahead = transcript[end_char:end_char+5].strip()
+                                if lookahead and lookahead[0] in puncs:
+                                    is_end = True
+                            if not is_end:
+                                if w_text and w_text[-1] in korean_endings:
+                                    is_end = True
+
+                            if is_end:
+                                curr_candidates.append(t)
+
+            # snap 후보 입력 용: global_candidates를 dict 형식의 리스트로 가공
+            snap_input_candidates = [{"word": ".", "end": t} for t in global_candidates.values()]
+
+            # snap 후보 계산 (global candidates 기반)
+            adjusted_end, snap_applied = snap_fragment_end_to_sentence(
+                fragment_end_sec=frag["end"],
+                word_timestamps=snap_input_candidates,
+                max_snap_sec=max_snap_sec,
+                min_fragment_duration_sec=min_fragment_duration_sec,
+                fragment_start_sec=frag["start"]
+            )
+
+            # audit과 동일한 방식으로 nearest_candidate, gap_sec 계산 (global candidates 기반)
+            nearest_candidate = None
+            gap_sec = None
+            if global_candidates:
+                nearest_candidate = min(global_candidates.values(), key=lambda c: abs(frag["end"] - c))
+                nearest_candidate = round(nearest_candidate, 3)
+                gap_sec = round(abs(frag["end"] - nearest_candidate), 4)
+
+            candidate_source = "real_words" if words else "none"
+            actual_delta_sec = round(abs(adjusted_end - frag["end"]), 4)
+
+            row = {
+                "fragment_id": frag["fragment_id"],
+                "old_end": frag["end"],
+                "adjusted_end": adjusted_end if snap_applied else frag["end"],
+                "actual_delta_sec": actual_delta_sec if snap_applied else 0.0,
+                "word_count": len(words),                  # 실제 Whisper words 수
+                "ev_word_count": len(ev_words),            # evidence text 가상 토큰 수 (debug only)
+                "candidate_count": len(curr_candidates),   # 이 fragment에 속하는 real_words 기반 sentence end 후보 수
+                "candidate_source": candidate_source,
+                "nearest_candidate": nearest_candidate,
+                "gap_sec": gap_sec,
+                "snap_applied": snap_applied,
+                "skip_reason": None
+            }
+
+            print(f"[SNAP] frag={frag['fragment_id'][:30]} word_count={len(words)} ev_word_count={len(ev_words)} global_candidates={len(global_candidates)}")
+
+            if snap_applied:
+                if actual_delta_sec < 0.05:
+                    snap_applied = False
+                    row["snap_applied"] = False
+                    row["adjusted_end"] = frag["end"]
+                    row["actual_delta_sec"] = 0.0
+                    row["skip_reason"] = "NO_OP_SAME_END"
+                elif candidate_source != "real_words":
+                    snap_applied = False
+                    row["snap_applied"] = False
+                    row["adjusted_end"] = frag["end"]
+                    row["actual_delta_sec"] = 0.0
+                    row["skip_reason"] = "NOT_REAL_WORDS"
+
+            old_end = frag["end"]
+
+            if not snap_applied:
+                if not row["skip_reason"]:
+                    if row["gap_sec"] is not None and row["gap_sec"] > max_snap_sec:
+                        row["skip_reason"] = "GAP_EXCEEDS_MAX_SNAP"
+                    elif row["candidate_count"] == 0:
+                        # candidate_count가 0이더라도 global_candidate와 매칭될 순 있으나 skip 사유 처리를 위해 설정
+                        row["skip_reason"] = "NO_CANDIDATE"
+                    else:
+                        # 가드 조건 판단
+                        next_frag = final_fragments[i + 1] if i + 1 < len(final_fragments) else None
+                        if next_frag is not None:
+                            if next_frag["end"] - adjusted_end < min_fragment_duration_sec:
+                                row["skip_reason"] = "NEXT_FRAGMENT_TOO_SHORT"
+                            else:
+                                row["skip_reason"] = "SNAP_FUNC_INTERNAL_GUARD"
+                        else:
+                            if total_duration > 0 and adjusted_end > total_duration:
+                                row["skip_reason"] = "EXCEEDS_TOTAL_DURATION"
+                            else:
+                                row["skip_reason"] = "SNAP_FUNC_INTERNAL_GUARD"
+                print(f"[SNAP] SKIPPED: {frag['fragment_id'][:30]} end={frag['end']:.2f} (reason={row['skip_reason']})")
+            else:
+                next_frag = final_fragments[i + 1] if i + 1 < len(final_fragments) else None
+
+                # 안전 조건 검사
+                if next_frag is not None:
+                    # 다음 fragment duration이 3초 미만이 되면 snap 금지
+                    if next_frag["end"] - adjusted_end < min_fragment_duration_sec:
+                        row["skip_reason"] = "NEXT_FRAGMENT_TOO_SHORT"
+                        row["snap_applied"] = False
+                        row["adjusted_end"] = frag["end"]
+                        row["actual_delta_sec"] = 0.0
+                        print(f"[SNAP] SKIPPED: {frag['fragment_id'][:30]} end={frag['end']:.2f} (next duration guard)")
+                        debug_rows.append(row)
+                        continue
+                else:
+                    # 마지막 fragment: total_duration 초과 금지
+                    if total_duration > 0 and adjusted_end > total_duration:
+                        row["skip_reason"] = "EXCEEDS_TOTAL_DURATION"
+                        row["snap_applied"] = False
+                        row["adjusted_end"] = frag["end"]
+                        row["actual_delta_sec"] = 0.0
+                        print(f"[SNAP] SKIPPED: {frag['fragment_id'][:30]} end={frag['end']:.2f} (total duration guard)")
+                        debug_rows.append(row)
+                        continue
+
+                # 적용
+                frag["end"] = adjusted_end
+                frag["structural"]["duration"] = round(adjusted_end - frag["start"], 2)
+
+                # 연쇄 정합성: 다음 fragment start도 맞춤
+                if next_frag is not None:
+                    next_frag["start"] = adjusted_end
+                    next_frag["structural"]["duration"] = round(next_frag["end"] - next_frag["start"], 2)
+
+                snap_applied_count += 1
+                row["snap_applied"] = True
+                row["adjusted_end"] = adjusted_end
+                row["actual_delta_sec"] = actual_delta_sec
+                print(f"[SNAP] APPLIED: {frag['fragment_id'][:30]} end {old_end:.2f} → {adjusted_end:.2f}")
+
+            debug_rows.append(row)
+
+        # 32.0~34.5초 구간 global candidate details만 추출해서 snap_debug에 포함
+        global_candidates_32_34 = [
+            d for d in global_candidate_details
+            if 32.0 <= d["time"] <= 34.5
+        ]
+        global_candidates_32_34.sort(key=lambda x: x["time"])
+
+        debug_info = {
+            "r16_loaded": True,
+            "called": True,
+            "snap_applied_count": snap_applied_count,
+            "real_word_candidate_count": len(global_candidates),
+            "derived_candidate_count": len(global_candidates_derived),
+            "global_candidates_32_34": global_candidates_32_34,   # ← detail 포함
+            "rows": debug_rows
+        }
+
+        print(f"[SNAP] snap_applied_count: {snap_applied_count}")
+        for row in debug_rows:
+            print(f"[SNAP] {row}")
+
+        return final_fragments, debug_info
+
     def create_fragment_boundaries(self, evidences, total_duration=0):
         """
         [STEP 10-I.5.3] Text-first 경계 후보 생성
@@ -100,17 +598,26 @@ class SemanticFragmentGenerator:
         """
         boundaries = [0.0]
         
-        # 1. Whisper Segments (Text-first priority)
-        whisper_evs = [e for e in evidences if e.get("worker_name") == "whisper_segments"]
-        for ev in whisper_evs:
-            boundaries.append(ev["start"])
-            boundaries.append(ev["end"])
+        # 1. Text-based Segments (Text-first priority)
+        text_evs = []
+        for ev in evidences:
+            is_text_evidence = (
+                bool(ev.get("text")) and (
+                    ev.get("worker_name") in ["whisper", "qwen3_asr", "asr", "whisper_segments"]
+                    or (ev.get("worker_sources") or {}).get("text") in ["whisper", "qwen3_asr", "asr", "whisper_segments"]
+                    or (ev.get("metadata_json") or {}).get("asr_provider")
+                )
+            )
+            if is_text_evidence:
+                text_evs.append(ev)
+                boundaries.append(ev["start"])
+                boundaries.append(ev["end"])
 
         # 2. Scene Changes & Silence from all evidences
         for ev in evidences:
             wn = ev.get("worker_name", "unknown")
             # [STEP 10-I.5.9] Skip boundaries from workers that just repeat VF boundaries
-            if wn in ["audio", "signal_processor", "whisper"]:
+            if wn in ["audio", "signal_processor", "whisper", "qwen3_asr", "asr"]:
                 continue
 
             if ev.get("scene_change") and isinstance(ev["scene_change"], list):
@@ -122,12 +629,12 @@ class SemanticFragmentGenerator:
                 boundaries.append(ev["start"])
 
         # [STEP 10-I.5.9] Boundary source distribution log
-        whisper_boundary_count = len(whisper_evs) * 2
+        text_boundary_count = len(text_evs) * 2
         scene_boundary_count = sum(len(ev["scene_change"]) for ev in evidences if ev.get("scene_change") and isinstance(ev["scene_change"], list))
-        silence_boundary_count = sum(1 for ev in evidences if (ev.get("worker_name") == "silence" or (ev.get("audio_energy", 1.0) < 0.05 and ev.get("worker_name") not in ["audio", "signal_processor", "whisper"])))
+        silence_boundary_count = sum(1 for ev in evidences if (ev.get("worker_name") == "silence" or (ev.get("audio_energy", 1.0) < 0.05 and ev.get("worker_name") not in ["audio", "signal_processor", "whisper", "qwen3_asr", "asr"])))
         
         print(f"[SEMANTIC DIAGNOSTIC] Boundary distribution:")
-        print(f"  - whisper_segments: {whisper_boundary_count}")
+        print(f"  - text/asr segments: {text_boundary_count}")
         print(f"  - scene_change: {scene_boundary_count}")
         print(f"  - silence/audio_energy: {silence_boundary_count}")
 

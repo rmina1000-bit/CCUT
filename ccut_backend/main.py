@@ -1180,6 +1180,7 @@ async def generate_semantic_fragments(source_id: str, refresh_proposals: bool = 
         "role_distribution": role_dist,
         "fragments": fragments,
         "proposal_refreshed": False,
+        "snap_debug": getattr(gen, "_snap_debug", {}),   # ← 추가
     }
 
     # [STEP 1-R5] 명시적 요청 시에만 Proposal 재생성 — 자동 연동 금지
