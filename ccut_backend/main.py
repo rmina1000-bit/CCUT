@@ -39,7 +39,8 @@ from report.generator import report_gen
 # ═══════════════════════════════════════════════════════════════════
 
 BACKEND_DIR = Path(__file__).resolve().parent
-STORAGE_DIR = Path(os.getenv("CCUT_STORAGE_DIR", str(BACKEND_DIR / ".." / "storage")))
+PROJECT_ROOT = BACKEND_DIR.parent
+STORAGE_DIR = Path(os.getenv("CCUT_STORAGE_DIR", str(PROJECT_ROOT / "storage"))).resolve()
 UPLOAD_DIR = STORAGE_DIR / "uploads"
 APP_BASE_URL = os.getenv("CCUT_BASE_URL", "http://127.0.0.1:8000").rstrip("/")
 
@@ -71,6 +72,7 @@ def build_dubbing_static_url(filename: str) -> str:
 app = FastAPI()
 
 app.mount("/static", StaticFiles(directory=str(STORAGE_DIR)), name="static")
+app.mount("/api/static", StaticFiles(directory=str(STORAGE_DIR)), name="api_static")
 
 app.add_middleware(
     CORSMiddleware,
@@ -154,7 +156,6 @@ async def upload_video(background_tasks: BackgroundTasks, file: UploadFile = Fil
         abs_path = str(save_path.resolve())
         
         # [STEP 1] Fingerprint 생성 및 중복 확인
-        from engine.video_engine import video_engine
         fingerprint = video_engine.generate_fingerprint(abs_path)
         
         existing = bams.get_source_by_hash(fingerprint)
@@ -502,8 +503,6 @@ def _background_panorama(source_id: str, video_path: str, fragments: list):
     백그라운드: PBE용 파노라마 썸네일 생성
     조각별 대표 프레임 1장씩 추출 → storage/panorama/{fragment_id}.jpg
     """
-    from engine.video_engine import video_engine
-
     print(f"[PANORAMA BG] source_id={source_id} 파노라마 생성 시작")
     for frag in fragments:
         try:
@@ -2161,7 +2160,6 @@ async def login():
 
 # ── 레거시 /analyze 엔드포인트 (호환성 유지) ─────────────────────────
 
-from engine.video_engine import video_engine
 from engine.ai_engine import ai_engine
 from engine.ai_pipeline import ai_pipeline
 

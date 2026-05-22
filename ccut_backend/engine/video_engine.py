@@ -10,7 +10,11 @@ class VideoEngine:
     def __init__(self, storage_path=None):
         if storage_path is None:
             # Fallback for direct imports, but main.py should pass it.
-            storage_path = os.getenv("CCUT_STORAGE_DIR", "./storage")
+            curr = Path(__file__).resolve()
+            while curr.name != "ccut_backend" and curr.parent != curr:
+                curr = curr.parent
+            project_root = curr.parent if curr.name == "ccut_backend" else Path(__file__).resolve().parent.parent.parent
+            storage_path = Path(os.getenv("CCUT_STORAGE_DIR", str(project_root / "storage"))).resolve()
             
         self.storage_path = Path(storage_path)
         self.fragments_path = self.storage_path / "fragments"
