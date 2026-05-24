@@ -1,0 +1,2993 @@
+{
+  "source_id": "SRC_B1A26714",
+  "source_duration": 221.2517,
+  "parent_semantic_fragment_count": 11,
+  "micro_candidate_count": 48,
+  "candidates_per_parent": 4.363636363636363,
+  "generation_time_sec": 0.0019603999971877784,
+  "scoring_time_sec": 0.0011394999892218038,
+  "estimated_json_kb": 72.189453125,
+  "intent_not_distinguishable": false,
+  "fail_reasons": [
+    "speech_human_priority_insufficient_data",
+    "visual_human_priority_no_visual_evidence"
+  ],
+  "data_insufficient": true,
+  "speech_insufficient": true,
+  "visual_insufficient": true,
+  "scenery_reduction_effect": "WEAK_EFFECT",
+  "pace_success": true,
+  "balanced_success": true,
+  "score_formulas": {
+    "speech_human_priority": "base_score * 0.2 + speech_score * 0.5 + weak_human_score * 0.3 - scenery_score * 0.2 - filler_score * 0.3",
+    "visual_human_priority": "base_score * 0.2 + visual_human_confidence * 0.8",
+    "reduce_scenery": "base_score * 0.2 + speech_score * 0.3 + motion_score_normalized * 0.3 + (1.0 - scenery_score) * 0.5",
+    "fast_pace": "base_score * 0.1 + motion_score_normalized * 0.4 + (1.0 - silence_normalized) * 0.3 + (1.0 - (duration - 2.0) / 4.0) * 0.2",
+    "balanced_sources": "base_score - (0.3 * count_selected_from_same_parent) - (0.4 * count_selected_from_same_source)"
+  },
+  "intent_results": {
+    "speech_human_priority": {
+      "coarse": {
+        "selected_ids": [
+          "SF_EE7ED8_SRC_B1A26714_P008",
+          "SF_EE7ED8_SRC_B1A26714_P007"
+        ],
+        "total_duration": 40.0,
+        "avg_motion": 0.0,
+        "avg_speech": 0.0,
+        "avg_scenery": 0.7465,
+        "avg_weak_human": 0.8700000000000001,
+        "avg_visual_human": 0.0,
+        "clip_count": 2,
+        "avg_clip_duration": 20.0
+      },
+      "micro": {
+        "selected_ids": [
+          "MC_SF_EE7ED8_SRC_B1A26714_P007_001",
+          "MC_SF_EE7ED8_SRC_B1A26714_P007_002",
+          "MC_SF_EE7ED8_SRC_B1A26714_P007_003",
+          "MC_SF_EE7ED8_SRC_B1A26714_P008_004",
+          "MC_SF_EE7ED8_SRC_B1A26714_P009_001",
+          "MC_SF_EE7ED8_SRC_B1A26714_P007_004"
+        ],
+        "total_duration": 30.08208300000001,
+        "avg_motion": 0.0,
+        "avg_speech": 0.0,
+        "avg_scenery": 0.7489650111995236,
+        "avg_weak_human": 0.9216008911350987,
+        "avg_visual_human": 0.0,
+        "clip_count": 6,
+        "avg_clip_duration": 5.013680500000002,
+        "selection_reason": "Selected 6 clips totaling 30.08s (target 30.0s). Avg speech: 0.00%, scenery: 74.90%, weak human: 92.16%, visual human: 0.00%. Prioritized ASR text speech ratio & weak human voice cues, penalized filler words and scenery."
+      }
+    },
+    "visual_human_priority": {
+      "coarse": {
+        "selected_ids": [
+          "SF_EE7ED8_SRC_B1A26714_P001",
+          "SF_EE7ED8_SRC_B1A26714_P002"
+        ],
+        "total_duration": 40.0,
+        "avg_motion": 0.0,
+        "avg_speech": 0.0,
+        "avg_scenery": 0.6559166666666667,
+        "avg_weak_human": 0.37277777777777776,
+        "avg_visual_human": 0.0,
+        "clip_count": 2,
+        "avg_clip_duration": 20.0
+      },
+      "micro": {
+        "selected_ids": [
+          "MC_SF_EE7ED8_SRC_B1A26714_P001_001",
+          "MC_SF_EE7ED8_SRC_B1A26714_P001_002",
+          "MC_SF_EE7ED8_SRC_B1A26714_P001_003",
+          "MC_SF_EE7ED8_SRC_B1A26714_P001_004",
+          "MC_SF_EE7ED8_SRC_B1A26714_P002_001",
+          "MC_SF_EE7ED8_SRC_B1A26714_P002_002",
+          "MC_SF_EE7ED8_SRC_B1A26714_P002_003"
+        ],
+        "total_duration": 32.544792,
+        "avg_motion": 0.0,
+        "avg_speech": 0.0,
+        "avg_scenery": 0.6198953483709468,
+        "avg_weak_human": 0.18361415297005648,
+        "avg_visual_human": 0.0,
+        "clip_count": 7,
+        "avg_clip_duration": 4.649256,
+        "selection_reason": "Selected 7 clips totaling 32.54s (target 30.0s). Avg speech: 0.00%, scenery: 61.99%, weak human: 18.36%, visual human: 0.00%. Prioritized visual human features (such as faces or speaker detections)."
+      }
+    },
+    "reduce_scenery": {
+      "coarse": {
+        "selected_ids": [
+          "SF_EE7ED8_SRC_B1A26714_P001",
+          "SF_EE7ED8_SRC_B1A26714_P002"
+        ],
+        "total_duration": 40.0,
+        "avg_motion": 0.0,
+        "avg_speech": 0.0,
+        "avg_scenery": 0.6559166666666667,
+        "avg_weak_human": 0.37277777777777776,
+        "avg_visual_human": 0.0,
+        "clip_count": 2,
+        "avg_clip_duration": 20.0
+      },
+      "micro": {
+        "selected_ids": [
+          "MC_SF_EE7ED8_SRC_B1A26714_P002_002",
+          "MC_SF_EE7ED8_SRC_B1A26714_P002_003",
+          "MC_SF_EE7ED8_SRC_B1A26714_P002_004",
+          "MC_SF_EE7ED8_SRC_B1A26714_P001_004",
+          "MC_SF_EE7ED8_SRC_B1A26714_P002_001",
+          "MC_SF_EE7ED8_SRC_B1A26714_P001_001",
+          "MC_SF_EE7ED8_SRC_B1A26714_P001_002"
+        ],
+        "total_duration": 34.143563,
+        "avg_motion": 0.0,
+        "avg_speech": 0.0,
+        "avg_scenery": 0.6096957160124151,
+        "avg_weak_human": 0.14184270624207174,
+        "avg_visual_human": 0.0,
+        "clip_count": 7,
+        "avg_clip_duration": 4.877651857142857,
+        "selection_reason": "Selected 7 clips totaling 34.14s (target 30.0s). Avg speech: 0.00%, scenery: 60.97%, weak human: 14.18%, visual human: 0.00%. Prioritized motion and speech presence, heavily penalized scenic static background clips."
+      }
+    },
+    "fast_pace": {
+      "coarse": {
+        "selected_ids": [
+          "SF_EE7ED8_SRC_B1A26714_P001",
+          "SF_EE7ED8_SRC_B1A26714_P002"
+        ],
+        "total_duration": 40.0,
+        "avg_motion": 0.0,
+        "avg_speech": 0.0,
+        "avg_scenery": 0.6559166666666667,
+        "avg_weak_human": 0.37277777777777776,
+        "avg_visual_human": 0.0,
+        "clip_count": 2,
+        "avg_clip_duration": 20.0
+      },
+      "micro": {
+        "selected_ids": [
+          "MC_SF_EE7ED8_SRC_B1A26714_P002_002",
+          "MC_SF_EE7ED8_SRC_B1A26714_P001_003",
+          "MC_SF_EE7ED8_SRC_B1A26714_P002_005",
+          "MC_SF_EE7ED8_SRC_B1A26714_P010_001",
+          "MC_SF_EE7ED8_SRC_B1A26714_P004_002",
+          "MC_SF_EE7ED8_SRC_B1A26714_P004_005",
+          "MC_SF_EE7ED8_SRC_B1A26714_P002_003",
+          "MC_SF_EE7ED8_SRC_B1A26714_P004_003",
+          "MC_SF_EE7ED8_SRC_B1A26714_P002_004"
+        ],
+        "total_duration": 31.285895,
+        "avg_motion": 0.0,
+        "avg_speech": 0.0,
+        "avg_scenery": 0.672668284142103,
+        "avg_weak_human": 0.38594525775912775,
+        "avg_visual_human": 0.0,
+        "clip_count": 9,
+        "avg_clip_duration": 3.4762105555555554,
+        "selection_reason": "Selected 9 clips totaling 31.29s (target 30.0s). Avg speech: 0.00%, scenery: 67.27%, weak human: 38.59%, visual human: 0.00%. Prioritized shorter clip durations and active audio/motion energy segments."
+      }
+    },
+    "balanced_sources": {
+      "coarse": {
+        "selected_ids": [
+          "SF_EE7ED8_SRC_B1A26714_P001",
+          "SF_EE7ED8_SRC_B1A26714_P002"
+        ],
+        "total_duration": 40.0,
+        "avg_motion": 0.0,
+        "avg_speech": 0.0,
+        "avg_scenery": 0.6559166666666667,
+        "avg_weak_human": 0.37277777777777776,
+        "avg_visual_human": 0.0,
+        "clip_count": 2,
+        "avg_clip_duration": 20.0
+      },
+      "micro": {
+        "selected_ids": [
+          "MC_SF_EE7ED8_SRC_B1A26714_P001_001",
+          "MC_SF_EE7ED8_SRC_B1A26714_P002_001",
+          "MC_SF_EE7ED8_SRC_B1A26714_P003_001",
+          "MC_SF_EE7ED8_SRC_B1A26714_P004_001",
+          "MC_SF_EE7ED8_SRC_B1A26714_P005_001",
+          "MC_SF_EE7ED8_SRC_B1A26714_P006_001"
+        ],
+        "total_duration": 30.594625000000004,
+        "avg_motion": 0.0,
+        "avg_speech": 0.0,
+        "avg_scenery": 0.762221658101709,
+        "avg_weak_human": 0.370711767943988,
+        "avg_visual_human": 0.0,
+        "clip_count": 6,
+        "avg_clip_duration": 5.099104166666668,
+        "selection_reason": "Selected 6 clips totaling 30.59s (target 30.0s). Avg speech: 0.00%, scenery: 76.22%, weak human: 37.07%, visual human: 0.00%. Dynamically penalized repetitive parent fragments to distribute selections evenly."
+      }
+    }
+  },
+  "coarse_vs_micro_comparison": {
+    "speech_human_priority": {
+      "duration_diff": -9.917916999999989,
+      "motion_improvement": 0.0,
+      "speech_ratio_improvement": 0.0,
+      "weak_human_score_improvement": 0.05160089113509858,
+      "visual_human_score_improvement": 0.0,
+      "scenery_reduction": -0.0024650111995235813,
+      "clip_duration_reduction_ratio": 0.7493159749999998
+    },
+    "visual_human_priority": {
+      "duration_diff": -7.455207999999999,
+      "motion_improvement": 0.0,
+      "speech_ratio_improvement": 0.0,
+      "weak_human_score_improvement": -0.18916362480772128,
+      "visual_human_score_improvement": 0.0,
+      "scenery_reduction": 0.03602131829571986,
+      "clip_duration_reduction_ratio": 0.7675371999999999
+    },
+    "reduce_scenery": {
+      "duration_diff": -5.856437,
+      "motion_improvement": 0.0,
+      "speech_ratio_improvement": 0.0,
+      "weak_human_score_improvement": -0.23093507153570603,
+      "visual_human_score_improvement": 0.0,
+      "scenery_reduction": 0.04622095065425158,
+      "clip_duration_reduction_ratio": 0.7561174071428571
+    },
+    "fast_pace": {
+      "duration_diff": -8.714105,
+      "motion_improvement": 0.0,
+      "speech_ratio_improvement": 0.0,
+      "weak_human_score_improvement": 0.013167479981349983,
+      "visual_human_score_improvement": 0.0,
+      "scenery_reduction": -0.016751617475436298,
+      "clip_duration_reduction_ratio": 0.8261894722222223
+    },
+    "balanced_sources": {
+      "duration_diff": -9.405374999999996,
+      "motion_improvement": 0.0,
+      "speech_ratio_improvement": 0.0,
+      "weak_human_score_improvement": -0.0020660098337897392,
+      "visual_human_score_improvement": 0.0,
+      "scenery_reduction": -0.10630499143504235,
+      "clip_duration_reduction_ratio": 0.7450447916666667
+    }
+  },
+  "project_level_simulation": {
+    "project_level_success": true,
+    "total_selected_duration": 60.120527,
+    "unique_source_count": 27,
+    "selected_source_count": 14,
+    "diversity_score": 0.5185185185185185,
+    "source_distribution": {
+      "SRC_CB9107CA": {
+        "duration": 4.509354,
+        "ratio": 0.0750052307425715
+      },
+      "SRC_616AEFBA": {
+        "duration": 4.0,
+        "ratio": 0.06653301625250224
+      },
+      "SRC_1574D87F": {
+        "duration": 4.0,
+        "ratio": 0.06653301625250224
+      },
+      "SRC_6BED729E": {
+        "duration": 2.479312,
+        "ratio": 0.041239026397755965
+      },
+      "SRC_55FFF73F": {
+        "duration": 4.0,
+        "ratio": 0.06653301625250224
+      },
+      "SRC_CE55C9BF": {
+        "duration": 5.459208,
+        "ratio": 0.09080439364744756
+      },
+      "SRC_12C414A7": {
+        "duration": 3.732813,
+        "ratio": 0.06208882699913792
+      },
+      "SRC_B4F09612": {
+        "duration": 5.961111,
+        "ratio": 0.09915267376149246
+      },
+      "SRC_0BE783EC": {
+        "duration": 4.0,
+        "ratio": 0.06653301625250224
+      },
+      "SRC_AA6C87D2": {
+        "duration": 4.0,
+        "ratio": 0.06653301625250224
+      },
+      "SRC_B669588A": {
+        "duration": 4.0,
+        "ratio": 0.06653301625250224
+      },
+      "SRC_2BE80EE2": {
+        "duration": 4.0,
+        "ratio": 0.06653301625250224
+      },
+      "SRC_6F5DEBE2": {
+        "duration": 5.978729,
+        "ratio": 0.09944571843157662
+      },
+      "SRC_634C81D9": {
+        "duration": 4.0,
+        "ratio": 0.06653301625250224
+      }
+    },
+    "selected_clips": [
+      "MC_SF_2B336C_SRC_CB9107CA_P001_001",
+      "MC_SF_7D2BA1_SRC_616AEFBA_P001_001",
+      "MC_SF_770436_SRC_1574D87F_P001_001",
+      "MC_SF_BB4C82_SRC_6BED729E_P001_001",
+      "MC_SF_BC8CAE_SRC_55FFF73F_P001_001",
+      "MC_SF_1EE04B_SRC_CE55C9BF_P001_001",
+      "MC_SF_C68EF0_SRC_12C414A7_P001_001",
+      "MC_SF_B6F3C6_SRC_B4F09612_P001_001",
+      "MC_SF_E9F93B_SRC_0BE783EC_P001_001",
+      "MC_SF_628324_SRC_AA6C87D2_P001_001",
+      "MC_SF_71EE04_SRC_B669588A_P001_001",
+      "MC_SF_60C421_SRC_2BE80EE2_P001_001",
+      "MC_SF_2978A0_SRC_6F5DEBE2_P001_001",
+      "MC_SF_B7132F_SRC_634C81D9_P001_001"
+    ]
+  },
+  "micro_candidates": [
+    {
+      "candidate_id": "MC_SF_EE7ED8_SRC_B1A26714_P001_001",
+      "parent_semantic_fragment_id": "SF_EE7ED8_SRC_B1A26714_P001",
+      "source_id": "SRC_B1A26714",
+      "time_range": "0.00s - 4.78s (duration: 4.78s)",
+      "text_match_summary": "No text transcription matches.",
+      "visual_signals": {
+        "keyframe_exists": true,
+        "keyframe_path": "/static/thumbnails/VF1_SRC_B1A26714.jpg",
+        "scene_changes_detected": [
+          1.5815,
+          2.760708,
+          3.637958,
+          4.778042
+        ],
+        "visual_human_detected": false,
+        "visual_human_confidence": 0.0
+      },
+      "raw_measurements": {
+        "motion_score_raw": 0.0,
+        "silence_duration_raw": 0.0,
+        "evidence_count": 1
+      },
+      "normalized_scores": {
+        "speech_score": 0.0,
+        "motion_score_normalized": 0.0,
+        "scenery_score": 0.657,
+        "weak_human_score": 0.3800000000000002,
+        "highlight_score": 0.25725,
+        "filler_score": 0.0
+      },
+      "tag_reason": "General B-Roll",
+      "score_details_per_intent": {
+        "speech_human_priority": {
+          "score": 0.08260000000000006,
+          "calculation_log": "base(0.5)*0.2 + speech(0.00)*0.5 + weak_human(0.38)*0.3 - scenery(0.66)*0.2 - filler(0.00)*0.3"
+        },
+        "visual_human_priority": {
+          "score": 0.1,
+          "calculation_log": "base(0.5)*0.2 + visual_human(0.00)*0.8"
+        },
+        "reduce_scenery": {
+          "score": 0.27149999999999996,
+          "calculation_log": "base(0.5)*0.2 + speech(0.00)*0.3 + motion(0.00)*0.3 + (1.0 - scenery(0.66))*0.5"
+        },
+        "fast_pace": {
+          "score": 0.18827289999999997,
+          "calculation_log": "base(0.5)*0.1 + motion(0.00)*0.4 + (1.0 - silence(0.74))*0.3 + len_factor(0.31)*0.2"
+        },
+        "balanced_sources": {
+          "score": 0.5,
+          "calculation_log": "base(0.5) - parent_penalty(0.3 * 0) - source_penalty(0.4 * 0)"
+        }
+      }
+    },
+    {
+      "candidate_id": "MC_SF_EE7ED8_SRC_B1A26714_P001_002",
+      "parent_semantic_fragment_id": "SF_EE7ED8_SRC_B1A26714_P001",
+      "source_id": "SRC_B1A26714",
+      "time_range": "4.78s - 10.20s (duration: 5.43s)",
+      "text_match_summary": "No text transcription matches.",
+      "visual_signals": {
+        "keyframe_exists": true,
+        "keyframe_path": "/static/thumbnails/VF1_SRC_B1A26714.jpg",
+        "scene_changes_detected": [
+          4.778042,
+          6.753583,
+          7.916875,
+          9.277958,
+          9.830417,
+          10.204792
+        ],
+        "visual_human_detected": false,
+        "visual_human_confidence": 0.0
+      },
+      "raw_measurements": {
+        "motion_score_raw": 0.0,
+        "silence_duration_raw": 0.0,
+        "evidence_count": 1
+      },
+      "normalized_scores": {
+        "speech_score": 0.0,
+        "motion_score_normalized": 0.0,
+        "scenery_score": 0.657,
+        "weak_human_score": 0.3800000000000002,
+        "highlight_score": 0.25725,
+        "filler_score": 0.0
+      },
+      "tag_reason": "General B-Roll",
+      "score_details_per_intent": {
+        "speech_human_priority": {
+          "score": 0.08260000000000006,
+          "calculation_log": "base(0.5)*0.2 + speech(0.00)*0.5 + weak_human(0.38)*0.3 - scenery(0.66)*0.2 - filler(0.00)*0.3"
+        },
+        "visual_human_priority": {
+          "score": 0.1,
+          "calculation_log": "base(0.5)*0.2 + visual_human(0.00)*0.8"
+        },
+        "reduce_scenery": {
+          "score": 0.27149999999999996,
+          "calculation_log": "base(0.5)*0.2 + speech(0.00)*0.3 + motion(0.00)*0.3 + (1.0 - scenery(0.66))*0.5"
+        },
+        "fast_pace": {
+          "score": 0.15583750000000002,
+          "calculation_log": "base(0.5)*0.1 + motion(0.00)*0.4 + (1.0 - silence(0.74))*0.3 + len_factor(0.14)*0.2"
+        },
+        "balanced_sources": {
+          "score": 0.5,
+          "calculation_log": "base(0.5) - parent_penalty(0.3 * 0) - source_penalty(0.4 * 0)"
+        }
+      }
+    },
+    {
+      "candidate_id": "MC_SF_EE7ED8_SRC_B1A26714_P001_003",
+      "parent_semantic_fragment_id": "SF_EE7ED8_SRC_B1A26714_P001",
+      "source_id": "SRC_B1A26714",
+      "time_range": "10.20s - 13.19s (duration: 2.98s)",
+      "text_match_summary": "No text transcription matches.",
+      "visual_signals": {
+        "keyframe_exists": true,
+        "keyframe_path": "/static/thumbnails/VF1_SRC_B1A26714.jpg",
+        "scene_changes_detected": [
+          10.204792,
+          10.959812,
+          13.1855
+        ],
+        "visual_human_detected": false,
+        "visual_human_confidence": 0.0
+      },
+      "raw_measurements": {
+        "motion_score_raw": 0.0,
+        "silence_duration_raw": 0.0,
+        "evidence_count": 1
+      },
+      "normalized_scores": {
+        "speech_score": 0.0,
+        "motion_score_normalized": 0.0,
+        "scenery_score": 0.657,
+        "weak_human_score": 0.3800000000000002,
+        "highlight_score": 0.25725,
+        "filler_score": 0.0
+      },
+      "tag_reason": "General B-Roll",
+      "score_details_per_intent": {
+        "speech_human_priority": {
+          "score": 0.08260000000000006,
+          "calculation_log": "base(0.5)*0.2 + speech(0.00)*0.5 + weak_human(0.38)*0.3 - scenery(0.66)*0.2 - filler(0.00)*0.3"
+        },
+        "visual_human_priority": {
+          "score": 0.1,
+          "calculation_log": "base(0.5)*0.2 + visual_human(0.00)*0.8"
+        },
+        "reduce_scenery": {
+          "score": 0.27149999999999996,
+          "calculation_log": "base(0.5)*0.2 + speech(0.00)*0.3 + motion(0.00)*0.3 + (1.0 - scenery(0.66))*0.5"
+        },
+        "fast_pace": {
+          "score": 0.2781396,
+          "calculation_log": "base(0.5)*0.1 + motion(0.00)*0.4 + (1.0 - silence(0.74))*0.3 + len_factor(0.75)*0.2"
+        },
+        "balanced_sources": {
+          "score": 0.5,
+          "calculation_log": "base(0.5) - parent_penalty(0.3 * 0) - source_penalty(0.4 * 0)"
+        }
+      }
+    },
+    {
+      "candidate_id": "MC_SF_EE7ED8_SRC_B1A26714_P001_004",
+      "parent_semantic_fragment_id": "SF_EE7ED8_SRC_B1A26714_P001",
+      "source_id": "SRC_B1A26714",
+      "time_range": "13.19s - 20.00s (duration: 6.81s)",
+      "text_match_summary": "No text transcription matches.",
+      "visual_signals": {
+        "keyframe_exists": true,
+        "keyframe_path": "/static/thumbnails/VF2_SRC_B1A26714.jpg",
+        "scene_changes_detected": [
+          13.1855,
+          16.479917,
+          18.126917
+        ],
+        "visual_human_detected": false,
+        "visual_human_confidence": 0.0
+      },
+      "raw_measurements": {
+        "motion_score_raw": 0.0,
+        "silence_duration_raw": 0.0,
+        "evidence_count": 2
+      },
+      "normalized_scores": {
+        "speech_score": 0.0,
+        "motion_score_normalized": 0.0,
+        "scenery_score": 0.6125,
+        "weak_human_score": 0.08333333333333337,
+        "highlight_score": 0.29062499999999997,
+        "filler_score": 0.0
+      },
+      "tag_reason": "General B-Roll",
+      "score_details_per_intent": {
+        "speech_human_priority": {
+          "score": 0.002500000000000016,
+          "calculation_log": "base(0.5)*0.2 + speech(0.00)*0.5 + weak_human(0.08)*0.3 - scenery(0.61)*0.2 - filler(0.00)*0.3"
+        },
+        "visual_human_priority": {
+          "score": 0.1,
+          "calculation_log": "base(0.5)*0.2 + visual_human(0.00)*0.8"
+        },
+        "reduce_scenery": {
+          "score": 0.29374999999999996,
+          "calculation_log": "base(0.5)*0.2 + speech(0.00)*0.3 + motion(0.00)*0.3 + (1.0 - scenery(0.61))*0.5"
+        },
+        "fast_pace": {
+          "score": 0.09646249999999992,
+          "calculation_log": "base(0.5)*0.1 + motion(0.00)*0.4 + (1.0 - silence(0.71))*0.3 + len_factor(-0.20)*0.2"
+        },
+        "balanced_sources": {
+          "score": 0.5,
+          "calculation_log": "base(0.5) - parent_penalty(0.3 * 0) - source_penalty(0.4 * 0)"
+        }
+      }
+    },
+    {
+      "candidate_id": "MC_SF_EE7ED8_SRC_B1A26714_P002_001",
+      "parent_semantic_fragment_id": "SF_EE7ED8_SRC_B1A26714_P002",
+      "source_id": "SRC_B1A26714",
+      "time_range": "20.00s - 24.77s (duration: 4.77s)",
+      "text_match_summary": "No text transcription matches.",
+      "visual_signals": {
+        "keyframe_exists": true,
+        "keyframe_path": "/static/thumbnails/VF2_SRC_B1A26714.jpg",
+        "scene_changes_detected": [
+          20.209937,
+          24.767833
+        ],
+        "visual_human_detected": false,
+        "visual_human_confidence": 0.0
+      },
+      "raw_measurements": {
+        "motion_score_raw": 0.0,
+        "silence_duration_raw": 0.0,
+        "evidence_count": 2
+      },
+      "normalized_scores": {
+        "speech_score": 0.0,
+        "motion_score_normalized": 0.0,
+        "scenery_score": 0.6125,
+        "weak_human_score": 0.08333333333333337,
+        "highlight_score": 0.29062499999999997,
+        "filler_score": 0.0
+      },
+      "tag_reason": "General B-Roll",
+      "score_details_per_intent": {
+        "speech_human_priority": {
+          "score": 0.002500000000000016,
+          "calculation_log": "base(0.5)*0.2 + speech(0.00)*0.5 + weak_human(0.08)*0.3 - scenery(0.61)*0.2 - filler(0.00)*0.3"
+        },
+        "visual_human_priority": {
+          "score": 0.1,
+          "calculation_log": "base(0.5)*0.2 + visual_human(0.00)*0.8"
+        },
+        "reduce_scenery": {
+          "score": 0.29374999999999996,
+          "calculation_log": "base(0.5)*0.2 + speech(0.00)*0.3 + motion(0.00)*0.3 + (1.0 - scenery(0.61))*0.5"
+        },
+        "fast_pace": {
+          "score": 0.19879585,
+          "calculation_log": "base(0.5)*0.1 + motion(0.00)*0.4 + (1.0 - silence(0.71))*0.3 + len_factor(0.31)*0.2"
+        },
+        "balanced_sources": {
+          "score": 0.5,
+          "calculation_log": "base(0.5) - parent_penalty(0.3 * 0) - source_penalty(0.4 * 0)"
+        }
+      }
+    },
+    {
+      "candidate_id": "MC_SF_EE7ED8_SRC_B1A26714_P002_002",
+      "parent_semantic_fragment_id": "SF_EE7ED8_SRC_B1A26714_P002",
+      "source_id": "SRC_B1A26714",
+      "time_range": "24.77s - 28.06s (duration: 3.30s)",
+      "text_match_summary": "No text transcription matches.",
+      "visual_signals": {
+        "keyframe_exists": true,
+        "keyframe_path": "/static/thumbnails/VF2_SRC_B1A26714.jpg",
+        "scene_changes_detected": [
+          24.767833,
+          28.063562
+        ],
+        "visual_human_detected": false,
+        "visual_human_confidence": 0.0
+      },
+      "raw_measurements": {
+        "motion_score_raw": 0.0,
+        "silence_duration_raw": 0.0,
+        "evidence_count": 1
+      },
+      "normalized_scores": {
+        "speech_score": 0.0,
+        "motion_score_normalized": 0.0,
+        "scenery_score": 0.5680000000000001,
+        "weak_human_score": 0.0,
+        "highlight_score": 0.324,
+        "filler_score": 0.0
+      },
+      "tag_reason": "General B-Roll",
+      "score_details_per_intent": {
+        "speech_human_priority": {
+          "score": -0.013600000000000015,
+          "calculation_log": "base(0.5)*0.2 + speech(0.00)*0.5 + weak_human(0.00)*0.3 - scenery(0.57)*0.2 - filler(0.00)*0.3"
+        },
+        "visual_human_priority": {
+          "score": 0.1,
+          "calculation_log": "base(0.5)*0.2 + visual_human(0.00)*0.8"
+        },
+        "reduce_scenery": {
+          "score": 0.31599999999999995,
+          "calculation_log": "base(0.5)*0.2 + speech(0.00)*0.3 + motion(0.00)*0.3 + (1.0 - scenery(0.57))*0.5"
+        },
+        "fast_pace": {
+          "score": 0.28241354999999996,
+          "calculation_log": "base(0.5)*0.1 + motion(0.00)*0.4 + (1.0 - silence(0.68))*0.3 + len_factor(0.68)*0.2"
+        },
+        "balanced_sources": {
+          "score": 0.5,
+          "calculation_log": "base(0.5) - parent_penalty(0.3 * 0) - source_penalty(0.4 * 0)"
+        }
+      }
+    },
+    {
+      "candidate_id": "MC_SF_EE7ED8_SRC_B1A26714_P002_003",
+      "parent_semantic_fragment_id": "SF_EE7ED8_SRC_B1A26714_P002",
+      "source_id": "SRC_B1A26714",
+      "time_range": "28.06s - 32.54s (duration: 4.48s)",
+      "text_match_summary": "No text transcription matches.",
+      "visual_signals": {
+        "keyframe_exists": true,
+        "keyframe_path": "/static/thumbnails/VF2_SRC_B1A26714.jpg",
+        "scene_changes_detected": [
+          28.063562,
+          30.787979,
+          32.544792
+        ],
+        "visual_human_detected": false,
+        "visual_human_confidence": 0.0
+      },
+      "raw_measurements": {
+        "motion_score_raw": 0.0,
+        "silence_duration_raw": 0.0,
+        "evidence_count": 1
+      },
+      "normalized_scores": {
+        "speech_score": 0.0,
+        "motion_score_normalized": 0.0,
+        "scenery_score": 0.5680000000000001,
+        "weak_human_score": 0.0,
+        "highlight_score": 0.324,
+        "filler_score": 0.0
+      },
+      "tag_reason": "General B-Roll",
+      "score_details_per_intent": {
+        "speech_human_priority": {
+          "score": -0.013600000000000015,
+          "calculation_log": "base(0.5)*0.2 + speech(0.00)*0.5 + weak_human(0.00)*0.3 - scenery(0.57)*0.2 - filler(0.00)*0.3"
+        },
+        "visual_human_priority": {
+          "score": 0.1,
+          "calculation_log": "base(0.5)*0.2 + visual_human(0.00)*0.8"
+        },
+        "reduce_scenery": {
+          "score": 0.31599999999999995,
+          "calculation_log": "base(0.5)*0.2 + speech(0.00)*0.3 + motion(0.00)*0.3 + (1.0 - scenery(0.57))*0.5"
+        },
+        "fast_pace": {
+          "score": 0.22313850000000002,
+          "calculation_log": "base(0.5)*0.1 + motion(0.00)*0.4 + (1.0 - silence(0.68))*0.3 + len_factor(0.38)*0.2"
+        },
+        "balanced_sources": {
+          "score": 0.5,
+          "calculation_log": "base(0.5) - parent_penalty(0.3 * 0) - source_penalty(0.4 * 0)"
+        }
+      }
+    },
+    {
+      "candidate_id": "MC_SF_EE7ED8_SRC_B1A26714_P002_004",
+      "parent_semantic_fragment_id": "SF_EE7ED8_SRC_B1A26714_P002",
+      "source_id": "SRC_B1A26714",
+      "time_range": "32.54s - 37.12s (duration: 4.58s)",
+      "text_match_summary": "No text transcription matches.",
+      "visual_signals": {
+        "keyframe_exists": true,
+        "keyframe_path": "/static/thumbnails/VF2_SRC_B1A26714.jpg",
+        "scene_changes_detected": [
+          32.544792,
+          36.30275,
+          37.124271
+        ],
+        "visual_human_detected": false,
+        "visual_human_confidence": 0.0
+      },
+      "raw_measurements": {
+        "motion_score_raw": 0.0,
+        "silence_duration_raw": 0.0,
+        "evidence_count": 1
+      },
+      "normalized_scores": {
+        "speech_score": 0.0,
+        "motion_score_normalized": 0.0,
+        "scenery_score": 0.5680000000000001,
+        "weak_human_score": 0.0,
+        "highlight_score": 0.324,
+        "filler_score": 0.0
+      },
+      "tag_reason": "General B-Roll",
+      "score_details_per_intent": {
+        "speech_human_priority": {
+          "score": -0.013600000000000015,
+          "calculation_log": "base(0.5)*0.2 + speech(0.00)*0.5 + weak_human(0.00)*0.3 - scenery(0.57)*0.2 - filler(0.00)*0.3"
+        },
+        "visual_human_priority": {
+          "score": 0.1,
+          "calculation_log": "base(0.5)*0.2 + visual_human(0.00)*0.8"
+        },
+        "reduce_scenery": {
+          "score": 0.31599999999999995,
+          "calculation_log": "base(0.5)*0.2 + speech(0.00)*0.3 + motion(0.00)*0.3 + (1.0 - scenery(0.57))*0.5"
+        },
+        "fast_pace": {
+          "score": 0.21822605000000006,
+          "calculation_log": "base(0.5)*0.1 + motion(0.00)*0.4 + (1.0 - silence(0.68))*0.3 + len_factor(0.36)*0.2"
+        },
+        "balanced_sources": {
+          "score": 0.5,
+          "calculation_log": "base(0.5) - parent_penalty(0.3 * 0) - source_penalty(0.4 * 0)"
+        }
+      }
+    },
+    {
+      "candidate_id": "MC_SF_EE7ED8_SRC_B1A26714_P002_005",
+      "parent_semantic_fragment_id": "SF_EE7ED8_SRC_B1A26714_P002",
+      "source_id": "SRC_B1A26714",
+      "time_range": "37.12s - 40.00s (duration: 2.88s)",
+      "text_match_summary": "No text transcription matches.",
+      "visual_signals": {
+        "keyframe_exists": true,
+        "keyframe_path": "/static/thumbnails/VF3_SRC_B1A26714.jpg",
+        "scene_changes_detected": [
+          37.124271,
+          38.835458,
+          39.666625
+        ],
+        "visual_human_detected": false,
+        "visual_human_confidence": 0.0
+      },
+      "raw_measurements": {
+        "motion_score_raw": 0.0,
+        "silence_duration_raw": 0.0,
+        "evidence_count": 2
+      },
+      "normalized_scores": {
+        "speech_score": 0.0,
+        "motion_score_normalized": 0.0,
+        "scenery_score": 0.7204999999999999,
+        "weak_human_score": 0.8033333333333332,
+        "highlight_score": 0.20962500000000003,
+        "filler_score": 0.0
+      },
+      "tag_reason": "Static Scenery",
+      "score_details_per_intent": {
+        "speech_human_priority": {
+          "score": 0.1969,
+          "calculation_log": "base(0.5)*0.2 + speech(0.00)*0.5 + weak_human(0.80)*0.3 - scenery(0.72)*0.2 - filler(0.00)*0.3"
+        },
+        "visual_human_priority": {
+          "score": 0.1,
+          "calculation_log": "base(0.5)*0.2 + visual_human(0.00)*0.8"
+        },
+        "reduce_scenery": {
+          "score": 0.23975000000000005,
+          "calculation_log": "base(0.5)*0.2 + speech(0.00)*0.3 + motion(0.00)*0.3 + (1.0 - scenery(0.72))*0.5"
+        },
+        "fast_pace": {
+          "score": 0.26910105000000006,
+          "calculation_log": "base(0.5)*0.1 + motion(0.00)*0.4 + (1.0 - silence(0.79))*0.3 + len_factor(0.78)*0.2"
+        },
+        "balanced_sources": {
+          "score": 0.5,
+          "calculation_log": "base(0.5) - parent_penalty(0.3 * 0) - source_penalty(0.4 * 0)"
+        }
+      }
+    },
+    {
+      "candidate_id": "MC_SF_EE7ED8_SRC_B1A26714_P003_001",
+      "parent_semantic_fragment_id": "SF_EE7ED8_SRC_B1A26714_P003",
+      "source_id": "SRC_B1A26714",
+      "time_range": "40.00s - 45.85s (duration: 5.85s)",
+      "text_match_summary": "No text transcription matches.",
+      "visual_signals": {
+        "keyframe_exists": true,
+        "keyframe_path": "/static/thumbnails/VF3_SRC_B1A26714.jpg",
+        "scene_changes_detected": [
+          40.071896,
+          40.488208,
+          42.708125,
+          45.852083
+        ],
+        "visual_human_detected": false,
+        "visual_human_confidence": 0.0
+      },
+      "raw_measurements": {
+        "motion_score_raw": 0.0,
+        "silence_duration_raw": 0.0,
+        "evidence_count": 1
+      },
+      "normalized_scores": {
+        "speech_score": 0.0,
+        "motion_score_normalized": 0.0,
+        "scenery_score": 0.873,
+        "weak_human_score": 0.17999999999999983,
+        "highlight_score": 0.09525,
+        "filler_score": 0.0
+      },
+      "tag_reason": "Static Scenery, Silent Pause",
+      "score_details_per_intent": {
+        "speech_human_priority": {
+          "score": -0.020600000000000063,
+          "calculation_log": "base(0.5)*0.2 + speech(0.00)*0.5 + weak_human(0.18)*0.3 - scenery(0.87)*0.2 - filler(0.00)*0.3"
+        },
+        "visual_human_priority": {
+          "score": 0.1,
+          "calculation_log": "base(0.5)*0.2 + visual_human(0.00)*0.8"
+        },
+        "reduce_scenery": {
+          "score": 0.1635,
+          "calculation_log": "base(0.5)*0.2 + speech(0.00)*0.3 + motion(0.00)*0.3 + (1.0 - scenery(0.87))*0.5"
+        },
+        "fast_pace": {
+          "score": 0.08597085,
+          "calculation_log": "base(0.5)*0.1 + motion(0.00)*0.4 + (1.0 - silence(0.90))*0.3 + len_factor(0.04)*0.2"
+        },
+        "balanced_sources": {
+          "score": 0.5,
+          "calculation_log": "base(0.5) - parent_penalty(0.3 * 0) - source_penalty(0.4 * 0)"
+        }
+      }
+    },
+    {
+      "candidate_id": "MC_SF_EE7ED8_SRC_B1A26714_P003_002",
+      "parent_semantic_fragment_id": "SF_EE7ED8_SRC_B1A26714_P003",
+      "source_id": "SRC_B1A26714",
+      "time_range": "45.85s - 50.16s (duration: 4.30s)",
+      "text_match_summary": "No text transcription matches.",
+      "visual_signals": {
+        "keyframe_exists": true,
+        "keyframe_path": "/static/thumbnails/VF3_SRC_B1A26714.jpg",
+        "scene_changes_detected": [
+          45.852083,
+          46.839188,
+          47.451937,
+          48.176562,
+          48.574125,
+          50.156854
+        ],
+        "visual_human_detected": false,
+        "visual_human_confidence": 0.0
+      },
+      "raw_measurements": {
+        "motion_score_raw": 0.0,
+        "silence_duration_raw": 0.0,
+        "evidence_count": 1
+      },
+      "normalized_scores": {
+        "speech_score": 0.0,
+        "motion_score_normalized": 0.0,
+        "scenery_score": 0.873,
+        "weak_human_score": 0.17999999999999983,
+        "highlight_score": 0.09525,
+        "filler_score": 0.0
+      },
+      "tag_reason": "Static Scenery, Silent Pause",
+      "score_details_per_intent": {
+        "speech_human_priority": {
+          "score": -0.020600000000000063,
+          "calculation_log": "base(0.5)*0.2 + speech(0.00)*0.5 + weak_human(0.18)*0.3 - scenery(0.87)*0.2 - filler(0.00)*0.3"
+        },
+        "visual_human_priority": {
+          "score": 0.1,
+          "calculation_log": "base(0.5)*0.2 + visual_human(0.00)*0.8"
+        },
+        "reduce_scenery": {
+          "score": 0.1635,
+          "calculation_log": "base(0.5)*0.2 + speech(0.00)*0.3 + motion(0.00)*0.3 + (1.0 - scenery(0.87))*0.5"
+        },
+        "fast_pace": {
+          "score": 0.1633364499999999,
+          "calculation_log": "base(0.5)*0.1 + motion(0.00)*0.4 + (1.0 - silence(0.90))*0.3 + len_factor(0.42)*0.2"
+        },
+        "balanced_sources": {
+          "score": 0.5,
+          "calculation_log": "base(0.5) - parent_penalty(0.3 * 0) - source_penalty(0.4 * 0)"
+        }
+      }
+    },
+    {
+      "candidate_id": "MC_SF_EE7ED8_SRC_B1A26714_P003_003",
+      "parent_semantic_fragment_id": "SF_EE7ED8_SRC_B1A26714_P003",
+      "source_id": "SRC_B1A26714",
+      "time_range": "50.16s - 55.38s (duration: 5.22s)",
+      "text_match_summary": "No text transcription matches.",
+      "visual_signals": {
+        "keyframe_exists": true,
+        "keyframe_path": "/static/thumbnails/VF3_SRC_B1A26714.jpg",
+        "scene_changes_detected": [
+          50.156854,
+          52.250062,
+          55.379562
+        ],
+        "visual_human_detected": false,
+        "visual_human_confidence": 0.0
+      },
+      "raw_measurements": {
+        "motion_score_raw": 0.0,
+        "silence_duration_raw": 0.0,
+        "evidence_count": 1
+      },
+      "normalized_scores": {
+        "speech_score": 0.0,
+        "motion_score_normalized": 0.0,
+        "scenery_score": 0.873,
+        "weak_human_score": 0.17999999999999983,
+        "highlight_score": 0.09525,
+        "filler_score": 0.0
+      },
+      "tag_reason": "Static Scenery, Silent Pause",
+      "score_details_per_intent": {
+        "speech_human_priority": {
+          "score": -0.020600000000000063,
+          "calculation_log": "base(0.5)*0.2 + speech(0.00)*0.5 + weak_human(0.18)*0.3 - scenery(0.87)*0.2 - filler(0.00)*0.3"
+        },
+        "visual_human_priority": {
+          "score": 0.1,
+          "calculation_log": "base(0.5)*0.2 + visual_human(0.00)*0.8"
+        },
+        "reduce_scenery": {
+          "score": 0.1635,
+          "calculation_log": "base(0.5)*0.2 + speech(0.00)*0.3 + motion(0.00)*0.3 + (1.0 - scenery(0.87))*0.5"
+        },
+        "fast_pace": {
+          "score": 0.11743960000000016,
+          "calculation_log": "base(0.5)*0.1 + motion(0.00)*0.4 + (1.0 - silence(0.90))*0.3 + len_factor(0.19)*0.2"
+        },
+        "balanced_sources": {
+          "score": 0.5,
+          "calculation_log": "base(0.5) - parent_penalty(0.3 * 0) - source_penalty(0.4 * 0)"
+        }
+      }
+    },
+    {
+      "candidate_id": "MC_SF_EE7ED8_SRC_B1A26714_P003_004",
+      "parent_semantic_fragment_id": "SF_EE7ED8_SRC_B1A26714_P003",
+      "source_id": "SRC_B1A26714",
+      "time_range": "55.38s - 60.00s (duration: 4.62s)",
+      "text_match_summary": "No text transcription matches.",
+      "visual_signals": {
+        "keyframe_exists": true,
+        "keyframe_path": "/static/thumbnails/VF4_SRC_B1A26714.jpg",
+        "scene_changes_detected": [
+          55.379562,
+          56.950562,
+          57.420375,
+          59.520292
+        ],
+        "visual_human_detected": false,
+        "visual_human_confidence": 0.0
+      },
+      "raw_measurements": {
+        "motion_score_raw": 0.0,
+        "silence_duration_raw": 0.0,
+        "evidence_count": 2
+      },
+      "normalized_scores": {
+        "speech_score": 0.0,
+        "motion_score_normalized": 0.0,
+        "scenery_score": 0.7955,
+        "weak_human_score": 0.6966666666666665,
+        "highlight_score": 0.15337499999999998,
+        "filler_score": 0.0
+      },
+      "tag_reason": "Static Scenery",
+      "score_details_per_intent": {
+        "speech_human_priority": {
+          "score": 0.14989999999999992,
+          "calculation_log": "base(0.5)*0.2 + speech(0.00)*0.5 + weak_human(0.70)*0.3 - scenery(0.80)*0.2 - filler(0.00)*0.3"
+        },
+        "visual_human_priority": {
+          "score": 0.1,
+          "calculation_log": "base(0.5)*0.2 + visual_human(0.00)*0.8"
+        },
+        "reduce_scenery": {
+          "score": 0.20225,
+          "calculation_log": "base(0.5)*0.2 + speech(0.00)*0.3 + motion(0.00)*0.3 + (1.0 - scenery(0.80))*0.5"
+        },
+        "fast_pace": {
+          "score": 0.16499060000000002,
+          "calculation_log": "base(0.5)*0.1 + motion(0.00)*0.4 + (1.0 - silence(0.85))*0.3 + len_factor(0.34)*0.2"
+        },
+        "balanced_sources": {
+          "score": 0.5,
+          "calculation_log": "base(0.5) - parent_penalty(0.3 * 0) - source_penalty(0.4 * 0)"
+        }
+      }
+    },
+    {
+      "candidate_id": "MC_SF_EE7ED8_SRC_B1A26714_P004_001",
+      "parent_semantic_fragment_id": "SF_EE7ED8_SRC_B1A26714_P004",
+      "source_id": "SRC_B1A26714",
+      "time_range": "60.00s - 64.91s (duration: 4.91s)",
+      "text_match_summary": "No text transcription matches.",
+      "visual_signals": {
+        "keyframe_exists": true,
+        "keyframe_path": "/static/thumbnails/VF4_SRC_B1A26714.jpg",
+        "scene_changes_detected": [
+          60.876812,
+          61.542583,
+          63.1305,
+          63.942646,
+          64.44875,
+          64.908417
+        ],
+        "visual_human_detected": false,
+        "visual_human_confidence": 0.0
+      },
+      "raw_measurements": {
+        "motion_score_raw": 0.0,
+        "silence_duration_raw": 0.0,
+        "evidence_count": 1
+      },
+      "normalized_scores": {
+        "speech_score": 0.0,
+        "motion_score_normalized": 0.0,
+        "scenery_score": 0.718,
+        "weak_human_score": 0.7866666666666668,
+        "highlight_score": 0.2115,
+        "filler_score": 0.0
+      },
+      "tag_reason": "Static Scenery",
+      "score_details_per_intent": {
+        "speech_human_priority": {
+          "score": 0.19240000000000007,
+          "calculation_log": "base(0.5)*0.2 + speech(0.00)*0.5 + weak_human(0.79)*0.3 - scenery(0.72)*0.2 - filler(0.00)*0.3"
+        },
+        "visual_human_priority": {
+          "score": 0.1,
+          "calculation_log": "base(0.5)*0.2 + visual_human(0.00)*0.8"
+        },
+        "reduce_scenery": {
+          "score": 0.24100000000000002,
+          "calculation_log": "base(0.5)*0.2 + speech(0.00)*0.3 + motion(0.00)*0.3 + (1.0 - scenery(0.72))*0.5"
+        },
+        "fast_pace": {
+          "score": 0.16802915000000002,
+          "calculation_log": "base(0.5)*0.1 + motion(0.00)*0.4 + (1.0 - silence(0.79))*0.3 + len_factor(0.27)*0.2"
+        },
+        "balanced_sources": {
+          "score": 0.5,
+          "calculation_log": "base(0.5) - parent_penalty(0.3 * 0) - source_penalty(0.4 * 0)"
+        }
+      }
+    },
+    {
+      "candidate_id": "MC_SF_EE7ED8_SRC_B1A26714_P004_002",
+      "parent_semantic_fragment_id": "SF_EE7ED8_SRC_B1A26714_P004",
+      "source_id": "SRC_B1A26714",
+      "time_range": "64.91s - 68.48s (duration: 3.57s)",
+      "text_match_summary": "No text transcription matches.",
+      "visual_signals": {
+        "keyframe_exists": true,
+        "keyframe_path": "/static/thumbnails/VF4_SRC_B1A26714.jpg",
+        "scene_changes_detected": [
+          64.908417,
+          66.233396,
+          67.279708,
+          68.475354
+        ],
+        "visual_human_detected": false,
+        "visual_human_confidence": 0.0
+      },
+      "raw_measurements": {
+        "motion_score_raw": 0.0,
+        "silence_duration_raw": 0.0,
+        "evidence_count": 1
+      },
+      "normalized_scores": {
+        "speech_score": 0.0,
+        "motion_score_normalized": 0.0,
+        "scenery_score": 0.718,
+        "weak_human_score": 0.7866666666666668,
+        "highlight_score": 0.2115,
+        "filler_score": 0.0
+      },
+      "tag_reason": "Static Scenery",
+      "score_details_per_intent": {
+        "speech_human_priority": {
+          "score": 0.19240000000000007,
+          "calculation_log": "base(0.5)*0.2 + speech(0.00)*0.5 + weak_human(0.79)*0.3 - scenery(0.72)*0.2 - filler(0.00)*0.3"
+        },
+        "visual_human_priority": {
+          "score": 0.1,
+          "calculation_log": "base(0.5)*0.2 + visual_human(0.00)*0.8"
+        },
+        "reduce_scenery": {
+          "score": 0.24100000000000002,
+          "calculation_log": "base(0.5)*0.2 + speech(0.00)*0.3 + motion(0.00)*0.3 + (1.0 - scenery(0.72))*0.5"
+        },
+        "fast_pace": {
+          "score": 0.2351031500000002,
+          "calculation_log": "base(0.5)*0.1 + motion(0.00)*0.4 + (1.0 - silence(0.79))*0.3 + len_factor(0.61)*0.2"
+        },
+        "balanced_sources": {
+          "score": 0.5,
+          "calculation_log": "base(0.5) - parent_penalty(0.3 * 0) - source_penalty(0.4 * 0)"
+        }
+      }
+    },
+    {
+      "candidate_id": "MC_SF_EE7ED8_SRC_B1A26714_P004_003",
+      "parent_semantic_fragment_id": "SF_EE7ED8_SRC_B1A26714_P004",
+      "source_id": "SRC_B1A26714",
+      "time_range": "68.48s - 72.33s (duration: 3.85s)",
+      "text_match_summary": "No text transcription matches.",
+      "visual_signals": {
+        "keyframe_exists": true,
+        "keyframe_path": "/static/thumbnails/VF4_SRC_B1A26714.jpg",
+        "scene_changes_detected": [
+          68.475354,
+          72.325021
+        ],
+        "visual_human_detected": false,
+        "visual_human_confidence": 0.0
+      },
+      "raw_measurements": {
+        "motion_score_raw": 0.0,
+        "silence_duration_raw": 0.0,
+        "evidence_count": 1
+      },
+      "normalized_scores": {
+        "speech_score": 0.0,
+        "motion_score_normalized": 0.0,
+        "scenery_score": 0.718,
+        "weak_human_score": 0.7866666666666668,
+        "highlight_score": 0.2115,
+        "filler_score": 0.0
+      },
+      "tag_reason": "Static Scenery",
+      "score_details_per_intent": {
+        "speech_human_priority": {
+          "score": 0.19240000000000007,
+          "calculation_log": "base(0.5)*0.2 + speech(0.00)*0.5 + weak_human(0.79)*0.3 - scenery(0.72)*0.2 - filler(0.00)*0.3"
+        },
+        "visual_human_priority": {
+          "score": 0.1,
+          "calculation_log": "base(0.5)*0.2 + visual_human(0.00)*0.8"
+        },
+        "reduce_scenery": {
+          "score": 0.24100000000000002,
+          "calculation_log": "base(0.5)*0.2 + speech(0.00)*0.3 + motion(0.00)*0.3 + (1.0 - scenery(0.72))*0.5"
+        },
+        "fast_pace": {
+          "score": 0.2209666499999995,
+          "calculation_log": "base(0.5)*0.1 + motion(0.00)*0.4 + (1.0 - silence(0.79))*0.3 + len_factor(0.54)*0.2"
+        },
+        "balanced_sources": {
+          "score": 0.5,
+          "calculation_log": "base(0.5) - parent_penalty(0.3 * 0) - source_penalty(0.4 * 0)"
+        }
+      }
+    },
+    {
+      "candidate_id": "MC_SF_EE7ED8_SRC_B1A26714_P004_004",
+      "parent_semantic_fragment_id": "SF_EE7ED8_SRC_B1A26714_P004",
+      "source_id": "SRC_B1A26714",
+      "time_range": "72.33s - 76.68s (duration: 4.36s)",
+      "text_match_summary": "No text transcription matches.",
+      "visual_signals": {
+        "keyframe_exists": true,
+        "keyframe_path": "/static/thumbnails/VF4_SRC_B1A26714.jpg",
+        "scene_changes_detected": [
+          72.325021,
+          75.241187,
+          76.680146
+        ],
+        "visual_human_detected": false,
+        "visual_human_confidence": 0.0
+      },
+      "raw_measurements": {
+        "motion_score_raw": 0.0,
+        "silence_duration_raw": 0.0,
+        "evidence_count": 1
+      },
+      "normalized_scores": {
+        "speech_score": 0.0,
+        "motion_score_normalized": 0.0,
+        "scenery_score": 0.718,
+        "weak_human_score": 0.7866666666666668,
+        "highlight_score": 0.2115,
+        "filler_score": 0.0
+      },
+      "tag_reason": "Static Scenery",
+      "score_details_per_intent": {
+        "speech_human_priority": {
+          "score": 0.19240000000000007,
+          "calculation_log": "base(0.5)*0.2 + speech(0.00)*0.5 + weak_human(0.79)*0.3 - scenery(0.72)*0.2 - filler(0.00)*0.3"
+        },
+        "visual_human_priority": {
+          "score": 0.1,
+          "calculation_log": "base(0.5)*0.2 + visual_human(0.00)*0.8"
+        },
+        "reduce_scenery": {
+          "score": 0.24100000000000002,
+          "calculation_log": "base(0.5)*0.2 + speech(0.00)*0.3 + motion(0.00)*0.3 + (1.0 - scenery(0.72))*0.5"
+        },
+        "fast_pace": {
+          "score": 0.19569375000000067,
+          "calculation_log": "base(0.5)*0.1 + motion(0.00)*0.4 + (1.0 - silence(0.79))*0.3 + len_factor(0.41)*0.2"
+        },
+        "balanced_sources": {
+          "score": 0.5,
+          "calculation_log": "base(0.5) - parent_penalty(0.3 * 0) - source_penalty(0.4 * 0)"
+        }
+      }
+    },
+    {
+      "candidate_id": "MC_SF_EE7ED8_SRC_B1A26714_P004_005",
+      "parent_semantic_fragment_id": "SF_EE7ED8_SRC_B1A26714_P004",
+      "source_id": "SRC_B1A26714",
+      "time_range": "76.68s - 80.00s (duration: 3.32s)",
+      "text_match_summary": "No text transcription matches.",
+      "visual_signals": {
+        "keyframe_exists": true,
+        "keyframe_path": "/static/thumbnails/VF5_SRC_B1A26714.jpg",
+        "scene_changes_detected": [
+          76.680146
+        ],
+        "visual_human_detected": false,
+        "visual_human_confidence": 0.0
+      },
+      "raw_measurements": {
+        "motion_score_raw": 0.0,
+        "silence_duration_raw": 0.0,
+        "evidence_count": 2
+      },
+      "normalized_scores": {
+        "speech_score": 0.0,
+        "motion_score_normalized": 0.0,
+        "scenery_score": 0.8095,
+        "weak_human_score": 0.6033333333333333,
+        "highlight_score": 0.142875,
+        "filler_score": 0.0
+      },
+      "tag_reason": "Static Scenery",
+      "score_details_per_intent": {
+        "speech_human_priority": {
+          "score": 0.11909999999999996,
+          "calculation_log": "base(0.5)*0.2 + speech(0.00)*0.5 + weak_human(0.60)*0.3 - scenery(0.81)*0.2 - filler(0.00)*0.3"
+        },
+        "visual_human_priority": {
+          "score": 0.1,
+          "calculation_log": "base(0.5)*0.2 + visual_human(0.00)*0.8"
+        },
+        "reduce_scenery": {
+          "score": 0.19525,
+          "calculation_log": "base(0.5)*0.2 + speech(0.00)*0.3 + motion(0.00)*0.3 + (1.0 - scenery(0.81))*0.5"
+        },
+        "fast_pace": {
+          "score": 0.22686979999999968,
+          "calculation_log": "base(0.5)*0.1 + motion(0.00)*0.4 + (1.0 - silence(0.86))*0.3 + len_factor(0.67)*0.2"
+        },
+        "balanced_sources": {
+          "score": 0.5,
+          "calculation_log": "base(0.5) - parent_penalty(0.3 * 0) - source_penalty(0.4 * 0)"
+        }
+      }
+    },
+    {
+      "candidate_id": "MC_SF_EE7ED8_SRC_B1A26714_P005_001",
+      "parent_semantic_fragment_id": "SF_EE7ED8_SRC_B1A26714_P005",
+      "source_id": "SRC_B1A26714",
+      "time_range": "80.00s - 85.18s (duration: 5.18s)",
+      "text_match_summary": "No text transcription matches.",
+      "visual_signals": {
+        "keyframe_exists": true,
+        "keyframe_path": "/static/thumbnails/VF5_SRC_B1A26714.jpg",
+        "scene_changes_detected": [
+          80.2375,
+          81.254146,
+          81.82625,
+          82.590833,
+          83.534583,
+          84.193604,
+          85.17775
+        ],
+        "visual_human_detected": false,
+        "visual_human_confidence": 0.0
+      },
+      "raw_measurements": {
+        "motion_score_raw": 0.0,
+        "silence_duration_raw": 0.0,
+        "evidence_count": 2
+      },
+      "normalized_scores": {
+        "speech_score": 0.0,
+        "motion_score_normalized": 0.0,
+        "scenery_score": 0.8095,
+        "weak_human_score": 0.6033333333333333,
+        "highlight_score": 0.142875,
+        "filler_score": 0.0
+      },
+      "tag_reason": "Static Scenery",
+      "score_details_per_intent": {
+        "speech_human_priority": {
+          "score": 0.11909999999999996,
+          "calculation_log": "base(0.5)*0.2 + speech(0.00)*0.5 + weak_human(0.60)*0.3 - scenery(0.81)*0.2 - filler(0.00)*0.3"
+        },
+        "visual_human_priority": {
+          "score": 0.1,
+          "calculation_log": "base(0.5)*0.2 + visual_human(0.00)*0.8"
+        },
+        "reduce_scenery": {
+          "score": 0.19525,
+          "calculation_log": "base(0.5)*0.2 + speech(0.00)*0.3 + motion(0.00)*0.3 + (1.0 - scenery(0.81))*0.5"
+        },
+        "fast_pace": {
+          "score": 0.13397499999999984,
+          "calculation_log": "base(0.5)*0.1 + motion(0.00)*0.4 + (1.0 - silence(0.86))*0.3 + len_factor(0.21)*0.2"
+        },
+        "balanced_sources": {
+          "score": 0.5,
+          "calculation_log": "base(0.5) - parent_penalty(0.3 * 0) - source_penalty(0.4 * 0)"
+        }
+      }
+    },
+    {
+      "candidate_id": "MC_SF_EE7ED8_SRC_B1A26714_P005_002",
+      "parent_semantic_fragment_id": "SF_EE7ED8_SRC_B1A26714_P005",
+      "source_id": "SRC_B1A26714",
+      "time_range": "85.18s - 91.12s (duration: 5.94s)",
+      "text_match_summary": "No text transcription matches.",
+      "visual_signals": {
+        "keyframe_exists": true,
+        "keyframe_path": "/static/thumbnails/VF5_SRC_B1A26714.jpg",
+        "scene_changes_detected": [
+          85.17775,
+          87.021875,
+          87.681708,
+          88.790521,
+          91.117271
+        ],
+        "visual_human_detected": false,
+        "visual_human_confidence": 0.0
+      },
+      "raw_measurements": {
+        "motion_score_raw": 0.0,
+        "silence_duration_raw": 0.0,
+        "evidence_count": 1
+      },
+      "normalized_scores": {
+        "speech_score": 0.0,
+        "motion_score_normalized": 0.0,
+        "scenery_score": 0.901,
+        "weak_human_score": 0.0,
+        "highlight_score": 0.07425000000000001,
+        "filler_score": 0.2406
+      },
+      "tag_reason": "Static Scenery, Silent Pause",
+      "score_details_per_intent": {
+        "speech_human_priority": {
+          "score": -0.15238000000000002,
+          "calculation_log": "base(0.5)*0.2 + speech(0.00)*0.5 + weak_human(0.00)*0.3 - scenery(0.90)*0.2 - filler(0.24)*0.3"
+        },
+        "visual_human_priority": {
+          "score": 0.1,
+          "calculation_log": "base(0.5)*0.2 + visual_human(0.00)*0.8"
+        },
+        "reduce_scenery": {
+          "score": 0.1495,
+          "calculation_log": "base(0.5)*0.2 + speech(0.00)*0.3 + motion(0.00)*0.3 + (1.0 - scenery(0.90))*0.5"
+        },
+        "fast_pace": {
+          "score": 0.07529895000000005,
+          "calculation_log": "base(0.5)*0.1 + motion(0.00)*0.4 + (1.0 - silence(0.93))*0.3 + len_factor(0.02)*0.2"
+        },
+        "balanced_sources": {
+          "score": 0.5,
+          "calculation_log": "base(0.5) - parent_penalty(0.3 * 0) - source_penalty(0.4 * 0)"
+        }
+      }
+    },
+    {
+      "candidate_id": "MC_SF_EE7ED8_SRC_B1A26714_P005_003",
+      "parent_semantic_fragment_id": "SF_EE7ED8_SRC_B1A26714_P005",
+      "source_id": "SRC_B1A26714",
+      "time_range": "91.12s - 96.08s (duration: 4.96s)",
+      "text_match_summary": "No text transcription matches.",
+      "visual_signals": {
+        "keyframe_exists": true,
+        "keyframe_path": "/static/thumbnails/VF5_SRC_B1A26714.jpg",
+        "scene_changes_detected": [
+          91.117271,
+          91.464187,
+          92.68725,
+          93.686604,
+          96.077667
+        ],
+        "visual_human_detected": false,
+        "visual_human_confidence": 0.0
+      },
+      "raw_measurements": {
+        "motion_score_raw": 0.0,
+        "silence_duration_raw": 0.0,
+        "evidence_count": 1
+      },
+      "normalized_scores": {
+        "speech_score": 0.0,
+        "motion_score_normalized": 0.0,
+        "scenery_score": 0.901,
+        "weak_human_score": 0.0,
+        "highlight_score": 0.07425000000000001,
+        "filler_score": 0.2406
+      },
+      "tag_reason": "Static Scenery, Silent Pause",
+      "score_details_per_intent": {
+        "speech_human_priority": {
+          "score": -0.15238000000000002,
+          "calculation_log": "base(0.5)*0.2 + speech(0.00)*0.5 + weak_human(0.00)*0.3 - scenery(0.90)*0.2 - filler(0.24)*0.3"
+        },
+        "visual_human_priority": {
+          "score": 0.1,
+          "calculation_log": "base(0.5)*0.2 + visual_human(0.00)*0.8"
+        },
+        "reduce_scenery": {
+          "score": 0.1495,
+          "calculation_log": "base(0.5)*0.2 + speech(0.00)*0.3 + motion(0.00)*0.3 + (1.0 - scenery(0.90))*0.5"
+        },
+        "fast_pace": {
+          "score": 0.12425519999999987,
+          "calculation_log": "base(0.5)*0.1 + motion(0.00)*0.4 + (1.0 - silence(0.93))*0.3 + len_factor(0.26)*0.2"
+        },
+        "balanced_sources": {
+          "score": 0.5,
+          "calculation_log": "base(0.5) - parent_penalty(0.3 * 0) - source_penalty(0.4 * 0)"
+        }
+      }
+    },
+    {
+      "candidate_id": "MC_SF_EE7ED8_SRC_B1A26714_P005_004",
+      "parent_semantic_fragment_id": "SF_EE7ED8_SRC_B1A26714_P005",
+      "source_id": "SRC_B1A26714",
+      "time_range": "96.08s - 100.00s (duration: 3.92s)",
+      "text_match_summary": "No text transcription matches.",
+      "visual_signals": {
+        "keyframe_exists": true,
+        "keyframe_path": "/static/thumbnails/VF6_SRC_B1A26714.jpg",
+        "scene_changes_detected": [
+          96.077667,
+          98.047187,
+          98.734896,
+          99.320729
+        ],
+        "visual_human_detected": false,
+        "visual_human_confidence": 0.0
+      },
+      "raw_measurements": {
+        "motion_score_raw": 0.0,
+        "silence_duration_raw": 0.0,
+        "evidence_count": 2
+      },
+      "normalized_scores": {
+        "speech_score": 0.0,
+        "motion_score_normalized": 0.0,
+        "scenery_score": 0.8845,
+        "weak_human_score": 0.10333333333333328,
+        "highlight_score": 0.086625,
+        "filler_score": 0.0
+      },
+      "tag_reason": "Static Scenery, Silent Pause",
+      "score_details_per_intent": {
+        "speech_human_priority": {
+          "score": -0.045900000000000024,
+          "calculation_log": "base(0.5)*0.2 + speech(0.00)*0.5 + weak_human(0.10)*0.3 - scenery(0.88)*0.2 - filler(0.00)*0.3"
+        },
+        "visual_human_priority": {
+          "score": 0.1,
+          "calculation_log": "base(0.5)*0.2 + visual_human(0.00)*0.8"
+        },
+        "reduce_scenery": {
+          "score": 0.15775000000000003,
+          "calculation_log": "base(0.5)*0.2 + speech(0.00)*0.3 + motion(0.00)*0.3 + (1.0 - scenery(0.88))*0.5"
+        },
+        "fast_pace": {
+          "score": 0.17987085000000025,
+          "calculation_log": "base(0.5)*0.1 + motion(0.00)*0.4 + (1.0 - silence(0.91))*0.3 + len_factor(0.52)*0.2"
+        },
+        "balanced_sources": {
+          "score": 0.5,
+          "calculation_log": "base(0.5) - parent_penalty(0.3 * 0) - source_penalty(0.4 * 0)"
+        }
+      }
+    },
+    {
+      "candidate_id": "MC_SF_EE7ED8_SRC_B1A26714_P006_001",
+      "parent_semantic_fragment_id": "SF_EE7ED8_SRC_B1A26714_P006",
+      "source_id": "SRC_B1A26714",
+      "time_range": "100.00s - 105.11s (duration: 5.11s)",
+      "text_match_summary": "No text transcription matches.",
+      "visual_signals": {
+        "keyframe_exists": true,
+        "keyframe_path": "/static/thumbnails/VF6_SRC_B1A26714.jpg",
+        "scene_changes_detected": [
+          101.798812,
+          102.950771,
+          104.119208,
+          105.1105
+        ],
+        "visual_human_detected": false,
+        "visual_human_confidence": 0.0
+      },
+      "raw_measurements": {
+        "motion_score_raw": 0.0,
+        "silence_duration_raw": 0.0,
+        "evidence_count": 1
+      },
+      "normalized_scores": {
+        "speech_score": 0.0,
+        "motion_score_normalized": 0.0,
+        "scenery_score": 0.868,
+        "weak_human_score": 0.21333333333333315,
+        "highlight_score": 0.099,
+        "filler_score": 0.0
+      },
+      "tag_reason": "Static Scenery, Silent Pause",
+      "score_details_per_intent": {
+        "speech_human_priority": {
+          "score": -0.009600000000000053,
+          "calculation_log": "base(0.5)*0.2 + speech(0.00)*0.5 + weak_human(0.21)*0.3 - scenery(0.87)*0.2 - filler(0.00)*0.3"
+        },
+        "visual_human_priority": {
+          "score": 0.1,
+          "calculation_log": "base(0.5)*0.2 + visual_human(0.00)*0.8"
+        },
+        "reduce_scenery": {
+          "score": 0.166,
+          "calculation_log": "base(0.5)*0.2 + speech(0.00)*0.3 + motion(0.00)*0.3 + (1.0 - scenery(0.87))*0.5"
+        },
+        "fast_pace": {
+          "score": 0.1241749999999999,
+          "calculation_log": "base(0.5)*0.1 + motion(0.00)*0.4 + (1.0 - silence(0.90))*0.3 + len_factor(0.22)*0.2"
+        },
+        "balanced_sources": {
+          "score": 0.5,
+          "calculation_log": "base(0.5) - parent_penalty(0.3 * 0) - source_penalty(0.4 * 0)"
+        }
+      }
+    },
+    {
+      "candidate_id": "MC_SF_EE7ED8_SRC_B1A26714_P006_002",
+      "parent_semantic_fragment_id": "SF_EE7ED8_SRC_B1A26714_P006",
+      "source_id": "SRC_B1A26714",
+      "time_range": "105.11s - 111.03s (duration: 5.92s)",
+      "text_match_summary": "No text transcription matches.",
+      "visual_signals": {
+        "keyframe_exists": true,
+        "keyframe_path": "/static/thumbnails/VF6_SRC_B1A26714.jpg",
+        "scene_changes_detected": [
+          105.1105,
+          106.704104,
+          107.869792,
+          109.188771,
+          110.455854,
+          111.031021
+        ],
+        "visual_human_detected": false,
+        "visual_human_confidence": 0.0
+      },
+      "raw_measurements": {
+        "motion_score_raw": 0.0,
+        "silence_duration_raw": 0.0,
+        "evidence_count": 1
+      },
+      "normalized_scores": {
+        "speech_score": 0.0,
+        "motion_score_normalized": 0.0,
+        "scenery_score": 0.868,
+        "weak_human_score": 0.21333333333333315,
+        "highlight_score": 0.099,
+        "filler_score": 0.0
+      },
+      "tag_reason": "Static Scenery, Silent Pause",
+      "score_details_per_intent": {
+        "speech_human_priority": {
+          "score": -0.009600000000000053,
+          "calculation_log": "base(0.5)*0.2 + speech(0.00)*0.5 + weak_human(0.21)*0.3 - scenery(0.87)*0.2 - filler(0.00)*0.3"
+        },
+        "visual_human_priority": {
+          "score": 0.1,
+          "calculation_log": "base(0.5)*0.2 + visual_human(0.00)*0.8"
+        },
+        "reduce_scenery": {
+          "score": 0.166,
+          "calculation_log": "base(0.5)*0.2 + speech(0.00)*0.3 + motion(0.00)*0.3 + (1.0 - scenery(0.87))*0.5"
+        },
+        "fast_pace": {
+          "score": 0.0836739500000003,
+          "calculation_log": "base(0.5)*0.1 + motion(0.00)*0.4 + (1.0 - silence(0.90))*0.3 + len_factor(0.02)*0.2"
+        },
+        "balanced_sources": {
+          "score": 0.5,
+          "calculation_log": "base(0.5) - parent_penalty(0.3 * 0) - source_penalty(0.4 * 0)"
+        }
+      }
+    },
+    {
+      "candidate_id": "MC_SF_EE7ED8_SRC_B1A26714_P006_003",
+      "parent_semantic_fragment_id": "SF_EE7ED8_SRC_B1A26714_P006",
+      "source_id": "SRC_B1A26714",
+      "time_range": "111.03s - 116.01s (duration: 4.98s)",
+      "text_match_summary": "No text transcription matches.",
+      "visual_signals": {
+        "keyframe_exists": true,
+        "keyframe_path": "/static/thumbnails/VF6_SRC_B1A26714.jpg",
+        "scene_changes_detected": [
+          111.031021,
+          112.073542,
+          115.386417,
+          116.014187
+        ],
+        "visual_human_detected": false,
+        "visual_human_confidence": 0.0
+      },
+      "raw_measurements": {
+        "motion_score_raw": 0.0,
+        "silence_duration_raw": 0.0,
+        "evidence_count": 1
+      },
+      "normalized_scores": {
+        "speech_score": 0.0,
+        "motion_score_normalized": 0.0,
+        "scenery_score": 0.868,
+        "weak_human_score": 0.21333333333333315,
+        "highlight_score": 0.099,
+        "filler_score": 0.0
+      },
+      "tag_reason": "Static Scenery, Silent Pause",
+      "score_details_per_intent": {
+        "speech_human_priority": {
+          "score": -0.009600000000000053,
+          "calculation_log": "base(0.5)*0.2 + speech(0.00)*0.5 + weak_human(0.21)*0.3 - scenery(0.87)*0.2 - filler(0.00)*0.3"
+        },
+        "visual_human_priority": {
+          "score": 0.1,
+          "calculation_log": "base(0.5)*0.2 + visual_human(0.00)*0.8"
+        },
+        "reduce_scenery": {
+          "score": 0.166,
+          "calculation_log": "base(0.5)*0.2 + speech(0.00)*0.3 + motion(0.00)*0.3 + (1.0 - scenery(0.87))*0.5"
+        },
+        "fast_pace": {
+          "score": 0.13054169999999943,
+          "calculation_log": "base(0.5)*0.1 + motion(0.00)*0.4 + (1.0 - silence(0.90))*0.3 + len_factor(0.25)*0.2"
+        },
+        "balanced_sources": {
+          "score": 0.5,
+          "calculation_log": "base(0.5) - parent_penalty(0.3 * 0) - source_penalty(0.4 * 0)"
+        }
+      }
+    },
+    {
+      "candidate_id": "MC_SF_EE7ED8_SRC_B1A26714_P006_004",
+      "parent_semantic_fragment_id": "SF_EE7ED8_SRC_B1A26714_P006",
+      "source_id": "SRC_B1A26714",
+      "time_range": "116.01s - 120.00s (duration: 3.99s)",
+      "text_match_summary": "No text transcription matches.",
+      "visual_signals": {
+        "keyframe_exists": true,
+        "keyframe_path": "/static/thumbnails/VF7_SRC_B1A26714.jpg",
+        "scene_changes_detected": [
+          116.014187,
+          118.240771
+        ],
+        "visual_human_detected": false,
+        "visual_human_confidence": 0.0
+      },
+      "raw_measurements": {
+        "motion_score_raw": 0.0,
+        "silence_duration_raw": 0.0,
+        "evidence_count": 2
+      },
+      "normalized_scores": {
+        "speech_score": 0.0,
+        "motion_score_normalized": 0.0,
+        "scenery_score": 0.807,
+        "weak_human_score": 0.6199999999999997,
+        "highlight_score": 0.14474999999999996,
+        "filler_score": 0.0
+      },
+      "tag_reason": "Static Scenery",
+      "score_details_per_intent": {
+        "speech_human_priority": {
+          "score": 0.1245999999999999,
+          "calculation_log": "base(0.5)*0.2 + speech(0.00)*0.5 + weak_human(0.62)*0.3 - scenery(0.81)*0.2 - filler(0.00)*0.3"
+        },
+        "visual_human_priority": {
+          "score": 0.1,
+          "calculation_log": "base(0.5)*0.2 + visual_human(0.00)*0.8"
+        },
+        "reduce_scenery": {
+          "score": 0.19649999999999998,
+          "calculation_log": "base(0.5)*0.2 + speech(0.00)*0.3 + motion(0.00)*0.3 + (1.0 - scenery(0.81))*0.5"
+        },
+        "fast_pace": {
+          "score": 0.19413435000000034,
+          "calculation_log": "base(0.5)*0.1 + motion(0.00)*0.4 + (1.0 - silence(0.86))*0.3 + len_factor(0.50)*0.2"
+        },
+        "balanced_sources": {
+          "score": 0.5,
+          "calculation_log": "base(0.5) - parent_penalty(0.3 * 0) - source_penalty(0.4 * 0)"
+        }
+      }
+    },
+    {
+      "candidate_id": "MC_SF_EE7ED8_SRC_B1A26714_P007_001",
+      "parent_semantic_fragment_id": "SF_EE7ED8_SRC_B1A26714_P007",
+      "source_id": "SRC_B1A26714",
+      "time_range": "120.00s - 124.44s (duration: 4.44s)",
+      "text_match_summary": "No text transcription matches.",
+      "visual_signals": {
+        "keyframe_exists": true,
+        "keyframe_path": "/static/thumbnails/VF7_SRC_B1A26714.jpg",
+        "scene_changes_detected": [
+          120.286542,
+          122.838,
+          123.521187,
+          123.978104,
+          124.442188
+        ],
+        "visual_human_detected": false,
+        "visual_human_confidence": 0.0
+      },
+      "raw_measurements": {
+        "motion_score_raw": 0.0,
+        "silence_duration_raw": 0.0,
+        "evidence_count": 1
+      },
+      "normalized_scores": {
+        "speech_score": 0.0,
+        "motion_score_normalized": 0.0,
+        "scenery_score": 0.746,
+        "weak_human_score": 0.9733333333333335,
+        "highlight_score": 0.1905,
+        "filler_score": 0.0
+      },
+      "tag_reason": "Static Scenery",
+      "score_details_per_intent": {
+        "speech_human_priority": {
+          "score": 0.24280000000000002,
+          "calculation_log": "base(0.5)*0.2 + speech(0.00)*0.5 + weak_human(0.97)*0.3 - scenery(0.75)*0.2 - filler(0.00)*0.3"
+        },
+        "visual_human_priority": {
+          "score": 0.1,
+          "calculation_log": "base(0.5)*0.2 + visual_human(0.00)*0.8"
+        },
+        "reduce_scenery": {
+          "score": 0.227,
+          "calculation_log": "base(0.5)*0.2 + speech(0.00)*0.3 + motion(0.00)*0.3 + (1.0 - scenery(0.75))*0.5"
+        },
+        "fast_pace": {
+          "score": 0.18504059999999992,
+          "calculation_log": "base(0.5)*0.1 + motion(0.00)*0.4 + (1.0 - silence(0.81))*0.3 + len_factor(0.39)*0.2"
+        },
+        "balanced_sources": {
+          "score": 0.5,
+          "calculation_log": "base(0.5) - parent_penalty(0.3 * 0) - source_penalty(0.4 * 0)"
+        }
+      }
+    },
+    {
+      "candidate_id": "MC_SF_EE7ED8_SRC_B1A26714_P007_002",
+      "parent_semantic_fragment_id": "SF_EE7ED8_SRC_B1A26714_P007",
+      "source_id": "SRC_B1A26714",
+      "time_range": "124.44s - 129.40s (duration: 4.96s)",
+      "text_match_summary": "No text transcription matches.",
+      "visual_signals": {
+        "keyframe_exists": true,
+        "keyframe_path": "/static/thumbnails/VF7_SRC_B1A26714.jpg",
+        "scene_changes_detected": [
+          124.442188,
+          126.371187,
+          128.561625,
+          129.402479
+        ],
+        "visual_human_detected": false,
+        "visual_human_confidence": 0.0
+      },
+      "raw_measurements": {
+        "motion_score_raw": 0.0,
+        "silence_duration_raw": 0.0,
+        "evidence_count": 1
+      },
+      "normalized_scores": {
+        "speech_score": 0.0,
+        "motion_score_normalized": 0.0,
+        "scenery_score": 0.746,
+        "weak_human_score": 0.9733333333333335,
+        "highlight_score": 0.1905,
+        "filler_score": 0.0
+      },
+      "tag_reason": "Static Scenery",
+      "score_details_per_intent": {
+        "speech_human_priority": {
+          "score": 0.24280000000000002,
+          "calculation_log": "base(0.5)*0.2 + speech(0.00)*0.5 + weak_human(0.97)*0.3 - scenery(0.75)*0.2 - filler(0.00)*0.3"
+        },
+        "visual_human_priority": {
+          "score": 0.1,
+          "calculation_log": "base(0.5)*0.2 + visual_human(0.00)*0.8"
+        },
+        "reduce_scenery": {
+          "score": 0.227,
+          "calculation_log": "base(0.5)*0.2 + speech(0.00)*0.3 + motion(0.00)*0.3 + (1.0 - scenery(0.75))*0.5"
+        },
+        "fast_pace": {
+          "score": 0.1591354500000001,
+          "calculation_log": "base(0.5)*0.1 + motion(0.00)*0.4 + (1.0 - silence(0.81))*0.3 + len_factor(0.26)*0.2"
+        },
+        "balanced_sources": {
+          "score": 0.5,
+          "calculation_log": "base(0.5) - parent_penalty(0.3 * 0) - source_penalty(0.4 * 0)"
+        }
+      }
+    },
+    {
+      "candidate_id": "MC_SF_EE7ED8_SRC_B1A26714_P007_003",
+      "parent_semantic_fragment_id": "SF_EE7ED8_SRC_B1A26714_P007",
+      "source_id": "SRC_B1A26714",
+      "time_range": "129.40s - 134.08s (duration: 4.68s)",
+      "text_match_summary": "No text transcription matches.",
+      "visual_signals": {
+        "keyframe_exists": true,
+        "keyframe_path": "/static/thumbnails/VF7_SRC_B1A26714.jpg",
+        "scene_changes_detected": [
+          129.402479,
+          132.055479,
+          132.819958,
+          134.081687
+        ],
+        "visual_human_detected": false,
+        "visual_human_confidence": 0.0
+      },
+      "raw_measurements": {
+        "motion_score_raw": 0.0,
+        "silence_duration_raw": 0.0,
+        "evidence_count": 1
+      },
+      "normalized_scores": {
+        "speech_score": 0.0,
+        "motion_score_normalized": 0.0,
+        "scenery_score": 0.746,
+        "weak_human_score": 0.9733333333333335,
+        "highlight_score": 0.1905,
+        "filler_score": 0.0
+      },
+      "tag_reason": "Static Scenery",
+      "score_details_per_intent": {
+        "speech_human_priority": {
+          "score": 0.24280000000000002,
+          "calculation_log": "base(0.5)*0.2 + speech(0.00)*0.5 + weak_human(0.97)*0.3 - scenery(0.75)*0.2 - filler(0.00)*0.3"
+        },
+        "visual_human_priority": {
+          "score": 0.1,
+          "calculation_log": "base(0.5)*0.2 + visual_human(0.00)*0.8"
+        },
+        "reduce_scenery": {
+          "score": 0.227,
+          "calculation_log": "base(0.5)*0.2 + speech(0.00)*0.3 + motion(0.00)*0.3 + (1.0 - scenery(0.75))*0.5"
+        },
+        "fast_pace": {
+          "score": 0.17318960000000055,
+          "calculation_log": "base(0.5)*0.1 + motion(0.00)*0.4 + (1.0 - silence(0.81))*0.3 + len_factor(0.33)*0.2"
+        },
+        "balanced_sources": {
+          "score": 0.5,
+          "calculation_log": "base(0.5) - parent_penalty(0.3 * 0) - source_penalty(0.4 * 0)"
+        }
+      }
+    },
+    {
+      "candidate_id": "MC_SF_EE7ED8_SRC_B1A26714_P007_004",
+      "parent_semantic_fragment_id": "SF_EE7ED8_SRC_B1A26714_P007",
+      "source_id": "SRC_B1A26714",
+      "time_range": "134.08s - 140.00s (duration: 5.92s)",
+      "text_match_summary": "No text transcription matches.",
+      "visual_signals": {
+        "keyframe_exists": true,
+        "keyframe_path": "/static/thumbnails/VF8_SRC_B1A26714.jpg",
+        "scene_changes_detected": [
+          134.081687,
+          138.910875
+        ],
+        "visual_human_detected": false,
+        "visual_human_confidence": 0.0
+      },
+      "raw_measurements": {
+        "motion_score_raw": 0.0,
+        "silence_duration_raw": 0.0,
+        "evidence_count": 2
+      },
+      "normalized_scores": {
+        "speech_score": 0.0,
+        "motion_score_normalized": 0.0,
+        "scenery_score": 0.7270000000000001,
+        "weak_human_score": 0.8466666666666669,
+        "highlight_score": 0.20474999999999996,
+        "filler_score": 0.0
+      },
+      "tag_reason": "Static Scenery",
+      "score_details_per_intent": {
+        "speech_human_priority": {
+          "score": 0.20860000000000006,
+          "calculation_log": "base(0.5)*0.2 + speech(0.00)*0.5 + weak_human(0.85)*0.3 - scenery(0.73)*0.2 - filler(0.00)*0.3"
+        },
+        "visual_human_priority": {
+          "score": 0.1,
+          "calculation_log": "base(0.5)*0.2 + visual_human(0.00)*0.8"
+        },
+        "reduce_scenery": {
+          "score": 0.23649999999999996,
+          "calculation_log": "base(0.5)*0.2 + speech(0.00)*0.3 + motion(0.00)*0.3 + (1.0 - scenery(0.73))*0.5"
+        },
+        "fast_pace": {
+          "score": 0.1155093499999994,
+          "calculation_log": "base(0.5)*0.1 + motion(0.00)*0.4 + (1.0 - silence(0.80))*0.3 + len_factor(0.02)*0.2"
+        },
+        "balanced_sources": {
+          "score": 0.5,
+          "calculation_log": "base(0.5) - parent_penalty(0.3 * 0) - source_penalty(0.4 * 0)"
+        }
+      }
+    },
+    {
+      "candidate_id": "MC_SF_EE7ED8_SRC_B1A26714_P008_001",
+      "parent_semantic_fragment_id": "SF_EE7ED8_SRC_B1A26714_P008",
+      "source_id": "SRC_B1A26714",
+      "time_range": "140.00s - 145.01s (duration: 5.01s)",
+      "text_match_summary": "No text transcription matches.",
+      "visual_signals": {
+        "keyframe_exists": true,
+        "keyframe_path": "/static/thumbnails/VF8_SRC_B1A26714.jpg",
+        "scene_changes_detected": [
+          140.365813,
+          140.876917,
+          142.720583,
+          143.181729,
+          143.860708,
+          145.006062
+        ],
+        "visual_human_detected": false,
+        "visual_human_confidence": 0.0
+      },
+      "raw_measurements": {
+        "motion_score_raw": 0.0,
+        "silence_duration_raw": 0.0,
+        "evidence_count": 1
+      },
+      "normalized_scores": {
+        "speech_score": 0.0,
+        "motion_score_normalized": 0.0,
+        "scenery_score": 0.708,
+        "weak_human_score": 0.7200000000000001,
+        "highlight_score": 0.219,
+        "filler_score": 0.0
+      },
+      "tag_reason": "Static Scenery",
+      "score_details_per_intent": {
+        "speech_human_priority": {
+          "score": 0.17440000000000005,
+          "calculation_log": "base(0.5)*0.2 + speech(0.00)*0.5 + weak_human(0.72)*0.3 - scenery(0.71)*0.2 - filler(0.00)*0.3"
+        },
+        "visual_human_priority": {
+          "score": 0.1,
+          "calculation_log": "base(0.5)*0.2 + visual_human(0.00)*0.8"
+        },
+        "reduce_scenery": {
+          "score": 0.24600000000000002,
+          "calculation_log": "base(0.5)*0.2 + speech(0.00)*0.3 + motion(0.00)*0.3 + (1.0 - scenery(0.71))*0.5"
+        },
+        "fast_pace": {
+          "score": 0.1653969000000007,
+          "calculation_log": "base(0.5)*0.1 + motion(0.00)*0.4 + (1.0 - silence(0.78))*0.3 + len_factor(0.25)*0.2"
+        },
+        "balanced_sources": {
+          "score": 0.5,
+          "calculation_log": "base(0.5) - parent_penalty(0.3 * 0) - source_penalty(0.4 * 0)"
+        }
+      }
+    },
+    {
+      "candidate_id": "MC_SF_EE7ED8_SRC_B1A26714_P008_002",
+      "parent_semantic_fragment_id": "SF_EE7ED8_SRC_B1A26714_P008",
+      "source_id": "SRC_B1A26714",
+      "time_range": "145.01s - 150.51s (duration: 5.50s)",
+      "text_match_summary": "No text transcription matches.",
+      "visual_signals": {
+        "keyframe_exists": true,
+        "keyframe_path": "/static/thumbnails/VF8_SRC_B1A26714.jpg",
+        "scene_changes_detected": [
+          145.006062,
+          147.215021,
+          148.432896,
+          150.509854
+        ],
+        "visual_human_detected": false,
+        "visual_human_confidence": 0.0
+      },
+      "raw_measurements": {
+        "motion_score_raw": 0.0,
+        "silence_duration_raw": 0.0,
+        "evidence_count": 1
+      },
+      "normalized_scores": {
+        "speech_score": 0.0,
+        "motion_score_normalized": 0.0,
+        "scenery_score": 0.708,
+        "weak_human_score": 0.7200000000000001,
+        "highlight_score": 0.219,
+        "filler_score": 0.0
+      },
+      "tag_reason": "Static Scenery",
+      "score_details_per_intent": {
+        "speech_human_priority": {
+          "score": 0.17440000000000005,
+          "calculation_log": "base(0.5)*0.2 + speech(0.00)*0.5 + weak_human(0.72)*0.3 - scenery(0.71)*0.2 - filler(0.00)*0.3"
+        },
+        "visual_human_priority": {
+          "score": 0.1,
+          "calculation_log": "base(0.5)*0.2 + visual_human(0.00)*0.8"
+        },
+        "reduce_scenery": {
+          "score": 0.24600000000000002,
+          "calculation_log": "base(0.5)*0.2 + speech(0.00)*0.3 + motion(0.00)*0.3 + (1.0 - scenery(0.71))*0.5"
+        },
+        "fast_pace": {
+          "score": 0.14051039999999979,
+          "calculation_log": "base(0.5)*0.1 + motion(0.00)*0.4 + (1.0 - silence(0.78))*0.3 + len_factor(0.12)*0.2"
+        },
+        "balanced_sources": {
+          "score": 0.5,
+          "calculation_log": "base(0.5) - parent_penalty(0.3 * 0) - source_penalty(0.4 * 0)"
+        }
+      }
+    },
+    {
+      "candidate_id": "MC_SF_EE7ED8_SRC_B1A26714_P008_003",
+      "parent_semantic_fragment_id": "SF_EE7ED8_SRC_B1A26714_P008",
+      "source_id": "SRC_B1A26714",
+      "time_range": "150.51s - 155.42s (duration: 4.91s)",
+      "text_match_summary": "No text transcription matches.",
+      "visual_signals": {
+        "keyframe_exists": true,
+        "keyframe_path": "/static/thumbnails/VF8_SRC_B1A26714.jpg",
+        "scene_changes_detected": [
+          150.509854,
+          152.334083,
+          155.424771
+        ],
+        "visual_human_detected": false,
+        "visual_human_confidence": 0.0
+      },
+      "raw_measurements": {
+        "motion_score_raw": 0.0,
+        "silence_duration_raw": 0.0,
+        "evidence_count": 1
+      },
+      "normalized_scores": {
+        "speech_score": 0.0,
+        "motion_score_normalized": 0.0,
+        "scenery_score": 0.708,
+        "weak_human_score": 0.7200000000000001,
+        "highlight_score": 0.219,
+        "filler_score": 0.0
+      },
+      "tag_reason": "Static Scenery",
+      "score_details_per_intent": {
+        "speech_human_priority": {
+          "score": 0.17440000000000005,
+          "calculation_log": "base(0.5)*0.2 + speech(0.00)*0.5 + weak_human(0.72)*0.3 - scenery(0.71)*0.2 - filler(0.00)*0.3"
+        },
+        "visual_human_priority": {
+          "score": 0.1,
+          "calculation_log": "base(0.5)*0.2 + visual_human(0.00)*0.8"
+        },
+        "reduce_scenery": {
+          "score": 0.24600000000000002,
+          "calculation_log": "base(0.5)*0.2 + speech(0.00)*0.3 + motion(0.00)*0.3 + (1.0 - scenery(0.71))*0.5"
+        },
+        "fast_pace": {
+          "score": 0.16995414999999986,
+          "calculation_log": "base(0.5)*0.1 + motion(0.00)*0.4 + (1.0 - silence(0.78))*0.3 + len_factor(0.27)*0.2"
+        },
+        "balanced_sources": {
+          "score": 0.5,
+          "calculation_log": "base(0.5) - parent_penalty(0.3 * 0) - source_penalty(0.4 * 0)"
+        }
+      }
+    },
+    {
+      "candidate_id": "MC_SF_EE7ED8_SRC_B1A26714_P008_004",
+      "parent_semantic_fragment_id": "SF_EE7ED8_SRC_B1A26714_P008",
+      "source_id": "SRC_B1A26714",
+      "time_range": "155.42s - 160.00s (duration: 4.58s)",
+      "text_match_summary": "No text transcription matches.",
+      "visual_signals": {
+        "keyframe_exists": true,
+        "keyframe_path": "/static/thumbnails/VF9_SRC_B1A26714.jpg",
+        "scene_changes_detected": [
+          155.424771
+        ],
+        "visual_human_detected": false,
+        "visual_human_confidence": 0.0
+      },
+      "raw_measurements": {
+        "motion_score_raw": 0.0,
+        "silence_duration_raw": 0.0,
+        "evidence_count": 2
+      },
+      "normalized_scores": {
+        "speech_score": 0.0,
+        "motion_score_normalized": 0.0,
+        "scenery_score": 0.766,
+        "weak_human_score": 0.8933333333333333,
+        "highlight_score": 0.1755,
+        "filler_score": 0.0
+      },
+      "tag_reason": "Static Scenery",
+      "score_details_per_intent": {
+        "speech_human_priority": {
+          "score": 0.2148,
+          "calculation_log": "base(0.5)*0.2 + speech(0.00)*0.5 + weak_human(0.89)*0.3 - scenery(0.77)*0.2 - filler(0.00)*0.3"
+        },
+        "visual_human_priority": {
+          "score": 0.1,
+          "calculation_log": "base(0.5)*0.2 + visual_human(0.00)*0.8"
+        },
+        "reduce_scenery": {
+          "score": 0.217,
+          "calculation_log": "base(0.5)*0.2 + speech(0.00)*0.3 + motion(0.00)*0.3 + (1.0 - scenery(0.77))*0.5"
+        },
+        "fast_pace": {
+          "score": 0.17388854999999964,
+          "calculation_log": "base(0.5)*0.1 + motion(0.00)*0.4 + (1.0 - silence(0.82))*0.3 + len_factor(0.36)*0.2"
+        },
+        "balanced_sources": {
+          "score": 0.5,
+          "calculation_log": "base(0.5) - parent_penalty(0.3 * 0) - source_penalty(0.4 * 0)"
+        }
+      }
+    },
+    {
+      "candidate_id": "MC_SF_EE7ED8_SRC_B1A26714_P009_001",
+      "parent_semantic_fragment_id": "SF_EE7ED8_SRC_B1A26714_P009",
+      "source_id": "SRC_B1A26714",
+      "time_range": "160.00s - 165.51s (duration: 5.51s)",
+      "text_match_summary": "No text transcription matches.",
+      "visual_signals": {
+        "keyframe_exists": true,
+        "keyframe_path": "/static/thumbnails/VF9_SRC_B1A26714.jpg",
+        "scene_changes_detected": [
+          160.075646,
+          161.467667,
+          162.859604,
+          165.506854
+        ],
+        "visual_human_detected": false,
+        "visual_human_confidence": 0.0
+      },
+      "raw_measurements": {
+        "motion_score_raw": 0.0,
+        "silence_duration_raw": 0.0,
+        "evidence_count": 2
+      },
+      "normalized_scores": {
+        "speech_score": 0.0,
+        "motion_score_normalized": 0.0,
+        "scenery_score": 0.766,
+        "weak_human_score": 0.8933333333333333,
+        "highlight_score": 0.1755,
+        "filler_score": 0.0
+      },
+      "tag_reason": "Static Scenery",
+      "score_details_per_intent": {
+        "speech_human_priority": {
+          "score": 0.2148,
+          "calculation_log": "base(0.5)*0.2 + speech(0.00)*0.5 + weak_human(0.89)*0.3 - scenery(0.77)*0.2 - filler(0.00)*0.3"
+        },
+        "visual_human_priority": {
+          "score": 0.1,
+          "calculation_log": "base(0.5)*0.2 + visual_human(0.00)*0.8"
+        },
+        "reduce_scenery": {
+          "score": 0.217,
+          "calculation_log": "base(0.5)*0.2 + speech(0.00)*0.3 + motion(0.00)*0.3 + (1.0 - scenery(0.77))*0.5"
+        },
+        "fast_pace": {
+          "score": 0.1273072999999998,
+          "calculation_log": "base(0.5)*0.1 + motion(0.00)*0.4 + (1.0 - silence(0.82))*0.3 + len_factor(0.12)*0.2"
+        },
+        "balanced_sources": {
+          "score": 0.5,
+          "calculation_log": "base(0.5) - parent_penalty(0.3 * 0) - source_penalty(0.4 * 0)"
+        }
+      }
+    },
+    {
+      "candidate_id": "MC_SF_EE7ED8_SRC_B1A26714_P009_002",
+      "parent_semantic_fragment_id": "SF_EE7ED8_SRC_B1A26714_P009",
+      "source_id": "SRC_B1A26714",
+      "time_range": "165.51s - 170.47s (duration: 4.96s)",
+      "text_match_summary": "No text transcription matches.",
+      "visual_signals": {
+        "keyframe_exists": true,
+        "keyframe_path": "/static/thumbnails/VF9_SRC_B1A26714.jpg",
+        "scene_changes_detected": [
+          165.506854,
+          166.670604,
+          168.065812,
+          169.131375,
+          169.814521,
+          170.470479
+        ],
+        "visual_human_detected": false,
+        "visual_human_confidence": 0.0
+      },
+      "raw_measurements": {
+        "motion_score_raw": 0.0,
+        "silence_duration_raw": 0.0,
+        "evidence_count": 1
+      },
+      "normalized_scores": {
+        "speech_score": 0.0,
+        "motion_score_normalized": 0.0,
+        "scenery_score": 0.8240000000000001,
+        "weak_human_score": 0.5066666666666666,
+        "highlight_score": 0.132,
+        "filler_score": 0.0
+      },
+      "tag_reason": "Static Scenery",
+      "score_details_per_intent": {
+        "speech_human_priority": {
+          "score": 0.08719999999999997,
+          "calculation_log": "base(0.5)*0.2 + speech(0.00)*0.5 + weak_human(0.51)*0.3 - scenery(0.82)*0.2 - filler(0.00)*0.3"
+        },
+        "visual_human_priority": {
+          "score": 0.1,
+          "calculation_log": "base(0.5)*0.2 + visual_human(0.00)*0.8"
+        },
+        "reduce_scenery": {
+          "score": 0.18799999999999997,
+          "calculation_log": "base(0.5)*0.2 + speech(0.00)*0.3 + motion(0.00)*0.3 + (1.0 - scenery(0.82))*0.5"
+        },
+        "fast_pace": {
+          "score": 0.14141874999999965,
+          "calculation_log": "base(0.5)*0.1 + motion(0.00)*0.4 + (1.0 - silence(0.87))*0.3 + len_factor(0.26)*0.2"
+        },
+        "balanced_sources": {
+          "score": 0.5,
+          "calculation_log": "base(0.5) - parent_penalty(0.3 * 0) - source_penalty(0.4 * 0)"
+        }
+      }
+    },
+    {
+      "candidate_id": "MC_SF_EE7ED8_SRC_B1A26714_P009_003",
+      "parent_semantic_fragment_id": "SF_EE7ED8_SRC_B1A26714_P009",
+      "source_id": "SRC_B1A26714",
+      "time_range": "170.47s - 176.37s (duration: 5.89s)",
+      "text_match_summary": "No text transcription matches.",
+      "visual_signals": {
+        "keyframe_exists": true,
+        "keyframe_path": "/static/thumbnails/VF9_SRC_B1A26714.jpg",
+        "scene_changes_detected": [
+          170.470479,
+          171.520729,
+          172.319458,
+          173.255604,
+          175.392833,
+          176.365208
+        ],
+        "visual_human_detected": false,
+        "visual_human_confidence": 0.0
+      },
+      "raw_measurements": {
+        "motion_score_raw": 0.0,
+        "silence_duration_raw": 0.0,
+        "evidence_count": 1
+      },
+      "normalized_scores": {
+        "speech_score": 0.0,
+        "motion_score_normalized": 0.0,
+        "scenery_score": 0.8240000000000001,
+        "weak_human_score": 0.5066666666666666,
+        "highlight_score": 0.132,
+        "filler_score": 0.0
+      },
+      "tag_reason": "Static Scenery",
+      "score_details_per_intent": {
+        "speech_human_priority": {
+          "score": 0.08719999999999997,
+          "calculation_log": "base(0.5)*0.2 + speech(0.00)*0.5 + weak_human(0.51)*0.3 - scenery(0.82)*0.2 - filler(0.00)*0.3"
+        },
+        "visual_human_priority": {
+          "score": 0.1,
+          "calculation_log": "base(0.5)*0.2 + visual_human(0.00)*0.8"
+        },
+        "reduce_scenery": {
+          "score": 0.18799999999999997,
+          "calculation_log": "base(0.5)*0.2 + speech(0.00)*0.3 + motion(0.00)*0.3 + (1.0 - scenery(0.82))*0.5"
+        },
+        "fast_pace": {
+          "score": 0.09486355000000082,
+          "calculation_log": "base(0.5)*0.1 + motion(0.00)*0.4 + (1.0 - silence(0.87))*0.3 + len_factor(0.03)*0.2"
+        },
+        "balanced_sources": {
+          "score": 0.5,
+          "calculation_log": "base(0.5) - parent_penalty(0.3 * 0) - source_penalty(0.4 * 0)"
+        }
+      }
+    },
+    {
+      "candidate_id": "MC_SF_EE7ED8_SRC_B1A26714_P009_004",
+      "parent_semantic_fragment_id": "SF_EE7ED8_SRC_B1A26714_P009",
+      "source_id": "SRC_B1A26714",
+      "time_range": "176.37s - 180.00s (duration: 3.63s)",
+      "text_match_summary": "No text transcription matches.",
+      "visual_signals": {
+        "keyframe_exists": true,
+        "keyframe_path": "/static/thumbnails/VF10_SRC_B1A26714.jpg",
+        "scene_changes_detected": [
+          176.365208,
+          179.380292
+        ],
+        "visual_human_detected": false,
+        "visual_human_confidence": 0.0
+      },
+      "raw_measurements": {
+        "motion_score_raw": 0.0,
+        "silence_duration_raw": 0.0,
+        "evidence_count": 2
+      },
+      "normalized_scores": {
+        "speech_score": 0.0,
+        "motion_score_normalized": 0.0,
+        "scenery_score": 0.8365,
+        "weak_human_score": 0.42333333333333323,
+        "highlight_score": 0.122625,
+        "filler_score": 0.0
+      },
+      "tag_reason": "Static Scenery",
+      "score_details_per_intent": {
+        "speech_human_priority": {
+          "score": 0.059699999999999975,
+          "calculation_log": "base(0.5)*0.2 + speech(0.00)*0.5 + weak_human(0.42)*0.3 - scenery(0.84)*0.2 - filler(0.00)*0.3"
+        },
+        "visual_human_priority": {
+          "score": 0.1,
+          "calculation_log": "base(0.5)*0.2 + visual_human(0.00)*0.8"
+        },
+        "reduce_scenery": {
+          "score": 0.18175,
+          "calculation_log": "base(0.5)*0.2 + speech(0.00)*0.3 + motion(0.00)*0.3 + (1.0 - scenery(0.84))*0.5"
+        },
+        "fast_pace": {
+          "score": 0.20504789999999978,
+          "calculation_log": "base(0.5)*0.1 + motion(0.00)*0.4 + (1.0 - silence(0.88))*0.3 + len_factor(0.59)*0.2"
+        },
+        "balanced_sources": {
+          "score": 0.5,
+          "calculation_log": "base(0.5) - parent_penalty(0.3 * 0) - source_penalty(0.4 * 0)"
+        }
+      }
+    },
+    {
+      "candidate_id": "MC_SF_EE7ED8_SRC_B1A26714_P010_001",
+      "parent_semantic_fragment_id": "SF_EE7ED8_SRC_B1A26714_P010",
+      "source_id": "SRC_B1A26714",
+      "time_range": "180.00s - 182.34s (duration: 2.34s)",
+      "text_match_summary": "No text transcription matches.",
+      "visual_signals": {
+        "keyframe_exists": true,
+        "keyframe_path": "/static/thumbnails/VF10_SRC_B1A26714.jpg",
+        "scene_changes_detected": [
+          181.957396,
+          182.336562
+        ],
+        "visual_human_detected": false,
+        "visual_human_confidence": 0.0
+      },
+      "raw_measurements": {
+        "motion_score_raw": 0.0,
+        "silence_duration_raw": 0.0,
+        "evidence_count": 1
+      },
+      "normalized_scores": {
+        "speech_score": 0.0,
+        "motion_score_normalized": 0.0,
+        "scenery_score": 0.849,
+        "weak_human_score": 0.33999999999999997,
+        "highlight_score": 0.11324999999999999,
+        "filler_score": 0.0
+      },
+      "tag_reason": "Static Scenery",
+      "score_details_per_intent": {
+        "speech_human_priority": {
+          "score": 0.032200000000000006,
+          "calculation_log": "base(0.5)*0.2 + speech(0.00)*0.5 + weak_human(0.34)*0.3 - scenery(0.85)*0.2 - filler(0.00)*0.3"
+        },
+        "visual_human_priority": {
+          "score": 0.1,
+          "calculation_log": "base(0.5)*0.2 + visual_human(0.00)*0.8"
+        },
+        "reduce_scenery": {
+          "score": 0.17550000000000002,
+          "calculation_log": "base(0.5)*0.2 + speech(0.00)*0.3 + motion(0.00)*0.3 + (1.0 - scenery(0.85))*0.5"
+        },
+        "fast_pace": {
+          "score": 0.2671469000000007,
+          "calculation_log": "base(0.5)*0.1 + motion(0.00)*0.4 + (1.0 - silence(0.89))*0.3 + len_factor(0.92)*0.2"
+        },
+        "balanced_sources": {
+          "score": 0.5,
+          "calculation_log": "base(0.5) - parent_penalty(0.3 * 0) - source_penalty(0.4 * 0)"
+        }
+      }
+    },
+    {
+      "candidate_id": "MC_SF_EE7ED8_SRC_B1A26714_P010_002",
+      "parent_semantic_fragment_id": "SF_EE7ED8_SRC_B1A26714_P010",
+      "source_id": "SRC_B1A26714",
+      "time_range": "182.34s - 186.34s (duration: 4.00s)",
+      "text_match_summary": "No text transcription matches.",
+      "visual_signals": {
+        "keyframe_exists": true,
+        "keyframe_path": "/static/thumbnails/VF10_SRC_B1A26714.jpg",
+        "scene_changes_detected": [
+          182.336562
+        ],
+        "visual_human_detected": false,
+        "visual_human_confidence": 0.0
+      },
+      "raw_measurements": {
+        "motion_score_raw": 0.0,
+        "silence_duration_raw": 0.0,
+        "evidence_count": 1
+      },
+      "normalized_scores": {
+        "speech_score": 0.0,
+        "motion_score_normalized": 0.0,
+        "scenery_score": 0.849,
+        "weak_human_score": 0.33999999999999997,
+        "highlight_score": 0.11324999999999999,
+        "filler_score": 0.0
+      },
+      "tag_reason": "Static Scenery",
+      "score_details_per_intent": {
+        "speech_human_priority": {
+          "score": 0.032200000000000006,
+          "calculation_log": "base(0.5)*0.2 + speech(0.00)*0.5 + weak_human(0.34)*0.3 - scenery(0.85)*0.2 - filler(0.00)*0.3"
+        },
+        "visual_human_priority": {
+          "score": 0.1,
+          "calculation_log": "base(0.5)*0.2 + visual_human(0.00)*0.8"
+        },
+        "reduce_scenery": {
+          "score": 0.17550000000000002,
+          "calculation_log": "base(0.5)*0.2 + speech(0.00)*0.3 + motion(0.00)*0.3 + (1.0 - scenery(0.85))*0.5"
+        },
+        "fast_pace": {
+          "score": 0.183975,
+          "calculation_log": "base(0.5)*0.1 + motion(0.00)*0.4 + (1.0 - silence(0.89))*0.3 + len_factor(0.50)*0.2"
+        },
+        "balanced_sources": {
+          "score": 0.5,
+          "calculation_log": "base(0.5) - parent_penalty(0.3 * 0) - source_penalty(0.4 * 0)"
+        }
+      }
+    },
+    {
+      "candidate_id": "MC_SF_EE7ED8_SRC_B1A26714_P010_003",
+      "parent_semantic_fragment_id": "SF_EE7ED8_SRC_B1A26714_P010",
+      "source_id": "SRC_B1A26714",
+      "time_range": "186.34s - 191.81s (duration: 5.47s)",
+      "text_match_summary": "No text transcription matches.",
+      "visual_signals": {
+        "keyframe_exists": true,
+        "keyframe_path": "/static/thumbnails/VF10_SRC_B1A26714.jpg",
+        "scene_changes_detected": [
+          189.704625,
+          190.570104,
+          191.809979
+        ],
+        "visual_human_detected": false,
+        "visual_human_confidence": 0.0
+      },
+      "raw_measurements": {
+        "motion_score_raw": 0.0,
+        "silence_duration_raw": 0.0,
+        "evidence_count": 1
+      },
+      "normalized_scores": {
+        "speech_score": 0.0,
+        "motion_score_normalized": 0.0,
+        "scenery_score": 0.849,
+        "weak_human_score": 0.33999999999999997,
+        "highlight_score": 0.11324999999999999,
+        "filler_score": 0.0
+      },
+      "tag_reason": "Static Scenery",
+      "score_details_per_intent": {
+        "speech_human_priority": {
+          "score": 0.032200000000000006,
+          "calculation_log": "base(0.5)*0.2 + speech(0.00)*0.5 + weak_human(0.34)*0.3 - scenery(0.85)*0.2 - filler(0.00)*0.3"
+        },
+        "visual_human_priority": {
+          "score": 0.1,
+          "calculation_log": "base(0.5)*0.2 + visual_human(0.00)*0.8"
+        },
+        "reduce_scenery": {
+          "score": 0.17550000000000002,
+          "calculation_log": "base(0.5)*0.2 + speech(0.00)*0.3 + motion(0.00)*0.3 + (1.0 - scenery(0.85))*0.5"
+        },
+        "fast_pace": {
+          "score": 0.11030414999999939,
+          "calculation_log": "base(0.5)*0.1 + motion(0.00)*0.4 + (1.0 - silence(0.89))*0.3 + len_factor(0.13)*0.2"
+        },
+        "balanced_sources": {
+          "score": 0.5,
+          "calculation_log": "base(0.5) - parent_penalty(0.3 * 0) - source_penalty(0.4 * 0)"
+        }
+      }
+    },
+    {
+      "candidate_id": "MC_SF_EE7ED8_SRC_B1A26714_P010_004",
+      "parent_semantic_fragment_id": "SF_EE7ED8_SRC_B1A26714_P010",
+      "source_id": "SRC_B1A26714",
+      "time_range": "191.81s - 196.60s (duration: 4.79s)",
+      "text_match_summary": "No text transcription matches.",
+      "visual_signals": {
+        "keyframe_exists": true,
+        "keyframe_path": "/static/thumbnails/VF10_SRC_B1A26714.jpg",
+        "scene_changes_detected": [
+          191.809979,
+          194.401792,
+          195.036042,
+          196.600667
+        ],
+        "visual_human_detected": false,
+        "visual_human_confidence": 0.0
+      },
+      "raw_measurements": {
+        "motion_score_raw": 0.0,
+        "silence_duration_raw": 0.0,
+        "evidence_count": 1
+      },
+      "normalized_scores": {
+        "speech_score": 0.0,
+        "motion_score_normalized": 0.0,
+        "scenery_score": 0.849,
+        "weak_human_score": 0.33999999999999997,
+        "highlight_score": 0.11324999999999999,
+        "filler_score": 0.0
+      },
+      "tag_reason": "Static Scenery",
+      "score_details_per_intent": {
+        "speech_human_priority": {
+          "score": 0.032200000000000006,
+          "calculation_log": "base(0.5)*0.2 + speech(0.00)*0.5 + weak_human(0.34)*0.3 - scenery(0.85)*0.2 - filler(0.00)*0.3"
+        },
+        "visual_human_priority": {
+          "score": 0.1,
+          "calculation_log": "base(0.5)*0.2 + visual_human(0.00)*0.8"
+        },
+        "reduce_scenery": {
+          "score": 0.17550000000000002,
+          "calculation_log": "base(0.5)*0.2 + speech(0.00)*0.3 + motion(0.00)*0.3 + (1.0 - scenery(0.85))*0.5"
+        },
+        "fast_pace": {
+          "score": 0.14444060000000056,
+          "calculation_log": "base(0.5)*0.1 + motion(0.00)*0.4 + (1.0 - silence(0.89))*0.3 + len_factor(0.30)*0.2"
+        },
+        "balanced_sources": {
+          "score": 0.5,
+          "calculation_log": "base(0.5) - parent_penalty(0.3 * 0) - source_penalty(0.4 * 0)"
+        }
+      }
+    },
+    {
+      "candidate_id": "MC_SF_EE7ED8_SRC_B1A26714_P010_005",
+      "parent_semantic_fragment_id": "SF_EE7ED8_SRC_B1A26714_P010",
+      "source_id": "SRC_B1A26714",
+      "time_range": "196.60s - 200.00s (duration: 3.40s)",
+      "text_match_summary": "No text transcription matches.",
+      "visual_signals": {
+        "keyframe_exists": true,
+        "keyframe_path": "/static/thumbnails/VF11_SRC_B1A26714.jpg",
+        "scene_changes_detected": [
+          196.600667,
+          198.599479,
+          199.891604
+        ],
+        "visual_human_detected": false,
+        "visual_human_confidence": 0.0
+      },
+      "raw_measurements": {
+        "motion_score_raw": 0.0,
+        "silence_duration_raw": 0.0,
+        "evidence_count": 2
+      },
+      "normalized_scores": {
+        "speech_score": 0.0,
+        "motion_score_normalized": 0.0,
+        "scenery_score": 0.895,
+        "weak_human_score": 0.033333333333333215,
+        "highlight_score": 0.07875,
+        "filler_score": 0.0
+      },
+      "tag_reason": "Static Scenery, Silent Pause",
+      "score_details_per_intent": {
+        "speech_human_priority": {
+          "score": -0.06900000000000005,
+          "calculation_log": "base(0.5)*0.2 + speech(0.00)*0.5 + weak_human(0.03)*0.3 - scenery(0.90)*0.2 - filler(0.00)*0.3"
+        },
+        "visual_human_priority": {
+          "score": 0.1,
+          "calculation_log": "base(0.5)*0.2 + visual_human(0.00)*0.8"
+        },
+        "reduce_scenery": {
+          "score": 0.1525,
+          "calculation_log": "base(0.5)*0.2 + speech(0.00)*0.3 + motion(0.00)*0.3 + (1.0 - scenery(0.90))*0.5"
+        },
+        "fast_pace": {
+          "score": 0.20365834999999935,
+          "calculation_log": "base(0.5)*0.1 + motion(0.00)*0.4 + (1.0 - silence(0.92))*0.3 + len_factor(0.65)*0.2"
+        },
+        "balanced_sources": {
+          "score": 0.5,
+          "calculation_log": "base(0.5) - parent_penalty(0.3 * 0) - source_penalty(0.4 * 0)"
+        }
+      }
+    },
+    {
+      "candidate_id": "MC_SF_EE7ED8_SRC_B1A26714_P011_001",
+      "parent_semantic_fragment_id": "SF_EE7ED8_SRC_B1A26714_P011",
+      "source_id": "SRC_B1A26714",
+      "time_range": "200.00s - 203.95s (duration: 3.95s)",
+      "text_match_summary": "No text transcription matches.",
+      "visual_signals": {
+        "keyframe_exists": true,
+        "keyframe_path": "/static/thumbnails/VF11_SRC_B1A26714.jpg",
+        "scene_changes_detected": [
+          201.657813,
+          203.185104,
+          203.949104
+        ],
+        "visual_human_detected": false,
+        "visual_human_confidence": 0.0
+      },
+      "raw_measurements": {
+        "motion_score_raw": 0.0,
+        "silence_duration_raw": 0.0,
+        "evidence_count": 1
+      },
+      "normalized_scores": {
+        "speech_score": 0.0,
+        "motion_score_normalized": 0.0,
+        "scenery_score": 0.9410000000000001,
+        "weak_human_score": 0.0,
+        "highlight_score": 0.04425,
+        "filler_score": 0.2646
+      },
+      "tag_reason": "Static Scenery, Silent Pause",
+      "score_details_per_intent": {
+        "speech_human_priority": {
+          "score": -0.16758,
+          "calculation_log": "base(0.5)*0.2 + speech(0.00)*0.5 + weak_human(0.00)*0.3 - scenery(0.94)*0.2 - filler(0.26)*0.3"
+        },
+        "visual_human_priority": {
+          "score": 0.1,
+          "calculation_log": "base(0.5)*0.2 + visual_human(0.00)*0.8"
+        },
+        "reduce_scenery": {
+          "score": 0.12949999999999998,
+          "calculation_log": "base(0.5)*0.2 + speech(0.00)*0.3 + motion(0.00)*0.3 + (1.0 - scenery(0.94))*0.5"
+        },
+        "fast_pace": {
+          "score": 0.16581979999999974,
+          "calculation_log": "base(0.5)*0.1 + motion(0.00)*0.4 + (1.0 - silence(0.96))*0.3 + len_factor(0.51)*0.2"
+        },
+        "balanced_sources": {
+          "score": 0.5,
+          "calculation_log": "base(0.5) - parent_penalty(0.3 * 0) - source_penalty(0.4 * 0)"
+        }
+      }
+    },
+    {
+      "candidate_id": "MC_SF_EE7ED8_SRC_B1A26714_P011_002",
+      "parent_semantic_fragment_id": "SF_EE7ED8_SRC_B1A26714_P011",
+      "source_id": "SRC_B1A26714",
+      "time_range": "203.95s - 209.51s (duration: 5.56s)",
+      "text_match_summary": "No text transcription matches.",
+      "visual_signals": {
+        "keyframe_exists": true,
+        "keyframe_path": "/static/thumbnails/VF11_SRC_B1A26714.jpg",
+        "scene_changes_detected": [
+          203.949104,
+          209.505812
+        ],
+        "visual_human_detected": false,
+        "visual_human_confidence": 0.0
+      },
+      "raw_measurements": {
+        "motion_score_raw": 0.0,
+        "silence_duration_raw": 0.0,
+        "evidence_count": 1
+      },
+      "normalized_scores": {
+        "speech_score": 0.0,
+        "motion_score_normalized": 0.0,
+        "scenery_score": 0.9410000000000001,
+        "weak_human_score": 0.0,
+        "highlight_score": 0.04425,
+        "filler_score": 0.2646
+      },
+      "tag_reason": "Static Scenery, Silent Pause",
+      "score_details_per_intent": {
+        "speech_human_priority": {
+          "score": -0.16758,
+          "calculation_log": "base(0.5)*0.2 + speech(0.00)*0.5 + weak_human(0.00)*0.3 - scenery(0.94)*0.2 - filler(0.26)*0.3"
+        },
+        "visual_human_priority": {
+          "score": 0.1,
+          "calculation_log": "base(0.5)*0.2 + visual_human(0.00)*0.8"
+        },
+        "reduce_scenery": {
+          "score": 0.12949999999999998,
+          "calculation_log": "base(0.5)*0.2 + speech(0.00)*0.3 + motion(0.00)*0.3 + (1.0 - scenery(0.94))*0.5"
+        },
+        "fast_pace": {
+          "score": 0.0854396000000007,
+          "calculation_log": "base(0.5)*0.1 + motion(0.00)*0.4 + (1.0 - silence(0.96))*0.3 + len_factor(0.11)*0.2"
+        },
+        "balanced_sources": {
+          "score": 0.5,
+          "calculation_log": "base(0.5) - parent_penalty(0.3 * 0) - source_penalty(0.4 * 0)"
+        }
+      }
+    },
+    {
+      "candidate_id": "MC_SF_EE7ED8_SRC_B1A26714_P011_003",
+      "parent_semantic_fragment_id": "SF_EE7ED8_SRC_B1A26714_P011",
+      "source_id": "SRC_B1A26714",
+      "time_range": "209.51s - 212.69s (duration: 3.18s)",
+      "text_match_summary": "No text transcription matches.",
+      "visual_signals": {
+        "keyframe_exists": true,
+        "keyframe_path": "/static/thumbnails/VF11_SRC_B1A26714.jpg",
+        "scene_changes_detected": [
+          209.505812,
+          210.722167,
+          212.685958
+        ],
+        "visual_human_detected": false,
+        "visual_human_confidence": 0.0
+      },
+      "raw_measurements": {
+        "motion_score_raw": 0.0,
+        "silence_duration_raw": 0.0,
+        "evidence_count": 1
+      },
+      "normalized_scores": {
+        "speech_score": 0.0,
+        "motion_score_normalized": 0.0,
+        "scenery_score": 0.9410000000000001,
+        "weak_human_score": 0.0,
+        "highlight_score": 0.04425,
+        "filler_score": 0.2646
+      },
+      "tag_reason": "Static Scenery, Silent Pause",
+      "score_details_per_intent": {
+        "speech_human_priority": {
+          "score": -0.16758,
+          "calculation_log": "base(0.5)*0.2 + speech(0.00)*0.5 + weak_human(0.00)*0.3 - scenery(0.94)*0.2 - filler(0.26)*0.3"
+        },
+        "visual_human_priority": {
+          "score": 0.1,
+          "calculation_log": "base(0.5)*0.2 + visual_human(0.00)*0.8"
+        },
+        "reduce_scenery": {
+          "score": 0.12949999999999998,
+          "calculation_log": "base(0.5)*0.2 + speech(0.00)*0.3 + motion(0.00)*0.3 + (1.0 - scenery(0.94))*0.5"
+        },
+        "fast_pace": {
+          "score": 0.2042676999999996,
+          "calculation_log": "base(0.5)*0.1 + motion(0.00)*0.4 + (1.0 - silence(0.96))*0.3 + len_factor(0.70)*0.2"
+        },
+        "balanced_sources": {
+          "score": 0.5,
+          "calculation_log": "base(0.5) - parent_penalty(0.3 * 0) - source_penalty(0.4 * 0)"
+        }
+      }
+    },
+    {
+      "candidate_id": "MC_SF_EE7ED8_SRC_B1A26714_P011_004",
+      "parent_semantic_fragment_id": "SF_EE7ED8_SRC_B1A26714_P011",
+      "source_id": "SRC_B1A26714",
+      "time_range": "212.69s - 217.43s (duration: 4.74s)",
+      "text_match_summary": "No text transcription matches.",
+      "visual_signals": {
+        "keyframe_exists": true,
+        "keyframe_path": "/static/thumbnails/VF11_SRC_B1A26714.jpg",
+        "scene_changes_detected": [
+          212.685958,
+          215.819458,
+          217.42575
+        ],
+        "visual_human_detected": false,
+        "visual_human_confidence": 0.0
+      },
+      "raw_measurements": {
+        "motion_score_raw": 0.0,
+        "silence_duration_raw": 0.0,
+        "evidence_count": 1
+      },
+      "normalized_scores": {
+        "speech_score": 0.0,
+        "motion_score_normalized": 0.0,
+        "scenery_score": 0.9410000000000001,
+        "weak_human_score": 0.0,
+        "highlight_score": 0.04425,
+        "filler_score": 0.2646
+      },
+      "tag_reason": "Static Scenery, Silent Pause",
+      "score_details_per_intent": {
+        "speech_human_priority": {
+          "score": -0.16758,
+          "calculation_log": "base(0.5)*0.2 + speech(0.00)*0.5 + weak_human(0.00)*0.3 - scenery(0.94)*0.2 - filler(0.26)*0.3"
+        },
+        "visual_human_priority": {
+          "score": 0.1,
+          "calculation_log": "base(0.5)*0.2 + visual_human(0.00)*0.8"
+        },
+        "reduce_scenery": {
+          "score": 0.12949999999999998,
+          "calculation_log": "base(0.5)*0.2 + speech(0.00)*0.3 + motion(0.00)*0.3 + (1.0 - scenery(0.94))*0.5"
+        },
+        "fast_pace": {
+          "score": 0.1262854000000003,
+          "calculation_log": "base(0.5)*0.1 + motion(0.00)*0.4 + (1.0 - silence(0.96))*0.3 + len_factor(0.32)*0.2"
+        },
+        "balanced_sources": {
+          "score": 0.5,
+          "calculation_log": "base(0.5) - parent_penalty(0.3 * 0) - source_penalty(0.4 * 0)"
+        }
+      }
+    },
+    {
+      "candidate_id": "MC_SF_EE7ED8_SRC_B1A26714_P011_005",
+      "parent_semantic_fragment_id": "SF_EE7ED8_SRC_B1A26714_P011",
+      "source_id": "SRC_B1A26714",
+      "time_range": "217.43s - 221.25s (duration: 3.82s)",
+      "text_match_summary": "No text transcription matches.",
+      "visual_signals": {
+        "keyframe_exists": true,
+        "keyframe_path": "/static/thumbnails/VF11_SRC_B1A26714.jpg",
+        "scene_changes_detected": [
+          217.42575
+        ],
+        "visual_human_detected": false,
+        "visual_human_confidence": 0.0
+      },
+      "raw_measurements": {
+        "motion_score_raw": 0.0,
+        "silence_duration_raw": 0.0,
+        "evidence_count": 1
+      },
+      "normalized_scores": {
+        "speech_score": 0.0,
+        "motion_score_normalized": 0.0,
+        "scenery_score": 0.9410000000000001,
+        "weak_human_score": 0.0,
+        "highlight_score": 0.04425,
+        "filler_score": 0.2646
+      },
+      "tag_reason": "Static Scenery, Silent Pause",
+      "score_details_per_intent": {
+        "speech_human_priority": {
+          "score": -0.16758,
+          "calculation_log": "base(0.5)*0.2 + speech(0.00)*0.5 + weak_human(0.00)*0.3 - scenery(0.94)*0.2 - filler(0.26)*0.3"
+        },
+        "visual_human_priority": {
+          "score": 0.1,
+          "calculation_log": "base(0.5)*0.2 + visual_human(0.00)*0.8"
+        },
+        "reduce_scenery": {
+          "score": 0.12949999999999998,
+          "calculation_log": "base(0.5)*0.2 + speech(0.00)*0.3 + motion(0.00)*0.3 + (1.0 - scenery(0.94))*0.5"
+        },
+        "fast_pace": {
+          "score": 0.1720624999999997,
+          "calculation_log": "base(0.5)*0.1 + motion(0.00)*0.4 + (1.0 - silence(0.96))*0.3 + len_factor(0.54)*0.2"
+        },
+        "balanced_sources": {
+          "score": 0.5,
+          "calculation_log": "base(0.5) - parent_penalty(0.3 * 0) - source_penalty(0.4 * 0)"
+        }
+      }
+    }
+  ],
+  "schema_used": {
+    "sources": [
+      "source_id",
+      "duration",
+      "title"
+    ],
+    "semantic_fragments": [
+      "id",
+      "fragment_id",
+      "start",
+      "end",
+      "semantic_json",
+      "structural_json",
+      "continuity_json"
+    ],
+    "evidence_board": [
+      "fragment_id",
+      "start",
+      "end",
+      "scene_change",
+      "motion_score",
+      "audio_energy",
+      "silence",
+      "speaker",
+      "keyframe",
+      "metadata_json"
+    ],
+    "fragments": [
+      "intelligence"
+    ],
+    "subtitles": [
+      "segments"
+    ]
+  }
+}

@@ -1,0 +1,966 @@
+{
+  "source_id": "SRC_CB9107CA",
+  "source_duration": 41.92,
+  "parent_semantic_fragment_count": 3,
+  "micro_candidate_count": 11,
+  "candidates_per_parent": 3.6666666666666665,
+  "generation_time_sec": 0.0013512000004993752,
+  "scoring_time_sec": 0.0004329000075813383,
+  "estimated_json_kb": 17.173828125,
+  "intent_not_distinguishable": false,
+  "fail_reasons": [
+    "visual_human_priority_no_visual_evidence"
+  ],
+  "data_insufficient": true,
+  "speech_insufficient": false,
+  "visual_insufficient": true,
+  "scenery_reduction_effect": "WEAK_EFFECT",
+  "pace_success": true,
+  "balanced_success": true,
+  "score_formulas": {
+    "speech_human_priority": "base_score * 0.2 + speech_score * 0.5 + weak_human_score * 0.3 - scenery_score * 0.2 - filler_score * 0.3",
+    "visual_human_priority": "base_score * 0.2 + visual_human_confidence * 0.8",
+    "reduce_scenery": "base_score * 0.2 + speech_score * 0.3 + motion_score_normalized * 0.3 + (1.0 - scenery_score) * 0.5",
+    "fast_pace": "base_score * 0.1 + motion_score_normalized * 0.4 + (1.0 - silence_normalized) * 0.3 + (1.0 - (duration - 2.0) / 4.0) * 0.2",
+    "balanced_sources": "base_score - (0.3 * count_selected_from_same_parent) - (0.4 * count_selected_from_same_source)"
+  },
+  "intent_results": {
+    "speech_human_priority": {
+      "coarse": {
+        "selected_ids": [
+          "SF_D1BD73_SRC_CB9107CA",
+          "SF_2B336C_SRC_CB9107CA_P001",
+          "SF_2B336C_SRC_CB9107CA_P002"
+        ],
+        "total_duration": 41.92,
+        "avg_motion": 0.0,
+        "avg_speech": 0.6197519083969463,
+        "avg_scenery": 0.24673401717557278,
+        "avg_weak_human": 0.0,
+        "avg_visual_human": 0.0,
+        "clip_count": 3,
+        "avg_clip_duration": 13.973333333333334
+      },
+      "micro": {
+        "selected_ids": [
+          "MC_SF_2B336C_SRC_CB9107CA_P001_005",
+          "MC_SF_D1BD73_SRC_CB9107CA_003",
+          "MC_SF_D1BD73_SRC_CB9107CA_001",
+          "MC_SF_D1BD73_SRC_CB9107CA_002",
+          "MC_SF_2B336C_SRC_CB9107CA_P001_002",
+          "MC_SF_2B336C_SRC_CB9107CA_P002_002",
+          "MC_SF_2B336C_SRC_CB9107CA_P002_003",
+          "MC_SF_2B336C_SRC_CB9107CA_P002_001"
+        ],
+        "total_duration": 30.961688000000002,
+        "avg_motion": 0.0,
+        "avg_speech": 0.6436247597353216,
+        "avg_scenery": 0.20012026886260237,
+        "avg_weak_human": 0.0,
+        "avg_visual_human": 0.0,
+        "clip_count": 8,
+        "avg_clip_duration": 3.8702110000000003,
+        "selection_reason": "Selected 8 clips totaling 30.96s (target 30.0s). Avg speech: 64.36%, scenery: 20.01%, weak human: 0.00%, visual human: 0.00%. Prioritized ASR text speech ratio & weak human voice cues, penalized filler words and scenery."
+      }
+    },
+    "visual_human_priority": {
+      "coarse": {
+        "selected_ids": [
+          "SF_2B336C_SRC_CB9107CA_P001",
+          "SF_2B336C_SRC_CB9107CA_P002"
+        ],
+        "total_duration": 33.03,
+        "avg_motion": 0.0,
+        "avg_speech": 0.48985770511656046,
+        "avg_scenery": 0.3131422948834396,
+        "avg_weak_human": 0.0,
+        "avg_visual_human": 0.0,
+        "clip_count": 2,
+        "avg_clip_duration": 16.515
+      },
+      "micro": {
+        "selected_ids": [
+          "MC_SF_2B336C_SRC_CB9107CA_P001_001",
+          "MC_SF_2B336C_SRC_CB9107CA_P001_002",
+          "MC_SF_2B336C_SRC_CB9107CA_P001_003",
+          "MC_SF_2B336C_SRC_CB9107CA_P001_004",
+          "MC_SF_2B336C_SRC_CB9107CA_P001_005",
+          "MC_SF_2B336C_SRC_CB9107CA_P002_001",
+          "MC_SF_2B336C_SRC_CB9107CA_P002_002",
+          "MC_SF_2B336C_SRC_CB9107CA_P002_003"
+        ],
+        "total_duration": 33.03,
+        "avg_motion": 0.0,
+        "avg_speech": 0.48985770511656035,
+        "avg_scenery": 0.32313941456251927,
+        "avg_weak_human": 0.011471467497080551,
+        "avg_visual_human": 0.0,
+        "clip_count": 8,
+        "avg_clip_duration": 4.12875,
+        "selection_reason": "Selected 8 clips totaling 33.03s (target 30.0s). Avg speech: 48.99%, scenery: 32.31%, weak human: 1.15%, visual human: 0.00%. Prioritized visual human features (such as faces or speaker detections)."
+      }
+    },
+    "reduce_scenery": {
+      "coarse": {
+        "selected_ids": [
+          "SF_D1BD73_SRC_CB9107CA",
+          "SF_2B336C_SRC_CB9107CA_P001",
+          "SF_2B336C_SRC_CB9107CA_P002"
+        ],
+        "total_duration": 41.92,
+        "avg_motion": 0.0,
+        "avg_speech": 0.6197519083969463,
+        "avg_scenery": 0.24673401717557278,
+        "avg_weak_human": 0.0,
+        "avg_visual_human": 0.0,
+        "clip_count": 3,
+        "avg_clip_duration": 13.973333333333334
+      },
+      "micro": {
+        "selected_ids": [
+          "MC_SF_D1BD73_SRC_CB9107CA_001",
+          "MC_SF_2B336C_SRC_CB9107CA_P001_005",
+          "MC_SF_D1BD73_SRC_CB9107CA_003",
+          "MC_SF_D1BD73_SRC_CB9107CA_002",
+          "MC_SF_2B336C_SRC_CB9107CA_P002_002",
+          "MC_SF_2B336C_SRC_CB9107CA_P001_002",
+          "MC_SF_2B336C_SRC_CB9107CA_P001_003",
+          "MC_SF_2B336C_SRC_CB9107CA_P001_001",
+          "MC_SF_2B336C_SRC_CB9107CA_P002_003"
+        ],
+        "total_duration": 33.963854,
+        "avg_motion": 0.0,
+        "avg_speech": 0.6352685122247904,
+        "avg_scenery": 0.20487494219590058,
+        "avg_weak_human": 0.0,
+        "avg_visual_human": 0.0,
+        "clip_count": 9,
+        "avg_clip_duration": 3.7737615555555553,
+        "selection_reason": "Selected 9 clips totaling 33.96s (target 30.0s). Avg speech: 63.53%, scenery: 20.49%, weak human: 0.00%, visual human: 0.00%. Prioritized motion and speech presence, heavily penalized scenic static background clips."
+      }
+    },
+    "fast_pace": {
+      "coarse": {
+        "selected_ids": [
+          "SF_2B336C_SRC_CB9107CA_P001",
+          "SF_2B336C_SRC_CB9107CA_P002"
+        ],
+        "total_duration": 33.03,
+        "avg_motion": 0.0,
+        "avg_speech": 0.48985770511656046,
+        "avg_scenery": 0.3131422948834396,
+        "avg_weak_human": 0.0,
+        "avg_visual_human": 0.0,
+        "clip_count": 2,
+        "avg_clip_duration": 16.515
+      },
+      "micro": {
+        "selected_ids": [
+          "MC_SF_2B336C_SRC_CB9107CA_P001_004",
+          "MC_SF_2B336C_SRC_CB9107CA_P001_005",
+          "MC_SF_D1BD73_SRC_CB9107CA_003",
+          "MC_SF_D1BD73_SRC_CB9107CA_002",
+          "MC_SF_D1BD73_SRC_CB9107CA_001",
+          "MC_SF_2B336C_SRC_CB9107CA_P002_002",
+          "MC_SF_2B336C_SRC_CB9107CA_P001_003",
+          "MC_SF_2B336C_SRC_CB9107CA_P001_001",
+          "MC_SF_2B336C_SRC_CB9107CA_P002_003"
+        ],
+        "total_duration": 30.575999000000003,
+        "avg_motion": 0.0,
+        "avg_speech": 0.6204961937629574,
+        "avg_scenery": 0.2237627970880038,
+        "avg_weak_human": 0.01239215671836497,
+        "avg_visual_human": 0.0,
+        "clip_count": 9,
+        "avg_clip_duration": 3.3973332222222226,
+        "selection_reason": "Selected 9 clips totaling 30.58s (target 30.0s). Avg speech: 62.05%, scenery: 22.38%, weak human: 1.24%, visual human: 0.00%. Prioritized shorter clip durations and active audio/motion energy segments."
+      }
+    },
+    "balanced_sources": {
+      "coarse": {
+        "selected_ids": [
+          "SF_2B336C_SRC_CB9107CA_P001",
+          "SF_2B336C_SRC_CB9107CA_P002"
+        ],
+        "total_duration": 33.03,
+        "avg_motion": 0.0,
+        "avg_speech": 0.48985770511656046,
+        "avg_scenery": 0.3131422948834396,
+        "avg_weak_human": 0.0,
+        "avg_visual_human": 0.0,
+        "clip_count": 2,
+        "avg_clip_duration": 16.515
+      },
+      "micro": {
+        "selected_ids": [
+          "MC_SF_2B336C_SRC_CB9107CA_P001_001",
+          "MC_SF_2B336C_SRC_CB9107CA_P002_001",
+          "MC_SF_D1BD73_SRC_CB9107CA_001",
+          "MC_SF_D1BD73_SRC_CB9107CA_002",
+          "MC_SF_2B336C_SRC_CB9107CA_P002_002",
+          "MC_SF_2B336C_SRC_CB9107CA_P001_002",
+          "MC_SF_2B336C_SRC_CB9107CA_P001_003"
+        ],
+        "total_duration": 30.323667,
+        "avg_motion": 0.0,
+        "avg_speech": 0.575908810764872,
+        "avg_scenery": 0.2502944507667892,
+        "avg_weak_human": 0.0,
+        "avg_visual_human": 0.0,
+        "clip_count": 7,
+        "avg_clip_duration": 4.331952428571428,
+        "selection_reason": "Selected 7 clips totaling 30.32s (target 30.0s). Avg speech: 57.59%, scenery: 25.03%, weak human: 0.00%, visual human: 0.00%. Dynamically penalized repetitive parent fragments to distribute selections evenly."
+      }
+    }
+  },
+  "coarse_vs_micro_comparison": {
+    "speech_human_priority": {
+      "duration_diff": -10.958312,
+      "motion_improvement": 0.0,
+      "speech_ratio_improvement": 0.023872851338375356,
+      "weak_human_score_improvement": 0.0,
+      "visual_human_score_improvement": 0.0,
+      "scenery_reduction": 0.04661374831297041,
+      "clip_duration_reduction_ratio": 0.7230287929389314
+    },
+    "visual_human_priority": {
+      "duration_diff": 0.0,
+      "motion_improvement": 0.0,
+      "speech_ratio_improvement": -1.1102230246251565e-16,
+      "weak_human_score_improvement": 0.011471467497080551,
+      "visual_human_score_improvement": 0.0,
+      "scenery_reduction": -0.00999711967907968,
+      "clip_duration_reduction_ratio": 0.75
+    },
+    "reduce_scenery": {
+      "duration_diff": -7.956146000000004,
+      "motion_improvement": 0.0,
+      "speech_ratio_improvement": 0.015516603827844144,
+      "weak_human_score_improvement": 0.0,
+      "visual_human_score_improvement": 0.0,
+      "scenery_reduction": 0.0418590749796722,
+      "clip_duration_reduction_ratio": 0.7299311863867685
+    },
+    "fast_pace": {
+      "duration_diff": -2.454000999999998,
+      "motion_improvement": 0.0,
+      "speech_ratio_improvement": 0.13063848864639693,
+      "weak_human_score_improvement": 0.01239215671836497,
+      "visual_human_score_improvement": 0.0,
+      "scenery_reduction": 0.08937949779543577,
+      "clip_duration_reduction_ratio": 0.7942880277189087
+    },
+    "balanced_sources": {
+      "duration_diff": -2.7063330000000008,
+      "motion_improvement": 0.0,
+      "speech_ratio_improvement": 0.08605110564831153,
+      "weak_human_score_improvement": 0.0,
+      "visual_human_score_improvement": 0.0,
+      "scenery_reduction": 0.0628478441166504,
+      "clip_duration_reduction_ratio": 0.7376958868561049
+    }
+  },
+  "project_level_simulation": {
+    "project_level_success": true,
+    "total_selected_duration": 60.120527,
+    "unique_source_count": 27,
+    "selected_source_count": 14,
+    "diversity_score": 0.5185185185185185,
+    "source_distribution": {
+      "SRC_CB9107CA": {
+        "duration": 4.509354,
+        "ratio": 0.0750052307425715
+      },
+      "SRC_616AEFBA": {
+        "duration": 4.0,
+        "ratio": 0.06653301625250224
+      },
+      "SRC_1574D87F": {
+        "duration": 4.0,
+        "ratio": 0.06653301625250224
+      },
+      "SRC_6BED729E": {
+        "duration": 2.479312,
+        "ratio": 0.041239026397755965
+      },
+      "SRC_55FFF73F": {
+        "duration": 4.0,
+        "ratio": 0.06653301625250224
+      },
+      "SRC_CE55C9BF": {
+        "duration": 5.459208,
+        "ratio": 0.09080439364744756
+      },
+      "SRC_12C414A7": {
+        "duration": 3.732813,
+        "ratio": 0.06208882699913792
+      },
+      "SRC_B4F09612": {
+        "duration": 5.961111,
+        "ratio": 0.09915267376149246
+      },
+      "SRC_0BE783EC": {
+        "duration": 4.0,
+        "ratio": 0.06653301625250224
+      },
+      "SRC_AA6C87D2": {
+        "duration": 4.0,
+        "ratio": 0.06653301625250224
+      },
+      "SRC_B669588A": {
+        "duration": 4.0,
+        "ratio": 0.06653301625250224
+      },
+      "SRC_2BE80EE2": {
+        "duration": 4.0,
+        "ratio": 0.06653301625250224
+      },
+      "SRC_6F5DEBE2": {
+        "duration": 5.978729,
+        "ratio": 0.09944571843157662
+      },
+      "SRC_634C81D9": {
+        "duration": 4.0,
+        "ratio": 0.06653301625250224
+      }
+    },
+    "selected_clips": [
+      "MC_SF_2B336C_SRC_CB9107CA_P001_001",
+      "MC_SF_7D2BA1_SRC_616AEFBA_P001_001",
+      "MC_SF_770436_SRC_1574D87F_P001_001",
+      "MC_SF_BB4C82_SRC_6BED729E_P001_001",
+      "MC_SF_BC8CAE_SRC_55FFF73F_P001_001",
+      "MC_SF_1EE04B_SRC_CE55C9BF_P001_001",
+      "MC_SF_C68EF0_SRC_12C414A7_P001_001",
+      "MC_SF_B6F3C6_SRC_B4F09612_P001_001",
+      "MC_SF_E9F93B_SRC_0BE783EC_P001_001",
+      "MC_SF_628324_SRC_AA6C87D2_P001_001",
+      "MC_SF_71EE04_SRC_B669588A_P001_001",
+      "MC_SF_60C421_SRC_2BE80EE2_P001_001",
+      "MC_SF_2978A0_SRC_6F5DEBE2_P001_001",
+      "MC_SF_B7132F_SRC_634C81D9_P001_001"
+    ]
+  },
+  "micro_candidates": [
+    {
+      "candidate_id": "MC_SF_2B336C_SRC_CB9107CA_P001_001",
+      "parent_semantic_fragment_id": "SF_2B336C_SRC_CB9107CA_P001",
+      "source_id": "SRC_CB9107CA",
+      "time_range": "0.00s - 4.51s (duration: 4.51s)",
+      "text_match_summary": "Contains 4 words. Sample: '괜찮아? 그래 분위기를 우산시하자'",
+      "visual_signals": {
+        "keyframe_exists": true,
+        "keyframe_path": "/static/thumbnails/VF1_SRC_CB9107CA.jpg",
+        "scene_changes_detected": [
+          1.109354,
+          2.816229,
+          4.509354
+        ],
+        "visual_human_detected": false,
+        "visual_human_confidence": 0.0
+      },
+      "raw_measurements": {
+        "motion_score_raw": 0.0,
+        "silence_duration_raw": 0.0,
+        "evidence_count": 1
+      },
+      "normalized_scores": {
+        "speech_score": 0.3790684874152705,
+        "motion_score_normalized": 0.0,
+        "scenery_score": 0.4239315125847295,
+        "weak_human_score": 0.0,
+        "highlight_score": 0.14774999999999996,
+        "filler_score": 0.6666666666666666
+      },
+      "tag_reason": "Filler Gap",
+      "score_details_per_intent": {
+        "speech_human_priority": {
+          "score": 0.004747941190689359,
+          "calculation_log": "base(0.5)*0.2 + speech(0.38)*0.5 + weak_human(0.00)*0.3 - scenery(0.42)*0.2 - filler(0.67)*0.3"
+        },
+        "visual_human_priority": {
+          "score": 0.1,
+          "calculation_log": "base(0.5)*0.2 + visual_human(0.00)*0.8"
+        },
+        "reduce_scenery": {
+          "score": 0.5017547899322163,
+          "calculation_log": "base(0.5)*0.2 + speech(0.38)*0.3 + motion(0.00)*0.3 + (1.0 - scenery(0.42))*0.5"
+        },
+        "fast_pace": {
+          "score": 0.1688573,
+          "calculation_log": "base(0.5)*0.1 + motion(0.00)*0.4 + (1.0 - silence(0.85))*0.3 + len_factor(0.37)*0.2"
+        },
+        "balanced_sources": {
+          "score": 0.5,
+          "calculation_log": "base(0.5) - parent_penalty(0.3 * 0) - source_penalty(0.4 * 0)"
+        }
+      }
+    },
+    {
+      "candidate_id": "MC_SF_2B336C_SRC_CB9107CA_P001_002",
+      "parent_semantic_fragment_id": "SF_2B336C_SRC_CB9107CA_P001",
+      "source_id": "SRC_CB9107CA",
+      "time_range": "4.51s - 10.09s (duration: 5.58s)",
+      "text_match_summary": "Contains 7 words. Sample: '우산시하자 얼음화 여보 굽지 어떤 맛인가요? 통결은'",
+      "visual_signals": {
+        "keyframe_exists": true,
+        "keyframe_path": "/static/thumbnails/VF1_SRC_CB9107CA.jpg",
+        "scene_changes_detected": [
+          4.509354,
+          8.232125,
+          8.918667,
+          10.087063
+        ],
+        "visual_human_detected": false,
+        "visual_human_confidence": 0.0
+      },
+      "raw_measurements": {
+        "motion_score_raw": 0.0,
+        "silence_duration_raw": 0.0,
+        "evidence_count": 1
+      },
+      "normalized_scores": {
+        "speech_score": 0.5804729145962977,
+        "motion_score_normalized": 0.0,
+        "scenery_score": 0.22252708540370233,
+        "weak_human_score": 0.0,
+        "highlight_score": 0.14774999999999996,
+        "filler_score": 0.6666666666666666
+      },
+      "tag_reason": "Active Speech, Filler Gap",
+      "score_details_per_intent": {
+        "speech_human_priority": {
+          "score": 0.14573104021740838,
+          "calculation_log": "base(0.5)*0.2 + speech(0.58)*0.5 + weak_human(0.00)*0.3 - scenery(0.22)*0.2 - filler(0.67)*0.3"
+        },
+        "visual_human_priority": {
+          "score": 0.1,
+          "calculation_log": "base(0.5)*0.2 + visual_human(0.00)*0.8"
+        },
+        "reduce_scenery": {
+          "score": 0.6628783316770381,
+          "calculation_log": "base(0.5)*0.2 + speech(0.58)*0.3 + motion(0.00)*0.3 + (1.0 - scenery(0.22))*0.5"
+        },
+        "fast_pace": {
+          "score": 0.11543954999999997,
+          "calculation_log": "base(0.5)*0.1 + motion(0.00)*0.4 + (1.0 - silence(0.85))*0.3 + len_factor(0.11)*0.2"
+        },
+        "balanced_sources": {
+          "score": 0.5,
+          "calculation_log": "base(0.5) - parent_penalty(0.3 * 0) - source_penalty(0.4 * 0)"
+        }
+      }
+    },
+    {
+      "candidate_id": "MC_SF_2B336C_SRC_CB9107CA_P001_003",
+      "parent_semantic_fragment_id": "SF_2B336C_SRC_CB9107CA_P001",
+      "source_id": "SRC_CB9107CA",
+      "time_range": "10.09s - 14.35s (duration: 4.26s)",
+      "text_match_summary": "Contains 6 words. Sample: '통결은 집에서 처음에 먹어 보네 얼음'",
+      "visual_signals": {
+        "keyframe_exists": true,
+        "keyframe_path": "/static/thumbnails/VF1_SRC_CB9107CA.jpg",
+        "scene_changes_detected": [
+          10.087063,
+          12.088854,
+          13.135229,
+          13.863417,
+          14.346167
+        ],
+        "visual_human_detected": false,
+        "visual_human_confidence": 0.0
+      },
+      "raw_measurements": {
+        "motion_score_raw": 0.0,
+        "silence_duration_raw": 0.0,
+        "evidence_count": 1
+      },
+      "normalized_scores": {
+        "speech_score": 0.46467613845541184,
+        "motion_score_normalized": 0.0,
+        "scenery_score": 0.33832386154458816,
+        "weak_human_score": 0.0,
+        "highlight_score": 0.14774999999999996,
+        "filler_score": 1.0
+      },
+      "tag_reason": "Active Speech, Filler Gap",
+      "score_details_per_intent": {
+        "speech_human_priority": {
+          "score": -0.03532670308121172,
+          "calculation_log": "base(0.5)*0.2 + speech(0.46)*0.5 + weak_human(0.00)*0.3 - scenery(0.34)*0.2 - filler(1.00)*0.3"
+        },
+        "visual_human_priority": {
+          "score": 0.1,
+          "calculation_log": "base(0.5)*0.2 + visual_human(0.00)*0.8"
+        },
+        "reduce_scenery": {
+          "score": 0.5702409107643295,
+          "calculation_log": "base(0.5)*0.2 + speech(0.46)*0.3 + motion(0.00)*0.3 + (1.0 - scenery(0.34))*0.5"
+        },
+        "fast_pace": {
+          "score": 0.18136980000000005,
+          "calculation_log": "base(0.5)*0.1 + motion(0.00)*0.4 + (1.0 - silence(0.85))*0.3 + len_factor(0.44)*0.2"
+        },
+        "balanced_sources": {
+          "score": 0.5,
+          "calculation_log": "base(0.5) - parent_penalty(0.3 * 0) - source_penalty(0.4 * 0)"
+        }
+      }
+    },
+    {
+      "candidate_id": "MC_SF_2B336C_SRC_CB9107CA_P001_004",
+      "parent_semantic_fragment_id": "SF_2B336C_SRC_CB9107CA_P001",
+      "source_id": "SRC_CB9107CA",
+      "time_range": "14.35s - 16.54s (duration: 2.19s)",
+      "text_match_summary": "Contains 3 words. Sample: '얼음 먹어 여보'",
+      "visual_signals": {
+        "keyframe_exists": true,
+        "keyframe_path": "/static/thumbnails/VF1_SRC_CB9107CA.jpg",
+        "scene_changes_detected": [
+          14.346167,
+          16.536021
+        ],
+        "visual_human_detected": false,
+        "visual_human_confidence": 0.0
+      },
+      "raw_measurements": {
+        "motion_score_raw": 0.0,
+        "silence_duration_raw": 0.0,
+        "evidence_count": 1
+      },
+      "normalized_scores": {
+        "speech_score": 0.2894407572376973,
+        "motion_score_normalized": 0.0,
+        "scenery_score": 0.5135592427623027,
+        "weak_human_score": 0.1730264078922934,
+        "highlight_score": 0.14774999999999996,
+        "filler_score": 0.6666666666666666
+      },
+      "tag_reason": "Filler Gap",
+      "score_details_per_intent": {
+        "speech_human_priority": {
+          "score": -0.00608354756592383,
+          "calculation_log": "base(0.5)*0.2 + speech(0.29)*0.5 + weak_human(0.17)*0.3 - scenery(0.51)*0.2 - filler(0.67)*0.3"
+        },
+        "visual_human_priority": {
+          "score": 0.1,
+          "calculation_log": "base(0.5)*0.2 + visual_human(0.00)*0.8"
+        },
+        "reduce_scenery": {
+          "score": 0.43005260579015786,
+          "calculation_log": "base(0.5)*0.2 + speech(0.29)*0.3 + motion(0.00)*0.3 + (1.0 - scenery(0.51))*0.5"
+        },
+        "fast_pace": {
+          "score": 0.2848322999999999,
+          "calculation_log": "base(0.5)*0.1 + motion(0.00)*0.4 + (1.0 - silence(0.85))*0.3 + len_factor(0.95)*0.2"
+        },
+        "balanced_sources": {
+          "score": 0.5,
+          "calculation_log": "base(0.5) - parent_penalty(0.3 * 0) - source_penalty(0.4 * 0)"
+        }
+      }
+    },
+    {
+      "candidate_id": "MC_SF_2B336C_SRC_CB9107CA_P001_005",
+      "parent_semantic_fragment_id": "SF_2B336C_SRC_CB9107CA_P001",
+      "source_id": "SRC_CB9107CA",
+      "time_range": "16.54s - 18.74s (duration: 2.20s)",
+      "text_match_summary": "Contains 5 words. Sample: '다음주에 우산 거기먹으러 가기로 했나?'",
+      "visual_signals": {
+        "keyframe_exists": true,
+        "keyframe_path": "/static/thumbnails/VF1_SRC_CB9107CA.jpg",
+        "scene_changes_detected": [
+          16.536021
+        ],
+        "visual_human_detected": false,
+        "visual_human_confidence": 0.0
+      },
+      "raw_measurements": {
+        "motion_score_raw": 0.0,
+        "silence_duration_raw": 0.0,
+        "evidence_count": 1
+      },
+      "normalized_scores": {
+        "speech_score": 0.9528221457645472,
+        "motion_score_normalized": 0.0,
+        "scenery_score": 0.0,
+        "weak_human_score": 0.0,
+        "highlight_score": 0.14774999999999996,
+        "filler_score": 0.3333333333333333
+      },
+      "tag_reason": "Active Speech",
+      "score_details_per_intent": {
+        "speech_human_priority": {
+          "score": 0.4764110728822736,
+          "calculation_log": "base(0.5)*0.2 + speech(0.95)*0.5 + weak_human(0.00)*0.3 - scenery(0.00)*0.2 - filler(0.33)*0.3"
+        },
+        "visual_human_priority": {
+          "score": 0.1,
+          "calculation_log": "base(0.5)*0.2 + visual_human(0.00)*0.8"
+        },
+        "reduce_scenery": {
+          "score": 0.8858466437293642,
+          "calculation_log": "base(0.5)*0.2 + speech(0.95)*0.3 + motion(0.00)*0.3 + (1.0 - scenery(0.00))*0.5"
+        },
+        "fast_pace": {
+          "score": 0.28412605000000013,
+          "calculation_log": "base(0.5)*0.1 + motion(0.00)*0.4 + (1.0 - silence(0.85))*0.3 + len_factor(0.95)*0.2"
+        },
+        "balanced_sources": {
+          "score": 0.5,
+          "calculation_log": "base(0.5) - parent_penalty(0.3 * 0) - source_penalty(0.4 * 0)"
+        }
+      }
+    },
+    {
+      "candidate_id": "MC_SF_2B336C_SRC_CB9107CA_P002_001",
+      "parent_semantic_fragment_id": "SF_2B336C_SRC_CB9107CA_P002",
+      "source_id": "SRC_CB9107CA",
+      "time_range": "18.74s - 24.51s (duration: 5.77s)",
+      "text_match_summary": "Contains 6 words. Sample: '다 다음주 했나? 고기? 왜 고기?'",
+      "visual_signals": {
+        "keyframe_exists": true,
+        "keyframe_path": "/static/thumbnails/VF1_SRC_CB9107CA.jpg",
+        "scene_changes_detected": [
+          21.388771,
+          24.506292
+        ],
+        "visual_human_detected": false,
+        "visual_human_confidence": 0.0
+      },
+      "raw_measurements": {
+        "motion_score_raw": 0.0,
+        "silence_duration_raw": 0.0,
+        "evidence_count": 1
+      },
+      "normalized_scores": {
+        "speech_score": 0.3537802109223736,
+        "motion_score_normalized": 0.0,
+        "scenery_score": 0.4492197890776265,
+        "weak_human_score": 0.0,
+        "highlight_score": 0.14774999999999996,
+        "filler_score": 0.3333333333333333
+      },
+      "tag_reason": "General B-Roll",
+      "score_details_per_intent": {
+        "speech_human_priority": {
+          "score": 0.08704614764566153,
+          "calculation_log": "base(0.5)*0.2 + speech(0.35)*0.5 + weak_human(0.00)*0.3 - scenery(0.45)*0.2 - filler(0.33)*0.3"
+        },
+        "visual_human_priority": {
+          "score": 0.1,
+          "calculation_log": "base(0.5)*0.2 + visual_human(0.00)*0.8"
+        },
+        "reduce_scenery": {
+          "score": 0.48152416873789883,
+          "calculation_log": "base(0.5)*0.2 + speech(0.35)*0.3 + motion(0.00)*0.3 + (1.0 - scenery(0.45))*0.5"
+        },
+        "fast_pace": {
+          "score": 0.10601039999999999,
+          "calculation_log": "base(0.5)*0.1 + motion(0.00)*0.4 + (1.0 - silence(0.85))*0.3 + len_factor(0.06)*0.2"
+        },
+        "balanced_sources": {
+          "score": 0.5,
+          "calculation_log": "base(0.5) - parent_penalty(0.3 * 0) - source_penalty(0.4 * 0)"
+        }
+      }
+    },
+    {
+      "candidate_id": "MC_SF_2B336C_SRC_CB9107CA_P002_002",
+      "parent_semantic_fragment_id": "SF_2B336C_SRC_CB9107CA_P002",
+      "source_id": "SRC_CB9107CA",
+      "time_range": "24.51s - 28.51s (duration: 4.00s)",
+      "text_match_summary": "Contains 10 words. Sample: '상교생으로 갔긴 했나? 아 그래 나? 아 그래 나? 영화도'",
+      "visual_signals": {
+        "keyframe_exists": true,
+        "keyframe_path": "/static/thumbnails/VF1_SRC_CB9107CA.jpg",
+        "scene_changes_detected": [
+          24.506292,
+          25.112333,
+          26.410542
+        ],
+        "visual_human_detected": false,
+        "visual_human_confidence": 0.0
+      },
+      "raw_measurements": {
+        "motion_score_raw": 0.0,
+        "silence_duration_raw": 0.0,
+        "evidence_count": 1
+      },
+      "normalized_scores": {
+        "speech_score": 0.7015729999999989,
+        "motion_score_normalized": 0.0,
+        "scenery_score": 0.10142700000000113,
+        "weak_human_score": 0.0,
+        "highlight_score": 0.14774999999999996,
+        "filler_score": 1.0
+      },
+      "tag_reason": "Active Speech, Filler Gap",
+      "score_details_per_intent": {
+        "speech_human_priority": {
+          "score": 0.1305010999999992,
+          "calculation_log": "base(0.5)*0.2 + speech(0.70)*0.5 + weak_human(0.00)*0.3 - scenery(0.10)*0.2 - filler(1.00)*0.3"
+        },
+        "visual_human_priority": {
+          "score": 0.1,
+          "calculation_log": "base(0.5)*0.2 + visual_human(0.00)*0.8"
+        },
+        "reduce_scenery": {
+          "score": 0.7597583999999991,
+          "calculation_log": "base(0.5)*0.2 + speech(0.70)*0.3 + motion(0.00)*0.3 + (1.0 - scenery(0.10))*0.5"
+        },
+        "fast_pace": {
+          "score": 0.194325,
+          "calculation_log": "base(0.5)*0.1 + motion(0.00)*0.4 + (1.0 - silence(0.85))*0.3 + len_factor(0.50)*0.2"
+        },
+        "balanced_sources": {
+          "score": 0.5,
+          "calculation_log": "base(0.5) - parent_penalty(0.3 * 0) - source_penalty(0.4 * 0)"
+        }
+      }
+    },
+    {
+      "candidate_id": "MC_SF_2B336C_SRC_CB9107CA_P002_003",
+      "parent_semantic_fragment_id": "SF_2B336C_SRC_CB9107CA_P002",
+      "source_id": "SRC_CB9107CA",
+      "time_range": "28.51s - 33.03s (duration: 4.52s)",
+      "text_match_summary": "Contains 3 words. Sample: '영화도 너무 맛있어'",
+      "visual_signals": {
+        "keyframe_exists": true,
+        "keyframe_path": "/static/thumbnails/VF1_SRC_CB9107CA.jpg",
+        "scene_changes_detected": [],
+        "visual_human_detected": false,
+        "visual_human_confidence": 0.0
+      },
+      "raw_measurements": {
+        "motion_score_raw": 0.0,
+        "silence_duration_raw": 0.0,
+        "evidence_count": 1
+      },
+      "normalized_scores": {
+        "speech_score": 0.3699858611563789,
+        "motion_score_normalized": 0.0,
+        "scenery_score": 0.43301413884362117,
+        "weak_human_score": 0.0,
+        "highlight_score": 0.14774999999999996,
+        "filler_score": 0.3333333333333333
+      },
+      "tag_reason": "General B-Roll",
+      "score_details_per_intent": {
+        "speech_human_priority": {
+          "score": 0.09839010280946518,
+          "calculation_log": "base(0.5)*0.2 + speech(0.37)*0.5 + weak_human(0.00)*0.3 - scenery(0.43)*0.2 - filler(0.33)*0.3"
+        },
+        "visual_human_priority": {
+          "score": 0.1,
+          "calculation_log": "base(0.5)*0.2 + visual_human(0.00)*0.8"
+        },
+        "reduce_scenery": {
+          "score": 0.4944886889251031,
+          "calculation_log": "base(0.5)*0.2 + speech(0.37)*0.3 + motion(0.00)*0.3 + (1.0 - scenery(0.43))*0.5"
+        },
+        "fast_pace": {
+          "score": 0.16813959999999986,
+          "calculation_log": "base(0.5)*0.1 + motion(0.00)*0.4 + (1.0 - silence(0.85))*0.3 + len_factor(0.37)*0.2"
+        },
+        "balanced_sources": {
+          "score": 0.5,
+          "calculation_log": "base(0.5) - parent_penalty(0.3 * 0) - source_penalty(0.4 * 0)"
+        }
+      }
+    },
+    {
+      "candidate_id": "MC_SF_D1BD73_SRC_CB9107CA_001",
+      "parent_semantic_fragment_id": "SF_D1BD73_SRC_CB9107CA",
+      "source_id": "SRC_CB9107CA",
+      "time_range": "33.03s - 36.29s (duration: 3.26s)",
+      "text_match_summary": "Contains 13 words. Sample: '아빠 아빠 오해 오해 굽는 굽는 날이라도 날이라도 아빠 아빠 한가저나? 한가저나? 그렇게'",
+      "visual_signals": {
+        "keyframe_exists": true,
+        "keyframe_path": "/static/thumbnails/VF2_SRC_CB9107CA.jpg",
+        "scene_changes_detected": [
+          33.525917,
+          36.287604
+        ],
+        "visual_human_detected": false,
+        "visual_human_confidence": 0.0
+      },
+      "raw_measurements": {
+        "motion_score_raw": 0.0,
+        "silence_duration_raw": 0.0,
+        "evidence_count": 2
+      },
+      "normalized_scores": {
+        "speech_score": 1.0,
+        "motion_score_normalized": 0.0,
+        "scenery_score": 0.0,
+        "weak_human_score": 0.0,
+        "highlight_score": 0.17024999999999996,
+        "filler_score": 1.0
+      },
+      "tag_reason": "Active Speech, Filler Gap",
+      "score_details_per_intent": {
+        "speech_human_priority": {
+          "score": 0.3,
+          "calculation_log": "base(0.5)*0.2 + speech(1.00)*0.5 + weak_human(0.00)*0.3 - scenery(0.00)*0.2 - filler(1.00)*0.3"
+        },
+        "visual_human_priority": {
+          "score": 0.1,
+          "calculation_log": "base(0.5)*0.2 + visual_human(0.00)*0.8"
+        },
+        "reduce_scenery": {
+          "score": 0.9,
+          "calculation_log": "base(0.5)*0.2 + speech(1.00)*0.3 + motion(0.00)*0.3 + (1.0 - scenery(0.00))*0.5"
+        },
+        "fast_pace": {
+          "score": 0.23819479999999998,
+          "calculation_log": "base(0.5)*0.1 + motion(0.00)*0.4 + (1.0 - silence(0.83))*0.3 + len_factor(0.69)*0.2"
+        },
+        "balanced_sources": {
+          "score": 0.5,
+          "calculation_log": "base(0.5) - parent_penalty(0.3 * 0) - source_penalty(0.4 * 0)"
+        }
+      }
+    },
+    {
+      "candidate_id": "MC_SF_D1BD73_SRC_CB9107CA_002",
+      "parent_semantic_fragment_id": "SF_D1BD73_SRC_CB9107CA",
+      "source_id": "SRC_CB9107CA",
+      "time_range": "36.29s - 39.24s (duration: 2.95s)",
+      "text_match_summary": "Contains 7 words. Sample: '그렇게 했는데 그 돈이 그 돈이 나도'",
+      "visual_signals": {
+        "keyframe_exists": true,
+        "keyframe_path": "/static/thumbnails/VF2_SRC_CB9107CA.jpg",
+        "scene_changes_detected": [
+          36.287604,
+          39.241208
+        ],
+        "visual_human_detected": false,
+        "visual_human_confidence": 0.0
+      },
+      "raw_measurements": {
+        "motion_score_raw": 0.0,
+        "silence_duration_raw": 0.0,
+        "evidence_count": 1
+      },
+      "normalized_scores": {
+        "speech_score": 0.8239439004010028,
+        "motion_score_normalized": 0.0,
+        "scenery_score": 0.0,
+        "weak_human_score": 0.0,
+        "highlight_score": 0.19274999999999998,
+        "filler_score": 1.0
+      },
+      "tag_reason": "Active Speech, Filler Gap",
+      "score_details_per_intent": {
+        "speech_human_priority": {
+          "score": 0.21197195020050147,
+          "calculation_log": "base(0.5)*0.2 + speech(0.82)*0.5 + weak_human(0.00)*0.3 - scenery(0.00)*0.2 - filler(1.00)*0.3"
+        },
+        "visual_human_priority": {
+          "score": 0.1,
+          "calculation_log": "base(0.5)*0.2 + visual_human(0.00)*0.8"
+        },
+        "reduce_scenery": {
+          "score": 0.8471831701203009,
+          "calculation_log": "base(0.5)*0.2 + speech(0.82)*0.3 + motion(0.00)*0.3 + (1.0 - scenery(0.00))*0.5"
+        },
+        "fast_pace": {
+          "score": 0.26014480000000006,
+          "calculation_log": "base(0.5)*0.1 + motion(0.00)*0.4 + (1.0 - silence(0.81))*0.3 + len_factor(0.76)*0.2"
+        },
+        "balanced_sources": {
+          "score": 0.5,
+          "calculation_log": "base(0.5) - parent_penalty(0.3 * 0) - source_penalty(0.4 * 0)"
+        }
+      }
+    },
+    {
+      "candidate_id": "MC_SF_D1BD73_SRC_CB9107CA_003",
+      "parent_semantic_fragment_id": "SF_D1BD73_SRC_CB9107CA",
+      "source_id": "SRC_CB9107CA",
+      "time_range": "39.24s - 41.92s (duration: 2.68s)",
+      "text_match_summary": "Contains 5 words. Sample: '나도 이제 먹자 고마워 찍고'",
+      "visual_signals": {
+        "keyframe_exists": true,
+        "keyframe_path": "/static/thumbnails/VF2_SRC_CB9107CA.jpg",
+        "scene_changes_detected": [
+          39.241208
+        ],
+        "visual_human_detected": false,
+        "visual_human_confidence": 0.0
+      },
+      "raw_measurements": {
+        "motion_score_raw": 0.0,
+        "silence_duration_raw": 0.0,
+        "evidence_count": 1
+      },
+      "normalized_scores": {
+        "speech_score": 0.8880092220672586,
+        "motion_score_normalized": 0.0,
+        "scenery_score": 0.0,
+        "weak_human_score": 0.0,
+        "highlight_score": 0.19274999999999998,
+        "filler_score": 0.3333333333333333
+      },
+      "tag_reason": "Active Speech",
+      "score_details_per_intent": {
+        "speech_human_priority": {
+          "score": 0.4440046110336293,
+          "calculation_log": "base(0.5)*0.2 + speech(0.89)*0.5 + weak_human(0.00)*0.3 - scenery(0.00)*0.2 - filler(0.33)*0.3"
+        },
+        "visual_human_priority": {
+          "score": 0.1,
+          "calculation_log": "base(0.5)*0.2 + visual_human(0.00)*0.8"
+        },
+        "reduce_scenery": {
+          "score": 0.8664027666201776,
+          "calculation_log": "base(0.5)*0.2 + speech(0.89)*0.3 + motion(0.00)*0.3 + (1.0 - scenery(0.00))*0.5"
+        },
+        "fast_pace": {
+          "score": 0.27388539999999995,
+          "calculation_log": "base(0.5)*0.1 + motion(0.00)*0.4 + (1.0 - silence(0.81))*0.3 + len_factor(0.83)*0.2"
+        },
+        "balanced_sources": {
+          "score": 0.5,
+          "calculation_log": "base(0.5) - parent_penalty(0.3 * 0) - source_penalty(0.4 * 0)"
+        }
+      }
+    }
+  ],
+  "schema_used": {
+    "sources": [
+      "source_id",
+      "duration",
+      "title"
+    ],
+    "semantic_fragments": [
+      "id",
+      "fragment_id",
+      "start",
+      "end",
+      "semantic_json",
+      "structural_json",
+      "continuity_json"
+    ],
+    "evidence_board": [
+      "fragment_id",
+      "start",
+      "end",
+      "scene_change",
+      "motion_score",
+      "audio_energy",
+      "silence",
+      "speaker",
+      "keyframe",
+      "metadata_json"
+    ],
+    "fragments": [
+      "intelligence"
+    ],
+    "subtitles": [
+      "segments"
+    ]
+  }
+}
