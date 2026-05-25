@@ -326,10 +326,11 @@ export const useProposalState = (
     const lower = text.toLowerCase();
     const shouldConfirm =
       lower.includes("이대로") ||
-      lower.includes("진행") ||
-      lower.includes("제안해") ||
-      /ok$/i.test(lower) ||
-      lower.includes("오케이");
+      lower.includes("좋아") ||
+      lower.includes("오케이") ||
+      lower.includes("진행해") ||
+      lower.includes("확정") ||
+      /ok$/i.test(lower);
 
     const userMsgId = `user_${Date.now()}`;
     const aiMsgId = `ai_${Date.now() + 1}`;
@@ -410,7 +411,124 @@ export const useProposalState = (
         ),
       };
     });
-  }, [storyPlan, buildConsultationReply]);
+
+    if (!shouldConfirm) {
+      if (!orderedSourceIds || orderedSourceIds.length === 0) {
+        console.warn("[Consultation] orderedSourceIds is empty. Skipping proposal generation.");
+        return;
+      }
+
+      const inputText = text;
+      console.log("[CONSULTATION_NL_SUBMIT]\n" + JSON.stringify({
+        inputText,
+        shouldConfirm,
+        sourceCount: orderedSourceIds.length
+      }, null, 2));
+
+      const targetLen = proposals?.A?.preview_duration || 60.0;
+      const userIntent = {
+        ...nextIntent,
+        instruction_text: inputText
+      };
+
+      const payload = {
+        project_id: projectId || "default_project",
+        source_ids: orderedSourceIds,
+        target_length: targetLen,
+        user_intent: userIntent,
+        refresh: true
+      };
+
+      console.log("[CONSULTATION_PROJECT_REQUEST]\n" + JSON.stringify({
+        apiUrl: `${videoService.API_BASE_URL}/proposals/project`,
+        payloadSummary: payload
+      }, null, 2));
+
+      try {
+        const proposalData = await videoService.requestProjectProposals(
+          projectId || "default_project",
+          orderedSourceIds,
+          targetLen,
+          userIntent,
+          true
+        );
+
+        if (proposalData && proposalData.proposals) {
+          const generatedProposals: Record<"A" | "B", any> = {} as any;
+
+          proposalData.proposals.forEach((p: any) => {
+            const mode = p.mode === "A" ? "A" : "B";
+            generatedProposals[mode] = {
+              id: mode,
+              proposal_id: p.proposal_id,
+              mode: p.mode === "A" ? "market" : "user",
+              title: p.mode === "A" ? "시장형 편집 (A)" : "사용자친화형 편집 (B)",
+              desc: p.proposal_reason?.mode_reason || "백엔드 분석 기반 추천 편집안입니다.",
+              score: String(Math.round(p.confidence * 100)) + "%",
+              key_fragments: p.sequence.map((s: any) => s.fragment_id),
+              proposal_story: p.proposal_story,
+              proposal_explanation: p.proposal_explanation,
+              direction: {},
+              snapshot_id: "R1",
+              template_id: p.mode,
+              slot_trace: [],
+              preview_url: p.preview_url ?? null,
+              preview_duration: p.preview_duration ?? 0,
+            };
+            
+            if (generatedProposals[mode].key_fragments.length > 0) {
+              generatedProposals[mode].resolved_aliases = p.sequence.map((s: any) => ({
+                proposal_fragment_id: s.fragment_id,
+                source_id: s.source_id,
+                source_fragment_id: s.fragment_id,
+                display_id: s.display_id,
+                start_sec: s.start,
+                end_sec: s.end,
+                thumbnail_url: s.thumbnail_url
+              }));
+            }
+          });
+
+          // [CONSULTATION_PROJECT_RESULT] Console Log
+          console.log("[CONSULTATION_PROJECT_RESULT]\n" + JSON.stringify({
+            proposal_id: {
+              A: generatedProposals.A?.proposal_id,
+              B: generatedProposals.B?.proposal_id
+            },
+            sequenceLength: {
+              A: generatedProposals.A?.key_fragments?.length || 0,
+              B: generatedProposals.B?.key_fragments?.length || 0
+            },
+            previewUrlExists: {
+              A: !!generatedProposals.A?.preview_url,
+              B: !!generatedProposals.B?.preview_url
+            }
+          }, null, 2));
+
+          // Guard A/B existence
+          if (!generatedProposals.A || !generatedProposals.B) {
+            console.warn("[CONSULTATION_PROJECT_RESULT] Missing A/B proposals. Keeping existing proposals.");
+            return;
+          }
+
+          setSelectedProposalId(null);
+          setCommittedProposalId(null);
+          setProposals(generatedProposals);
+        }
+      } catch (apiErr: any) {
+        console.error("[Consultation] requestProjectProposals Error:", apiErr);
+      }
+    }
+  }, [
+    storyPlan,
+    buildConsultationReply,
+    proposals,
+    orderedSourceIds,
+    projectId,
+    setSelectedProposalId,
+    setCommittedProposalId,
+    setProposals
+  ]);
 
   return {
     selectedProposalId,
