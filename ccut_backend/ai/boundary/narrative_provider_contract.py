@@ -19,6 +19,7 @@ class StoryIntentPatch:
     target_length: str = "medium"
     must_keep: List[str] = field(default_factory=list)
     avoid: List[str] = field(default_factory=list)
+    coverage: str = "default"
     reason: str = ""
 
     @classmethod
@@ -29,6 +30,7 @@ class StoryIntentPatch:
             target_length=data.get("target_length", "medium"),
             must_keep=data.get("must_keep", []),
             avoid=data.get("avoid", []),
+            coverage=data.get("coverage", "default"),
             reason=data.get("reason", "")
         )
 
@@ -56,7 +58,7 @@ def validate_narrative_contract(text: str) -> bool:
         
     try:
         data = json.loads(clean_text)
-        required = ["patch_type", "tone", "target_length", "must_keep", "avoid", "reason"]
+        required = ["patch_type", "tone", "target_length", "must_keep", "avoid", "coverage", "reason"]
         return all(k in data for k in required)
     except:
         return False

@@ -175,6 +175,66 @@ const Index: React.FC = () => {
     return prev.filter((f) => getUid(f) !== getUid(target));
   }, []);
 
+  const mapFragments = useCallback((frags: any[], label: string) => {
+    const mapped: Fragment[] = frags.map((f: any, idx: number) => {
+      const fps = 30;
+      const startSec = f.start_sec ?? f.start ?? f.start_time ?? f.semantic?.start_sec ?? f.structural?.start_sec ?? 0;
+      const endSec = f.end_sec ?? f.end ?? f.end_time ?? f.semantic?.end_sec ?? f.structural?.end_sec ?? 
+                     (startSec + (f.duration_sec || f.structural?.duration || f.duration || 5));
+      
+      const startFrame = Math.round(f.start_frame ?? (startSec * fps));
+      const endFrame = Math.round(f.end_frame ?? (endSec * fps));
+      const durationFrames = Math.max(1, endFrame - startFrame);
+      const rawThumb = f.intelligence?.thumb_url || f.thumb || f.thumbnail_url;
+
+      return {
+        fragment_id: f.fragment_id,
+        fragment_uid: f.fragment_id,
+        root_fragment_uid: f.root_fragment_uid || f.fragment_id,
+        display_id: f.fragment_id,
+        selection_state: "S" as SelectionState,
+        status: "committed" as FragmentStatus,
+        source_video: label,
+        start_frame: startFrame,
+        end_frame: endFrame,
+        duration: durationFrames,
+        thumbnail_hue: idx % 2 === 0 ? 211 : 30,
+        thumbnail: {
+          thumbnail_url: toFullUrl(rawThumb) ?? null,
+        },
+        intelligence: {
+          hook_score: f.intelligence?.hook_score || f.structural?.market_value || 0.5,
+          role: f.intelligence?.role || f.structural?.role || "Main",
+          description: f.intelligence?.description || f.intelligence?.visual_description || f.semantic?.summary || "",
+        },
+        preview_clip_url: f.preview_clip_url ?? null,
+      } as any;
+    });
+
+    if (mapped.length > 0) {
+      console.log(`[mapFragments] ${label} (${mapped.length} frags) first thumb:`, mapped[0].thumbnail?.thumbnail_url);
+      console.log(
+        `[THUMB_AUDIT_ALL_JSON] ${label}\n` +
+        JSON.stringify(
+          mapped.map((f: any) => ({
+            fragment_id: f.fragment_id,
+            display_id: f.display_id,
+            source_video: f.source_video,
+            start_frame: f.start_frame,
+            end_frame: f.end_frame,
+            duration: f.duration,
+            thumb: f.thumbnail?.thumbnail_url,
+            thumb_direct: f.thumbnail_url,
+            intelligence_thumb: f.intelligence?.thumb_url,
+          })),
+          null,
+          2
+        )
+      );
+    }
+    return assignShortDisplayIds(recalcDisplayIds(mapped as any)) as any;
+  }, [toFullUrl]);
+
 // logProposalPair moved to useProposalState
 
   const resetAnalysisState = useCallback(() => {
@@ -227,69 +287,6 @@ const Index: React.FC = () => {
         }
 
         const labelFromIndex = (idx: number) => String.fromCharCode(65 + idx);
-
-        const mapFragments = (frags: any[], label: string) => {
-          const mapped: Fragment[] = frags.map((f: any, idx: number) => {
-            const fps = 30;
-            // [STEP 10-I.5.5] Strict timing priority
-            const startSec = f.start_sec ?? f.start ?? f.start_time ?? f.semantic?.start_sec ?? f.structural?.start_sec ?? 0;
-            const endSec = f.end_sec ?? f.end ?? f.end_time ?? f.semantic?.end_sec ?? f.structural?.end_sec ?? 
-                           (startSec + (f.duration_sec || f.structural?.duration || f.duration || 5));
-            
-            const startFrame = Math.round(f.start_frame ?? (startSec * fps));
-            const endFrame = Math.round(f.end_frame ?? (endSec * fps));
-            const durationFrames = Math.max(1, endFrame - startFrame);
-            const rawThumb = f.intelligence?.thumb_url || f.thumb || f.thumbnail_url;
-
-            return {
-              fragment_id: f.fragment_id,
-              fragment_uid: f.fragment_id,
-              root_fragment_uid: f.root_fragment_uid || f.fragment_id,
-              display_id: f.fragment_id,
-              selection_state: "S" as SelectionState,
-              status: "committed" as FragmentStatus,
-              source_video: label,
-              start_frame: startFrame,
-              end_frame: endFrame,
-              duration: durationFrames,
-              thumbnail_hue: idx % 2 === 0 ? 211 : 30,
-              thumbnail: {
-                thumbnail_url: toFullUrl(rawThumb) ?? null,
-              },
-              intelligence: {
-                hook_score: f.intelligence?.hook_score || f.structural?.market_value || 0.5,
-                role: f.intelligence?.role || f.structural?.role || "Main",
-                description: f.intelligence?.description || f.intelligence?.visual_description || f.semantic?.summary || "",
-              },
-              // [PREVIEW_CLIP] Backend-generated clip URL — pass through verbatim
-              preview_clip_url: f.preview_clip_url ?? null,
-            } as any;
-          });
-
-          if (mapped.length > 0) {
-            console.log(`[mapFragments] ${label} (${mapped.length} frags) first thumb:`, mapped[0].thumbnail?.thumbnail_url);
-            
-            console.log(
-              `[THUMB_AUDIT_ALL_JSON] ${label}\n` +
-              JSON.stringify(
-                mapped.map((f: any) => ({
-                  fragment_id: f.fragment_id,
-                  display_id: f.display_id,
-                  source_video: f.source_video,
-                  start_frame: f.start_frame,
-                  end_frame: f.end_frame,
-                  duration: f.duration,
-                  thumb: f.thumbnail?.thumbnail_url,
-                  thumb_direct: f.thumbnail_url,
-                  intelligence_thumb: f.intelligence?.thumb_url,
-                })),
-                null,
-                2
-              )
-            );
-          }
-          return assignShortDisplayIds(recalcDisplayIds(mapped as any));
-        };
 
         const collectedEntries: SourceEntry[] = [];
         let firstSourceId: string | null = null;
@@ -658,6 +655,73 @@ const Index: React.FC = () => {
     },
     [logProposalPair, resetAnalysisState, toFullUrl]
   );
+
+  // [CCUT1.0.4 PROPOSALS PROJECT SOURCES HYDRATION]
+  useEffect(() => {
+    const savedActiveProject = typeof window !== "undefined" ? localStorage.getItem("ccut_active_project_id") : null;
+    if (!savedActiveProject || savedActiveProject === "projects" || !activeNavItem || activeNavItem === "projects" || activeNavItem === "default_project") {
+      return;
+    }
+
+    let isMounted = true;
+    
+    const hydrateProjectSources = async () => {
+      try {
+        console.log(`[Hydration] Loading sources for project: ${activeNavItem}`);
+        const data = await videoService.getProjectSources(activeNavItem);
+        if (!isMounted) return;
+
+        // 2. API 응답 project_id 가 요청 projectId와 다르면 hydration skip
+        if (!data || data.project_id !== activeNavItem) {
+          console.warn(`[Hydration] project_id mismatch. Request: ${activeNavItem}, Response: ${data?.project_id}`);
+          return;
+        }
+
+        // 3. 응답 sources.length === 0 이면 기존 세션 sourceEntries를 덮어쓰지 않도록 skip
+        if (!data.sources || data.sources.length === 0) {
+          console.log("[Hydration] Response sources length is 0. Guarding against empty override.");
+          return;
+        }
+
+        if (data.status === "OK" && Array.isArray(data.sources)) {
+          const restoredEntries: SourceEntry[] = data.sources.map((src: any) => {
+            const label = src.label;
+            const mappedFrags = mapFragments(src.fragments || [], label);
+            return {
+              source_id: src.source_id,
+              label: label,
+              video_url: src.video_url,
+              fragments: mappedFrags,
+              file_size_bytes: src.file_size_bytes || 0,
+              duration_sec: src.duration_sec || (mappedFrags.length > 0 ? mappedFrags[mappedFrags.length - 1].end_frame / 30 : 0)
+            };
+          });
+
+          if (restoredEntries.length > 0) {
+            setSourceEntries(restoredEntries);
+            setActiveSource("A");
+            
+            const firstEntry = restoredEntries[0];
+            setEditFragments(firstEntry.fragments);
+            setSourceFragments(firstEntry.fragments);
+            
+            setCurrentSourceId(firstEntry.source_id);
+            setCurrentVideoUrl(firstEntry.video_url);
+
+            console.log(`[Hydration] Successfully hydrated ${restoredEntries.length} sources for project: ${activeNavItem}`);
+          }
+        }
+      } catch (err) {
+        console.error("[Hydration] Failed to hydrate project sources:", err);
+      }
+    };
+
+    hydrateProjectSources();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [activeNavItem, mapFragments]);
 
   // [STEP 10-I.5.28-E9-R1] StoryPlanPreview 자동 생성 (Skeleton)
   useEffect(() => {

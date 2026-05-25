@@ -11,9 +11,20 @@ const MIN_CENTER = 420;
 const MIN_RIGHT = 400;
 
 export const useWorkspaceLayout = () => {
-  const [activeNavItem, setActiveNavItem] = useState("projects");
+  const [activeNavItem, setActiveNavItem] = useState(() => {
+    if (typeof window !== "undefined") {
+      return localStorage.getItem("ccut_active_project_id") || "projects";
+    }
+    return "projects";
+  });
   const [navCollapsed, setNavCollapsed] = useState(false);
-  const [projects, setProjects] = useState<ProjectItem[]>([]);
+  const [projects, setProjects] = useState<ProjectItem[]>(() => {
+    if (typeof window !== "undefined") {
+      const saved = localStorage.getItem("ccut_projects");
+      return saved ? JSON.parse(saved) : [];
+    }
+    return [];
+  });
 
   const [centerWidth, setCenterWidth] = useState<number>(() => {
     const vw = typeof window !== "undefined" ? window.innerWidth : 1200;
@@ -22,6 +33,14 @@ export const useWorkspaceLayout = () => {
 
   const [isDragging, setIsDragging] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    localStorage.setItem("ccut_active_project_id", activeNavItem);
+  }, [activeNavItem]);
+
+  useEffect(() => {
+    localStorage.setItem("ccut_projects", JSON.stringify(projects));
+  }, [projects]);
 
   useEffect(() => {
     if (!isDragging) return;

@@ -1082,8 +1082,8 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
           </div>
         )}
 
-        {/* [STEP 10-I.5.28-E9-R2] Proposals Grid (Visible only after confirmation) */}
-        {storyPlan?.consultation_status === "confirmed" && (
+        {/* [STEP 10-I.5.28-E9-R2] Proposals Grid (Visible only after confirmation or proposals exist) */}
+        {(storyPlan?.consultation_status === "confirmed" || !!proposals) && (
           <>
           <div className="grid grid-cols-2 gap-4 w-full">
           <div className="flex flex-col items-center space-y-4">

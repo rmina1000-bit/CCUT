@@ -1410,6 +1410,79 @@ def _response_level_sequence_guard(sequence, min_gap_frames=30):
 
     return result
 
+@app.get("/proposals/project/{project_id}/sources")
+async def get_project_sources(project_id: str):
+    """
+    [CCUT1.0.4 PROPOSALS PROJECT SOURCES HYDRATION]
+    프로젝트에 매핑되어 있는 모든 source_id 목록 및 메타데이터를 역조회하여 프론트엔드로 전달합니다.
+    """
+    import os
+    import json
+    from database import SessionLocal
+    from archive.db_models import ProposalTable, SourceTable
+
+    source_ids = []
+    
+    with SessionLocal() as db:
+        # 1. Proposals 테이블에서 source_id가 project_id인 것들을 쿼리
+        props = db.query(ProposalTable).filter_by(source_id=project_id).all()
+        for p in props:
+            # sequence JSON 파싱
+            seq = p.sequence or []
+            if isinstance(seq, str):
+                try:
+                    seq = json.loads(seq)
+                except Exception:
+                    seq = []
+            
+            for clip in seq:
+                sid = clip.get("source_id")
+                if sid and sid not in source_ids:
+                    source_ids.append(sid)
+        
+        # 2. 만약 해당 project_id로 저장된 제안 정보가 없다면, 에러 응답 반환
+        if not source_ids:
+            return {
+                "status": "NO_PROPOSALS_FOUND",
+                "project_id": project_id,
+                "sources": [],
+                "reason": "No proposal sequence found for project_id"
+            }
+
+        # 3. 각 source_id에 대해 Source 정보 조회 및 Fragment 로드
+        collected_sources = []
+        for idx, sid in enumerate(source_ids):
+            src = db.query(SourceTable).filter_by(source_id=sid).first()
+            if not src:
+                continue
+            
+            # fragments 로드 (bams 이용)
+            frags = bams.get_semantic_fragments(sid)
+            if not frags:
+                frags = bams.get_fragments_by_source(sid)
+
+            # 비디오 URL 변환 (file_path가 절대 경로이면 basename을 따옴)
+            video_name = os.path.basename(src.file_path) if src.file_path else f"{sid}.mp4"
+            vurl = f"/static/{video_name}"
+
+            # Label 순서대로 부여 (A, B, C, D...)
+            label = chr(65 + idx)
+
+            collected_sources.append({
+                "source_id": sid,
+                "label": label,
+                "video_url": vurl,
+                "fragments": frags,
+                "file_size_bytes": 0, # mock size
+                "duration_sec": src.duration or 0.0
+            })
+
+    return {
+        "status": "OK",
+        "project_id": project_id,
+        "sources": collected_sources
+    }
+
 @app.post("/proposals/project")
 async def post_generate_project_proposals(req: ProjectProposalRequest):
     """

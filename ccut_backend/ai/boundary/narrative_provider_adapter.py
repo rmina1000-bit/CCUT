@@ -29,6 +29,7 @@ class NarrativeProviderAdapter:
             "3. tone should be one of [natural, fast, slow, emotional].\n"
             "4. target_length should be one of [short, medium, long].\n"
             "5. must_keep and avoid are lists of fragment IDs or descriptions (leave empty if not specified).\n"
+            "6. coverage should be one of [default, balanced_sources]. Set to 'balanced_sources' when the user wants to balance sources, use various/all videos, or distribute clips evenly.\n"
         )
         
         prompt = f"{system_prompt}\nUser message: '{user_message}'\n\nJSON:"
@@ -42,9 +43,10 @@ class NarrativeProviderAdapter:
                 "target_length": { "type": "string" },
                 "must_keep": { "type": "array", "items": { "type": "string" } },
                 "avoid": { "type": "array", "items": { "type": "string" } },
+                "coverage": { "type": "string" },
                 "reason": { "type": "string" }
             },
-            "required": ["patch_type", "tone", "target_length", "must_keep", "avoid", "reason"]
+            "required": ["patch_type", "tone", "target_length", "must_keep", "avoid", "coverage", "reason"]
         }
 
         payload = {

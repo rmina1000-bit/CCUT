@@ -89,5 +89,9 @@ export const videoService = {
             throw new Error(`프로젝트 제안 생성 실패 (${response.status}): ${errText}`);
         }
         return await response.json();
+    },
+
+    getProjectSources: async (projectId: string) => {
+        return await fetcher(`/proposals/project/${encodeURIComponent(projectId)}/sources`);
     }
 };
