@@ -91,6 +91,16 @@ const Index: React.FC = () => {
   const [quickScanData, setQuickScanData] = useState<QuickScanData | null>(null);
   const [semanticFragments, setSemanticFragments] = useState<SemanticFragmentData[]>([]);
 
+  type SourceEntry = {
+    source_id: string;
+    label: string;
+    video_url: string;
+    fragments: Fragment[];
+    file_size_bytes?: number;
+    duration_sec?: number;
+  };
+  const [sourceEntries, setSourceEntries] = useState<SourceEntry[]>([]);
+
   const {
     selectedProposalId,
     setSelectedProposalId,
@@ -107,18 +117,13 @@ const Index: React.FC = () => {
     handleReproposal,
     handleConsultation,
     logProposalPair
-  } = useProposalState(sourceFragments);
-
-
-  type SourceEntry = {
-    source_id: string;
-    label: string;
-    video_url: string;
-    fragments: Fragment[];
-    file_size_bytes?: number;
-    duration_sec?: number;
-  };
-  const [sourceEntries, setSourceEntries] = useState<SourceEntry[]>([]);
+  } = useProposalState(
+    sourceFragments,
+    activeNavItem || "default_project",
+    sourceEntries.length > 0
+      ? sourceEntries.map(e => e.source_id)
+      : currentSourceId ? [currentSourceId] : []
+  );
 
   // [STEP 10-I.5.27-E7] Timing measurement baseline
   const timingRef = useRef<Record<string, number>>({});

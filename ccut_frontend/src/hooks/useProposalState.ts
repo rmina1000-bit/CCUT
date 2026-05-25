@@ -4,6 +4,7 @@ import { createNextSnapshot } from "@/proposal/directionSnapshot";
 import { generateProposals } from "@/proposal/proposalOrchestrator";
 import { Fragment } from "@/data/fragmentData";
 import { narrativeService } from "@/services/narrativeService";
+import { videoService } from "@/services/videoService";
 
 /**
  * [STEP 10-K-C1-R39] Frontend Commit-Time Sequence Guard
@@ -56,7 +57,11 @@ function guardProposalSequence(sequence: any[], _minGapFrames = 30): any[] {
   return result;
 }
 
-export const useProposalState = (sourceFragments: Fragment[]) => {
+export const useProposalState = (
+  sourceFragments: Fragment[],
+  projectId?: string,
+  orderedSourceIds?: string[]
+) => {
   const [selectedProposalId, setSelectedProposalId] = useState<string | null>(null);
   const [committedProposalId, setCommittedProposalId] = useState<string | null>(null);
   const [proposals, setProposals] = useState<Record<"A" | "B", Proposal> | null>(null);
@@ -139,36 +144,142 @@ export const useProposalState = (sourceFragments: Fragment[]) => {
   }, [proposals]);
 
   const handleReproposal = useCallback(
-    (nextDirection: Direction) => {
+    async (nextDirection: Direction | string) => {
       if (!sourceFragments.length) {
         console.warn("[Reproposal] sourceFragments is empty. Skipping reproposal.");
         return;
       }
 
-      const nextSnapshot = createNextSnapshot(directionSnapshot, nextDirection);
-      
-      // [STEP 10-I.5.27-E2] Local reproposal isolation
-      if (proposals) {
-        console.warn("[Reproposal] Local strategyEngine is legacy fallback only. Backend narrative reproposal is required.");
-        // Keep existing proposals but update the snapshot to reflect user intent
-        setDirectionSnapshot(nextSnapshot);
+      const instructionText = typeof nextDirection === "string" ? nextDirection.trim() : "";
+      if (!instructionText) {
+        console.warn("[Reproposal] instructionText is empty. Skipping reproposal.");
         return;
       }
 
-      console.warn("[Reproposal] Falling back to local strategyEngine (No backend proposals found).");
-      const nextProposals = generateProposals(sourceFragments, nextSnapshot);
+      if (!orderedSourceIds || orderedSourceIds.length === 0) {
+        console.warn("[Reproposal] orderedSourceIds is empty. Skipping reproposal.");
+        return;
+      }
 
-      logProposalPair(nextProposals, "REPROPOSAL");
+      // [REPROPOSAL_NL_SUBMIT] Console Log
+      console.log("[REPROPOSAL_NL_SUBMIT]\n" + JSON.stringify({
+        instructionText,
+        sourceCount: orderedSourceIds.length,
+        existingProposals: proposals ? {
+          A: proposals.A?.proposal_id,
+          B: proposals.B?.proposal_id
+        } : "none"
+      }, null, 2));
 
-      setSelectedProposalId(null);
-      setCommittedProposalId(null);
-      setProposals(nextProposals);
+      const nextSnapshot = createNextSnapshot(directionSnapshot, typeof nextDirection === "string" ? {} as Direction : nextDirection);
       setDirectionSnapshot(nextSnapshot);
 
-      console.log("[Reproposal] active_direction:", nextSnapshot.active_direction);
-      console.log("[Reproposal] snapshot_id:", nextSnapshot.snapshot_id);
+      const targetLen = proposals?.A?.preview_duration || 60.0;
+      const userIntent = {
+        ...(storyPlan?.story_intent || {}),
+        instruction_text: instructionText,
+        coverage: "balanced_sources"
+      };
+
+      const payload = {
+        project_id: projectId || "default_project",
+        source_ids: orderedSourceIds,
+        target_length: targetLen,
+        user_intent: userIntent,
+        refresh: true
+      };
+
+      // [REPROPOSAL_PROJECT_REQUEST] Console Log
+      console.log("[REPROPOSAL_PROJECT_REQUEST]\n" + JSON.stringify({
+        apiUrl: `${videoService.API_BASE_URL}/proposals/project`,
+        payloadSummary: payload,
+        source_ids: orderedSourceIds,
+        instruction_text: instructionText
+      }, null, 2));
+
+      try {
+        const proposalData = await videoService.requestProjectProposals(
+          projectId || "default_project",
+          orderedSourceIds,
+          targetLen,
+          userIntent,
+          true
+        );
+
+        if (proposalData && proposalData.proposals) {
+          const generatedProposals: Record<"A" | "B", any> = {} as any;
+
+          proposalData.proposals.forEach((p: any) => {
+            const mode = p.mode === "A" ? "A" : "B";
+            generatedProposals[mode] = {
+              id: mode,
+              proposal_id: p.proposal_id,
+              mode: p.mode === "A" ? "market" : "user",
+              title: p.mode === "A" ? "시장형 편집 (A)" : "사용자친화형 편집 (B)",
+              desc: p.proposal_reason?.mode_reason || "백엔드 분석 기반 추천 편집안입니다.",
+              score: String(Math.round(p.confidence * 100)) + "%",
+              key_fragments: p.sequence.map((s: any) => s.fragment_id),
+              proposal_story: p.proposal_story,
+              proposal_explanation: p.proposal_explanation,
+              direction: {},
+              snapshot_id: "R1",
+              template_id: p.mode,
+              slot_trace: [],
+              preview_url: p.preview_url ?? null,
+              preview_duration: p.preview_duration ?? 0,
+            };
+            
+            if (generatedProposals[mode].key_fragments.length > 0) {
+              generatedProposals[mode].resolved_aliases = p.sequence.map((s: any) => ({
+                proposal_fragment_id: s.fragment_id,
+                source_id: s.source_id,
+                source_fragment_id: s.fragment_id,
+                display_id: s.display_id,
+                start_sec: s.start,
+                end_sec: s.end,
+                thumbnail_url: s.thumbnail_url
+              }));
+            }
+          });
+
+          // [REPROPOSAL_PROJECT_RESULT] Console Log
+          console.log("[REPROPOSAL_PROJECT_RESULT]\n" + JSON.stringify({
+            proposal_id: {
+              A: generatedProposals.A?.proposal_id,
+              B: generatedProposals.B?.proposal_id
+            },
+            previewUrlExists: {
+              A: !!generatedProposals.A?.preview_url,
+              B: !!generatedProposals.B?.preview_url
+            },
+            sequenceLength: {
+              A: generatedProposals.A?.key_fragments?.length || 0,
+              B: generatedProposals.B?.key_fragments?.length || 0
+            },
+            sourceDistribution: proposalData.source_usage || {}
+          }, null, 2));
+
+          setProposals(generatedProposals);
+          setSelectedProposalId(null);
+          setCommittedProposalId(null);
+        } else {
+          console.warn("[Reproposal] No proposals returned from server");
+        }
+      } catch (err: any) {
+        console.error("[Reproposal] Failed to fetch reproposaled project proposals:", err);
+      }
     },
-    [directionSnapshot, logProposalPair, sourceFragments]
+    [
+      directionSnapshot,
+      proposals,
+      sourceFragments,
+      projectId,
+      orderedSourceIds,
+      storyPlan,
+      setProposals,
+      setSelectedProposalId,
+      setCommittedProposalId
+    ]
   );
 
   const buildConsultationReply = useCallback((input: string): string => {

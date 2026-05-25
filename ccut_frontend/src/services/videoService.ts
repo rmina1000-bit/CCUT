@@ -66,14 +66,22 @@ export const videoService = {
         });
     },
 
-    requestProjectProposals: async (projectId: string, sourceIds: string[], targetLength: number = 60.0) => {
+    requestProjectProposals: async (
+        projectId: string, 
+        sourceIds: string[], 
+        targetLength: number = 60.0,
+        userIntent?: any,
+        refresh?: boolean
+    ) => {
         const response = await fetch(`${API_BASE_URL}/proposals/project`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
                 project_id: projectId,
                 source_ids: sourceIds,
-                target_length: targetLength
+                target_length: targetLength,
+                user_intent: userIntent,
+                refresh: refresh
             })
         });
         if (!response.ok) {
