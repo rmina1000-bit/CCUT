@@ -6,6 +6,10 @@ import FragmentMap from "@/components/FragmentMap";
 import ReservedFragments from "@/components/ReservedFragments";
 import { useWorkspaceLayout } from "@/hooks/useWorkspaceLayout";
 import { useProposalState } from "@/hooks/useProposalState";
+import { ArchivePanel } from "@/components/ArchivePanel";
+import { SnsUploadPanel } from "@/components/SnsUploadPanel";
+import { AccountPanel } from "@/components/AccountPanel";
+import PrecisionBoundaryEditor, { BoundaryEditorTarget } from "@/features/pbe/PrecisionBoundaryEditor";
 
 
 import {
@@ -75,6 +79,11 @@ const Index: React.FC = () => {
   const [reservedFragments, setReservedFragments] = useState<Fragment[]>(initialReservedFragments);
   const [holdPositions, setHoldPositions] = useState<Record<string, { x: number; y: number }>>({});
   const [deletedFragments, setDeletedFragments] = useState<Fragment[]>([]);
+  const [boundaryHighlightIds, setBoundaryHighlightIds] = useState<string[]>([]);
+  const [editorTarget, setEditorTarget] = useState<BoundaryEditorTarget | null>(null);
+  const [pbeWindow, setPbeWindow] = useState<Fragment[]>([]);
+  const [editorOpen, setEditorOpen] = useState(false);
+  const [fragmentOverrides, setFragmentOverrides] = useState<Map<string, Fragment>>(new Map());
 
 // selectedProposalId, committedProposalId moved to useProposalState
 
@@ -1106,6 +1115,169 @@ const Index: React.FC = () => {
     setDeletedFragments([]);
   }, []);
 
+  const handleBoundaryDragChange = useCallback(
+    (leftFrag: Fragment | null, rightFrag: Fragment | null) => {
+      if (!leftFrag || !rightFrag) {
+        setBoundaryHighlightIds([]);
+        setFragmentOverrides(new Map());
+        return;
+      }
+
+      setActiveSource(leftFrag.source_video);
+      setBoundaryHighlightIds([getUid(leftFrag), getUid(rightFrag)]);
+    },
+    []
+  );
+
+  useEffect(() => {
+    if (boundaryHighlightIds.length === 0) return;
+
+    const overrides = new Map<string, Fragment>();
+
+    for (const fid of boundaryHighlightIds) {
+      const frag = editFragments.find((f) => getUid(f) === fid);
+      if (frag) overrides.set(fid, frag);
+    }
+
+    setFragmentOverrides(overrides);
+  }, [boundaryHighlightIds, editFragments]);
+
+  const filteredFragments = useMemo(() => {
+    if (!committedProposalId || !proposals) return [];
+
+    const proposal = proposals[committedProposalId as "A" | "B"];
+    const proposalFragIds = proposal?.key_fragments || [];
+    if (proposalFragIds.length === 0) return [];
+
+    const matched = editFragments.filter((f) => {
+      if (proposalFragIds.includes(f.fragment_id)) return true;
+      if (f.root_fragment_uid && proposalFragIds.includes(f.root_fragment_uid)) return true;
+      if (f.parent_fragment_uid && proposalFragIds.includes(f.parent_fragment_uid)) return true;
+      if (f.derivedFrom && proposalFragIds.includes(f.derivedFrom)) return true;
+      return false;
+    });
+
+    const result = proposalFragIds
+      .map((id) =>
+        matched.find(
+          (f) =>
+            f.fragment_id === id ||
+            f.root_fragment_uid === id ||
+            f.parent_fragment_uid === id ||
+            f.derivedFrom === id
+        )
+      )
+      .filter(Boolean) as Fragment[];
+
+    return result;
+  }, [committedProposalId, editFragments, proposals]);
+
+  const handleOpenBoundaryEditor = useCallback(
+    async (leftRealIndex: number, rightRealIndex: number, clickSide?: "left" | "right" | "center") => {
+      // 1. Get left and right fragments based on the indices in the timeline (filteredFragments)
+      const leftFrag = filteredFragments[leftRealIndex];
+      const rightFrag = filteredFragments[rightRealIndex];
+
+      if (!leftFrag && !rightFrag) return;
+
+      // 2. Build the exact PBE Window targeting the seam context (DoD §6 boundary context rules)
+      // We want to load:
+      // - If S|S: [leftFrag, rightFrag]
+      // - If S|N|S: [leftFrag, ...middle_N_fragments, rightFrag]
+      // - If Left single trim: [leftFrag]
+      // - If Right single trim: [rightFrag]
+      let targetFrags: Fragment[] = [];
+      const isSameSource = leftFrag && rightFrag && leftFrag.source_video === rightFrag.source_video;
+
+      if (leftFrag && rightFrag && isSameSource) {
+        // Find if there are any excluded 'N' fragments between leftFrag and rightFrag in the full order of that source
+        const sFrags = filteredFragments.map((f) => ({ ...f, selection_state: "S" as const }));
+        const nFrags = reservedFragments.map((f) => ({ ...f, selection_state: "N" as const }));
+        const rawAll = [...sFrags, ...nFrags];
+
+        const uniqueMap = new Map<string, Fragment>();
+        rawAll.forEach((f) => uniqueMap.set(f.fragment_id, f));
+
+        const sourceOrdered = Array.from(uniqueMap.values())
+          .filter((f) => f.source_video === leftFrag.source_video)
+          .sort((a, b) => (a.start_frame ?? 0) - (b.start_frame ?? 0));
+
+        const leftIdxInSource = sourceOrdered.findIndex((f) => getUid(f) === getUid(leftFrag));
+        const rightIdxInSource = sourceOrdered.findIndex((f) => getUid(f) === getUid(rightFrag));
+
+        if (leftIdxInSource >= 0 && rightIdxInSource >= 0) {
+          const startIdx = Math.min(leftIdxInSource, rightIdxInSource);
+          const endIdx = Math.max(leftIdxInSource, rightIdxInSource);
+          targetFrags = sourceOrdered.slice(startIdx, endIdx + 1);
+        } else {
+          targetFrags = [leftFrag, rightFrag];
+        }
+      } else if (leftFrag && rightFrag && !isSameSource) {
+        // Cross source boundary editor: edit adjacent clips
+        targetFrags = [leftFrag, rightFrag];
+      } else if (leftFrag) {
+        targetFrags = [leftFrag];
+      } else if (rightFrag) {
+        targetFrags = [rightFrag];
+      }
+
+      // Format for PBE fragment specifications
+      const pbeFragments = targetFrags.map(f => ({
+        ...f,
+        start_frame: f.start_frame ?? Math.round((f.start ?? f.start_time ?? 0) * 30),
+        end_frame: f.end_frame ?? Math.round(((f.start ?? f.start_time ?? 0) + (f.duration ?? 0)) * 30),
+        selection_state: f.selection_state || (reservedFragments.some(r => getUid(r) === getUid(f)) ? "N" : "S"),
+      }));
+
+      setPbeWindow(pbeFragments);
+      setEditorTarget({
+        leftRealIndex: 0,
+        rightRealIndex: pbeFragments.length - 1,
+        clickSide: clickSide || "center",
+      });
+      setEditorOpen(true);
+
+      // 3. Proactively trigger backend panorama frame extraction to prevent broken frame thumbnails
+      try {
+        const payloadFrags = pbeFragments.map(f => ({
+          fragment_id: f.fragment_id,
+          source_id: f.source_id || currentSourceId,
+          start_time: f.start ?? f.start_time ?? 0.0,
+          end_time: (f.start ?? f.start_time ?? 0.0) + (f.duration ?? f.duration_sec ?? 0.0)
+        }));
+
+        fetch(`${videoService.API_BASE_URL}/pbe/extract-panoramas`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ fragments: payloadFrags }),
+        }).catch(err => console.error("Extract panorama request failed async:", err));
+      } catch (e) {
+        console.error("Failed to post extract panorama:", e);
+      }
+    },
+    [filteredFragments, reservedFragments, currentSourceId]
+  );
+
+  const handleEditorApply = useCallback(async (result: { updatedFragments: Fragment[]; removedFragmentIds: string[] }) => {
+    const { updatedFragments } = result;
+    setEditFragments(updatedFragments);
+    setPbeWindow([]);
+    setEditorOpen(false);
+
+    try {
+      await fetch(`${videoService.API_BASE_URL}/save_edit`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          fragments: updatedFragments,
+          timestamp: Date.now(),
+        }),
+      });
+    } catch (e) {
+      console.error("Save edit error:", e);
+    }
+  }, []);
+
   const handleBackgroundClick = useCallback((e: React.MouseEvent) => {
     const target = e.target as HTMLElement;
     if (target.closest(".fragment-tile")) return;
@@ -1137,123 +1309,143 @@ const Index: React.FC = () => {
         />
       </div>
 
-      <div style={{ width: centerWidth, flexShrink: 0 }}>
-        <CenterPanel
-          selectedFragment={selectedFragment}
-          selectedSource={activeSource}
-          appState={appState}
-          onAppStateChange={setAppState}
-          analyzeProgress={analyzeProgress}
-          analyzeMessage={analyzeMessage}
-          proposals={proposals}
-          sourceFragments={sourceFragments}
-          sourceId={currentSourceId}
-          videoUrl={currentVideoUrl}
-          onAnalyze={handleStartAnalysis}
-          committedProposalId={committedProposalId}
-          onPreviewProposal={handleProposalPreview}
-          onCommitProposal={handleProposalCommit}
-          onExport={handleExport}
-          onConsultation={handleConsultation}
-          onReproposal={(dir: any) => {
-            handleReproposal(dir);
-          }}
-          fragments={resolvedFragments}
-          exportClips={physicalClips}
-          storyPlan={storyPlan}
-          onStoryPlanConfirm={setStoryPlan}
-          guidanceMessage={
-            semanticFragments.length > 0
-              ? "Semantic " + semanticFragments.length + " / Quick Scan " + (quickScanData?.status ?? "READY")
-              : quickScanData?.status
-                ? "Quick Scan " + quickScanData.status
-                : undefined
-          }
-          sourceEntries={sourceEntries}
-        />
-      </div>
-
-      <div
-        className={`flex-shrink-0 flex items-center justify-center cursor-col-resize group transition-colors ${isDragging ? "bg-primary/15" : "hover:bg-primary/8"
-          }`}
-        style={{ width: 6 }}
-        onMouseDown={(e) => {
-          e.preventDefault();
-          setIsDragging(true);
-        }}
-      >
-        <div
-          className={`w-[2px] h-10 rounded-full transition-all duration-150 ${isDragging
-            ? "bg-primary/60 h-16"
-            : "bg-border/40 group-hover:bg-primary/40 group-hover:h-14"
-            }`}
-        />
-      </div>
-
-      <div className="flex-1 flex flex-col gap-2 p-2 overflow-hidden min-w-0">
-        <OriginalPanorama
-          activeSource={activeSource}
-          onSourceChange={setActiveSource}
-          highlightedFragmentId={highlightedPanoramaFrag}
-          selectedFragmentId={selectedFragment?.fragment_id || null}
-          onFragmentClick={handlePanoramaFragmentClick}
-          intelligenceOn={intelligenceOn}
-          onToggleIntelligence={() => setIntelligenceOn((p) => !p)}
-
-          fragmentOverrides={new Map()}
-
-          boundaryHighlightIds={[]}
-          sourceFragments={
-            sourceEntries.length > 0
-              ? sourceEntries.find((e) => e.label === activeSource)?.fragments ?? []
-              : sourceFragments
-          }
-          sources={
-            sourceEntries.length > 0
-              ? sourceEntries.map((e) => ({
-                source_id: e.source_id,
-                label: e.label,
-                video_url: e.video_url,
-              }))
-              : currentSourceId
-                ? [{ source_id: currentSourceId, label: "A", video_url: currentVideoUrl || undefined }]
-                : []
-          }
-        />
-
-        <div className="flex-1 overflow-y-auto">
-          <FragmentMap
+      <div style={!(activeNavItem === "archive" || activeNavItem === "upload" || activeNavItem === "account") ? { width: centerWidth, flexShrink: 0 } : { flex: 1, minWidth: 0 }} className="h-full">
+        {activeNavItem === "archive" ? (
+          <ArchivePanel />
+        ) : activeNavItem === "upload" ? (
+          <SnsUploadPanel />
+        ) : activeNavItem === "account" ? (
+          <AccountPanel />
+        ) : (
+          <CenterPanel
+            selectedFragment={selectedFragment}
+            selectedSource={activeSource}
+            appState={appState}
+            onAppStateChange={setAppState}
+            analyzeProgress={analyzeProgress}
+            analyzeMessage={analyzeMessage}
+            proposals={proposals}
+            sourceFragments={sourceFragments}
+            sourceId={currentSourceId}
+            videoUrl={currentVideoUrl}
+            onAnalyze={handleStartAnalysis}
+            committedProposalId={committedProposalId}
+            onPreviewProposal={handleProposalPreview}
+            onCommitProposal={handleProposalCommit}
+            onExport={handleExport}
+            onConsultation={handleConsultation}
+            onReproposal={(dir: any) => {
+              handleReproposal(dir);
+            }}
             fragments={resolvedFragments}
-            onFragmentsChange={handleFragmentsReorder}
-            selectedFragmentId={selectedFragment ? getUid(selectedFragment) : null}
-            expandedFragmentId={expandedFragment}
-            onFragmentClick={handleEditFragmentClick}
-            onFragmentDoubleClick={handleEditFragmentDoubleClick}
-            onExcludeFragment={handleExcludeFromEdit}
-            onRestoreFragment={handleRestoreFromHold}
-            onSourceRestore={handleAddFromSource}
-            onMoveToHold={handleMoveToHold}
-            onTrashRestore={handleRestoreToEdit}
-
+            exportClips={physicalClips}
+            storyPlan={storyPlan}
+            onStoryPlanConfirm={setStoryPlan}
+            guidanceMessage={
+              semanticFragments.length > 0
+                ? "Semantic " + semanticFragments.length + " / Quick Scan " + (quickScanData?.status ?? "READY")
+                : quickScanData?.status
+                  ? "Quick Scan " + quickScanData.status
+                  : undefined
+            }
+            sourceEntries={sourceEntries}
           />
-        </div>
-
-        <ReservedFragments
-          fragments={reservedFragments}
-          selectedFragmentId={selectedFragment ? getUid(selectedFragment) : null}
-          onFragmentClick={handleReservedClick}
-          onRestoreFragment={handleRestoreFromHold}
-          onDeleteFragment={handleDeleteFromHold}
-          deletedFragments={deletedFragments}
-          onRestoreToHold={handleRestoreToHold}
-          onRestoreToEdit={handleRestoreToEdit}
-          onEmptyTrash={handleEmptyTrash}
-          holdPositions={holdPositions}
-          onHoldPositionsChange={setHoldPositions}
-          onDropToHold={handleDropToHold}
-        />
+        )}
       </div>
 
+      {!(activeNavItem === "archive" || activeNavItem === "upload" || activeNavItem === "account") && (
+        <>
+          <div
+            className={`flex-shrink-0 flex items-center justify-center cursor-col-resize group transition-colors ${isDragging ? "bg-primary/15" : "hover:bg-primary/8"
+              }`}
+            style={{ width: 6 }}
+            onMouseDown={(e) => {
+              e.preventDefault();
+              setIsDragging(true);
+            }}
+          >
+            <div
+              className={`w-[2px] h-10 rounded-full transition-all duration-150 ${isDragging
+                ? "bg-primary/60 h-16"
+                : "bg-border/40 group-hover:bg-primary/40 group-hover:h-14"
+                }`}
+            />
+          </div>
+
+          <div className="flex-1 flex flex-col gap-2 p-2 overflow-hidden min-w-0">
+            <OriginalPanorama
+              activeSource={activeSource}
+              onSourceChange={setActiveSource}
+              highlightedFragmentId={highlightedPanoramaFrag}
+              selectedFragmentId={selectedFragment?.fragment_id || null}
+              onFragmentClick={handlePanoramaFragmentClick}
+              intelligenceOn={intelligenceOn}
+              onToggleIntelligence={() => setIntelligenceOn((p) => !p)}
+
+              fragmentOverrides={fragmentOverrides}
+
+              boundaryHighlightIds={boundaryHighlightIds}
+              onBoundaryClick={(leftIdx, rightIdx) => handleOpenBoundaryEditor(leftIdx, rightIdx, "center")}
+              sourceFragments={
+                sourceEntries.length > 0
+                  ? sourceEntries.find((e) => e.label === activeSource)?.fragments ?? []
+                  : sourceFragments
+              }
+              sources={
+                sourceEntries.length > 0
+                  ? sourceEntries.map((e) => ({
+                    source_id: e.source_id,
+                    label: e.label,
+                    video_url: e.video_url,
+                  }))
+                  : currentSourceId
+                    ? [{ source_id: currentSourceId, label: "A", video_url: currentVideoUrl || undefined }]
+                    : []
+              }
+            />
+
+            <div className="flex-1 overflow-y-auto">
+              <FragmentMap
+                fragments={resolvedFragments}
+                onFragmentsChange={handleFragmentsReorder}
+                selectedFragmentId={selectedFragment ? getUid(selectedFragment) : null}
+                expandedFragmentId={expandedFragment}
+                onFragmentClick={handleEditFragmentClick}
+                onFragmentDoubleClick={handleEditFragmentDoubleClick}
+                onExcludeFragment={handleExcludeFromEdit}
+                onRestoreFragment={handleRestoreFromHold}
+                onSourceRestore={handleAddFromSource}
+                onMoveToHold={handleMoveToHold}
+                onTrashRestore={handleRestoreToEdit}
+                onBoundaryClick={handleOpenBoundaryEditor}
+              />
+            </div>
+
+            <ReservedFragments
+              fragments={reservedFragments}
+              selectedFragmentId={selectedFragment ? getUid(selectedFragment) : null}
+              onFragmentClick={handleReservedClick}
+              onRestoreFragment={handleRestoreFromHold}
+              onDeleteFragment={handleDeleteFromHold}
+              deletedFragments={deletedFragments}
+              onRestoreToHold={handleRestoreToHold}
+              onRestoreToEdit={handleRestoreToEdit}
+              onEmptyTrash={handleEmptyTrash}
+              holdPositions={holdPositions}
+              onHoldPositionsChange={setHoldPositions}
+              onDropToHold={handleDropToHold}
+            />
+          </div>
+        </>
+      )}
+      <PrecisionBoundaryEditor
+        open={editorOpen}
+        onOpenChange={setEditorOpen}
+        fragments={pbeWindow}
+        editFragments={editFragments}
+        target={editorTarget}
+        onApply={handleEditorApply}
+      />
     </div>
   );
 };

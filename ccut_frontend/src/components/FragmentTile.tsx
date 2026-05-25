@@ -32,7 +32,8 @@ const FragmentTile: React.FC<FragmentTileProps> = ({
   widthScale = 0.7,
 }) => {
   const [hasImageError, setHasImageError] = useState(false);
-  const cardWidth = "120px";
+  const seconds = fragment.duration / 30;
+  const cardWidth = `${Math.max(70, Math.min(350, seconds * 20 * widthScale))}px`;
   const hookWidth = `${(fragment.intelligence?.hook_score || 0.5) * 100}%`;
 
   return (

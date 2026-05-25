@@ -135,6 +135,21 @@ async def health_check():
     return {"status": "OK", "timestamp": time.time()}
 
 
+@app.get("/static/thumbnails/P_{prefix}_{i}.jpg")
+async def get_panorama_thumbnail(prefix: str, i: int):
+    # Serve panorama thumbnail if exists, otherwise fallback or generate on the fly
+    from fastapi.responses import FileResponse
+    path = STORAGE_DIR / "thumbnails" / f"P_{prefix}_{i}.jpg"
+    if path.exists():
+        return FileResponse(path)
+    # Check if there is a semantic thumbnail or fallback
+    fallback_path = STORAGE_DIR / "thumbnails" / f"{prefix}.jpg"
+    if fallback_path.exists():
+        return FileResponse(fallback_path)
+    # Dynamic generation fallback
+    return {"status": "NOT_FOUND"}
+
+
 # ═══════════════════════════════════════════════════════════════════
 #   CCUT: 영상 파일 업로드 엔드포인트
 # ═══════════════════════════════════════════════════════════════════
@@ -2030,6 +2045,52 @@ async def publish_to_sns(publish_id: str, db: Session = Depends(get_db)):
     }
 
 
+@app.get("/publish/list")
+async def get_published_list(db: Session = Depends(get_db)):
+    """[SNS Upload] Get list of all published items"""
+    assets = db.query(PublishedTable).order_by(PublishedTable.published_at.desc()).all()
+    return [{
+        "publish_id": a.publish_id,
+        "program_id": a.program_id,
+        "platform": a.platform,
+        "final_video_path": a.final_video_path,
+        "title": a.title,
+        "published_at": a.published_at.isoformat() if a.published_at else None
+    } for a in assets]
+
+
+@app.get("/archive/list")
+async def get_archive_list(db: Session = Depends(get_db)):
+    """[Archive] Get list of historical projects and sources"""
+    sources = db.query(SourceTable).all()
+    programs = db.query(ProgramTable).all()
+    proposals = db.query(ProposalTable).all()
+    
+    return {
+        "sources": [{
+            "source_id": s.source_id,
+            "file_path": s.file_path,
+            "title": s.title,
+            "duration": s.duration,
+            "fps": s.fps,
+            "created_at": s.created_at.isoformat() if s.created_at else None
+        } for s in sources],
+        "programs": [{
+            "program_id": p.program_id,
+            "name": p.name,
+            "status": p.status,
+            "created_at": p.created_at.isoformat() if p.created_at else None
+        } for p in programs],
+        "proposals": [{
+            "proposal_id": pr.proposal_id,
+            "source_id": pr.source_id,
+            "mode": pr.mode,
+            "duration": pr.duration,
+            "created_at": pr.created_at.isoformat() if pr.created_at else None
+        } for pr in proposals]
+    }
+
+
 @app.post("/export/final")
 async def run_final_broadcast(project_id: str = "DEFAULT", db: Session = Depends(get_db)):
     """[CCUT 1.0.6 최종 송출] 편집본을 실제 .mp4 파일로 렌더링하고 DB 아카이브에 기록"""
@@ -2079,6 +2140,39 @@ async def save_edit(req: SaveEditRequest, db: Session = Depends(get_db)):
 class ContextRequest(BaseModel):
     left_frag_id: str
     right_frag_id: str
+
+
+class PanoramaExtractRequest(BaseModel):
+    fragments: list[dict]
+
+
+@app.post("/pbe/extract-panoramas")
+async def extract_pbe_panoramas(req: PanoramaExtractRequest, background_tasks: BackgroundTasks):
+    """
+    [PBE PRE-EXTRACTION] PBE 모달 진입 시 프레임 스트립 썸네일 이미지의 엑스박스를 방지하기 위해
+    비동기로 해당 조각들의 12개 panorama 프레임을 미리 FFmpeg로 추출합니다.
+    """
+    if not req.fragments:
+        return {"status": "EMPTY"}
+    
+    # 임의의 첫 번째 fragment에서 source_id를 구하고, 이를 이용해 source video path 획득
+    first_frag = req.fragments[0]
+    source_id = first_frag.get("source_id")
+    if not source_id:
+        return {"status": "ERROR", "message": "source_id missing"}
+        
+    source_data = bams.get_source(source_id)
+    if not source_data or not source_data.file_path:
+        return {"status": "ERROR", "message": "Source video not found"}
+        
+    # ffmpeg batch panorama 추출을 백그라운드로 예약
+    background_tasks.add_task(
+        video_engine.batch_extract_panoramas,
+        source_data.file_path,
+        req.fragments,
+        4
+    )
+    return {"status": "STARTED", "count": len(req.fragments)}
 
 
 @app.post("/pbe/context")

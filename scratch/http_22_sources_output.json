@@ -1,0 +1,1780 @@
+{
+  "status": "PROPOSAL_READY",
+  "project_id": "proj_1779591776013",
+  "source_ids": [
+    "SRC_12C414A7",
+    "SRC_CB9107CA",
+    "SRC_B4F09612",
+    "SRC_0BE783EC",
+    "SRC_AA6C87D2",
+    "SRC_B669588A",
+    "SRC_2BE80EE2",
+    "SRC_6F5DEBE2",
+    "SRC_634C81D9",
+    "SRC_9E3E3C7B",
+    "SRC_B85F1985",
+    "SRC_EFDBBCFC",
+    "SRC_83B87D21",
+    "SRC_901671A7",
+    "SRC_563A1B48",
+    "SRC_F2CFC4DC",
+    "SRC_1435727E",
+    "SRC_E8F4845B",
+    "SRC_8E415949",
+    "SRC_616AEFBA",
+    "SRC_D5BD47B6",
+    "SRC_B1A26714"
+  ],
+  "semantic_count": 177,
+  "proposals": [
+    {
+      "proposal_id": "PROP_A_07B31F_proj_1779591776013",
+      "source_id": "proj_1779591776013",
+      "mode": "A",
+      "sequence": [
+        {
+          "fragment_id": "SF_7D041C_SRC_CB9107CA",
+          "source_id": "SRC_CB9107CA",
+          "start": 33.03,
+          "end": 41.92,
+          "semantic": {
+            "summary": "괜찮아? 그래 분위기를 우산시하자 얼음화 여보 굽지 어떤 맛인가요? 통결은 집에서 처음에 ...",
+            "topic": "general",
+            "transcript_refs": [
+              "VF1_SRC_CB9107CA",
+              "VF2_SRC_CB9107CA"
+            ],
+            "evidence_refs": [
+              "VF1_SRC_CB9107CA",
+              "VF2_SRC_CB9107CA"
+            ]
+          },
+          "structural": {
+            "role": "closing",
+            "edit_value": 0.50454,
+            "market_value": 0.50454,
+            "duration": 8.89
+          },
+          "continuity": {
+            "topic_similarity": 0.7,
+            "time_proximity": 1.0,
+            "sentiment_continuity": 0.5,
+            "narrative_flow": 0.5
+          },
+          "confidence": 0.9,
+          "fallback_reason": "continuity_placeholder",
+          "thumbnail_url": "/static/thumbnails/SF_7D041C_SRC_CB9107CA.jpg",
+          "thumbnail": {
+            "thumbnail_url": "/static/thumbnails/SF_7D041C_SRC_CB9107CA.jpg"
+          },
+          "intelligence": {
+            "thumb_url": "/static/thumbnails/SF_7D041C_SRC_CB9107CA.jpg"
+          }
+        },
+        {
+          "fragment_id": "SF_46348D_SRC_B1A26714_P001",
+          "source_id": "SRC_B1A26714",
+          "start": 0.0,
+          "end": 20.0,
+          "semantic": {
+            "summary": "Visual/Audio Context",
+            "topic": "general",
+            "transcript_refs": [
+              "VF1_SRC_B1A26714",
+              "VF2_SRC_B1A26714",
+              "VF3_SRC_B1A26714",
+              "VF4_SRC_B1A26714",
+              "VF5_SRC_B1A26714",
+              "VF6_SRC_B1A26714",
+              "VF7_SRC_B1A26714",
+              "VF8_SRC_B1A26714",
+              "VF9_SRC_B1A26714",
+              "VF10_SRC_B1A26714",
+              "VF11_SRC_B1A26714"
+            ],
+            "evidence_refs": [
+              "VF1_SRC_B1A26714",
+              "VF2_SRC_B1A26714",
+              "VF3_SRC_B1A26714",
+              "VF4_SRC_B1A26714",
+              "VF5_SRC_B1A26714",
+              "VF6_SRC_B1A26714",
+              "VF7_SRC_B1A26714",
+              "VF8_SRC_B1A26714",
+              "VF9_SRC_B1A26714",
+              "VF10_SRC_B1A26714",
+              "VF11_SRC_B1A26714"
+            ]
+          },
+          "structural": {
+            "role": "closing",
+            "edit_value": 0.10426727272727274,
+            "market_value": 0.10426727272727274,
+            "duration": 20.0
+          },
+          "continuity": {
+            "topic_similarity": 0.5,
+            "time_proximity": 1.0,
+            "sentiment_continuity": 0.5,
+            "narrative_flow": 0.5
+          },
+          "confidence": 0.7,
+          "fallback_reason": "continuity_placeholder",
+          "thumbnail_url": "/static/thumbnails/SF_46348D_SRC_B1A26714_P001.jpg",
+          "thumbnail": {
+            "thumbnail_url": "/static/thumbnails/SF_46348D_SRC_B1A26714_P001.jpg"
+          },
+          "intelligence": {
+            "thumb_url": "/static/thumbnails/SF_46348D_SRC_B1A26714_P001.jpg"
+          }
+        },
+        {
+          "fragment_id": "SF_C17F2F_SRC_B4F09612_P003",
+          "source_id": "SRC_B4F09612",
+          "start": 40.0,
+          "end": 57.59,
+          "semantic": {
+            "summary": "Visual/Audio Context",
+            "topic": "general",
+            "transcript_refs": [
+              "VF1_SRC_B4F09612",
+              "VF2_SRC_B4F09612"
+            ],
+            "evidence_refs": [
+              "VF1_SRC_B4F09612",
+              "VF2_SRC_B4F09612"
+            ]
+          },
+          "structural": {
+            "role": "closing",
+            "edit_value": 0.10395000000000001,
+            "market_value": 0.10395000000000001,
+            "duration": 17.59
+          },
+          "continuity": {
+            "topic_similarity": 0.5,
+            "time_proximity": 1.0,
+            "sentiment_continuity": 0.5,
+            "narrative_flow": 0.5
+          },
+          "confidence": 0.7,
+          "fallback_reason": "continuity_placeholder",
+          "thumbnail_url": "/static/thumbnails/SF_C17F2F_SRC_B4F09612_P003.jpg",
+          "thumbnail": {
+            "thumbnail_url": "/static/thumbnails/SF_C17F2F_SRC_B4F09612_P003.jpg"
+          },
+          "intelligence": {
+            "thumb_url": "/static/thumbnails/SF_C17F2F_SRC_B4F09612_P003.jpg"
+          }
+        }
+      ],
+      "duration": 0.0,
+      "proposal_reason": {
+        "mode_reason": "market_value_and_role_priority",
+        "target_length": {
+          "target": 60.0,
+          "actual": 65.22,
+          "status": "within_range"
+        },
+        "sequence_reason": "optimized_market_flow",
+        "bridge": null
+      },
+      "proposal_story": {
+        "title": "교차 하이라이트 편집",
+        "story_summary": "서로 다른 영상에서 눈에 잘 들어오는 장면을 골라 빠르게 이어 붙집니다. 초반에는 가장 선명한 장면으로 시선을 잡고, 중간에는 분위기가 다른 장면을 교차시켜 변화감을 만듭니다. 마지막은 가장 안정적인 장면으로 정리해 짧은 모음 영상처럼 마무리합니다.",
+        "intent_keywords": [
+          "여러 영상 하이라이트",
+          "빠른 전개",
+          "장면 대비",
+          "짧은 완성도"
+        ],
+        "hidden_fragment_refs": [
+          "SF_7D041C_SRC_CB9107CA",
+          "SF_CA5F54_SRC_CB9107CA_P001",
+          "SF_46348D_SRC_B1A26714_P001",
+          "SF_C17F2F_SRC_B4F09612_P003"
+        ],
+        "proposal_id": "PROP_A_07B31F_proj_1779591776013",
+        "mode": "A"
+      },
+      "confidence": 0.9,
+      "fallback_reason": null,
+      "project_id": "proj_1779591776013",
+      "source_ids": [
+        "SRC_12C414A7",
+        "SRC_CB9107CA",
+        "SRC_B4F09612",
+        "SRC_0BE783EC",
+        "SRC_AA6C87D2",
+        "SRC_B669588A",
+        "SRC_2BE80EE2",
+        "SRC_6F5DEBE2",
+        "SRC_634C81D9",
+        "SRC_9E3E3C7B",
+        "SRC_B85F1985",
+        "SRC_EFDBBCFC",
+        "SRC_83B87D21",
+        "SRC_901671A7",
+        "SRC_563A1B48",
+        "SRC_F2CFC4DC",
+        "SRC_1435727E",
+        "SRC_E8F4845B",
+        "SRC_8E415949",
+        "SRC_616AEFBA",
+        "SRC_D5BD47B6",
+        "SRC_B1A26714"
+      ],
+      "proposal_explanation": {
+        "project_summary": "이 프로젝트는 22개의 소스 영상을 분석하여 시장형(Market) 관점으로 최적의 3개 장면을 선정했습니다. 멀티 소스 환경에서 교차 편집을 최우선으로 고려했습니다.",
+        "source_summaries": [
+          {
+            "source_id": "SRC_12C414A7",
+            "source_label": "A",
+            "summary": "9개의 장면 조각이 분석되었습니다.",
+            "dominant_topic": "구체 주제 미확정",
+            "visual_character": "안정적인 흐름 위주",
+            "audio_text_status": "available",
+            "fragment_count": 9,
+            "proposed_count": 0
+          },
+          {
+            "source_id": "SRC_CB9107CA",
+            "source_label": "B",
+            "summary": "3개의 장면 조각이 분석되었습니다.",
+            "dominant_topic": "구체 주제 미확정",
+            "visual_character": "안정적인 흐름 위주",
+            "audio_text_status": "available",
+            "fragment_count": 3,
+            "proposed_count": 1
+          },
+          {
+            "source_id": "SRC_B4F09612",
+            "source_label": "C",
+            "summary": "3개의 장면 조각이 분석되었습니다.",
+            "dominant_topic": "구체 주제 미확정",
+            "visual_character": "안정적인 흐름 위주",
+            "audio_text_status": "available",
+            "fragment_count": 3,
+            "proposed_count": 1
+          },
+          {
+            "source_id": "SRC_0BE783EC",
+            "source_label": "D",
+            "summary": "4개의 장면 조각이 분석되었습니다.",
+            "dominant_topic": "구체 주제 미확정",
+            "visual_character": "안정적인 흐름 위주",
+            "audio_text_status": "available",
+            "fragment_count": 4,
+            "proposed_count": 0
+          },
+          {
+            "source_id": "SRC_AA6C87D2",
+            "source_label": "E",
+            "summary": "24개의 장면 조각이 분석되었습니다.",
+            "dominant_topic": "구체 주제 미확정",
+            "visual_character": "안정적인 흐름 위주",
+            "audio_text_status": "available",
+            "fragment_count": 24,
+            "proposed_count": 0
+          },
+          {
+            "source_id": "SRC_B669588A",
+            "source_label": "F",
+            "summary": "3개의 장면 조각이 분석되었습니다.",
+            "dominant_topic": "구체 주제 미확정",
+            "visual_character": "안정적인 흐름 위주",
+            "audio_text_status": "available",
+            "fragment_count": 3,
+            "proposed_count": 0
+          },
+          {
+            "source_id": "SRC_2BE80EE2",
+            "source_label": "G",
+            "summary": "2개의 장면 조각이 분석되었습니다.",
+            "dominant_topic": "구체 주제 미확정",
+            "visual_character": "안정적인 흐름 위주",
+            "audio_text_status": "available",
+            "fragment_count": 2,
+            "proposed_count": 0
+          },
+          {
+            "source_id": "SRC_6F5DEBE2",
+            "source_label": "H",
+            "summary": "5개의 장면 조각이 분석되었습니다.",
+            "dominant_topic": "구체 주제 미확정",
+            "visual_character": "안정적인 흐름 위주",
+            "audio_text_status": "available",
+            "fragment_count": 5,
+            "proposed_count": 0
+          },
+          {
+            "source_id": "SRC_634C81D9",
+            "source_label": "I",
+            "summary": "2개의 장면 조각이 분석되었습니다.",
+            "dominant_topic": "구체 주제 미확정",
+            "visual_character": "안정적인 흐름 위주",
+            "audio_text_status": "available",
+            "fragment_count": 2,
+            "proposed_count": 0
+          },
+          {
+            "source_id": "SRC_9E3E3C7B",
+            "source_label": "J",
+            "summary": "1개의 장면 조각이 분석되었습니다.",
+            "dominant_topic": "구체 주제 미확정",
+            "visual_character": "안정적인 흐름 위주",
+            "audio_text_status": "available",
+            "fragment_count": 1,
+            "proposed_count": 0
+          },
+          {
+            "source_id": "SRC_B85F1985",
+            "source_label": "K",
+            "summary": "1개의 장면 조각이 분석되었습니다.",
+            "dominant_topic": "구체 주제 미확정",
+            "visual_character": "안정적인 흐름 위주",
+            "audio_text_status": "available",
+            "fragment_count": 1,
+            "proposed_count": 0
+          },
+          {
+            "source_id": "SRC_EFDBBCFC",
+            "source_label": "L",
+            "summary": "1개의 장면 조각이 분석되었습니다.",
+            "dominant_topic": "구체 주제 미확정",
+            "visual_character": "안정적인 흐름 위주",
+            "audio_text_status": "available",
+            "fragment_count": 1,
+            "proposed_count": 0
+          },
+          {
+            "source_id": "SRC_83B87D21",
+            "source_label": "M",
+            "summary": "7개의 장면 조각이 분석되었습니다.",
+            "dominant_topic": "구체 주제 미확정",
+            "visual_character": "안정적인 흐름 위주",
+            "audio_text_status": "available",
+            "fragment_count": 7,
+            "proposed_count": 0
+          },
+          {
+            "source_id": "SRC_901671A7",
+            "source_label": "N",
+            "summary": "1개의 장면 조각이 분석되었습니다.",
+            "dominant_topic": "구체 주제 미확정",
+            "visual_character": "안정적인 흐름 위주",
+            "audio_text_status": "available",
+            "fragment_count": 1,
+            "proposed_count": 0
+          },
+          {
+            "source_id": "SRC_563A1B48",
+            "source_label": "O",
+            "summary": "5개의 장면 조각이 분석되었습니다.",
+            "dominant_topic": "구체 주제 미확정",
+            "visual_character": "안정적인 흐름 위주",
+            "audio_text_status": "available",
+            "fragment_count": 5,
+            "proposed_count": 0
+          },
+          {
+            "source_id": "SRC_F2CFC4DC",
+            "source_label": "P",
+            "summary": "2개의 장면 조각이 분석되었습니다.",
+            "dominant_topic": "구체 주제 미확정",
+            "visual_character": "안정적인 흐름 위주",
+            "audio_text_status": "available",
+            "fragment_count": 2,
+            "proposed_count": 0
+          },
+          {
+            "source_id": "SRC_1435727E",
+            "source_label": "Q",
+            "summary": "1개의 장면 조각이 분석되었습니다.",
+            "dominant_topic": "구체 주제 미확정",
+            "visual_character": "안정적인 흐름 위주",
+            "audio_text_status": "available",
+            "fragment_count": 1,
+            "proposed_count": 0
+          },
+          {
+            "source_id": "SRC_E8F4845B",
+            "source_label": "R",
+            "summary": "3개의 장면 조각이 분석되었습니다.",
+            "dominant_topic": "구체 주제 미확정",
+            "visual_character": "안정적인 흐름 위주",
+            "audio_text_status": "available",
+            "fragment_count": 3,
+            "proposed_count": 0
+          },
+          {
+            "source_id": "SRC_8E415949",
+            "source_label": "S",
+            "summary": "8개의 장면 조각이 분석되었습니다.",
+            "dominant_topic": "구체 주제 미확정",
+            "visual_character": "안정적인 흐름 위주",
+            "audio_text_status": "available",
+            "fragment_count": 8,
+            "proposed_count": 0
+          },
+          {
+            "source_id": "SRC_616AEFBA",
+            "source_label": "T",
+            "summary": "71개의 장면 조각이 분석되었습니다.",
+            "dominant_topic": "구체 주제 미확정",
+            "visual_character": "안정적인 흐름 위주",
+            "audio_text_status": "available",
+            "fragment_count": 71,
+            "proposed_count": 0
+          },
+          {
+            "source_id": "SRC_D5BD47B6",
+            "source_label": "U",
+            "summary": "10개의 장면 조각이 분석되었습니다.",
+            "dominant_topic": "구체 주제 미확정",
+            "visual_character": "안정적인 흐름 위주",
+            "audio_text_status": "available",
+            "fragment_count": 10,
+            "proposed_count": 0
+          },
+          {
+            "source_id": "SRC_B1A26714",
+            "source_label": "V",
+            "summary": "11개의 장면 조각이 분석되었습니다.",
+            "dominant_topic": "구체 주제 미확정",
+            "visual_character": "안정적인 흐름 위주",
+            "audio_text_status": "available",
+            "fragment_count": 11,
+            "proposed_count": 1
+          }
+        ],
+        "storyline": [
+          {
+            "step": 1,
+            "role": "opening",
+            "description": "가장 시선을 끄는 장면으로 도입부를 구성합니다.",
+            "fragment_refs": [
+              "SF_7D041C_SRC_CB9107CA"
+            ]
+          },
+          {
+            "step": 2,
+            "role": "main",
+            "description": "전체적인 흐름을 이어가며 주요 내용을 전달합니다. 소스 간 교차 편집을 통해 변화를 주었습니다.",
+            "fragment_refs": [
+              "SF_46348D_SRC_B1A26714_P001"
+            ]
+          },
+          {
+            "step": 3,
+            "role": "closing",
+            "description": "안정적이고 여운이 남는 장면으로 마무리합니다.",
+            "fragment_refs": [
+              "SF_C17F2F_SRC_B4F09612_P003"
+            ]
+          }
+        ],
+        "selection_reasons": [
+          {
+            "fragment_id": "SF_7D041C_SRC_CB9107CA",
+            "source_id": "SRC_CB9107CA",
+            "reason": "자연스러운 시작을 위해 선정",
+            "role": "closing",
+            "score_basis": {
+              "market_value": 0.5,
+              "edit_value": 0.5,
+              "confidence": 0.9
+            }
+          },
+          {
+            "fragment_id": "SF_46348D_SRC_B1A26714_P001",
+            "source_id": "SRC_B1A26714",
+            "reason": "영상 흐름상 적절한 장면으로 판단",
+            "role": "closing",
+            "score_basis": {
+              "market_value": 0.1,
+              "edit_value": 0.1,
+              "confidence": 0.7
+            }
+          },
+          {
+            "fragment_id": "SF_C17F2F_SRC_B4F09612_P003",
+            "source_id": "SRC_B4F09612",
+            "reason": "깔끔한 마무리를 위해 선정",
+            "role": "closing",
+            "score_basis": {
+              "market_value": 0.1,
+              "edit_value": 0.1,
+              "confidence": 0.7
+            }
+          }
+        ],
+        "exclusion_policy": [
+          "비슷한 구도나 중복되는 장면군은 다양성을 위해 제외 시도",
+          "지나치게 짧거나 분석 신뢰도가 낮은 조각은 후순위 배치",
+          "특정 영상에 편중되지 않도록 소스 균형 보정 적용 (R1)"
+        ],
+        "quality_warnings": [
+          "의미 분석 결과가 일반적(Generic)인 조각이 많아 정밀한 주제 선별이 제한되었습니다."
+        ]
+      },
+      "preview_url": "/static/proposal_previews/PREV_PROP_A_07B31F_proj_1779591776013_A.mp4",
+      "preview_duration": 46.466016
+    },
+    {
+      "proposal_id": "PROP_B_428981_proj_1779591776013",
+      "source_id": "proj_1779591776013",
+      "mode": "B",
+      "sequence": [
+        {
+          "fragment_id": "SF_CA5F54_SRC_CB9107CA_P001",
+          "source_id": "SRC_CB9107CA",
+          "start": 0.0,
+          "end": 18.74,
+          "semantic": {
+            "summary": "괜찮아? 그래 분위기를 우산시하자 얼음화 여보 굽지 어떤 맛인가요? 통결은 집에서 처음에 ...",
+            "topic": "general",
+            "transcript_refs": [
+              "VF1_SRC_CB9107CA"
+            ],
+            "evidence_refs": [
+              "VF1_SRC_CB9107CA"
+            ]
+          },
+          "structural": {
+            "role": "context",
+            "edit_value": 0.50394,
+            "market_value": 0.50394,
+            "duration": 18.74
+          },
+          "continuity": {
+            "topic_similarity": 0.5,
+            "time_proximity": 1.0,
+            "sentiment_continuity": 0.5,
+            "narrative_flow": 0.5
+          },
+          "confidence": 0.9,
+          "fallback_reason": "continuity_placeholder",
+          "thumbnail_url": "/static/thumbnails/SF_CA5F54_SRC_CB9107CA_P001.jpg",
+          "thumbnail": {
+            "thumbnail_url": "/static/thumbnails/SF_CA5F54_SRC_CB9107CA_P001.jpg"
+          },
+          "intelligence": {
+            "thumb_url": "/static/thumbnails/SF_CA5F54_SRC_CB9107CA_P001.jpg"
+          }
+        },
+        {
+          "fragment_id": "SF_1B4232_SRC_83B87D21_P001",
+          "source_id": "SRC_83B87D21",
+          "start": 0.0,
+          "end": 20.0,
+          "semantic": {
+            "summary": "Visual/Audio Context",
+            "topic": "general",
+            "transcript_refs": [
+              "VF1_SRC_83B87D21",
+              "VF2_SRC_83B87D21",
+              "VF3_SRC_83B87D21",
+              "VF4_SRC_83B87D21",
+              "VF5_SRC_83B87D21",
+              "VF6_SRC_83B87D21",
+              "VF7_SRC_83B87D21"
+            ],
+            "evidence_refs": [
+              "VF1_SRC_83B87D21",
+              "VF2_SRC_83B87D21",
+              "VF3_SRC_83B87D21",
+              "VF4_SRC_83B87D21",
+              "VF5_SRC_83B87D21",
+              "VF6_SRC_83B87D21",
+              "VF7_SRC_83B87D21"
+            ]
+          },
+          "structural": {
+            "role": "closing",
+            "edit_value": 0.10369142857142857,
+            "market_value": 0.10369142857142857,
+            "duration": 20.0
+          },
+          "continuity": {
+            "topic_similarity": 0.5,
+            "time_proximity": 1.0,
+            "sentiment_continuity": 0.5,
+            "narrative_flow": 0.5
+          },
+          "confidence": 0.7,
+          "fallback_reason": "continuity_placeholder",
+          "thumbnail_url": "/static/thumbnails/SF_1B4232_SRC_83B87D21_P001.jpg",
+          "thumbnail": {
+            "thumbnail_url": "/static/thumbnails/SF_1B4232_SRC_83B87D21_P001.jpg"
+          },
+          "intelligence": {
+            "thumb_url": "/static/thumbnails/SF_1B4232_SRC_83B87D21_P001.jpg"
+          }
+        },
+        {
+          "fragment_id": "SF_CFAC1E_SRC_9E3E3C7B",
+          "source_id": "SRC_9E3E3C7B",
+          "start": 0.0,
+          "end": 7.76,
+          "semantic": {
+            "summary": "Visual/Audio Context",
+            "topic": "general",
+            "transcript_refs": [
+              "VF1_SRC_9E3E3C7B"
+            ],
+            "evidence_refs": [
+              "VF1_SRC_9E3E3C7B"
+            ]
+          },
+          "structural": {
+            "role": "closing",
+            "edit_value": 0.1021,
+            "market_value": 0.1021,
+            "duration": 7.76
+          },
+          "continuity": {
+            "topic_similarity": 0.5,
+            "time_proximity": 1.0,
+            "sentiment_continuity": 0.5,
+            "narrative_flow": 0.5
+          },
+          "confidence": 0.7,
+          "fallback_reason": "continuity_placeholder",
+          "thumbnail_url": "/static/thumbnails/SF_CFAC1E_SRC_9E3E3C7B.jpg",
+          "thumbnail": {
+            "thumbnail_url": "/static/thumbnails/SF_CFAC1E_SRC_9E3E3C7B.jpg"
+          },
+          "intelligence": {
+            "thumb_url": "/static/thumbnails/SF_CFAC1E_SRC_9E3E3C7B.jpg"
+          }
+        },
+        {
+          "fragment_id": "SF_9A1BBE_SRC_563A1B48_P001",
+          "source_id": "SRC_563A1B48",
+          "start": 0.0,
+          "end": 20.0,
+          "semantic": {
+            "summary": "Visual/Audio Context",
+            "topic": "general",
+            "transcript_refs": [
+              "VF1_SRC_563A1B48",
+              "VF2_SRC_563A1B48",
+              "VF3_SRC_563A1B48",
+              "VF4_SRC_563A1B48"
+            ],
+            "evidence_refs": [
+              "VF1_SRC_563A1B48",
+              "VF2_SRC_563A1B48",
+              "VF3_SRC_563A1B48",
+              "VF4_SRC_563A1B48"
+            ]
+          },
+          "structural": {
+            "role": "closing",
+            "edit_value": 0.07931500000000001,
+            "market_value": 0.07931500000000001,
+            "duration": 20.0
+          },
+          "continuity": {
+            "topic_similarity": 0.5,
+            "time_proximity": 1.0,
+            "sentiment_continuity": 0.5,
+            "narrative_flow": 0.5
+          },
+          "confidence": 0.7,
+          "fallback_reason": "continuity_placeholder",
+          "thumbnail_url": "/static/thumbnails/SF_9A1BBE_SRC_563A1B48_P001.jpg",
+          "thumbnail": {
+            "thumbnail_url": "/static/thumbnails/SF_9A1BBE_SRC_563A1B48_P001.jpg"
+          },
+          "intelligence": {
+            "thumb_url": "/static/thumbnails/SF_9A1BBE_SRC_563A1B48_P001.jpg"
+          }
+        },
+        {
+          "fragment_id": "SF_46348D_SRC_B1A26714_P001",
+          "source_id": "SRC_B1A26714",
+          "start": 0.0,
+          "end": 20.0,
+          "semantic": {
+            "summary": "Visual/Audio Context",
+            "topic": "general",
+            "transcript_refs": [
+              "VF1_SRC_B1A26714",
+              "VF2_SRC_B1A26714",
+              "VF3_SRC_B1A26714",
+              "VF4_SRC_B1A26714",
+              "VF5_SRC_B1A26714",
+              "VF6_SRC_B1A26714",
+              "VF7_SRC_B1A26714",
+              "VF8_SRC_B1A26714",
+              "VF9_SRC_B1A26714",
+              "VF10_SRC_B1A26714",
+              "VF11_SRC_B1A26714"
+            ],
+            "evidence_refs": [
+              "VF1_SRC_B1A26714",
+              "VF2_SRC_B1A26714",
+              "VF3_SRC_B1A26714",
+              "VF4_SRC_B1A26714",
+              "VF5_SRC_B1A26714",
+              "VF6_SRC_B1A26714",
+              "VF7_SRC_B1A26714",
+              "VF8_SRC_B1A26714",
+              "VF9_SRC_B1A26714",
+              "VF10_SRC_B1A26714",
+              "VF11_SRC_B1A26714"
+            ]
+          },
+          "structural": {
+            "role": "closing",
+            "edit_value": 0.10426727272727274,
+            "market_value": 0.10426727272727274,
+            "duration": 20.0
+          },
+          "continuity": {
+            "topic_similarity": 0.5,
+            "time_proximity": 1.0,
+            "sentiment_continuity": 0.5,
+            "narrative_flow": 0.5
+          },
+          "confidence": 0.7,
+          "fallback_reason": "continuity_placeholder",
+          "thumbnail_url": "/static/thumbnails/SF_46348D_SRC_B1A26714_P001.jpg",
+          "thumbnail": {
+            "thumbnail_url": "/static/thumbnails/SF_46348D_SRC_B1A26714_P001.jpg"
+          },
+          "intelligence": {
+            "thumb_url": "/static/thumbnails/SF_46348D_SRC_B1A26714_P001.jpg"
+          }
+        },
+        {
+          "fragment_id": "SF_0C468F_SRC_D5BD47B6_P001",
+          "source_id": "SRC_D5BD47B6",
+          "start": 0.0,
+          "end": 20.0,
+          "semantic": {
+            "summary": "Visual/Audio Context",
+            "topic": "general",
+            "transcript_refs": [
+              "VF1_SRC_D5BD47B6",
+              "VF2_SRC_D5BD47B6",
+              "VF3_SRC_D5BD47B6",
+              "VF4_SRC_D5BD47B6",
+              "VF5_SRC_D5BD47B6",
+              "VF6_SRC_D5BD47B6",
+              "VF7_SRC_D5BD47B6",
+              "VF8_SRC_D5BD47B6",
+              "VF9_SRC_D5BD47B6",
+              "VF10_SRC_D5BD47B6"
+            ],
+            "evidence_refs": [
+              "VF1_SRC_D5BD47B6",
+              "VF2_SRC_D5BD47B6",
+              "VF3_SRC_D5BD47B6",
+              "VF4_SRC_D5BD47B6",
+              "VF5_SRC_D5BD47B6",
+              "VF6_SRC_D5BD47B6",
+              "VF7_SRC_D5BD47B6",
+              "VF8_SRC_D5BD47B6",
+              "VF9_SRC_D5BD47B6",
+              "VF10_SRC_D5BD47B6"
+            ]
+          },
+          "structural": {
+            "role": "closing",
+            "edit_value": 0.10242000000000002,
+            "market_value": 0.10242000000000002,
+            "duration": 20.0
+          },
+          "continuity": {
+            "topic_similarity": 0.5,
+            "time_proximity": 1.0,
+            "sentiment_continuity": 0.5,
+            "narrative_flow": 0.5
+          },
+          "confidence": 0.7,
+          "fallback_reason": "continuity_placeholder",
+          "thumbnail_url": "/static/thumbnails/SF_0C468F_SRC_D5BD47B6_P001.jpg",
+          "thumbnail": {
+            "thumbnail_url": "/static/thumbnails/SF_0C468F_SRC_D5BD47B6_P001.jpg"
+          },
+          "intelligence": {
+            "thumb_url": "/static/thumbnails/SF_0C468F_SRC_D5BD47B6_P001.jpg"
+          }
+        },
+        {
+          "fragment_id": "SF_49F96E_SRC_1435727E",
+          "source_id": "SRC_1435727E",
+          "start": 0.0,
+          "end": 5.67,
+          "semantic": {
+            "summary": "Visual/Audio Context",
+            "topic": "general",
+            "transcript_refs": [
+              "VF1_SRC_1435727E"
+            ],
+            "evidence_refs": [
+              "VF1_SRC_1435727E"
+            ]
+          },
+          "structural": {
+            "role": "closing",
+            "edit_value": 0.07730000000000001,
+            "market_value": 0.07730000000000001,
+            "duration": 5.67
+          },
+          "continuity": {
+            "topic_similarity": 0.5,
+            "time_proximity": 1.0,
+            "sentiment_continuity": 0.5,
+            "narrative_flow": 0.5
+          },
+          "confidence": 0.7,
+          "fallback_reason": "continuity_placeholder",
+          "thumbnail_url": "/static/thumbnails/SF_49F96E_SRC_1435727E.jpg",
+          "thumbnail": {
+            "thumbnail_url": "/static/thumbnails/SF_49F96E_SRC_1435727E.jpg"
+          },
+          "intelligence": {
+            "thumb_url": "/static/thumbnails/SF_49F96E_SRC_1435727E.jpg"
+          }
+        },
+        {
+          "fragment_id": "SF_DF1912_SRC_E8F4845B_P001",
+          "source_id": "SRC_E8F4845B",
+          "start": 0.0,
+          "end": 20.0,
+          "semantic": {
+            "summary": "Visual/Audio Context",
+            "topic": "general",
+            "transcript_refs": [
+              "VF1_SRC_E8F4845B",
+              "VF2_SRC_E8F4845B"
+            ],
+            "evidence_refs": [
+              "VF1_SRC_E8F4845B",
+              "VF2_SRC_E8F4845B"
+            ]
+          },
+          "structural": {
+            "role": "closing",
+            "edit_value": 0.08834,
+            "market_value": 0.08834,
+            "duration": 20.0
+          },
+          "continuity": {
+            "topic_similarity": 0.5,
+            "time_proximity": 1.0,
+            "sentiment_continuity": 0.5,
+            "narrative_flow": 0.5
+          },
+          "confidence": 0.7,
+          "fallback_reason": "continuity_placeholder",
+          "thumbnail_url": "/static/thumbnails/SF_DF1912_SRC_E8F4845B_P001.jpg",
+          "thumbnail": {
+            "thumbnail_url": "/static/thumbnails/SF_DF1912_SRC_E8F4845B_P001.jpg"
+          },
+          "intelligence": {
+            "thumb_url": "/static/thumbnails/SF_DF1912_SRC_E8F4845B_P001.jpg"
+          }
+        },
+        {
+          "fragment_id": "SF_C17F2F_SRC_B4F09612_P001",
+          "source_id": "SRC_B4F09612",
+          "start": 0.0,
+          "end": 20.0,
+          "semantic": {
+            "summary": "Visual/Audio Context",
+            "topic": "general",
+            "transcript_refs": [
+              "VF1_SRC_B4F09612",
+              "VF2_SRC_B4F09612"
+            ],
+            "evidence_refs": [
+              "VF1_SRC_B4F09612",
+              "VF2_SRC_B4F09612"
+            ]
+          },
+          "structural": {
+            "role": "closing",
+            "edit_value": 0.10395000000000001,
+            "market_value": 0.10395000000000001,
+            "duration": 20.0
+          },
+          "continuity": {
+            "topic_similarity": 0.5,
+            "time_proximity": 1.0,
+            "sentiment_continuity": 0.5,
+            "narrative_flow": 0.5
+          },
+          "confidence": 0.7,
+          "fallback_reason": "continuity_placeholder",
+          "thumbnail_url": "/static/thumbnails/SF_C17F2F_SRC_B4F09612_P001.jpg",
+          "thumbnail": {
+            "thumbnail_url": "/static/thumbnails/SF_C17F2F_SRC_B4F09612_P001.jpg"
+          },
+          "intelligence": {
+            "thumb_url": "/static/thumbnails/SF_C17F2F_SRC_B4F09612_P001.jpg"
+          }
+        },
+        {
+          "fragment_id": "SF_6B231A_SRC_2BE80EE2_P001",
+          "source_id": "SRC_2BE80EE2",
+          "start": 0.0,
+          "end": 20.0,
+          "semantic": {
+            "summary": "Visual/Audio Context",
+            "topic": "general",
+            "transcript_refs": [
+              "VF1_SRC_2BE80EE2"
+            ],
+            "evidence_refs": [
+              "VF1_SRC_2BE80EE2"
+            ]
+          },
+          "structural": {
+            "role": "closing",
+            "edit_value": 0.08944,
+            "market_value": 0.08944,
+            "duration": 20.0
+          },
+          "continuity": {
+            "topic_similarity": 0.5,
+            "time_proximity": 1.0,
+            "sentiment_continuity": 0.5,
+            "narrative_flow": 0.5
+          },
+          "confidence": 0.7,
+          "fallback_reason": "continuity_placeholder",
+          "thumbnail_url": "/static/thumbnails/SF_6B231A_SRC_2BE80EE2_P001.jpg",
+          "thumbnail": {
+            "thumbnail_url": "/static/thumbnails/SF_6B231A_SRC_2BE80EE2_P001.jpg"
+          },
+          "intelligence": {
+            "thumb_url": "/static/thumbnails/SF_6B231A_SRC_2BE80EE2_P001.jpg"
+          }
+        },
+        {
+          "fragment_id": "SF_6F22B7_SRC_B85F1985",
+          "source_id": "SRC_B85F1985",
+          "start": 0.0,
+          "end": 7.55,
+          "semantic": {
+            "summary": "Visual/Audio Context",
+            "topic": "general",
+            "transcript_refs": [
+              "VF1_SRC_B85F1985"
+            ],
+            "evidence_refs": [
+              "VF1_SRC_B85F1985"
+            ]
+          },
+          "structural": {
+            "role": "closing",
+            "edit_value": 0.10154,
+            "market_value": 0.10154,
+            "duration": 7.55
+          },
+          "continuity": {
+            "topic_similarity": 0.5,
+            "time_proximity": 1.0,
+            "sentiment_continuity": 0.5,
+            "narrative_flow": 0.5
+          },
+          "confidence": 0.7,
+          "fallback_reason": "continuity_placeholder",
+          "thumbnail_url": "/static/thumbnails/SF_6F22B7_SRC_B85F1985.jpg",
+          "thumbnail": {
+            "thumbnail_url": "/static/thumbnails/SF_6F22B7_SRC_B85F1985.jpg"
+          },
+          "intelligence": {
+            "thumb_url": "/static/thumbnails/SF_6F22B7_SRC_B85F1985.jpg"
+          }
+        },
+        {
+          "fragment_id": "SF_0D574F_SRC_901671A7",
+          "source_id": "SRC_901671A7",
+          "start": 0.0,
+          "end": 9.5,
+          "semantic": {
+            "summary": "Visual/Audio Context",
+            "topic": "general",
+            "transcript_refs": [
+              "VF1_SRC_901671A7"
+            ],
+            "evidence_refs": [
+              "VF1_SRC_901671A7"
+            ]
+          },
+          "structural": {
+            "role": "closing",
+            "edit_value": 0.0817,
+            "market_value": 0.0817,
+            "duration": 9.5
+          },
+          "continuity": {
+            "topic_similarity": 0.5,
+            "time_proximity": 1.0,
+            "sentiment_continuity": 0.5,
+            "narrative_flow": 0.5
+          },
+          "confidence": 0.7,
+          "fallback_reason": "continuity_placeholder",
+          "thumbnail_url": "/static/thumbnails/SF_0D574F_SRC_901671A7.jpg",
+          "thumbnail": {
+            "thumbnail_url": "/static/thumbnails/SF_0D574F_SRC_901671A7.jpg"
+          },
+          "intelligence": {
+            "thumb_url": "/static/thumbnails/SF_0D574F_SRC_901671A7.jpg"
+          }
+        },
+        {
+          "fragment_id": "SF_458190_SRC_0BE783EC_P001",
+          "source_id": "SRC_0BE783EC",
+          "start": 0.0,
+          "end": 20.0,
+          "semantic": {
+            "summary": "Visual/Audio Context",
+            "topic": "general",
+            "transcript_refs": [
+              "VF1_SRC_0BE783EC",
+              "VF2_SRC_0BE783EC",
+              "VF3_SRC_0BE783EC",
+              "VF4_SRC_0BE783EC"
+            ],
+            "evidence_refs": [
+              "VF1_SRC_0BE783EC",
+              "VF2_SRC_0BE783EC",
+              "VF3_SRC_0BE783EC",
+              "VF4_SRC_0BE783EC"
+            ]
+          },
+          "structural": {
+            "role": "closing",
+            "edit_value": 0.10157,
+            "market_value": 0.10157,
+            "duration": 20.0
+          },
+          "continuity": {
+            "topic_similarity": 0.5,
+            "time_proximity": 1.0,
+            "sentiment_continuity": 0.5,
+            "narrative_flow": 0.5
+          },
+          "confidence": 0.7,
+          "fallback_reason": "continuity_placeholder",
+          "thumbnail_url": "/static/thumbnails/SF_458190_SRC_0BE783EC_P001.jpg",
+          "thumbnail": {
+            "thumbnail_url": "/static/thumbnails/SF_458190_SRC_0BE783EC_P001.jpg"
+          },
+          "intelligence": {
+            "thumb_url": "/static/thumbnails/SF_458190_SRC_0BE783EC_P001.jpg"
+          }
+        },
+        {
+          "fragment_id": "SF_7D041C_SRC_CB9107CA",
+          "source_id": "SRC_CB9107CA",
+          "start": 33.03,
+          "end": 41.92,
+          "semantic": {
+            "summary": "괜찮아? 그래 분위기를 우산시하자 얼음화 여보 굽지 어떤 맛인가요? 통결은 집에서 처음에 ...",
+            "topic": "general",
+            "transcript_refs": [
+              "VF1_SRC_CB9107CA",
+              "VF2_SRC_CB9107CA"
+            ],
+            "evidence_refs": [
+              "VF1_SRC_CB9107CA",
+              "VF2_SRC_CB9107CA"
+            ]
+          },
+          "structural": {
+            "role": "closing",
+            "edit_value": 0.50454,
+            "market_value": 0.50454,
+            "duration": 8.89
+          },
+          "continuity": {
+            "topic_similarity": 0.7,
+            "time_proximity": 1.0,
+            "sentiment_continuity": 0.5,
+            "narrative_flow": 0.5
+          },
+          "confidence": 0.9,
+          "fallback_reason": "continuity_placeholder",
+          "thumbnail_url": "/static/thumbnails/SF_7D041C_SRC_CB9107CA.jpg",
+          "thumbnail": {
+            "thumbnail_url": "/static/thumbnails/SF_7D041C_SRC_CB9107CA.jpg"
+          },
+          "intelligence": {
+            "thumb_url": "/static/thumbnails/SF_7D041C_SRC_CB9107CA.jpg"
+          }
+        },
+        {
+          "fragment_id": "SF_1B4232_SRC_83B87D21_P007",
+          "source_id": "SRC_83B87D21",
+          "start": 120.0,
+          "end": 128.56,
+          "semantic": {
+            "summary": "Visual/Audio Context",
+            "topic": "general",
+            "transcript_refs": [
+              "VF1_SRC_83B87D21",
+              "VF2_SRC_83B87D21",
+              "VF3_SRC_83B87D21",
+              "VF4_SRC_83B87D21",
+              "VF5_SRC_83B87D21",
+              "VF6_SRC_83B87D21",
+              "VF7_SRC_83B87D21"
+            ],
+            "evidence_refs": [
+              "VF1_SRC_83B87D21",
+              "VF2_SRC_83B87D21",
+              "VF3_SRC_83B87D21",
+              "VF4_SRC_83B87D21",
+              "VF5_SRC_83B87D21",
+              "VF6_SRC_83B87D21",
+              "VF7_SRC_83B87D21"
+            ]
+          },
+          "structural": {
+            "role": "closing",
+            "edit_value": 0.10369142857142857,
+            "market_value": 0.10369142857142857,
+            "duration": 8.56
+          },
+          "continuity": {
+            "topic_similarity": 0.5,
+            "time_proximity": 1.0,
+            "sentiment_continuity": 0.5,
+            "narrative_flow": 0.5
+          },
+          "confidence": 0.7,
+          "fallback_reason": "continuity_placeholder",
+          "thumbnail_url": "/static/thumbnails/SF_1B4232_SRC_83B87D21_P007.jpg",
+          "thumbnail": {
+            "thumbnail_url": "/static/thumbnails/SF_1B4232_SRC_83B87D21_P007.jpg"
+          },
+          "intelligence": {
+            "thumb_url": "/static/thumbnails/SF_1B4232_SRC_83B87D21_P007.jpg"
+          }
+        }
+      ],
+      "duration": 0.0,
+      "proposal_reason": {
+        "mode_reason": "strict_intent_matching",
+        "target_length": {
+          "target": 60.0,
+          "actual": 226.67,
+          "status": "out_of_range"
+        },
+        "sequence_reason": "user_intent_alignment",
+        "bridge": null
+      },
+      "proposal_story": {
+        "title": "흐름 통합 편집",
+        "story_summary": "각 영상의 분위기를 크게 섞지 않고, 장면들을 차례로 보여줍니다. 서로 다른 장소나 상황은 구간별로 나누어 배치하고, 중복되는 부분은 줄이되 원본의 흐름은 유지합니다. 전체적으로 하루 기록을 요약한 영상처럼 자연스럽게 정리합니다.",
+        "intent_keywords": [
+          "원본 흐름 유지",
+          "여러 장면 정리",
+          "기록성",
+          "편안한 감상"
+        ],
+        "hidden_fragment_refs": [
+          "SF_CA5F54_SRC_CB9107CA_P001",
+          "SF_1B4232_SRC_83B87D21_P001",
+          "SF_CFAC1E_SRC_9E3E3C7B",
+          "SF_9A1BBE_SRC_563A1B48_P001",
+          "SF_46348D_SRC_B1A26714_P001",
+          "SF_0C468F_SRC_D5BD47B6_P001",
+          "SF_49F96E_SRC_1435727E",
+          "SF_DF1912_SRC_E8F4845B_P001",
+          "SF_C17F2F_SRC_B4F09612_P001",
+          "SF_6B231A_SRC_2BE80EE2_P001",
+          "SF_6F22B7_SRC_B85F1985",
+          "SF_0D574F_SRC_901671A7",
+          "SF_458190_SRC_0BE783EC_P001",
+          "SF_7D041C_SRC_CB9107CA",
+          "SF_1B4232_SRC_83B87D21_P007"
+        ],
+        "proposal_id": "PROP_B_428981_proj_1779591776013",
+        "mode": "B"
+      },
+      "confidence": 0.85,
+      "fallback_reason": "significant_length_mismatch",
+      "source_distribution": {
+        "source_count": 13,
+        "total_fragments": 15,
+        "by_source": {
+          "SRC_CB9107CA": {
+            "count": 2,
+            "ratio": 0.133
+          },
+          "SRC_83B87D21": {
+            "count": 2,
+            "ratio": 0.133
+          },
+          "SRC_9E3E3C7B": {
+            "count": 1,
+            "ratio": 0.067
+          },
+          "SRC_563A1B48": {
+            "count": 1,
+            "ratio": 0.067
+          },
+          "SRC_B1A26714": {
+            "count": 1,
+            "ratio": 0.067
+          },
+          "SRC_D5BD47B6": {
+            "count": 1,
+            "ratio": 0.067
+          },
+          "SRC_1435727E": {
+            "count": 1,
+            "ratio": 0.067
+          },
+          "SRC_E8F4845B": {
+            "count": 1,
+            "ratio": 0.067
+          },
+          "SRC_B4F09612": {
+            "count": 1,
+            "ratio": 0.067
+          },
+          "SRC_2BE80EE2": {
+            "count": 1,
+            "ratio": 0.067
+          },
+          "SRC_B85F1985": {
+            "count": 1,
+            "ratio": 0.067
+          },
+          "SRC_901671A7": {
+            "count": 1,
+            "ratio": 0.067
+          },
+          "SRC_0BE783EC": {
+            "count": 1,
+            "ratio": 0.067
+          }
+        },
+        "max_single_source_ratio": 0.133
+      },
+      "balance_policy": {
+        "applied": true,
+        "template_id": "balanced_multi_source_record",
+        "warnings": []
+      },
+      "project_id": "proj_1779591776013",
+      "source_ids": [
+        "SRC_12C414A7",
+        "SRC_CB9107CA",
+        "SRC_B4F09612",
+        "SRC_0BE783EC",
+        "SRC_AA6C87D2",
+        "SRC_B669588A",
+        "SRC_2BE80EE2",
+        "SRC_6F5DEBE2",
+        "SRC_634C81D9",
+        "SRC_9E3E3C7B",
+        "SRC_B85F1985",
+        "SRC_EFDBBCFC",
+        "SRC_83B87D21",
+        "SRC_901671A7",
+        "SRC_563A1B48",
+        "SRC_F2CFC4DC",
+        "SRC_1435727E",
+        "SRC_E8F4845B",
+        "SRC_8E415949",
+        "SRC_616AEFBA",
+        "SRC_D5BD47B6",
+        "SRC_B1A26714"
+      ],
+      "proposal_explanation": {
+        "project_summary": "이 프로젝트는 22개의 소스 영상을 분석하여 사용자친화형(User) 관점으로 최적의 15개 장면을 선정했습니다. 멀티 소스 환경에서 교차 편집을 최우선으로 고려했습니다.",
+        "source_summaries": [
+          {
+            "source_id": "SRC_12C414A7",
+            "source_label": "A",
+            "summary": "9개의 장면 조각이 분석되었습니다.",
+            "dominant_topic": "구체 주제 미확정",
+            "visual_character": "안정적인 흐름 위주",
+            "audio_text_status": "available",
+            "fragment_count": 9,
+            "proposed_count": 0
+          },
+          {
+            "source_id": "SRC_CB9107CA",
+            "source_label": "B",
+            "summary": "3개의 장면 조각이 분석되었습니다.",
+            "dominant_topic": "구체 주제 미확정",
+            "visual_character": "안정적인 흐름 위주",
+            "audio_text_status": "available",
+            "fragment_count": 3,
+            "proposed_count": 2
+          },
+          {
+            "source_id": "SRC_B4F09612",
+            "source_label": "C",
+            "summary": "3개의 장면 조각이 분석되었습니다.",
+            "dominant_topic": "구체 주제 미확정",
+            "visual_character": "안정적인 흐름 위주",
+            "audio_text_status": "available",
+            "fragment_count": 3,
+            "proposed_count": 1
+          },
+          {
+            "source_id": "SRC_0BE783EC",
+            "source_label": "D",
+            "summary": "4개의 장면 조각이 분석되었습니다.",
+            "dominant_topic": "구체 주제 미확정",
+            "visual_character": "안정적인 흐름 위주",
+            "audio_text_status": "available",
+            "fragment_count": 4,
+            "proposed_count": 1
+          },
+          {
+            "source_id": "SRC_AA6C87D2",
+            "source_label": "E",
+            "summary": "24개의 장면 조각이 분석되었습니다.",
+            "dominant_topic": "구체 주제 미확정",
+            "visual_character": "안정적인 흐름 위주",
+            "audio_text_status": "available",
+            "fragment_count": 24,
+            "proposed_count": 0
+          },
+          {
+            "source_id": "SRC_B669588A",
+            "source_label": "F",
+            "summary": "3개의 장면 조각이 분석되었습니다.",
+            "dominant_topic": "구체 주제 미확정",
+            "visual_character": "안정적인 흐름 위주",
+            "audio_text_status": "available",
+            "fragment_count": 3,
+            "proposed_count": 0
+          },
+          {
+            "source_id": "SRC_2BE80EE2",
+            "source_label": "G",
+            "summary": "2개의 장면 조각이 분석되었습니다.",
+            "dominant_topic": "구체 주제 미확정",
+            "visual_character": "안정적인 흐름 위주",
+            "audio_text_status": "available",
+            "fragment_count": 2,
+            "proposed_count": 1
+          },
+          {
+            "source_id": "SRC_6F5DEBE2",
+            "source_label": "H",
+            "summary": "5개의 장면 조각이 분석되었습니다.",
+            "dominant_topic": "구체 주제 미확정",
+            "visual_character": "안정적인 흐름 위주",
+            "audio_text_status": "available",
+            "fragment_count": 5,
+            "proposed_count": 0
+          },
+          {
+            "source_id": "SRC_634C81D9",
+            "source_label": "I",
+            "summary": "2개의 장면 조각이 분석되었습니다.",
+            "dominant_topic": "구체 주제 미확정",
+            "visual_character": "안정적인 흐름 위주",
+            "audio_text_status": "available",
+            "fragment_count": 2,
+            "proposed_count": 0
+          },
+          {
+            "source_id": "SRC_9E3E3C7B",
+            "source_label": "J",
+            "summary": "1개의 장면 조각이 분석되었습니다.",
+            "dominant_topic": "구체 주제 미확정",
+            "visual_character": "안정적인 흐름 위주",
+            "audio_text_status": "available",
+            "fragment_count": 1,
+            "proposed_count": 1
+          },
+          {
+            "source_id": "SRC_B85F1985",
+            "source_label": "K",
+            "summary": "1개의 장면 조각이 분석되었습니다.",
+            "dominant_topic": "구체 주제 미확정",
+            "visual_character": "안정적인 흐름 위주",
+            "audio_text_status": "available",
+            "fragment_count": 1,
+            "proposed_count": 1
+          },
+          {
+            "source_id": "SRC_EFDBBCFC",
+            "source_label": "L",
+            "summary": "1개의 장면 조각이 분석되었습니다.",
+            "dominant_topic": "구체 주제 미확정",
+            "visual_character": "안정적인 흐름 위주",
+            "audio_text_status": "available",
+            "fragment_count": 1,
+            "proposed_count": 0
+          },
+          {
+            "source_id": "SRC_83B87D21",
+            "source_label": "M",
+            "summary": "7개의 장면 조각이 분석되었습니다.",
+            "dominant_topic": "구체 주제 미확정",
+            "visual_character": "안정적인 흐름 위주",
+            "audio_text_status": "available",
+            "fragment_count": 7,
+            "proposed_count": 2
+          },
+          {
+            "source_id": "SRC_901671A7",
+            "source_label": "N",
+            "summary": "1개의 장면 조각이 분석되었습니다.",
+            "dominant_topic": "구체 주제 미확정",
+            "visual_character": "안정적인 흐름 위주",
+            "audio_text_status": "available",
+            "fragment_count": 1,
+            "proposed_count": 1
+          },
+          {
+            "source_id": "SRC_563A1B48",
+            "source_label": "O",
+            "summary": "5개의 장면 조각이 분석되었습니다.",
+            "dominant_topic": "구체 주제 미확정",
+            "visual_character": "안정적인 흐름 위주",
+            "audio_text_status": "available",
+            "fragment_count": 5,
+            "proposed_count": 1
+          },
+          {
+            "source_id": "SRC_F2CFC4DC",
+            "source_label": "P",
+            "summary": "2개의 장면 조각이 분석되었습니다.",
+            "dominant_topic": "구체 주제 미확정",
+            "visual_character": "안정적인 흐름 위주",
+            "audio_text_status": "available",
+            "fragment_count": 2,
+            "proposed_count": 0
+          },
+          {
+            "source_id": "SRC_1435727E",
+            "source_label": "Q",
+            "summary": "1개의 장면 조각이 분석되었습니다.",
+            "dominant_topic": "구체 주제 미확정",
+            "visual_character": "안정적인 흐름 위주",
+            "audio_text_status": "available",
+            "fragment_count": 1,
+            "proposed_count": 1
+          },
+          {
+            "source_id": "SRC_E8F4845B",
+            "source_label": "R",
+            "summary": "3개의 장면 조각이 분석되었습니다.",
+            "dominant_topic": "구체 주제 미확정",
+            "visual_character": "안정적인 흐름 위주",
+            "audio_text_status": "available",
+            "fragment_count": 3,
+            "proposed_count": 1
+          },
+          {
+            "source_id": "SRC_8E415949",
+            "source_label": "S",
+            "summary": "8개의 장면 조각이 분석되었습니다.",
+            "dominant_topic": "구체 주제 미확정",
+            "visual_character": "안정적인 흐름 위주",
+            "audio_text_status": "available",
+            "fragment_count": 8,
+            "proposed_count": 0
+          },
+          {
+            "source_id": "SRC_616AEFBA",
+            "source_label": "T",
+            "summary": "71개의 장면 조각이 분석되었습니다.",
+            "dominant_topic": "구체 주제 미확정",
+            "visual_character": "안정적인 흐름 위주",
+            "audio_text_status": "available",
+            "fragment_count": 71,
+            "proposed_count": 0
+          },
+          {
+            "source_id": "SRC_D5BD47B6",
+            "source_label": "U",
+            "summary": "10개의 장면 조각이 분석되었습니다.",
+            "dominant_topic": "구체 주제 미확정",
+            "visual_character": "안정적인 흐름 위주",
+            "audio_text_status": "available",
+            "fragment_count": 10,
+            "proposed_count": 1
+          },
+          {
+            "source_id": "SRC_B1A26714",
+            "source_label": "V",
+            "summary": "11개의 장면 조각이 분석되었습니다.",
+            "dominant_topic": "구체 주제 미확정",
+            "visual_character": "안정적인 흐름 위주",
+            "audio_text_status": "available",
+            "fragment_count": 11,
+            "proposed_count": 1
+          }
+        ],
+        "storyline": [
+          {
+            "step": 1,
+            "role": "opening",
+            "description": "가장 시선을 끄는 장면으로 도입부를 구성합니다.",
+            "fragment_refs": [
+              "SF_CA5F54_SRC_CB9107CA_P001"
+            ]
+          },
+          {
+            "step": 2,
+            "role": "main",
+            "description": "전체적인 흐름을 이어가며 주요 내용을 전달합니다. 소스 간 교차 편집을 통해 변화를 주었습니다.",
+            "fragment_refs": [
+              "SF_1B4232_SRC_83B87D21_P001",
+              "SF_CFAC1E_SRC_9E3E3C7B",
+              "SF_9A1BBE_SRC_563A1B48_P001"
+            ]
+          },
+          {
+            "step": 3,
+            "role": "closing",
+            "description": "안정적이고 여운이 남는 장면으로 마무리합니다.",
+            "fragment_refs": [
+              "SF_1B4232_SRC_83B87D21_P007"
+            ]
+          }
+        ],
+        "selection_reasons": [
+          {
+            "fragment_id": "SF_CA5F54_SRC_CB9107CA_P001",
+            "source_id": "SRC_CB9107CA",
+            "reason": "자연스러운 시작을 위해 선정",
+            "role": "context",
+            "score_basis": {
+              "market_value": 0.5,
+              "edit_value": 0.5,
+              "confidence": 0.9
+            }
+          },
+          {
+            "fragment_id": "SF_1B4232_SRC_83B87D21_P001",
+            "source_id": "SRC_83B87D21",
+            "reason": "영상 흐름상 적절한 장면으로 판단",
+            "role": "closing",
+            "score_basis": {
+              "market_value": 0.1,
+              "edit_value": 0.1,
+              "confidence": 0.7
+            }
+          },
+          {
+            "fragment_id": "SF_CFAC1E_SRC_9E3E3C7B",
+            "source_id": "SRC_9E3E3C7B",
+            "reason": "영상 흐름상 적절한 장면으로 판단",
+            "role": "closing",
+            "score_basis": {
+              "market_value": 0.1,
+              "edit_value": 0.1,
+              "confidence": 0.7
+            }
+          },
+          {
+            "fragment_id": "SF_9A1BBE_SRC_563A1B48_P001",
+            "source_id": "SRC_563A1B48",
+            "reason": "영상 흐름상 적절한 장면으로 판단",
+            "role": "closing",
+            "score_basis": {
+              "market_value": 0.08,
+              "edit_value": 0.08,
+              "confidence": 0.7
+            }
+          },
+          {
+            "fragment_id": "SF_46348D_SRC_B1A26714_P001",
+            "source_id": "SRC_B1A26714",
+            "reason": "영상 흐름상 적절한 장면으로 판단",
+            "role": "closing",
+            "score_basis": {
+              "market_value": 0.1,
+              "edit_value": 0.1,
+              "confidence": 0.7
+            }
+          },
+          {
+            "fragment_id": "SF_0C468F_SRC_D5BD47B6_P001",
+            "source_id": "SRC_D5BD47B6",
+            "reason": "영상 흐름상 적절한 장면으로 판단",
+            "role": "closing",
+            "score_basis": {
+              "market_value": 0.1,
+              "edit_value": 0.1,
+              "confidence": 0.7
+            }
+          },
+          {
+            "fragment_id": "SF_49F96E_SRC_1435727E",
+            "source_id": "SRC_1435727E",
+            "reason": "영상 흐름상 적절한 장면으로 판단",
+            "role": "closing",
+            "score_basis": {
+              "market_value": 0.08,
+              "edit_value": 0.08,
+              "confidence": 0.7
+            }
+          },
+          {
+            "fragment_id": "SF_DF1912_SRC_E8F4845B_P001",
+            "source_id": "SRC_E8F4845B",
+            "reason": "영상 흐름상 적절한 장면으로 판단",
+            "role": "closing",
+            "score_basis": {
+              "market_value": 0.09,
+              "edit_value": 0.09,
+              "confidence": 0.7
+            }
+          },
+          {
+            "fragment_id": "SF_C17F2F_SRC_B4F09612_P001",
+            "source_id": "SRC_B4F09612",
+            "reason": "영상 흐름상 적절한 장면으로 판단",
+            "role": "closing",
+            "score_basis": {
+              "market_value": 0.1,
+              "edit_value": 0.1,
+              "confidence": 0.7
+            }
+          },
+          {
+            "fragment_id": "SF_6B231A_SRC_2BE80EE2_P001",
+            "source_id": "SRC_2BE80EE2",
+            "reason": "영상 흐름상 적절한 장면으로 판단",
+            "role": "closing",
+            "score_basis": {
+              "market_value": 0.09,
+              "edit_value": 0.09,
+              "confidence": 0.7
+            }
+          },
+          {
+            "fragment_id": "SF_6F22B7_SRC_B85F1985",
+            "source_id": "SRC_B85F1985",
+            "reason": "영상 흐름상 적절한 장면으로 판단",
+            "role": "closing",
+            "score_basis": {
+              "market_value": 0.1,
+              "edit_value": 0.1,
+              "confidence": 0.7
+            }
+          },
+          {
+            "fragment_id": "SF_0D574F_SRC_901671A7",
+            "source_id": "SRC_901671A7",
+            "reason": "영상 흐름상 적절한 장면으로 판단",
+            "role": "closing",
+            "score_basis": {
+              "market_value": 0.08,
+              "edit_value": 0.08,
+              "confidence": 0.7
+            }
+          },
+          {
+            "fragment_id": "SF_458190_SRC_0BE783EC_P001",
+            "source_id": "SRC_0BE783EC",
+            "reason": "영상 흐름상 적절한 장면으로 판단",
+            "role": "closing",
+            "score_basis": {
+              "market_value": 0.1,
+              "edit_value": 0.1,
+              "confidence": 0.7
+            }
+          },
+          {
+            "fragment_id": "SF_7D041C_SRC_CB9107CA",
+            "source_id": "SRC_CB9107CA",
+            "reason": "영상 흐름상 적절한 장면으로 판단",
+            "role": "closing",
+            "score_basis": {
+              "market_value": 0.5,
+              "edit_value": 0.5,
+              "confidence": 0.9
+            }
+          },
+          {
+            "fragment_id": "SF_1B4232_SRC_83B87D21_P007",
+            "source_id": "SRC_83B87D21",
+            "reason": "깔끔한 마무리를 위해 선정",
+            "role": "closing",
+            "score_basis": {
+              "market_value": 0.1,
+              "edit_value": 0.1,
+              "confidence": 0.7
+            }
+          }
+        ],
+        "exclusion_policy": [
+          "비슷한 구도나 중복되는 장면군은 다양성을 위해 제외 시도",
+          "지나치게 짧거나 분석 신뢰도가 낮은 조각은 후순위 배치",
+          "특정 영상에 편중되지 않도록 소스 균형 보정 적용 (R1)"
+        ],
+        "quality_warnings": [
+          "의미 분석 결과가 일반적(Generic)인 조각이 많아 정밀한 주제 선별이 제한되었습니다.",
+          "A안과의 차별화를 위해 일부 중복 조각의 우선순위를 조정했습니다."
+        ]
+      },
+      "preview_url": "/static/proposal_previews/PREV_PROP_B_428981_proj_1779591776013_B.mp4",
+      "preview_duration": 226.820021
+    }
+  ],
+  "source_usage": {
+    "SRC_CB9107CA": 3,
+    "SRC_B1A26714": 2,
+    "SRC_B4F09612": 2,
+    "SRC_83B87D21": 2,
+    "SRC_9E3E3C7B": 1,
+    "SRC_563A1B48": 1,
+    "SRC_D5BD47B6": 1,
+    "SRC_1435727E": 1,
+    "SRC_E8F4845B": 1,
+    "SRC_2BE80EE2": 1,
+    "SRC_B85F1985": 1,
+    "SRC_901671A7": 1,
+    "SRC_0BE783EC": 1
+  },
+  "resolved_story_template": {
+    "template_id": "balanced_multi_source_record",
+    "display_name": "여러 영상 골고루 기록형",
+    "editing_technique_ids": [
+      "source_rotation",
+      "source_diversity_guard",
+      "establishing_context_open",
+      "wide_medium_close_sequence",
+      "cutaway_bridge"
+    ],
+    "production_hard_rule_ids": [
+      "no_mid_word_cut",
+      "word_boundary_snap_required",
+      "audio_fade_30ms_at_cut",
+      "edl_before_render"
+    ],
+    "hard_constraints": {
+      "min_source_coverage_ratio": 0.6,
+      "min_fragments_per_selected_source": 1,
+      "max_single_source_clip_ratio": 0.35
+    },
+    "soft_scoring": {
+      "edit_value": 0.25,
+      "source_diversity": 0.35,
+      "visual_variety": 0.15,
+      "narrative_flow": 0.15,
+      "continuity": 0.1
+    },
+    "qa_checks": [
+      "min_source_count_met",
+      "single_source_dominance_check",
+      "duplicate_thumbnail_avoidance",
+      "description_sequence_match_check"
+    ]
+  },
+  "warnings": null
+}

@@ -1,0 +1,1037 @@
+﻿diff --git a/ccut_backend/archive/manager.py b/ccut_backend/archive/manager.py
+index d794b45..780199f 100644
+--- a/ccut_backend/archive/manager.py
++++ b/ccut_backend/archive/manager.py
+@@ -532,11 +532,65 @@ class BAMSManager:
+                 intent = UserIntentTable(source_id=source_id)
+                 db.add(intent)
+             
+-            intent.must_keep = intent_data.get("must_keep", intent.must_keep or [])
+-            intent.avoid = intent_data.get("avoid", intent.avoid or [])
+-            intent.tone = intent_data.get("tone", intent.tone)
+-            intent.target_length = intent_data.get("target_length", intent.target_length)
+-            intent.priority_axis = intent_data.get("priority_axis", intent.priority_axis or {})
++            # must_keep type-safety normalization
++            must_keep_raw = intent_data.get("must_keep", intent.must_keep or [])
++            if isinstance(must_keep_raw, str):
++                intent.must_keep = [must_keep_raw]
++            elif isinstance(must_keep_raw, list):
++                intent.must_keep = [str(x) for x in must_keep_raw]
++            else:
++                intent.must_keep = []
++
++            # avoid type-safety normalization
++            avoid_raw = intent_data.get("avoid", intent.avoid or [])
++            if isinstance(avoid_raw, str):
++                intent.avoid = [avoid_raw]
++            elif isinstance(avoid_raw, list):
++                intent.avoid = [str(x) for x in avoid_raw]
++            else:
++                intent.avoid = []
++            
++            # tone type safety (convert list to comma-separated string)
++            tone_raw = intent_data.get("tone", intent.tone)
++            if isinstance(tone_raw, list):
++                intent.tone = ", ".join(str(t) for t in tone_raw)
++            else:
++                intent.tone = tone_raw
++            
++            # target_length mapping type safety
++            target_len_raw = intent_data.get("target_length", intent.target_length)
++            if isinstance(target_len_raw, str):
++                target_len_raw_lower = target_len_raw.strip().lower()
++                if target_len_raw_lower == "short":
++                    intent.target_length = 30.0
++                elif target_len_raw_lower == "medium":
++                    intent.target_length = 60.0
++                elif target_len_raw_lower == "long":
++                    intent.target_length = 120.0
++                else:
++                    try:
++                        intent.target_length = float(target_len_raw)
++                    except ValueError:
++                        intent.target_length = 60.0  # fallback
++            elif isinstance(target_len_raw, (int, float)):
++                intent.target_length = float(target_len_raw)
++            else:
++                intent.target_length = None
++            
++            # priority_axis dictionary type safety and extra fields storage
++            priority_raw = intent_data.get("priority_axis", intent.priority_axis or {})
++            if not isinstance(priority_raw, dict):
++                priority_raw = {}
++            
++            # Make a copy of priority_axis and embed extra fields into it
++            priority_dict = dict(priority_raw)
++            extra_keys = ["pace", "coverage", "focus", "mood", "source_balance", "target_density", "action"]
++            for k in extra_keys:
++                if k in intent_data:
++                    priority_dict[k] = intent_data[k]
++                    
++            intent.priority_axis = priority_dict
++                
+             intent.updated_at = datetime.datetime.now()
+             db.commit()
+             return intent
+@@ -547,15 +601,24 @@ class BAMSManager:
+             from archive.db_models import UserIntentTable
+             intent = db.query(UserIntentTable).filter_by(source_id=source_id).first()
+             if not intent: return None
+-            return {
++            
++            priority = dict(intent.priority_axis or {})
++            res = {
+                 "source_id": intent.source_id,
+                 "must_keep": intent.must_keep,
+                 "avoid": intent.avoid,
+                 "tone": intent.tone,
+                 "target_length": intent.target_length,
+-                "priority_axis": intent.priority_axis,
++                "priority_axis": priority,
+                 "updated_at": str(intent.updated_at)
+             }
++            
++            # Promote extra keys to top-level dict for story templates and logic
++            extra_keys = ["pace", "coverage", "focus", "mood", "source_balance", "target_density", "action"]
++            for k in extra_keys:
++                if k in priority:
++                    res[k] = priority[k]
++            return res
+ 
+     # [STEP 6] Proposal Persistence
+     def save_proposals(self, source_id: str, proposals: list):
+diff --git a/ccut_backend/engine/proposal_engine.py b/ccut_backend/engine/proposal_engine.py
+index 2896084..8f92d06 100644
+--- a/ccut_backend/engine/proposal_engine.py
++++ b/ccut_backend/engine/proposal_engine.py
+@@ -1,5 +1,14 @@
+ import uuid
+ 
++def append_audit_log(msg):
++    try:
++        import os
++        log_path = "d:\\CCUT1.0.4\\logs\\proposal_audit_debug.txt"
++        with open(log_path, "a", encoding="utf-8") as f:
++            f.write(msg + "\n")
++    except Exception as e:
++        pass
++
+ class ProposalEngine:
+     """
+     [STEP 6] Proposal Engine (v3.2.1)
+@@ -60,22 +69,40 @@ class ProposalEngine:
+         print("[PROPOSAL ENGINE] Creating Market Proposal (A)...")
+         p_a = self._create_market_proposal(project_id, fragments, target_len, source_ids)
+         
+-        # 2. Mode B (User) ?앹꽦
+-        print("[PROPOSAL ENGINE] Creating User Proposal (B)...")
+-        # [STEP 10-I.5.28-E8-R1] A???좏깮 ID 異붿텧?섏뿬 以묐났 ?섎꼸?곗슜?쇰줈 ?꾨떖
+-        market_selected_ids = {f["fragment_id"] for f in p_a["sequence"]}
+-        
++        # Ensure we have a story template resolved if not already present
++        if not story_context or "template_id" not in story_context:
++            try:
++                from engine.story_template_resolver import StoryTemplateResolver
++                resolver = StoryTemplateResolver()
++                user_intent = story_context.get("user_intent") if story_context else None
++                if not user_intent:
++                    if source_ids:
++                        user_intent = self.bams.get_user_intent(source_ids[0])
++                story_context = resolver.resolve_story_template(user_intent=user_intent)
++                story_context["user_intent"] = user_intent
++            except Exception as e:
++                print(f"[PROPOSAL ENGINE] Template resolution fallback failed: {e}")
++
+         # [STEP 10-K-B2] Replaced hardcoded intent with story_context
+         intent = story_context.get("user_intent", {"target_length": target_len}) if story_context else {"target_length": target_len}
+         p_b = self._create_user_proposal(project_id, fragments, target_len, intent, source_ids, market_selected_ids, story_context=story_context)
+         
+         # 3. A/B 李⑤퀎??蹂댁셿
++        p_b["sequence"] = self._enforce_ab_difference(p_a["sequence"], p_b["sequence"], fragments, target_len)
++        
+         if [f["fragment_id"] for f in p_a["sequence"]] == [f["fragment_id"] for f in p_b["sequence"]]:
+             p_a["proposal_reason"]["sequence_reason"] = "same_sequence_due_to_limited_fragments"
+             p_b["proposal_reason"]["sequence_reason"] = "same_sequence_due_to_limited_fragments"
+         
+         proposals = [p_a, p_b]
+ 
++        msg_a = f"[FINAL_PROPOSAL_A_KEYS] {[f.get('fragment_id') for f in p_a['sequence']]}"
++        msg_b = f"[FINAL_PROPOSAL_B_KEYS] {[f.get('fragment_id') for f in p_b['sequence']]}"
++        append_audit_log(msg_a)
++        append_audit_log(msg_b)
++        print(msg_a)
++        print(msg_b)
++
+         # [STEP 10-K-C1-R38] Live Proposal Path Proof
+         print("[R38_PROPOSAL_ENGINE_LIVE] generate_proposals_from_fragments active")
+ 
+@@ -229,15 +256,59 @@ class ProposalEngine:
+ 
+     def _create_user_proposal(self, source_id, fragments, target_len, intent, source_ids=None, overlap_ids=None, story_context=None):
+         """B: User Mode (User Intent ?꾧꺽 諛섏쁺 + A??以묐났 ?섎꼸??"""
++        # [INTENT_APPLIED_TO_PROPOSAL] Log user intent application
++        print(f"[INTENT_APPLIED_TO_PROPOSAL] intent={intent}")
++        msg = f"[INTENT_AT_PROPOSAL_ENGINE] user_intent={story_context.get('user_intent') if story_context else None}"
++        append_audit_log(msg)
++        print(msg)
++
++        # Load all evidences for metadata lookup
++        all_evidences = {}
++        if source_ids:
++            for sid in source_ids:
++                try:
++                    evs = self.bams.get_evidence_board(sid)
++                    if evs:
++                        for ev in evs:
++                            all_evidences[ev["fragment_id"]] = ev
++                except Exception as e:
++                    print(f"[PROPOSAL ENGINE] Error loading evidences for source {sid}: {e}")
++
++        fragment_meta = {}
++        for f in fragments:
++            meta = self._detect_fragment_metadata(f, all_evidences)
++            fragment_meta[f["fragment_id"]] = meta
++
+         # [STEP 2-C-R4] B-mode Diversity Scoring
+         # A?덉씠 ?대? ?좏깮??group怨?B媛 ?꾩옱 ?좏깮??group??異붿쟻?섏뿬 diversity ?좊룄
+         a_fragment_ids = overlap_ids if overlap_ids else set()
+         a_group_keys = {self._semantic_group_key(fid) for fid in a_fragment_ids}
+         selected_b_group_keys = set()
+ 
++        priority_axis = intent.get("priority_axis", {})
++        if not isinstance(priority_axis, dict):
++            priority_axis = {}
++            
++        human_presence = priority_axis.get("human_presence")
++        avoid_list = intent.get("avoid", [])
++        if isinstance(avoid_list, str):
++            avoid_list = [avoid_list]
++        avoid_list_lower = [str(x).lower() for x in avoid_list]
++        has_scenery_avoid = any(k in avoid_list_lower for k in ["landscape_only", "scenery_heavy", "landscape", "scenery"])
++        
++        pace = intent.get("pace")
++        if pace == "fast":
++            original_target = target_len
++            target_len = target_len * 0.75
++            print(f"[PACE_FAST_APPLIED] Reduced target length from {original_target} to {target_len}")
++
++        frag_score_details = {}
++
+         def edit_score(f):
+-            base_val = float(f.get("structural", {}).get("edit_value", 0.5))
++            base_val = float(f.get("structural", {}).get("edit_value", 0.5) or 0.5)
+             group_key = self._semantic_group_key(f.get("fragment_id"))
++            fid = f.get("fragment_id")
++            meta = fragment_meta.get(fid, {"has_human": False, "is_landscape": False, "landscape_only": False})
+             
+             score = base_val
+             
+@@ -253,10 +324,66 @@ class ProposalEngine:
+             if group_key not in a_group_keys and group_key not in selected_b_group_keys:
+                 score *= 1.15   # ?덈줈??group 蹂대꼫??                 
++            original_score = score
++            reasons_applied = []
++            
++            # 2. Human Presence Focus
++            if human_presence in ["high", "higher"]:
++                if meta["has_human"]:
++                    score *= 1.5
++                    reasons_applied.append("human_boost")
++                elif meta["landscape_only"] or meta["is_landscape"]:
++                    score *= 0.5
++                    reasons_applied.append("scenery_penalty_due_to_human_presence")
++            
++            # 3. Scenery Avoid
++            if has_scenery_avoid:
++                if meta["landscape_only"]:
++                    score *= 0.1
++                    reasons_applied.append("scenery_only_penalty")
++                elif meta["is_landscape"]:
++                    score *= 0.3
++                    reasons_applied.append("scenery_penalty")
++                    
++            # 4. Pace Fast
++            if pace == "fast":
++                dur = self._safe_duration(f)
++                if dur > 10.0:
++                    score *= 0.5
++                    reasons_applied.append("pace_long_clip_penalty")
++                elif dur < 6.0:
++                    score *= 1.3
++                    reasons_applied.append("pace_short_clip_boost")
++                
++                role = f.get("structural", {}).get("role", "context")
++                if role in ["hook", "payoff"]:
++                    score *= 1.4
++                    reasons_applied.append("pace_role_boost")
++                    
++            if score != original_score:
++                print(f"[PROPOSAL_SCORE_BEFORE_AFTER] Fragment {fid}: before={original_score:.3f}, after={score:.3f}")
++
++            frag_score_details[fid] = {
++                "original_score": original_score,
++                "adjusted_score": score,
++                "reasons": reasons_applied
++            }
++                
+             return score
+ 
+         # ?뺣젹 湲곗?: 1. b_score ?대┝李⑥닚, 2. start ?ㅻ쫫李⑥닚 (寃곗젙濡??좎?)
+         sorted_frags = sorted(fragments, key=lambda x: (edit_score(x), -x.get("start", 0)), reverse=True)
++
++        append_audit_log("[SCORE_BEFORE_AFTER_TOP10]")
++        print("[SCORE_BEFORE_AFTER_TOP10]")
++        for frag in sorted_frags[:10]:
++            fid = frag.get("fragment_id")
++            details = frag_score_details.get(fid, {"original_score": 0.5, "adjusted_score": 0.5, "reasons": []})
++            reason_str = ", ".join(details["reasons"]) if details["reasons"] else "none"
++            msg = (f"  {fid} | src:{frag.get('source_id')} | dur:{self._safe_duration(frag)} | "
++                  f"orig:{details['original_score']:.3f} | adj:{details['adjusted_score']:.3f} | delta:{reason_str}")
++            append_audit_log(msg)
++            print(msg)
+         
+         selected = []
+         current_len = 0
+@@ -282,35 +409,95 @@ class ProposalEngine:
+         # [STEP2C-R2] B-mode edit_value<0.1 ?쒖쇅 移댁슫??(R3 吏꾨떒??
+         _low_edit_excluded = 0
+ 
+-        for f in sorted_frags:
+-            # [STEP 2-C-R4] ?ㅼ떆媛??먯닔 ?ш퀎??(selected_b_group_keys 諛섏쁺)
+-            # ?? sorted_frags媛 ?대? ?뺣젹?섏뼱 ?덉쑝誘濡??ш린?쒕뒗 ?꾪꽣留??꾩＜濡??숈옉
+-            f_group_key = self._semantic_group_key(f.get("fragment_id"))
++        coverage = intent.get("coverage")
++        source_diversity = intent.get("source_diversity") or priority_axis.get("source_diversity")
++        is_balanced = (coverage == "balanced_sources") or (source_diversity == "high")
++
++        if is_balanced and is_multi:
++            print("[SOURCE_DIVERSITY_ENFORCED] Enforcing source diversity two-pass selection.")
+             
+-            # ?꾧꺽???꾪꽣留? edit_value媛 0.1 誘몃쭔?대㈃ ?쒖쇅
+-            if f.get("structural", {}).get("edit_value", 0.5) < 0.1:
+-                _low_edit_excluded += 1
+-                continue
+-            f_dur = self._safe_duration(f)
+-            f_sid = f.get("source_id")
++            # Pass 1: Select at least 1 fragment from each source
++            for sid in source_ids:
++                best_frag = None
++                best_score = -999.0
++                for f in sorted_frags:
++                    if f.get("source_id") == sid:
++                        f_group_key = self._semantic_group_key(f.get("fragment_id"))
++                        if f.get("structural", {}).get("edit_value", 0.5) < 0.1:
++                            continue
++                        if self._is_contiguous_to_selected(f, selected):
++                            continue
++                        s = edit_score(f)
++                        if s > best_score:
++                            best_score = s
++                            best_frag = f
++                
++                if best_frag:
++                    f_dur = self._safe_duration(best_frag)
++                    if current_len + f_dur <= target_len * 1.1:
++                        selected.append(best_frag)
++                        selected_b_group_keys.add(self._semantic_group_key(best_frag.get("fragment_id")))
++                        current_len += f_dur
++                        source_counts[sid] = source_counts.get(sid, 0) + 1
++                        print(f"[SOURCE_DIVERSITY_ENFORCED] Pass 1 selected fragment {best_frag.get('fragment_id')} for source {sid}")
++            
++            # Pass 2: Fill the rest, enforcing maximum share per source
++            for f in sorted_frags:
++                if f in selected:
++                    continue
++                if len(selected) >= max_frags:
++                    break
++                
++                f_group_key = self._semantic_group_key(f.get("fragment_id"))
++                if f.get("structural", {}).get("edit_value", 0.5) < 0.1:
++                    continue
++                    
++                f_dur = self._safe_duration(f)
++                f_sid = f.get("source_id")
++                
++                if len(selected) > 0:
++                    share = source_counts.get(f_sid, 0) / len(selected)
++                    if share > 0.35:
++                        continue
++                
++                if current_len + f_dur <= target_len * 1.1:
++                    if self._is_contiguous_to_selected(f, selected):
++                        continue
++                    selected.append(f)
++                    selected_b_group_keys.add(f_group_key)
++                    current_len += f_dur
++                    source_counts[f_sid] = source_counts.get(f_sid, 0) + 1
++                    print(f"[SOURCE_DIVERSITY_ENFORCED] Pass 2 selected fragment {f.get('fragment_id')} for source {f_sid}")
++        else:
++            for f in sorted_frags:
++                # [STEP 2-C-R4] ?ㅼ떆媛??먯닔 ?ш퀎??(selected_b_group_keys 諛섏쁺)
++                # ?? sorted_frags媛 ?대? ?뺣젹?섏뼱 ?덉쑝誘濡??ш린?쒕뒗 ?꾪꽣留??꾩＜濡??숈옉
++                f_group_key = self._semantic_group_key(f.get("fragment_id"))
++                
++                # ?꾧꺽???꾪꽣留? edit_value媛 0.1 誘몃쭔?대㈃ ?쒖쇅
++                if f.get("structural", {}).get("edit_value", 0.5) < 0.1:
++                    _low_edit_excluded += 1
++                    continue
++                f_dur = self._safe_duration(f)
++                f_sid = f.get("source_id")
+ 
+-            if len(selected) >= max_frags: break
++                if len(selected) >= max_frags: break
+ 
+-            # [STEP 10-I.5.28-E8-R1] Source Soft Balance (User: 0.8 penalty)
+-            if is_multi and len(selected) > 2:
+-                share = source_counts.get(f_sid, 0) / len(selected)
+-                if share > 0.4: # ?좎? 紐⑤뱶??議곌툑 ???꾧꺽?섍쾶 遺꾩궛 ?쒕룄
+-                    if current_len + f_dur <= target_len * 0.9:
+-                        continue
++                # [STEP 10-I.5.28-E8-R1] Source Soft Balance (User: 0.8 penalty)
++                if is_multi and len(selected) > 2:
++                    share = source_counts.get(f_sid, 0) / len(selected)
++                    if share > 0.4: # ?좎? 紐⑤뱶??議곌툑 ???꾧꺽?섍쾶 遺꾩궛 ?쒕룄
++                        if current_len + f_dur <= target_len * 0.9:
++                            continue
+ 
+-            if current_len + f_dur <= target_len * 1.1:
+-                # [STEP 10-K-C1-R36] ?좏깮 ?④퀎 Guard: ?대? ?좏깮??議곌컖怨??곗냽?섎뒗吏 ?뺤씤
+-                if self._is_contiguous_to_selected(f, selected):
+-                    continue
+-                selected.append(f)
+-                selected_b_group_keys.add(f_group_key) # [R4] 洹몃９ 異붿쟻
+-                current_len += f_dur
+-                source_counts[f_sid] = source_counts.get(f_sid, 0) + 1
++                if current_len + f_dur <= target_len * 1.1:
++                    # [STEP 10-K-C1-R36] ?좏깮 ?④퀎 Guard: ?대? ?좏깮??議곌컖怨??곗냽?섎뒗吏 ?뺤씤
++                    if self._is_contiguous_to_selected(f, selected):
++                        continue
++                    selected.append(f)
++                    selected_b_group_keys.add(f_group_key) # [R4] 洹몃９ 異붿쟻
++                    current_len += f_dur
++                    source_counts[f_sid] = source_counts.get(f_sid, 0) + 1
+ 
+         # [STEP 2-C-R4-R1] B Exclusive Group Fallback Fix
+         b_group_keys = {self._semantic_group_key(f.get("fragment_id")) for f in selected}
+@@ -327,14 +514,14 @@ class ProposalEngine:
+                     continue
+                 
+                 f_struct = f.get("structural") or {}
+-                f_ev = float(f_struct.get("edit_value", 0.0))
++                f_ev = float(f_struct.get("edit_value", 0.0) or 0.0)
+                 f_dur = self._safe_duration(f)
+                 
+                 if f_ev >= 0.05 and f_dur > 0:
+                     fallback_candidates.append(f)
+             
+             # ?뺣젹: edit_value ?대┝李⑥닚, start ?ㅻ쫫李⑥닚
+-            fallback_candidates = sorted(fallback_candidates, key=lambda x: (float(x.get("structural", {}).get("edit_value", 0.0)), -x.get("start", 0)), reverse=True)
++            fallback_candidates = sorted(fallback_candidates, key=lambda x: (float(x.get("structural", {}).get("edit_value", 0.0) or 0.0), -x.get("start", 0)), reverse=True)
+             
+             if fallback_candidates:
+                 best_fallback = fallback_candidates[0]
+@@ -350,7 +537,6 @@ class ProposalEngine:
+                     weakest_idx = 0
+                     min_score = 999.0
+                     for i, f in enumerate(selected):
+-                        # edit_score???대??⑥닔?대?濡??묎렐 媛??                         s = edit_score(f)
+                         if s < min_score:
+                             min_score = s
+@@ -462,6 +648,112 @@ class ProposalEngine:
+             "balance_policy": balance_info if balance_info["applied"] else None
+         }
+ 
++    def _detect_fragment_metadata(self, f, all_evidences):
++        has_human = False
++        is_landscape = False
++        
++        # 1. Check visual evidence
++        ref_ids = f.get("semantic", {}).get("evidence_refs", [])
++        for ref_id in ref_ids:
++            ev = all_evidences.get(ref_id)
++            if ev:
++                # Check human_presence_score or visible_people_count
++                try:
++                    hp_score = float(ev.get("human_presence_score", 0.0) or 0.0)
++                except (ValueError, TypeError):
++                    hp_score = 0.0
++                try:
++                    people_cnt = int(ev.get("visible_people_count", 0) or 0)
++                except (ValueError, TypeError):
++                    people_cnt = 0
++                if hp_score > 0.1 or people_cnt > 0:
++                    has_human = True
++                
++                # Check scene_type or metadata
++                scene_type = str(ev.get("scene_type", "") or "").lower()
++                if any(k in scene_type for k in ["landscape", "scenery", "nature", "mountain", "sea", "river", "sky", "view"]):
++                    is_landscape = True
++                
++                # Check text in evidence
++                ev_text = str(ev.get("text", "") or "").lower()
++                if any(k in ev_text for k in ["?щ엺", "?몃Ъ", "?쇨뎬", "?쒖젙", "紐⑹냼由?, "?명꽣酉?, "?ㅻ챸", "留먰븯??, "???]):
++                    has_human = True
++                    
++        # 2. Check text in fragment summary/topic
++        text = (str(f.get("semantic", {}).get("summary", "") or "") + " " + str(f.get("semantic", {}).get("topic", "") or "")).lower()
++        
++        human_keywords = ["?щ엺", "?몃Ъ", "?쇨뎬", "?쒖젙", "紐⑹냼由?, "?명꽣酉?, "?ㅻ챸", "留먰븯??, "???, "talk", "interview", "voice", "speak", "person", "man", "woman", "people", "elderly"]
++        if any(k in text for k in human_keywords):
++            has_human = True
++            
++        landscape_keywords = ["?띻꼍", "?먯뿰", "??, "諛붾떎", "?섎뒛", "媛?, "寃쎌튂", "?꾧꼍", "?쇱쇅", "landscape", "scenery", "nature", "view", "mountain", "sea", "river", "sky", "outdoor"]
++        if any(k in text for k in landscape_keywords):
++            is_landscape = True
++            
++        return {
++            "has_human": has_human,
++            "is_landscape": is_landscape,
++            "landscape_only": is_landscape and not has_human
++        }
++
++    def _enforce_ab_difference(self, p_a_seq, p_b_seq, fragments, target_len):
++        """
++        [AB_DIFFERENCE_GUARD] Ensure B's key fragments differ from A's key fragments.
++        If similarity is too high (e.g., more than 75% overlap of fragment IDs), 
++        find alternative candidates from pool and swap them in B.
++        """
++        a_ids = {f["fragment_id"] for f in p_a_seq if f.get("fragment_id")}
++        b_ids = {f["fragment_id"] for f in p_b_seq if f.get("fragment_id")}
++        
++        if not a_ids or not b_ids:
++            return p_b_seq
++            
++        overlap = a_ids.intersection(b_ids)
++        overlap_ratio = len(overlap) / len(b_ids)
++        
++        if overlap_ratio > 0.75:
++            print(f"[AB_DIFFERENCE_GUARD] High overlap detected ({overlap_ratio:.1%}). Swapping fragments to enforce A/B diversity.")
++            # Find candidate fragments in pool that are NOT in A or B
++            unused_candidates = [
++                f for f in fragments 
++                if f.get("fragment_id") and f["fragment_id"] not in a_ids and f["fragment_id"] not in b_ids
++            ]
++            
++            # Sort unused candidates by edit_value
++            unused_candidates = sorted(
++                unused_candidates, 
++                key=lambda x: float(x.get("structural", {}).get("edit_value", 0.5) or 0.5), 
++                reverse=True
++            )
++            
++            b_seq_copy = list(p_b_seq)
++            target_replace_count = max(1, int(len(b_seq_copy) * 0.25))
++            replaced = 0
++            
++            overlapping_in_b = [f for f in b_seq_copy if f.get("fragment_id") in a_ids]
++            overlapping_in_b = sorted(overlapping_in_b, key=lambda x: float(x.get("structural", {}).get("edit_value", 0.5) or 0.5))
++            
++            for f_to_replace in overlapping_in_b:
++                if replaced >= target_replace_count or not unused_candidates:
++                    break
++                
++                for sub in unused_candidates:
++                    temp_seq = [x for x in b_seq_copy if x.get("fragment_id") != f_to_replace.get("fragment_id")]
++                    if not self._is_contiguous_to_selected(sub, temp_seq):
++                        try:
++                            idx = b_seq_copy.index(f_to_replace)
++                            b_seq_copy[idx] = sub
++                            unused_candidates.remove(sub)
++                            replaced += 1
++                            print(f"[AB_DIFFERENCE_GUARD] Replaced overlapping fragment {f_to_replace.get('fragment_id')} with {sub.get('fragment_id')} in B")
++                            break
++                        except ValueError:
++                            pass
++            
++            return b_seq_copy
++            
++        return p_b_seq
++
+     def _insert_bridges(self, selected, all_fragments):
+         """
+         [STEP 6] Bridge Fragment ?덉쇅 異붽? 諛?濡쒓렇 湲곕줉
+diff --git a/ccut_backend/main.py b/ccut_backend/main.py
+index db8fdbd..7983c55 100644
+--- a/ccut_backend/main.py
++++ b/ccut_backend/main.py
+@@ -1266,13 +1266,27 @@ async def post_user_intent(source_id: str, intent: dict):
+     must_keep, avoid, target_length, priority_axis ?깆쓣 諛섏쁺?섏뿬 
+     湲곗〈 Semantic Fragments??edit_value瑜??ш퀎?고븿.
+     """
++    # 2. post_user_intent()濡??ㅼ뼱?ㅻ뒗 request body瑜??꾩떆 濡쒓렇濡?異쒕젰.
++    print(f"[USER_INTENT_DEBUG] source_id: {source_id}")
++    print(f"[USER_INTENT_DEBUG] user_intent payload: {intent}")
++    print(f"[USER_INTENT_DEBUG] target_length: {intent.get('target_length')}")
++    print(f"[USER_INTENT_DEBUG] tone: {intent.get('tone')}")
++    print(f"[USER_INTENT_DEBUG] priority_axis: {intent.get('priority_axis')}")
++    print(f"[USER_INTENT_DEBUG] avoid: {intent.get('avoid')}")
++    print(f"[USER_INTENT_DEBUG] coverage: {intent.get('coverage')}")
++    print(f"[USER_INTENT_DEBUG] pace: {intent.get('pace')}")
++
+     # 1. Intent ?곴뎄 ???     bams.save_user_intent(source_id, intent)
+     
+     # 2. Rescoring ?붿쭊 媛??(Dynamic Import to avoid circular refs if any)
+     from engine.semantic_engine import SemanticFragmentGenerator
+     generator = SemanticFragmentGenerator(bams)
+-    rescored_fragments = generator.rescore_all_fragments(source_id, intent)
++    
++    # Sanitized user intent from database
++    saved_intent = bams.get_user_intent(source_id) or intent
++    
++    rescored_fragments = generator.rescore_all_fragments(source_id, saved_intent)
+     
+     role_dist = {}
+     for f in rescored_fragments:
+@@ -1410,11 +1424,22 @@ def _response_level_sequence_guard(sequence, min_gap_frames=30):
+ 
+     return result
+ 
++def append_audit_log(msg):
++    try:
++        import os
++        log_path = "d:\\CCUT1.0.4\\logs\\proposal_audit_debug.txt"
++        with open(log_path, "a", encoding="utf-8") as f:
++            f.write(msg + "\n")
++    except Exception as e:
++        pass
++
+ @app.post("/proposals/project")
+ async def post_generate_project_proposals(req: ProjectProposalRequest):
+     """
+     [STEP 10-I.5.24-R1] Multi-Source Project Proposal ?앹꽦 (v0.1)
+     """
++    append_audit_log(f"\n========================================\n[INTENT_PAYLOAD_TO_BACKEND] user_intent={req.user_intent}")
++    print(f"[INTENT_PAYLOAD_TO_BACKEND] user_intent={req.user_intent}")
+     import traceback
+     from engine.proposal_engine import ProposalEngine
+ 
+@@ -1430,7 +1455,14 @@ async def post_generate_project_proposals(req: ProjectProposalRequest):
+             seen.add(sid)
+             
+     target_len = req.target_length
+-    user_intent = req.user_intent
++    
++    # 5. ????깃났 ??bams.get_user_intent(source_id)瑜??ㅼ떆 ?쎌뼱 proposal regeneration???ъ슜.
++    user_intent = None
++    if source_ids:
++        user_intent = bams.get_user_intent(source_ids[0])
++    if not user_intent:
++        user_intent = req.user_intent
++        
+     req_template_id = req.template_id
+ 
+     # [STEP 10-K-B2] Resolve Story Template
+@@ -1438,6 +1470,7 @@ async def post_generate_project_proposals(req: ProjectProposalRequest):
+         user_intent=user_intent, 
+         template_id=req_template_id
+     )
++    resolved_story_template["user_intent"] = user_intent
+     logger.info(f"[PROPOSAL] Resolved Template: {resolved_story_template.get('template_id')} (via {req_template_id or 'intent'})")
+ 
+     if not source_ids:
+@@ -1476,6 +1509,9 @@ async def post_generate_project_proposals(req: ProjectProposalRequest):
+ 
+     try:
+         engine = ProposalEngine(bams)
++        msg = f"[INTENT_BEFORE_ENGINE] story_context={resolved_story_template.get('user_intent') if resolved_story_template else None}"
++        append_audit_log(msg)
++        print(msg)
+         proposals = engine.generate_proposals_from_fragments(
+             project_id=project_id,
+             source_ids=source_ids,
+diff --git a/ccut_frontend/src/hooks/useProposalState.ts b/ccut_frontend/src/hooks/useProposalState.ts
+index 2d7ab26..020bc92 100644
+--- a/ccut_frontend/src/hooks/useProposalState.ts
++++ b/ccut_frontend/src/hooks/useProposalState.ts
+@@ -4,6 +4,7 @@ import { createNextSnapshot } from "@/proposal/directionSnapshot";
+ import { generateProposals } from "@/proposal/proposalOrchestrator";
+ import { Fragment } from "@/data/fragmentData";
+ import { narrativeService } from "@/services/narrativeService";
++import { videoService } from "@/services/videoService";
+ 
+ /**
+  * [STEP 10-K-C1-R39] Frontend Commit-Time Sequence Guard
+@@ -56,7 +57,12 @@ function guardProposalSequence(sequence: any[], _minGapFrames = 30): any[] {
+   return result;
+ }
+ 
+-export const useProposalState = (sourceFragments: Fragment[]) => {
++export const useProposalState = (
++  sourceFragments: Fragment[],
++  projectId?: string | null,
++  sourceEntries?: any[],
++  currentSourceId?: string | null
++) => {
+   const [selectedProposalId, setSelectedProposalId] = useState<string | null>(null);
+   const [committedProposalId, setCommittedProposalId] = useState<string | null>(null);
+   const [proposals, setProposals] = useState<Record<"A" | "B", Proposal> | null>(null);
+@@ -212,13 +218,25 @@ export const useProposalState = (sourceFragments: Fragment[]) => {
+   const handleConsultation = useCallback(async (text: string) => {
+     if (!storyPlan) return;
+ 
+-    const lower = text.toLowerCase();
+-    const shouldConfirm =
+-      lower.includes("?대?濡?) ||
+-      lower.includes("吏꾪뻾") ||
+-      lower.includes("?쒖븞??) ||
+-      /ok$/i.test(lower) ||
+-      lower.includes("?ㅼ???);
++    const lower = text.trim();
++
++    // 1. 踰꾪듉蹂?intent patch ?앹꽦
++    const buttonIntentMap: Record<string, any> = {
++      "?대?濡??쒖븞?댁쨾": { action: "confirm_current_direction" },
++      "?щ엺 以묒떖?쇰줈": { priority_axis: { human_presence: "high" }, avoid: ["landscape_only"] },
++      "?띻꼍? 以꾩뿬以?: { avoid: ["landscape_only", "scenery_heavy"], priority_axis: { human_presence: "higher" } },
++      "?띻꼍? 以꾩씠怨?: { avoid: ["landscape_only", "scenery_heavy"], priority_axis: { human_presence: "higher" } },
++      "??鍮좊Ⅴ寃?: { pace: "fast", target_density: "high", avoid: ["slow_opening"] },
++      "?щ윭 ?곸긽 怨④퀬猷?: { coverage: "balanced_sources", source_diversity: "high" }
++    };
++
++    const isOpinionButton = lower in buttonIntentMap;
++    const patch = buttonIntentMap[lower] || null;
++
++    if (isOpinionButton) {
++      console.log("[OPINION_BUTTON_CLICK] Button clicked:", text);
++      console.log("[INTENT_PATCH] Generated patch:", patch);
++    }
+ 
+     const userMsgId = `user_${Date.now()}`;
+     const aiMsgId = `ai_${Date.now() + 1}`;
+@@ -234,7 +252,7 @@ export const useProposalState = (sourceFragments: Fragment[]) => {
+     const aiMsg = {
+       id: aiMsgId,
+       sender: "ai" as const,
+-      text: "?몄쭛 諛⑺뼢???댁꽍?섍퀬 ?덉뒿?덈떎...",
++      text: isOpinionButton ? "?쒖븞 以?.." : "?몄쭛 諛⑺뼢???댁꽍?섍퀬 ?덉뒿?덈떎...",
+       timestamp: Date.now() + 1,
+       isInterpreting: true
+     };
+@@ -247,59 +265,209 @@ export const useProposalState = (sourceFragments: Fragment[]) => {
+       };
+     });
+ 
+-    // Background Narrative AI call with 15s timeout
+-    const startTime = Date.now();
+-    let result: any = { status: "TIMEOUT", patch: null, latency_ms: 0, error: "Frontend 15s timeout" };
++    let nextIntent: any = { ...(storyPlan.story_intent || {}) };
++    let finalAiText = "";
++
++    if (isOpinionButton) {
++      // Opinion button path: merge the hardcoded patch
++      Object.assign(nextIntent, patch);
++      finalAiText = buildConsultationReply(text);
++    } else {
++      // General chat path: Background Narrative AI call with 15s timeout
++      const startTime = Date.now();
++      let result: any = { status: "TIMEOUT", patch: null, latency_ms: 0, error: "Frontend 15s timeout" };
++      try {
++        const timeoutPromise = new Promise((_, reject) => 
++          setTimeout(() => reject(new Error("TIMEOUT")), 30000)
++        );
++        
++        result = await Promise.race([
++          narrativeService.interpretIntent(text),
++          timeoutPromise
++        ]);
++      } catch (err: any) {
++        console.warn("[NarrativeAI] Safe fallback triggered:", err.message);
++      }
++
++      const latency = Date.now() - startTime;
++      if (result.status !== "OK") {
++        console.log(`[NarrativeAI] Fallback (Status: ${result.status}, Latency: ${latency}ms)`);
++      }
++
++      // AI Success: Apply StoryIntentPatch
++      if (result.status === "OK" && result.patch) {
++        Object.assign(nextIntent, result.patch);
++      } else {
++        // AI Fallback: Rule-based simple intent extraction
++        const lowerText = text.toLowerCase();
++        if (/鍮좊Ⅴ寃??쒗룷|?띾룄/.test(lowerText)) nextIntent.pace = "fast";
++        if (/媛먯꽦|?곕쑜|?ъ슫/.test(lowerText)) nextIntent.mood = "warm";
++        if (/?щ엺|?몃Ъ|媛議?.test(lowerText)) nextIntent.focus = "people";
++        if (/?띻꼍|諛곌꼍|?μ냼/.test(lowerText)) nextIntent.focus = "landscape";
++        if (/怨④퀬猷?洹좏삎/.test(lowerText)) nextIntent.coverage = "balanced_sources";
++      }
++      finalAiText = buildConsultationReply(text);
++    }
++
++    // 2. ?꾩옱 source_id ?먮뒗 project source_ids? ?④퍡 intent ???+    const sourceIds = sourceEntries && sourceEntries.length > 0
++      ? sourceEntries.map((e: any) => e.source_id).filter(Boolean)
++      : (currentSourceId ? [currentSourceId] : []);
++
+     try {
+-      const timeoutPromise = new Promise((_, reject) => 
+-        setTimeout(() => reject(new Error("TIMEOUT")), 30000)
+-      );
++      console.log("[PROPOSAL_REGEN_REQUEST] Saving intent and triggering proposal regeneration for sources:", sourceIds);
+       
+-      result = await Promise.race([
+-        narrativeService.interpretIntent(text),
+-        timeoutPromise
+-      ]);
+-    } catch (err: any) {
+-      console.warn("[NarrativeAI] Safe fallback triggered:", err.message);
+-    }
++      // Save intent to /user-intent/{source_id}
++      const saveResults = await Promise.all(
++        sourceIds.map(async (sid) => {
++          try {
++            const res = await fetch(`${videoService.API_BASE_URL}/user-intent/${sid}`, {
++              method: "POST",
++              headers: { "Content-Type": "application/json" },
++              body: JSON.stringify(nextIntent),
++            });
++            if (!res.ok) {
++              const errText = await res.text();
++              console.warn(`[INTENT_SAVE_FAIL] Failed to save intent for source ${sid}: ${res.statusText} - ${errText}`);
++              return { source_id: sid, success: false, error: `${res.statusText}: ${errText}` };
++            }
++            const data = await res.json();
++            return { source_id: sid, success: true, data };
++          } catch (e: any) {
++            console.error(`[INTENT_SAVE_ERROR] Network/parsing error saving intent for source ${sid}:`, e);
++            return { source_id: sid, success: false, error: e.message || String(e) };
++          }
++        })
++      );
+ 
+-    const latency = Date.now() - startTime;
+-    if (result.status !== "OK") {
+-      console.log(`[NarrativeAI] Fallback (Status: ${result.status}, Latency: ${latency}ms)`);
+-    }
++      const successfulSaves = saveResults.filter(r => r.success);
++      const failedSaves = saveResults.filter(r => !r.success);
+ 
+-    const nextIntent: any = { ...(storyPlan.story_intent || {}) };
+-    
+-    // AI Success: Apply StoryIntentPatch
+-    if (result.status === "OK" && result.patch) {
+-      // Merge patch into story_intent
+-      Object.assign(nextIntent, result.patch);
+-    } else {
+-      // AI Fallback: Rule-based simple intent extraction
+-      if (/鍮좊Ⅴ寃??쒗룷|?띾룄/.test(lower)) nextIntent.pace = "fast";
+-      if (/媛먯꽦|?곕쑜|?ъ슫/.test(lower)) nextIntent.mood = "warm";
+-      if (/?щ엺|?몃Ъ|媛議?.test(lower)) nextIntent.focus = "people";
+-      if (/?띻꼍|諛곌꼍|?μ냼/.test(lower)) nextIntent.focus = "landscape";
+-      if (/怨④퀬猷?洹좏삎/.test(lower)) nextIntent.coverage = "balanced_sources";
+-    }
++      if (successfulSaves.length > 0) {
++        console.log("INTENT_SAVE_RESULT success");
++        console.log("[INTENT_SAVE_RESULT] Saved intent successfully for:", successfulSaves.map(r => r.source_id));
++      }
++      if (failedSaves.length > 0) {
++        console.warn("[INTENT_SAVE_PARTIAL_FAIL] Some source intents failed to save:", failedSaves);
++      }
+ 
+-    const nextStatus = shouldConfirm ? "confirmed" : "user_requested_change";
+-    const finalAiText = buildConsultationReply(text);
++      if (sourceIds.length > 0 && successfulSaves.length === 0) {
++        throw new Error(`Failed to save intent for all sources: ${failedSaves.map(f => `${f.source_id}(${f.error})`).join(", ")}`);
++      }
+ 
+-    setStoryPlan((prev: any) => {
+-      if (!prev) return prev;
+-      return {
+-        ...prev,
+-        story_intent: nextIntent,
+-        consultation_status: nextStatus,
+-        confirmation_status: nextStatus === "confirmed" ? "confirmed" : prev.confirmation_status,
+-        user_notes: text,
+-        messages: (prev.messages ?? []).map((m: any) => 
+-          m.id === aiMsgId ? { ...m, text: finalAiText, isInterpreting: false } : m
+-        ),
++      // 3. Proposal ?ъ깮???몄텧
++      let proposalData: any = null;
++      if (sourceIds.length >= 2) {
++        proposalData = await videoService.requestProjectProposals(
++          projectId || `proj_${Date.now()}`,
++          sourceIds,
++          60.0,
++          nextIntent
++        );
++      } else if (sourceIds.length === 1) {
++        const sid = sourceIds[0];
++        const res = await fetch(`${videoService.API_BASE_URL}/proposals/${sid}`, {
++          method: "POST"
++        });
++        if (!res.ok) {
++          throw new Error(`Single source proposal regeneration failed: ${res.statusText}`);
++        }
++        proposalData = await res.json();
++      }
++      console.log("[PROPOSAL_REGEN_RESULT] Regenerated proposals successfully:", proposalData);
++
++      // Map proposals to UI structure
++      const generatedProposals: Record<"A" | "B", any> = {} as any;
++      if (proposalData && proposalData.proposals) {
++        proposalData.proposals.forEach((p: any) => {
++          const mode = p.mode === "A" ? "A" : "B";
++          generatedProposals[mode] = {
++            id: mode,
++            proposal_id: p.proposal_id,
++            mode: p.mode === "A" ? "market" : "user",
++            title: p.mode === "A" ? "?쒖옣???몄쭛 (A)" : "?ъ슜?먯튇?뷀삎 ?몄쭛 (B)",
++            desc: p.proposal_reason?.mode_reason || "諛깆뿏??遺꾩꽍 湲곕컲 異붿쿇 ?몄쭛?덉엯?덈떎.",
++            score: String(Math.round(p.confidence * 100)) + "%",
++            key_fragments: p.sequence.map((s: any) => s.fragment_id),
++            proposal_story: p.proposal_story,
++            proposal_explanation: p.proposal_explanation,
++            direction: {},
++            snapshot_id: "R1",
++            template_id: p.mode,
++            slot_trace: [],
++            preview_url: p.preview_url ?? null,
++            preview_duration: p.preview_duration ?? 0,
++          };
++          
++          if (generatedProposals[mode].key_fragments.length > 0) {
++            generatedProposals[mode].resolved_aliases = p.sequence.map((s: any) => ({
++              proposal_fragment_id: s.fragment_id,
++              source_id: s.source_id,
++              source_fragment_id: s.fragment_id,
++              display_id: s.display_id,
++              start_sec: s.start,
++              end_sec: s.end,
++              thumbnail_url: s.thumbnail_url
++            }));
++          }
++        });
++      }
++
++      // proposal response ?섏떊 吏곹썑
++      const responseData = proposalData;
++      const proposalsData = generatedProposals;
++      
++      const mapToId = (arr: any[] | null | undefined): string[] => {
++        if (!arr) return [];
++        return arr.map(f => (typeof f === 'object' && f !== null) ? (f.fragment_id || f.id || "") : String(f));
+       };
+-    });
+-  }, [storyPlan, buildConsultationReply]);
++
++      console.log('[FRONTEND_PROPOSAL_RESPONSE_KEYS]', {
++        A: mapToId(responseData?.proposals?.find((p: any) => p.mode === "A")?.sequence || responseData?.proposals?.A?.key_fragments),
++        B: mapToId(responseData?.proposals?.find((p: any) => p.mode === "B")?.sequence || responseData?.proposals?.B?.key_fragments)
++      });
++
++      // Update proposals in UI
++      setProposals(generatedProposals);
++
++      // state ?낅뜲?댄듃 吏곹썑
++      console.log('[FRONTEND_PROPOSAL_STATE_KEYS]', {
++        A: mapToId(proposalsData?.A?.key_fragments),
++        B: mapToId(proposalsData?.B?.key_fragments)
++      });
++
++      console.log("[PROPOSAL_UI_REFRESH] proposals UI refreshed:", generatedProposals);
++
++      // 4. UI ?곹깭 媛깆떊 (?깃났 ??confirmed濡??꾪솚?섏뿬 proposals grid瑜??몄텧)
++      setStoryPlan((prev: any) => {
++        if (!prev) return prev;
++        return {
++          ...prev,
++          story_intent: nextIntent,
++          consultation_status: "confirmed",
++          confirmation_status: "confirmed",
++          user_notes: text,
++          messages: (prev.messages ?? []).map((m: any) => 
++            m.id === aiMsgId ? { ...m, text: finalAiText, isInterpreting: false } : m
++          ),
++        };
++      });
++
++    } catch (error: any) {
++      console.error("[PROPOSAL_REGEN_RESULT] Proposal regeneration failed:", error);
++      // On failure, do not freeze but display error message
++      setStoryPlan((prev: any) => {
++        if (!prev) return prev;
++        return {
++          ...prev,
++          messages: (prev.messages ?? []).map((m: any) => 
++            m.id === aiMsgId ? { ...m, text: `?쒖븞 ?앹꽦???ㅽ뙣?덉뒿?덈떎: ${error.message || error}`, isInterpreting: false } : m
++          ),
++        };
++      });
++    }
++
++  }, [storyPlan, buildConsultationReply, projectId, sourceEntries, currentSourceId, setProposals]);
+ 
+   return {
+     selectedProposalId,
+diff --git a/ccut_frontend/src/pages/Index.tsx b/ccut_frontend/src/pages/Index.tsx
+index 3456000..b92b290 100644
+--- a/ccut_frontend/src/pages/Index.tsx
++++ b/ccut_frontend/src/pages/Index.tsx
+@@ -91,6 +91,18 @@ const Index: React.FC = () => {
+   const [quickScanData, setQuickScanData] = useState<QuickScanData | null>(null);
+   const [semanticFragments, setSemanticFragments] = useState<SemanticFragmentData[]>([]);
+ 
++  type SourceEntry = {
++    source_id: string;
++    label: string;
++    video_url: string;
++    fragments: Fragment[];
++    file_size_bytes?: number;
++    duration_sec?: number;
++  };
++
++  const [sourceEntries, setSourceEntries] = useState<SourceEntry[]>([]);
++  const [projectId, setProjectId] = useState<string | null>(null);
++
+   const {
+     selectedProposalId,
+     setSelectedProposalId,
+@@ -107,18 +119,7 @@ const Index: React.FC = () => {
+     handleReproposal,
+     handleConsultation,
+     logProposalPair
+-  } = useProposalState(sourceFragments);
+-
+-
+-  type SourceEntry = {
+-    source_id: string;
+-    label: string;
+-    video_url: string;
+-    fragments: Fragment[];
+-    file_size_bytes?: number;
+-    duration_sec?: number;
+-  };
+-  const [sourceEntries, setSourceEntries] = useState<SourceEntry[]>([]);
++  } = useProposalState(sourceFragments, projectId, sourceEntries, currentSourceId);
+ 
+   // [STEP 10-I.5.27-E7] Timing measurement baseline
+   const timingRef = useRef<Record<string, number>>({});
+@@ -329,6 +330,7 @@ const Index: React.FC = () => {
+         const today = new Date();
+         const dateStrYYMMDD = `${today.getFullYear().toString().slice(2)}${String(today.getMonth() + 1).padStart(2, "0")}${String(today.getDate()).padStart(2, "0")}`;
+         const projectId = `proj_${Date.now()}`;
++        setProjectId(projectId);
+         const fileCount = allFiles.length;
+ 
+         setProjects((prev) => {
+diff --git a/ccut_frontend/src/services/videoService.ts b/ccut_frontend/src/services/videoService.ts
+index 549452c..585cb26 100644
+--- a/ccut_frontend/src/services/videoService.ts
++++ b/ccut_frontend/src/services/videoService.ts
+@@ -66,14 +66,15 @@ export const videoService = {
+         });
+     },
+ 
+-    requestProjectProposals: async (projectId: string, sourceIds: string[], targetLength: number = 60.0) => {
++    requestProjectProposals: async (projectId: string, sourceIds: string[], targetLength: number = 60.0, userIntent?: any) => {
+         const response = await fetch(`${API_BASE_URL}/proposals/project`, {
+             method: "POST",
+             headers: { "Content-Type": "application/json" },
+             body: JSON.stringify({
+                 project_id: projectId,
+                 source_ids: sourceIds,
+-                target_length: targetLength
++                target_length: targetLength,
++                user_intent: userIntent
+             })
+         });
+         if (!response.ok) {

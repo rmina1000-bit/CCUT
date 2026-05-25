@@ -666,8 +666,12 @@ class SemanticFragmentGenerator:
                 filtered.append(b)
         
         # 마지막 경계가 total_duration보다 작으면 추가 (전체 영상 커버 보장)
-        if total_duration > 0 and filtered[-1] < total_duration - 0.5:
-             filtered.append(total_duration)
+        # 만약 filtered의 길이가 2 미만이면 강제로 total_duration (또는 evidences의 최대 end)을 추가하여 최소 1개의 fragment가 생성되도록 보장
+        target_end = total_duration if total_duration > 0 else (max([e["end"] for e in evidences]) if evidences else 0.0)
+        if len(filtered) < 2 and target_end > 0.0:
+            filtered.append(target_end)
+        elif target_end > 0.0 and filtered[-1] < target_end - 0.5:
+            filtered.append(target_end)
              
         return filtered
 

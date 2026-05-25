@@ -20,7 +20,7 @@ class CognitiveFragment:
         }
 
 class ArchiveManager:
-    """紐?????議곌컖??李얠븘二쇰뒗 ?꾩뭅?대툕 ?쒖뒪??""
+    """Archive manager for finding cognitive fragments."""
     def save_fragment(self, fragment):
         # ?곗씠?곕쿋?댁뒪 諛??ㅽ넗由ъ? ???濡쒖쭅
         print(f"議곌컖 {fragment.fragment_id} ?꾩뭅?대툕 ?깅줉 ?꾨즺. (?쒓렇: {fragment.metadata['tags']})")

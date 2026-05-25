@@ -390,6 +390,12 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
 
   const buildSeqFrags = useCallback(
     (proposalKey: "A" | "B"): Fragment[] => {
+      // 만약 재생하려는 제안서(A or B)가 현재 커밋/편집 중인 제안서(committedProposalId)이고,
+      // 사용자 수동 편집 목록(fragments)이 존재한다면 이를 우선적으로 재생에 사용
+      if (proposalKey === committedProposalId && fragments && fragments.length > 0) {
+        return fragments.filter((f) => !f.excluded);
+      }
+
       const p = proposals?.[proposalKey];
       if (!p) return [];
 
@@ -409,7 +415,7 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
         .map((id) => allSourceFragments.find((f) => f.fragment_id === id))
         .filter(Boolean) as Fragment[];
     },
-    [proposals, allSourceFragments]
+    [proposals, allSourceFragments, committedProposalId, fragments]
   );
 
 

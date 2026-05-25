@@ -1,0 +1,15 @@
+﻿ M ccut_backend/archive/manager.py
+ M ccut_backend/engine/proposal_engine.py
+ M ccut_backend/main.py
+ M ccut_frontend/src/hooks/useProposalState.ts
+ M ccut_frontend/src/pages/Index.tsx
+ M ccut_frontend/src/services/videoService.ts
+?? artifacts/micro_candidate_simulation/
+?? artifacts/rollback_backup/
+?? scratch/db_inspect.py
+?? scratch/db_sample.py
+?? scratch/reset_cache.ps1
+?? scratch/test_proposal.py
+?? tools/rollback_to_qwen3_failed.py
+?? tools/simulate_micro_candidate_layer.py
+?? tools/stage_by_hunk.py

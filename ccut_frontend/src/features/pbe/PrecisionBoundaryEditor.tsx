@@ -63,16 +63,16 @@ const PrecisionBoundaryEditor: React.FC<PrecisionBoundaryEditorProps> = ({
 
     const modalDragStart = useRef({ x: 0, y: 0 });
 
-    // 조각 단위로 그룹핑
+    // 조각 단위로 그룹핑 (각 조각별로 12개의 파노라마 프레임을 backend GET API를 통해 로딩)
     const fragmentGroups: FragmentGroup[] = fragments.map((frag) => ({
         fragment: frag,
         frames: Array.from(
-            { length: frag.end_frame - frag.start_frame },
+            { length: 12 },
             (_, i) => ({
-                frameNumber: frag.start_frame + i,
-                thumbnailBase: frag.thumbnail?.thumbnail_url || frag.thumbnail || '',
+                frameNumber: i,
+                thumbnailBase: `/static/thumbnails/P_${frag.fragment_id}_${i}.jpg`,
             })
-        ).filter((f) => f.thumbnailBase),
+        ),
     }));
 
     // 비례바 생성 - 모든 조각 경계에 생성
@@ -481,7 +481,7 @@ const PrecisionBoundaryEditor: React.FC<PrecisionBoundaryEditorProps> = ({
                                         {group.frames.map((frame, idx) => (
                                             <img
                                                 key={`${group.fragment.fragment_id}-${frame.frameNumber}-${idx}`}
-                                                src={`${frame.thumbnailBase}/frame_${frame.frameNumber}.jpg`}
+                                                src={frame.thumbnailBase}
                                                 alt=""
                                                 style={{
                                                     width: '80px',

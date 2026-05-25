@@ -192,14 +192,14 @@ def setup_brain():
             models = [m["name"] for m in r.json().get("models", [])]
             ok(f"Ollama ?곌껐 ?깃났. ?ㅼ튂??紐⑤뜽: {models}")
             if any("llama3.1" in m for m in models):
-                ok("Llama 3.1 以鍮??꾨즺 ??)
+                ok("Llama 3.1 ready")
             else:
-                warn("Llama 3.1 誘몃떎?대줈??)
+                warn("Llama 3.1 not_downloaded")
                 info("?곕??먯뿉???ㅽ뻾: ollama pull llama3.1  (??4.7GB)")
         except Exception:
             ok("Ollama ?ы듃 ?대┝ (API ?묐떟 ?놁쓬)")
     else:
-        warn("Ollama ?쒕쾭 誘멸???)
+        warn("Ollama server not running")
         info("1. https://ollama.ai ?먯꽌 Ollama ?ㅼ튂")
         info("2. ollama serve")
         info("3. ollama pull llama3.1")
@@ -235,7 +235,7 @@ def setup_face():
     else:
         warn("Wav2Lip 紐⑤뜽 ?놁쓬 (FFmpeg ?대갚 紐⑤뱶濡??숈옉 以?")
         print()
-        info("???섎룞 ?ㅼ튂 媛?대뱶 ??)
+        info("Wav2Lip manual install guide")
         print(f"""
   1. 由ы룷吏?좊━ ?대줎:
      git clone https://github.com/Rudrabha/Wav2Lip {wav2lip_dir}
@@ -259,7 +259,7 @@ def setup_face():
 #  ?뾼  MEMORY  ?? Qdrant + Sentence Transformers
 # ?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧
 def setup_memory():
-    banner("?뾼", "[Memory] Qdrant + Sentence Transformers 珥덇린??)
+    banner("Memory", "[Memory] Qdrant + Sentence Transformers Setup")
 
     missing = []
     if not check_import("qdrant_client"):
@@ -293,16 +293,16 @@ def setup_memory():
 #  ?뱤  CHECK  ?? ?꾩껜 ?ㅼ튂 ?꾪솴 由ы룷??
 # ?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧
 def check_all():
-    banner("?뱤", "CCUT 1.0.6 濡쒖뺄 AI ?ㅼ튂 ?꾪솴 由ы룷??)
+    banner("Check", "CCUT 1.0.6 Local AI Setup Status Report")
 
     results = []
 
     def chk(label: str, condition: bool, hint: str = ""):
-        sym = "?? if condition else "??
+        sym = "[OK]" if condition else "[FAIL]"
         results.append(condition)
         msg = f"  {sym}  {label}"
         if not condition and hint:
-            msg += f"\n       ??{hint}"
+            msg += f"\\n       Hint: {hint}"
         print(msg)
 
     print()
@@ -365,8 +365,8 @@ if __name__ == "__main__":
     parser.add_argument("--voice",  action="store_true", help="XTTS v2 ?ㅼ슫濡쒕뱶")
     parser.add_argument("--brain",  action="store_true", help="Ollama ?곹깭 ?뺤씤")
     parser.add_argument("--face",   action="store_true", help="Wav2Lip ?덈궡")
-    parser.add_argument("--memory", action="store_true", help="Qdrant 珥덇린??)
-    parser.add_argument("--check",  action="store_true", help="?꾩껜 ?ㅼ튂 ?꾪솴 由ы룷??)
+    parser.add_argument("--memory", action="store_true", help="Qdrant Setup")
+    parser.add_argument("--check",  action="store_true", help="Check Status")
     parser.add_argument("--size",   default="base",      help="Whisper 紐⑤뜽 ?ш린 (base/large-v3)")
     parser.add_argument("--qwen",   default="2B",         help="Qwen2-VL ?ш린 (2B/7B)")
     args = parser.parse_args()
@@ -377,7 +377,7 @@ if __name__ == "__main__":
     ])
 
     print()
-    print("  ?? CCUT 1.0.6 Pure Local AI Studio ???섍꼍 援ъ텞湲?)
+    print("  CCUT 1.0.6 Pure Local AI Studio Setup")
     print(f"  ???寃쎈줈: {MODELS}")
 
     t0 = time.time()
@@ -393,9 +393,9 @@ if __name__ == "__main__":
         if run_all or args.memory: setup_memory()
 
         if run_all:
-            print(f"\n{'??*55}")
+            print("\\n" + "="*55)
             print(f"  ???꾩껜 援ъ텞 ?꾨즺 ({time.time()-t0:.0f}s)")
             print("  ?댁젣 ?명꽣?룹쓣 ?딆뼱??CCUT? 硫덉텛吏 ?딆뒿?덈떎.")
-            print(f"{'??*55}\n")
+            print("="*55 + "\\n")
             check_all()
 

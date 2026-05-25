@@ -697,10 +697,60 @@ class ProposalEngine:
             if len(current_sources) < target_source_count:
                 warnings.append("insufficient_source_count")
 
-        # 3. Max Ratio 체크
-        dist = self._calculate_source_distribution(selected)
-        if dist["max_single_source_ratio"] > max_ratio_limit:
-             warnings.append("max_single_source_clip_ratio_exceeded")
+        # 3. Max Ratio 체크 및 보정 (단일 소스의 점유율이 max_ratio_limit를 초과하지 않도록 보장)
+        iterations = 0
+        max_iterations = 30
+        while iterations < max_iterations:
+            dist = self._calculate_source_distribution(selected)
+            if not selected:
+                break
+            
+            max_sid = None
+            max_ratio = 0.0
+            for sid, info in dist["by_source"].items():
+                if info["ratio"] > max_ratio:
+                    max_ratio = info["ratio"]
+                    max_sid = sid
+            
+            if max_ratio <= max_ratio_limit:
+                break
+            
+            over_frags = [f for f in selected if f.get("source_id") == max_sid]
+            if not over_frags:
+                break
+            
+            worst_frag = min(over_frags, key=lambda x: x.get("structural", {}).get("edit_value", 0.0))
+            selected_ids = {f.get("id") for f in selected}
+            potential_replacements = []
+            
+            for c in candidates:
+                if c.get("id") in selected_ids:
+                    continue
+                c_sid = c.get("source_id")
+                if not c_sid or c_sid == max_sid:
+                    continue
+                
+                # 임시 시뮬레이션
+                temp_selected = [f for f in selected if f.get("id") != worst_frag.get("id")] + [c]
+                temp_dist = self._calculate_source_distribution(temp_selected)
+                if temp_dist["max_single_source_ratio"] <= max_ratio_limit or temp_dist["max_single_source_ratio"] < max_ratio:
+                    potential_replacements.append(c)
+            
+            if potential_replacements:
+                best_replacement = max(potential_replacements, key=lambda x: x.get("structural", {}).get("edit_value", 0.0))
+                selected.remove(worst_frag)
+                selected.append(best_replacement)
+            else:
+                if len(selected) > 2:
+                    selected.remove(worst_frag)
+                else:
+                    warnings.append("max_single_source_clip_ratio_exceeded")
+                    break
+            
+            iterations += 1
+            
+        if iterations >= max_iterations:
+            warnings.append("max_single_source_clip_ratio_adjustment_reached_limit")
 
         # 4. Source Rotation (간단한 정렬 보정)
         balanced_seq = []
