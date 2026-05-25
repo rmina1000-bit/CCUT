@@ -1438,6 +1438,7 @@ async def post_generate_project_proposals(req: ProjectProposalRequest):
         user_intent=user_intent, 
         template_id=req_template_id
     )
+    resolved_story_template["user_intent"] = user_intent
     logger.info(f"[PROPOSAL] Resolved Template: {resolved_story_template.get('template_id')} (via {req_template_id or 'intent'})")
 
     if not source_ids:

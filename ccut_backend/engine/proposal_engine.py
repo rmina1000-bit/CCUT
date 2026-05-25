@@ -106,6 +106,11 @@ class ProposalEngine:
         p_a["duration"] = round(sum(self._safe_duration(f) for f in p_a["sequence"]), 2)
         p_b["duration"] = round(sum(self._safe_duration(f) for f in p_b["sequence"]), 2)
 
+        # [PROPOSAL_BALANCED_SOURCES_AFTER]
+        import json
+        after_dist = self._calculate_source_distribution(p_b["sequence"])
+        print(f"[PROPOSAL_BALANCED_SOURCES_AFTER] selected_count={len(p_b['sequence'])}, source_distribution={json.dumps(after_dist, ensure_ascii=False)}, used_source_count={after_dist['source_count']}, total_duration={p_b['duration']}")
+
         for p in proposals:
             p["project_id"] = project_id
             p["source_ids"] = source_ids
@@ -257,60 +262,169 @@ class ProposalEngine:
 
         # 정렬 기준: 1. b_score 내림차순, 2. start 오름차순 (결정론 유지)
         sorted_frags = sorted(fragments, key=lambda x: (edit_score(x), -x.get("start", 0)), reverse=True)
-        
+
+        is_balanced_sources = False
+        if intent:
+            if intent.get("coverage") == "balanced_sources":
+                is_balanced_sources = True
+            else:
+                instruction_text = intent.get("instruction_text", "")
+                if instruction_text:
+                    lower_text = instruction_text.lower()
+                    if "골고루" in lower_text or "balanced" in lower_text or "여러 영상" in lower_text:
+                        is_balanced_sources = True
+
+        threshold_used = 0.05 if is_balanced_sources else 0.1
+
+        # [PROPOSAL_BALANCED_SOURCES_INPUT]
+        eligible_frags = [f for f in fragments if float(f.get("structural", {}).get("edit_value", 0.5)) >= threshold_used]
+        eligible_source_count = len(set(f.get("source_id") for f in eligible_frags if f.get("source_id")))
+        import json
+        print(f"[PROPOSAL_BALANCED_SOURCES_INPUT] requested_source_count={len(source_ids) if source_ids else 1}, candidate_source_count={len(set(f.get('source_id') for f in fragments if f.get('source_id')))}, eligible_after_threshold={eligible_source_count}, threshold_used={threshold_used}, user_intent={json.dumps(intent, ensure_ascii=False)}")
+
+        # [PROPOSAL_BALANCED_SOURCES_BEFORE]
+        before_dist = self._calculate_source_distribution(fragments)
+        print(f"[PROPOSAL_BALANCED_SOURCES_BEFORE] source_distribution={json.dumps(before_dist, ensure_ascii=False)}")
+
         selected = []
         current_len = 0
-        is_fast_path = target_len <= 60.0
-        source_count = len(source_ids) if source_ids else 1
-
-        # [STEP2C-R2] single-source / multi-source max_frags 분리
-        if source_count == 1:
-            max_frags = min(len(fragments), 12)
-        else:
-            _base = source_count * 2 if is_fast_path else source_count * 3
-            _cap  = 40 if is_fast_path else 60
-            max_frags = min(max(_base, 6), _cap)
-
-        print(f"[PROPOSAL ENGINE][R4] User(Diversity) max_frags={max_frags} "
-              f"source_count={source_count} is_fast_path={is_fast_path} "
-              f"fragment_pool={len(fragments)}")
-
-        # [STEP 10-I.5.28-E8-R1] 소스 밸런싱 추적
         source_counts = {}
-        is_multi = source_ids and len(source_ids) > 1
-
-        # [STEP2C-R2] B-mode edit_value<0.1 제외 카운터 (R3 진단용)
         _low_edit_excluded = 0
 
-        for f in sorted_frags:
-            # [STEP 2-C-R4] 실시간 점수 재계산 (selected_b_group_keys 반영)
-            # 단, sorted_frags가 이미 정렬되어 있으므로 여기서는 필터링 위주로 동작
-            f_group_key = self._semantic_group_key(f.get("fragment_id"))
-            
-            # 엄격한 필터링: edit_value가 0.1 미만이면 제외
-            if f.get("structural", {}).get("edit_value", 0.5) < 0.1:
-                _low_edit_excluded += 1
-                continue
-            f_dur = self._safe_duration(f)
-            f_sid = f.get("source_id")
+        if is_balanced_sources:
+            # 1. source별로 eligible_frags 그룹화
+            source_to_frags = {}
+            for f in eligible_frags:
+                sid = f.get("source_id")
+                if sid:
+                    if sid not in source_to_frags:
+                        source_to_frags[sid] = []
+                    source_to_frags[sid].append(f)
 
-            if len(selected) >= max_frags: break
+            # 2. 각 source 그룹 내부 조각들을 edit_score 기준 내림차순 정렬 (start_time 내림차순 등으로 결정론 유지)
+            for sid in source_to_frags:
+                source_to_frags[sid] = sorted(source_to_frags[sid], key=lambda x: (edit_score(x), -x.get("start", 0)), reverse=True)
 
-            # [STEP 10-I.5.28-E8-R1] Source Soft Balance (User: 0.8 penalty)
-            if is_multi and len(selected) > 2:
-                share = source_counts.get(f_sid, 0) / len(selected)
-                if share > 0.4: # 유저 모드는 조금 더 엄격하게 분산 시도
-                    if current_len + f_dur <= target_len * 0.9:
+            # 3. 1차 라운드: source별 best candidate 1개씩 우선 선별
+            for sid in (source_ids or []):
+                frags_for_sid = source_to_frags.get(sid, [])
+                if not frags_for_sid:
+                    continue
+                for f in frags_for_sid:
+                    f_dur = self._safe_duration(f)
+                    if current_len + f_dur <= target_len * 1.1:
+                        if self._is_contiguous_to_selected(f, selected):
+                            continue
+                        selected.append(f)
+                        f_group_key = self._semantic_group_key(f.get("fragment_id"))
+                        selected_b_group_keys.add(f_group_key)
+                        current_len += f_dur
+                        source_counts[sid] = source_counts.get(sid, 0) + 1
+                        break
+
+            # 4. 2차 라운드: target_length 초과 전까지 round-robin 추가
+            used_fids = {f.get("fragment_id") for f in selected}
+            has_more = True
+
+            # max_frags 계산
+            is_fast_path = target_len <= 60.0
+            source_count = len(source_ids) if source_ids else 1
+            if source_count == 1:
+                max_frags = min(len(fragments), 12)
+            else:
+                _base = source_count * 2 if is_fast_path else source_count * 3
+                _cap  = 40 if is_fast_path else 60
+                max_frags = min(max(_base, 6), _cap)
+
+            print(f"[PROPOSAL ENGINE][R4] User(Diversity-Balanced) max_frags={max_frags} source_count={source_count} target_len={target_len}")
+
+            while has_more and current_len < target_len and len(selected) < max_frags:
+                has_more = False
+                for sid in (source_ids or []):
+                    if len(selected) >= max_frags:
+                        break
+                    frags_for_sid = source_to_frags.get(sid, [])
+                    if not frags_for_sid:
                         continue
 
-            if current_len + f_dur <= target_len * 1.1:
-                # [STEP 10-K-C1-R36] 선택 단계 Guard: 이미 선택된 조각과 연속되는지 확인
-                if self._is_contiguous_to_selected(f, selected):
+                    next_frag = None
+                    for f in frags_for_sid:
+                        if f.get("fragment_id") not in used_fids:
+                            next_frag = f
+                            break
+
+                    if next_frag:
+                        has_more = True
+                        f_dur = self._safe_duration(next_frag)
+
+                        # 같은 source 과다 점유 제한 (share > 0.4 시 skip)
+                        if len(selected) > 2:
+                            share = source_counts.get(sid, 0) / len(selected)
+                            if share > 0.4:
+                                if current_len + f_dur <= target_len * 0.9:
+                                    continue
+
+                        if current_len + f_dur <= target_len * 1.1:
+                            if self._is_contiguous_to_selected(next_frag, selected):
+                                used_fids.add(next_frag.get("fragment_id"))
+                                continue
+                            selected.append(next_frag)
+                            used_fids.add(next_frag.get("fragment_id"))
+                            f_group_key = self._semantic_group_key(next_frag.get("fragment_id"))
+                            selected_b_group_keys.add(f_group_key)
+                            current_len += f_dur
+                            source_counts[sid] = source_counts.get(sid, 0) + 1
+                            if current_len >= target_len:
+                                break
+
+            # _low_edit_excluded 카운팅
+            for f in fragments:
+                if f.get("structural", {}).get("edit_value", 0.5) < threshold_used:
+                    _low_edit_excluded += 1
+
+        else:
+            # 기존 B안 선별 알고리즘 (else 분기로 기존 로직 완전 보존)
+            is_fast_path = target_len <= 60.0
+            source_count = len(source_ids) if source_ids else 1
+            if source_count == 1:
+                max_frags = min(len(fragments), 12)
+            else:
+                _base = source_count * 2 if is_fast_path else source_count * 3
+                _cap  = 40 if is_fast_path else 60
+                max_frags = min(max(_base, 6), _cap)
+
+            print(f"[PROPOSAL ENGINE][R4] User(Diversity) max_frags={max_frags} "
+                  f"source_count={source_count} is_fast_path={is_fast_path} "
+                  f"fragment_pool={len(fragments)}")
+
+            is_multi = source_ids and len(source_ids) > 1
+
+            for f in sorted_frags:
+                f_group_key = self._semantic_group_key(f.get("fragment_id"))
+
+                # 엄격한 필터링: edit_value가 0.1 미만이면 제외
+                if f.get("structural", {}).get("edit_value", 0.5) < 0.1:
+                    _low_edit_excluded += 1
                     continue
-                selected.append(f)
-                selected_b_group_keys.add(f_group_key) # [R4] 그룹 추적
-                current_len += f_dur
-                source_counts[f_sid] = source_counts.get(f_sid, 0) + 1
+                f_dur = self._safe_duration(f)
+                f_sid = f.get("source_id")
+
+                if len(selected) >= max_frags: break
+
+                # [STEP 10-I.5.28-E8-R1] Source Soft Balance (User: 0.8 penalty)
+                if is_multi and len(selected) > 2:
+                    share = source_counts.get(f_sid, 0) / len(selected)
+                    if share > 0.4: # 유저 모드는 조금 더 엄격하게 분산 시도
+                        if current_len + f_dur <= target_len * 0.9:
+                            continue
+
+                if current_len + f_dur <= target_len * 1.1:
+                    if self._is_contiguous_to_selected(f, selected):
+                        continue
+                    selected.append(f)
+                    selected_b_group_keys.add(f_group_key)
+                    current_len += f_dur
+                    source_counts[f_sid] = source_counts.get(f_sid, 0) + 1
 
         # [STEP 2-C-R4-R1] B Exclusive Group Fallback Fix
         b_group_keys = {self._semantic_group_key(f.get("fragment_id")) for f in selected}
