@@ -161,8 +161,8 @@ class SemanticFragmentGenerator:
             
             final_fragments.append(frag)
 
-        # 8. Merge / Split 보정 (2s ~ 60s)
-        final_fragments = self.apply_merge_split(final_fragments, boundaries, total_duration)
+        # 8. Merge / Split 보정 (2s ~ 60s) - 스마트 상황 반영을 위해 evidences 전달
+        final_fragments = self.apply_merge_split(final_fragments, boundaries, total_duration, evidences=evidences)
 
         # R16-R1: Sentence Boundary Snap 보정
         final_fragments, snap_debug = self.apply_sentence_boundary_snap(
@@ -352,6 +352,9 @@ class SemanticFragmentGenerator:
                                     "reason": "evidence_board_text_end"
                                 })
 
+        # [OPTIMIZATION] O(E) 탐색 방지를 위한 evidence hash map 구축
+        evidence_map = {ev.get("fragment_id"): ev for ev in evidences if ev.get("fragment_id")} if evidences else {}
+
         for i, frag in enumerate(final_fragments):
             # 이 fragment에 해당하는 words 수집 (real_words count 용)
             words = []
@@ -364,21 +367,21 @@ class SemanticFragmentGenerator:
             ev_words = []
             if evidences:
                 for ref in frag.get("semantic", {}).get("evidence_refs", []):
-                    for ev in evidences:
-                        if ev.get("fragment_id") == ref and ev.get("text"):
-                            text = ev["text"].strip()
-                            tokens = text.split()
-                            # 각 토큰을 가상 word timestamp로 변환
-                            # start/end를 fragment 구간에 균등 분배 (근사값)
-                            if tokens:
-                                frag_dur = frag["end"] - frag["start"]
-                                step = frag_dur / len(tokens)
-                                for j, tok in enumerate(tokens):
-                                    ev_words.append({
-                                        "word": tok,
-                                        "start": round(frag["start"] + j * step, 3),
-                                        "end": round(frag["start"] + (j + 1) * step, 3)
-                                    })
+                    ev = evidence_map.get(ref)
+                    if ev and ev.get("text"):
+                        text = ev["text"].strip()
+                        tokens = text.split()
+                        # 각 토큰을 가상 word timestamp로 변환
+                        # start/end를 fragment 구간에 균등 분배 (근사값)
+                        if tokens:
+                            frag_dur = frag["end"] - frag["start"]
+                            step = frag_dur / len(tokens)
+                            for j, tok in enumerate(tokens):
+                                ev_words.append({
+                                    "word": tok,
+                                    "start": round(frag["start"] + j * step, 3),
+                                    "end": round(frag["start"] + (j + 1) * step, 3)
+                                })
 
             # real_words 기반으로 이 fragment에 속한 sentence end 후보 계산
             curr_candidates = []
@@ -774,8 +777,32 @@ class SemanticFragmentGenerator:
             continuity["topic_similarity"] = 0.7 if current["semantic"]["topic"] == prev["semantic"]["topic"] else 0.4
         return continuity
 
-    def apply_merge_split(self, fragments, boundaries, total_duration):
-        """[STEP 10-I.5.3] Merge (3s 미만) 및 Split (20s 초과) 보정"""
+    def _is_important_boundary(self, boundary_time: float, evidences: list) -> bool:
+        """
+        [CONTEXT_AWARE_BOUNDARY] 경계 시간대(boundary_time)가 장면 전환이나 오디오/문장의 시작/끝이 있는 중요 지점인지 판별합니다.
+        """
+        if not evidences:
+            return False
+
+        for ev in evidences:
+            # 1. 장면 전환(Scene Change) 감지
+            scene_changes = ev.get("scene_change") or []
+            if isinstance(scene_changes, list):
+                for sc in scene_changes:
+                    if abs(sc - boundary_time) < 0.15:
+                        return True
+
+            # 2. Whisper ASR 문장 경계 감지
+            if ev.get("worker_name") == "whisper_segments":
+                start_t = ev.get("start")
+                end_t = ev.get("end")
+                if (start_t is not None and abs(start_t - boundary_time) < 0.15) or (end_t is not None and abs(end_t - boundary_time) < 0.15):
+                    return True
+
+        return False
+
+    def apply_merge_split(self, fragments, boundaries, total_duration, evidences=None):
+        """[STEP 10-I.5.3] Merge (3s 미만) 및 Split (20s 초과) 보정 - 스마트 상황 반영"""
         if not fragments: return []
         
         is_fast_path = total_duration <= 60.0
@@ -790,8 +817,21 @@ class SemanticFragmentGenerator:
                 continue
             
             last = res[-1]
-            # 너무 짧으면 이전 조각에 병합 (단, 병합 후 너무 길어지지 않는 경우)
-            if last["structural"]["duration"] < merge_threshold:
+            last_dur = last["structural"]["duration"]
+            boundary_t = last["end"]
+            
+            # 중요 경계(장면 전환 또는 문장 전환점)가 존재하는지 확인
+            is_important = self._is_important_boundary(boundary_t, evidences) if evidences else False
+            
+            # 1.5초 미만의 극단적으로 짧은 쓰레기 조각은 흐름을 위해 강제 병합하되,
+            # 그 이상(1.5s ~ 3.0s)이면서 중요한 장면 전환/문장이 걸쳐 있으면 병합하지 않고 미세 조각으로 보존
+            should_merge = False
+            if last_dur < 1.5:
+                should_merge = True
+            elif last_dur < merge_threshold and not is_important:
+                should_merge = True
+                
+            if should_merge:
                 # 병합
                 last["end"] = frag["end"]
                 last["structural"]["duration"] = round(last["end"] - last["start"], 2)

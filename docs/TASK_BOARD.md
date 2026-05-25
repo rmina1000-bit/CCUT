@@ -14,11 +14,26 @@
 - [x] `PROPOSAL_PREVIEW_RENDER_POLICY.md` 문서화
 - [x] **push 완료: `git push origin ccut-1.0.4-step9`** (2026-05-10)
 
-## NEXT — 전체 파이프라인 Runtime Audit 📋
+## 2026-05-25 — Guard 모듈화 & 편집 파이프라인 정밀 진단 (DONE ✅)
+- [x] 아키텍처 감사 — docs/ 명세 전체 코드 대조 검증
+- [x] 시뮬레이터 작성 및 실행 — 시간역행 가드 80% 누수 발견 및 pre-sort 보정
+- [x] `proposal_guards.py` 신설 — temporal_regression_guard, contiguous_guard, response_level_guard 통합
+- [x] 미세조각 최소 갭 완화: 30프레임 → 15프레임 (0.5초)
+- [x] B안 소스 점유 한도 완화: 0.4 → 0.55
+- [x] `proposal_engine.py` 가드 메서드 제거 및 proposal_guards 위임 리팩토링
+- [x] `main.py` _response_level_sequence_guard 제거 및 모듈 통합
+- [x] DB 분석 데이터 전체 초기화 (sources 32개만 보존)
+- [x] storage 파생 파일 전부 정리 (uploads 31개 보존)
+- [x] D드라이브 사본 백업 동기화 완료
+- [x] **git push 완료: `ccut-1.0.4-step9`** (2026-05-25)
+
+## NEXT — 소스 다양성 & 시각 증거 통합 📋
+- [ ] **새 영상 인제스트** — 초기화된 DB에 영상 새로 등록 및 분석
+- [ ] **소스 편향 근원 분석** — 일부 소스만 극단적으로 선택되는 원인 규명
+- [ ] **STEP 10-K-B3** — Balanced Sources Proposal Constraint 구현
+- [ ] **STEP 10-K-C** — Visual Evidence Scoring Integration
 - [ ] **PART A** — 인지조각 생성 감사 (signal_processor, semantic_engine)
 - [ ] **PART B** — 편집 파이프라인 감사 (export_engine, render_engine)
-- [ ] **PART C** — A/B 제안 품질 감사 (proposal_engine, story_template_resolver)
-- [ ] **PART D** — 오픈소스 AI 런타임 감사 (ASR, VL, Narrative, Factory/Governor)
 
 ---
 

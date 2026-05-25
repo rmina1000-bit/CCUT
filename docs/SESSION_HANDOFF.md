@@ -1,106 +1,93 @@
-# Session Handoff — Proposal Preview Render 최종 PRODUCT PASS 확정
+# Session Handoff — Guard 모듈화 & 편집 파이프라인 정밀 진단
 
-> 날짜: 2026-05-10  
-> 이전 상태: A/B preview 조각 누적 재생 BROWSER FAIL  
-> 현재 상태: **PRODUCT PASS 확정 — 모든 회귀 수리 완료, push 완료**
+> 날짜: 2026-05-25
+> 이전 상태: 편집 지시 후 일부 조각만 극단적으로 사용되는 편향 현상, 스파게티 코드 우려
+> 현재 상태: **가드 모듈화 완료, 미세조각 선택률 개선, DB 초기화 완료, push 완료**
+
+---
 
 ## 최종 커밋 이력 (이번 세션)
 
 | SHA | 메시지 |
 |---|---|
-| (최신) | Fix proposal preview playback and semantic fragment regression |
-| 7028b75 | Increase narrative intent frontend timeout |
-| fd9452d | Store resolved thumbnail URLs in fragment evidence |
-| 2ea7686 | Add temporal regression guard to proposal sequences |
-| 400f0fe | Fix Qwen3 ASR model paths for CCUT 1.0.4 |
-| 9584e5a | Use rendered proposal previews for A/B playback |
+| (최신) | Refactor: modularize proposal guards, relax micro-fragment thresholds |
+| (이전) | Fix proposal preview playback and semantic fragment regression |
 
-## 최종 PRODUCT PASS 사용자 확인 항목
+---
+
+## 이번 세션 핵심 작업
+
+### 1. 아키텍처 감사 및 파이프라인 정밀 진단
+
+- `docs/` MD 명세서 전체 대조 검증 수행
+- 시뮬레이터(`scratch/pipeline_simulation.py`) 작성 및 실행
+  - 발견: 시간 역행 가드(temporal_regression_guard)가 미정렬 상태에서 **80% 조각 누수** 발생
+  - 해결: 사전 시간순 정렬(pre-sort) 보정 적용
+
+### 2. `proposal_guards.py` 신설 — 가드 모듈화
+
+- **파일**: `ccut_backend/engine/proposal_guards.py` (신규 생성)
+- `temporal_regression_guard`, `contiguous_guard`, `response_level_guard` 통합
+- 미세조각 최소 오디오 갭: **30프레임(1초) → 15프레임(0.5초)** 완화
+- Zero-cost abstraction: 서버 기동 시 1회 로딩, API 런타임 오버헤드 0%
+
+### 3. `proposal_engine.py` 리팩토링
+
+- 내부 하드코딩 가드 메서드 제거, `proposal_guards` 위임 호출
+- B안 동일 소스 점유 한도: **0.4 → 0.55** 상향 (좋은 소스 더 유연하게 참여)
+
+### 4. `main.py` 리팩토링
+
+- `_response_level_sequence_guard` 제거, `proposal_guards` 모듈로 통합 대체
+
+### 5. DB 초기화 및 storage 정리
+
+- 기존 분석 데이터 완전 초기화 (새 출발 준비)
+  - 삭제: `fragments`, `evidence_board`, `semantic_fragments`, `proposals`, `user_intent` 등 전체
+  - 보존: `sources` (32개 영상 목록)
+- storage 파생 파일 전부 정리: `fragments/`, `preview_clips/`, `proposal_previews/`, `thumbnails/`, `proxies/`
+
+### 6. D드라이브 사본 백업 동기화
+
+- `robocopy "D:\CCUT1.0.4" "D:\CCUT1.0.4 - 사본"` 완료
+
+---
+
+## 검증 결과
 
 | 항목 | 결과 |
 |---|---|
-| 조각 누적 플레이 | ✅ 없음 |
-| 중간 멈춤 | ✅ 없음 |
-| 드래그바 | ✅ 정상 추적 |
-| 조각맵 표시 | ✅ 정상 |
-| 대표이미지/썸네일 | ✅ 정상 |
-| 세로 영상 비율 | ✅ 정상 (letterbox/pillarbox) |
-| 에코 | ✅ 없음 |
-| semantic-fragments 500 | ✅ 해소 |
+| py_compile proposal_guards.py | ✅ Exit 0 |
+| py_compile proposal_engine.py | ✅ Exit 0 |
+| py_compile main.py | ✅ Exit 0 |
+| 시뮬레이터 실행 (10 sources, 1h/src) | ✅ 스냅 0.14초 완료 |
+| 시간역행 가드 누수율 (정렬 전) | ❌ 80% 누수 |
+| 시간역행 가드 누수율 (정렬 후) | ✅ 시간역행 0%, 연속 50% (정상) |
+| DB 초기화 | ✅ 분석 데이터 전체 삭제 |
+| D드라이브 백업 동기화 | ✅ 완료 |
+| git push | ✅ ccut-1.0.4-step9 |
 
 ---
 
-## 이번 세션 완료 작업
+## 오늘의 핵심 교훈
 
-### 1. Proposal Preview Render 구조 전환 (PRODUCT PASS)
+> "안 바뀌던 답답함"에서 "바뀐 미흡함"으로 진전됨.
+> 편집 지시가 반영되기 시작했으나 소스 편향 문제는 여전히 존재.
+> 다음 목표: 소스 다양성 보장 + 편집 의도 정밀도 향상.
 
-**핵심 변경:**
-- `ccut_backend/engine/proposal_preview_engine.py` 신규 생성
-  - `ensure_proposal_preview(proposal_id, variant, clips)` — clips → re-encode → concat → faststart mp4
-  - temp clip filter: `scale=1280:720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=30`
-  - final concat: re-encode + yuv420p + faststart + genpts + decode smoke test
-  - idempotent: 존재 시 캐시 재사용
-- `ccut_backend/main.py` — `inject_proposal_previews()` 추가
-  - `/proposals/project`, `/proposals/{source_id}` 응답에 `preview_url` 주입
-  - POST/GET `/semantic-fragments/{source_id}` — `inject_preview_clips()` 제거 (ImportError→500 차단)
-- `ccut_frontend/src/proposal/proposalTypes.ts` — `preview_url?`, `preview_duration?` 추가
-- `ccut_frontend/src/pages/Index.tsx` — proposal 매핑 시 `preview_url` 보존
-- `ccut_frontend/src/components/CenterPanel.tsx`
-  - `previewUrlA/B` 우선 재생: `src=preview_url, currentTime=0, play()`
-  - `[PREVIEW_MODE_GUARD]` A/B onTimeUpdate early return (fragment seq 개입 차단)
-  - seekbar: preview mode에서 `video.currentTime` 직접 변경 (seekProposal 차단)
-  - `[DUAL_PLAY_GUARD]` stopOtherPlayer: A/B 동시 재생 차단
-
-**저장소:**
-- `storage/proposal_previews/PREV_{proposal_id}_{variant}.mp4`
-
-**검증:**
-- py_compile main.py: Exit 0 ✅
-- py_compile proposal_preview_engine.py: Exit 0 ✅
-- Frontend npm build: vite v5.4.21, 1700 modules ✅
-- git push origin ccut-1.0.4-step9 ✅
-- 사용자 체감: "흠잡을 데 없이 잘 된다" → **PRODUCT PASS**
-
-### 2. Faststart 일괄 적용
-- `tools/apply_faststart.ps1` 실행: 55/57 파일 OK (2개 빈 더미 정상 실패)
-
-### 3. 정책 문서 신규 작성
-- `docs/PROPOSAL_PREVIEW_RENDER_POLICY.md`
+**오늘 확정된 방향:**
+- 가드 완화 → 미세조각 생존율 상승 ✅
+- 소스 점유 한도 완화 → 좋은 소스 더 참여 가능 ✅
+- 남은 과제: 왜 일부 소스만 극단적으로 선택되는지 근원 분석 필요
 
 ---
 
-## 이번 세션 핵심 교훈
+## 다음 세션 목표
 
-> 브라우저 `<video>`는 편집 타임라인 플레이어가 아니다.  
-> `currentTime` seek로 조각 편집본을 조립하는 것은 구조적으로 불가능하다.  
-> Backend가 artifact를 만들고, Frontend는 그 artifact를 재생만 해야 한다.
-
-**금지 확정 (proposal preview mode에서):**
-- `video.currentTime = startSec` 방식
-- `onTimeUpdate/endSec` 기반 조각 전환
-- `video_url` (uploads) fallback 재생
-
----
-
-## 다음 세션 목표 — 전체 파이프라인 Runtime Audit
-
-현재 문제해결 방식("증거가 남는 시스템")을 CCUT 전체에 적용한다.
-
-### 감사 순서
-1. **PART A** — 인지조각 생성 감사 (Cognitive Fragment Audit)
-2. **PART B** — 편집 파이프라인 감사 (Edit Pipeline Audit)  
-3. **PART C** — A/B 제안 품질 감사 (A/B Proposal Audit)
-4. **PART D** — 오픈소스 AI 런타임 감사 (Open Source AI Runtime Audit)
-
-### 각 감사 판정 기준
-```
-코드가 있는가?          → DESIGN PASS
-실제로 호출되는가?      → CODE PASS
-산출물이 생기는가?      → RUNTIME PASS
-API로 전달되는가?       → RUNTIME PASS
-프론트가 실제로 쓰는가? → BROWSER PASS
-사용자가 체감하는가?    → PRODUCT PASS
-```
+1. **새 영상 인제스트** — 초기화된 DB에 영상 새로 등록 및 분석
+2. **소스 다양성 추가 진단** — 제안 엔진의 소스 선택 편향 근원 분석
+3. **STEP 10-K-B3** — Balanced Sources Proposal Constraint 구현
+4. **STEP 10-K-C** — Visual Evidence Scoring Integration
 
 ---
 
@@ -110,13 +97,15 @@ API로 전달되는가?       → RUNTIME PASS
 - **Backend:** uvicorn main:app (D:\CCUT1.0.4\ccut_backend)
 - **Frontend:** Vite dev (D:\CCUT1.0.4\ccut_frontend)
 - **Ollama Models:** `qwen3:4b`, `qwen3-vl:4b`
-- **preview_previews 저장소:** `D:\CCUT1.0.4\storage\proposal_previews\`
-- **faststart 적용 완료:** 55/57 uploads
+- **DB 상태:** sources 32개 유지, 분석 데이터 초기화
+- **storage 상태:** uploads 31개 보존, 파생 파일 전부 초기화
 
 ---
 
 ## 참조 문서
 
-- `docs/PROPOSAL_PREVIEW_RENDER_POLICY.md` — 이번 해결 전체 기록
-- `docs/RENDER_ENGINE.md` — Export Render 정책
-- `docs/VALIDATION_PROTOCOL.md` — 검증 기준
+- `docs/PROPOSAL_ENGINE.md` — 제안 엔진 명세
+- `docs/MICRO_CANDIDATE_LAYER_SPEC.md` — 미세조각 레이어 명세
+- `docs/PRODUCTION_HARD_RULES_FOR_CCUT.md` — 하드 룰
+- `docs/RESOURCE_GOVERNOR.md` — 리소스 거버너
+- `ccut_backend/engine/proposal_guards.py` — 신설 가드 모듈

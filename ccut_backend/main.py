@@ -29,6 +29,7 @@ from engine.generative_engine import generative_engine
 from ai import get_registry
 from engine.video_engine import VideoEngine
 from engine.story_template_resolver import StoryTemplateResolver
+from engine.proposal_guards import response_level_sequence_guard
 
 from auth.manager import user_manager
 from report.generator import report_gen
@@ -1346,69 +1347,7 @@ class ProjectProposalRequest(BaseModel):
     user_intent: Optional[dict] = None
     template_id: Optional[str] = None
 
-# [FORCE_RELOAD_STEP_10_K_B2_R1]
-def _response_level_sequence_guard(sequence, min_gap_frames=30):
-    if not sequence:
-        return sequence
 
-    result = []
-
-    for frag in sequence:
-        source_key = (
-            frag.get("source_id")
-            or frag.get("source_video")
-            or frag.get("source_label")
-            or "UNKNOWN"
-        )
-
-        start_frame = frag.get("start_frame")
-        end_frame = frag.get("end_frame")
-
-        if start_frame is None:
-            start = frag.get("start") or frag.get("start_time") or 0
-            start_frame = int(round(float(start) * 30))
-
-        if end_frame is None:
-            end = frag.get("end") or frag.get("end_time") or 0
-            end_frame = int(round(float(end) * 30))
-
-        blocked = False
-
-        for prev in result:
-            prev_source_key = (
-                prev.get("source_id")
-                or prev.get("source_video")
-                or prev.get("source_label")
-                or "UNKNOWN"
-            )
-
-            if prev_source_key != source_key:
-                continue
-
-            prev_start = prev.get("start_frame")
-            prev_end = prev.get("end_frame")
-
-            if prev_start is None:
-                ps = prev.get("start") or prev.get("start_time") or 0
-                prev_start = int(round(float(ps) * 30))
-
-            if prev_end is None:
-                pe = prev.get("end") or prev.get("end_time") or 0
-                prev_end = int(round(float(pe) * 30))
-
-            # 같은 source에서 바로 붙거나 1초 이내로 가까우면 제거
-            if abs(int(start_frame) - int(prev_end)) <= min_gap_frames:
-                blocked = True
-                break
-
-            if abs(int(prev_start) - int(end_frame)) <= min_gap_frames:
-                blocked = True
-                break
-
-        if not blocked:
-            result.append(frag)
-
-    return result
 
 @app.get("/proposals/project/{project_id}/sources")
 async def get_project_sources(project_id: str):
@@ -1561,9 +1500,9 @@ async def post_generate_project_proposals(req: ProjectProposalRequest):
         # Source Usage 진단 (제안 A/B 통합)
         source_usage = {}
         for p in proposals:
-            # [STEP 10-K-C1-R38] Response-Level Hard Guard
+            # [STEP 10-K-C1-R38] Response-Level Hard Guard (proposal_guards 위임)
             before = len(p.get("sequence", []))
-            p["sequence"] = _response_level_sequence_guard(p.get("sequence", []))
+            p["sequence"] = response_level_sequence_guard(p.get("sequence", []))
             after = len(p.get("sequence", []))
             p["duration"] = round(sum(
                 float(f.get("duration_sec") or f.get("duration") or 0)

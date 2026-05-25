@@ -1,4 +1,5 @@
 import uuid
+import engine.proposal_guards as guards
 
 class ProposalEngine:
     """
@@ -96,8 +97,8 @@ class ProposalEngine:
         _debug_seq("BEFORE_B", p_b["sequence"])
 
         # [STEP 10-K-C1-R37] 최종 시퀀스 하드 가드 적용 (어떠한 경우에도 연속 구간 허용 금지)
-        p_a["sequence"] = self._hard_guard_final_sequence(p_a["sequence"])
-        p_b["sequence"] = self._hard_guard_final_sequence(p_b["sequence"])
+        p_a["sequence"] = guards.hard_guard_final_sequence(p_a["sequence"])
+        p_b["sequence"] = guards.hard_guard_final_sequence(p_b["sequence"])
 
         _debug_seq("AFTER_A", p_a["sequence"])
         _debug_seq("AFTER_B", p_b["sequence"])
@@ -178,7 +179,7 @@ class ProposalEngine:
 
             if current_len + f_dur <= target_len * 1.1:
                 # [STEP 10-K-C1-R36] 선택 단계 Guard: 이미 선택된 조각과 연속되는지 확인
-                if self._is_contiguous_to_selected(f, selected):
+                if guards.is_contiguous_to_selected(f, selected):
                     continue
                 selected.append(f)
                 current_len += f_dur
@@ -313,7 +314,7 @@ class ProposalEngine:
                 for f in frags_for_sid:
                     f_dur = self._safe_duration(f)
                     if current_len + f_dur <= target_len * 1.1:
-                        if self._is_contiguous_to_selected(f, selected):
+                        if guards.is_contiguous_to_selected(f, selected):
                             continue
                         selected.append(f)
                         f_group_key = self._semantic_group_key(f.get("fragment_id"))
@@ -357,15 +358,15 @@ class ProposalEngine:
                         has_more = True
                         f_dur = self._safe_duration(next_frag)
 
-                        # 같은 source 과다 점유 제한 (share > 0.4 시 skip)
+                        # 같은 source 과다 점유 제한 (share > 0.55 시 skip)
                         if len(selected) > 2:
                             share = source_counts.get(sid, 0) / len(selected)
-                            if share > 0.4:
+                            if share > 0.55:
                                 if current_len + f_dur <= target_len * 0.9:
                                     continue
 
                         if current_len + f_dur <= target_len * 1.1:
-                            if self._is_contiguous_to_selected(next_frag, selected):
+                            if guards.is_contiguous_to_selected(next_frag, selected):
                                 used_fids.add(next_frag.get("fragment_id"))
                                 continue
                             selected.append(next_frag)
@@ -414,12 +415,12 @@ class ProposalEngine:
                 # [STEP 10-I.5.28-E8-R1] Source Soft Balance (User: 0.8 penalty)
                 if is_multi and len(selected) > 2:
                     share = source_counts.get(f_sid, 0) / len(selected)
-                    if share > 0.4: # 유저 모드는 조금 더 엄격하게 분산 시도
+                    if share > 0.55: # 유저 모드는 조금 더 유연하게 상향
                         if current_len + f_dur <= target_len * 0.9:
                             continue
 
                 if current_len + f_dur <= target_len * 1.1:
-                    if self._is_contiguous_to_selected(f, selected):
+                    if guards.is_contiguous_to_selected(f, selected):
                         continue
                     selected.append(f)
                     selected_b_group_keys.add(f_group_key)
@@ -496,7 +497,7 @@ class ProposalEngine:
                 # Confidence 높은 순으로 최대 8개 선택하되, 연속 조각 방지 적용
                 fallback_selected = []
                 for f in sorted(candidates, key=lambda x: x.get("confidence", 0.5), reverse=True):
-                    if self._is_contiguous_to_selected(f, fallback_selected):
+                    if guards.is_contiguous_to_selected(f, fallback_selected):
                         continue
                     fallback_selected.append(f)
                     if len(fallback_selected) >= 8:
@@ -1027,126 +1028,3 @@ class ProposalEngine:
                 target_len = 60.0
 
         return target_len
-    def _is_contiguous_to_selected(self, frag: dict, selected: list[dict], threshold: float = 0.15) -> bool:
-        """
-        [STEP 10-K-C1-R36] 이미 선택된 같은 source 조각과 시간상 바로 붙어 있으면 True.
-        """
-        if not frag or not selected:
-            return False
-
-        source_id = frag.get("source_id")
-        if not source_id:
-            return False
-
-        start = float(frag.get("start", frag.get("start_time", 0.0)) or 0.0)
-        end = float(frag.get("end", frag.get("end_time", start)) or start)
-
-        for prev in selected:
-            if prev.get("source_id") != source_id:
-                continue
-
-            prev_start = float(prev.get("start", prev.get("start_time", 0.0)) or 0.0)
-            prev_end = float(prev.get("end", prev.get("end_time", prev_start)) or prev_start)
-
-            # prev 바로 뒤에 현재 조각이 붙는 경우
-            if abs(start - prev_end) < threshold:
-                return True
-
-            # 현재 조각 바로 뒤에 prev가 붙는 경우
-            if abs(prev_start - end) < threshold:
-                return True
-
-        return False
-
-    def _hard_guard_final_sequence(self, sequence: list[dict], threshold: float = 0.15, min_gap_sec: float = 1.0) -> list[dict]:
-        """
-        [STEP 10-K-C1-R37] 최종 proposal sequence에서 같은 source의 시간상 연속 조각을 강제 제거한다.
-        이 함수는 절대 원본 sequence를 그대로 반환하지 않는다. (R35와 달리 짧아져도 유지)
-        """
-        if not sequence:
-            return sequence
-
-        result = []
-
-        for frag in sequence:
-            source_id = frag.get("source_id")
-            # fragments는 'start' 또는 'start_time' 필드를 가질 수 있음
-            start = float(frag.get("start", frag.get("start_time", 0.0)) or 0.0)
-            end = float(frag.get("end", frag.get("end_time", start)) or start)
-
-            blocked = False
-            for prev in result:
-                if prev.get("source_id") != source_id:
-                    continue
-
-                prev_start = float(prev.get("start", prev.get("start_time", 0.0)) or 0.0)
-                prev_end = float(prev.get("end", prev.get("end_time", prev_start)) or prev_start)
-
-                # [TEMPORAL_REGRESSION_GUARD] 같은 source 안에서 시간 역행 차단
-                if start + 0.5 < prev_start:
-                    blocked = True
-                    break
-
-                # 1. 바로 붙은 조각 차단 (Threshold)
-                if abs(start - prev_end) < threshold:
-                    blocked = True
-                    break
-
-                # 2. 역방향으로 바로 붙은 조각도 차단
-                if abs(prev_start - end) < threshold:
-                    blocked = True
-                    break
-
-                # 3. 너무 가까운 같은 source 조각 차단 (Min Gap)
-                # 같은 영상 내에서 너무 짧은 간격으로 컷이 바뀌면 편집 효과가 떨어짐
-                if abs(start - prev_end) < min_gap_sec:
-                    blocked = True
-                    break
-
-            if not blocked:
-                result.append(frag)
-
-        return result
-
-    def _remove_contiguous_fragments(self, fragments: list[dict], min_items: int = 2) -> list[dict]:
-        """
-        [STEP 10-K-C1-R35] 같은 소스의 인접한 조각이 연속으로 나열되는 것을 방지.
-        '편집 제안'으로서의 가치를 높이기 위해 연속 구간은 건너뛴다.
-        """
-        if not fragments or len(fragments) <= min_items:
-            return fragments
-
-        result = []
-        # source_id별 마지막 선택 조각의 종료 시간 추적
-        last_end_by_source = {}
-
-        for frag in fragments:
-            source_id = frag.get("source_id")
-            # fragments는 'start' 또는 'start_time' 필드를 가질 수 있음
-            start = float(frag.get("start", frag.get("start_time", 0.0)) or 0.0)
-            end = float(frag.get("end", frag.get("end_time", start)) or start)
-
-            if not result:
-                result.append(frag)
-                last_end_by_source[source_id] = end
-                continue
-
-            prev_end = last_end_by_source.get(source_id)
-            
-            # 같은 소스이면서 시간 간격이 0.15초 미만이면 연속으로 판정
-            is_contiguous = (
-                source_id is not None
-                and prev_end is not None
-                and abs(start - prev_end) < 0.15
-            )
-
-            # 연속 구간이면 제외 (단, 결과물이 너무 짧아지는 것을 방지하기 위해 min_items 체크)
-            if is_contiguous:
-                # [v3.2.1-R35] 강제 건너뛰기 수행
-                continue
-
-            result.append(frag)
-            last_end_by_source[source_id] = end
-
-        # 결과가 너무 짧아지면 원본 반환 (안전 장치)
-        return result if len(result) >= min_items else fragments
