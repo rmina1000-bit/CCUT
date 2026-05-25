@@ -35,6 +35,14 @@
 - [ ] **PART A** — 인지조각 생성 감사 (signal_processor, semantic_engine)
 - [ ] **PART B** — 편집 파이프라인 감사 (export_engine, render_engine)
 
+## 2026-05-26 — 외부 영상 생성 AI API 로드맵 수립 📋
+- [x] `docs/EXTERNAL_AI_VIDEO_API_ROADMAP.md` 신규 작성 (Phase 1~5 전체 설계)
+- [x] `docs/NARRATIVE_ENGINE_ROADMAP.md` Phase 4 확장 (영상 생성 서브타입 B 추가)
+- [x] `docs/WEB_AI_CONTRACT_V0_1.md` 영상 생성 AI 계약 스키마 추가
+- [x] `docs/PROJECT_NAVIGATION.md` 로드맵 항목 추가
+- [ ] **Phase 2** — Adapter 기반 코드 구조 설계 (runway_adapter, kling_adapter, base_adapter)
+- [ ] **Phase 3 (MVP)** — Runway Gen-4.5 첫 번째 실제 통합 구현
+
 ---
 
 ## STEP 10-K — Deep Visual Analysis Stage (PASS ✅)

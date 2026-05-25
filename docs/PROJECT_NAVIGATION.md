@@ -1,6 +1,6 @@
 # CCUT 1.0.4 PROJECT NAVIGATION v3.4.0
 
-> **현재 기준 SHA:** `0fa1e85e62fe7ce43e6209bbd0def2283dba5289`  
+> **현재 기준 SHA:** `d95be59` (2026-05-25)  
 > **Branch:** `ccut-1.0.4-step9`  
 > **완료 단계:** R10-C -> AI Transition Room (Qwen3-VL, Story Resolver) PASS  
 > **핵심 흐름:** 영상 → 분석 → 편집스토리 초안 → 사용자 협의 → StoryIntent → Template/Technique Resolver → A/B 제안 → Render  
@@ -42,8 +42,16 @@ CCUT은 사용자의 자연어 의견을 StoryIntent로 정리한 뒤, 그 Story
   - `proposal_preview_engine.py` 신규
   - A/B preview mp4 backend 생성 → frontend 재생
   - 상세: `docs/PROPOSAL_PREVIEW_RENDER_POLICY.md`
-- STEP 10-K-B3 예정: Balanced Sources Proposal Constraint (Next Room)
-- **NEXT: 전체 파이프라인 Runtime Audit (PART A~D)**
+- **2026-05-25: Guard 모듈화 & 편집 파이프라인 정밀 진단 (DONE)**
+  - `proposal_guards.py` 신설, 가드 완화 (30f→15f, 0.4→0.55)
+  - 시뮬레이터 검증: 시간역행 가드 80% 누수 발견 및 pre-sort 보정
+  - 상세: `docs/SESSION_HANDOFF.md`
+- **2026-05-26: 외부 영상 생성 AI API 로드맵 수립 (계획)**
+  - Runway Gen-4.5 / Kling 3.0 기반 B-roll 자동 생성
+  - Video-Use 철학 적용: 메타데이터만 외부 전송, 렌더링은 로컬
+  - 상세: `docs/EXTERNAL_AI_VIDEO_API_ROADMAP.md`
+- STEP 10-K-B3 예정: Balanced Sources Proposal Constraint
+- **NEXT: 소스 편향 근원 분석 + 외부 AI API Adapter 설계**
 
 > **주의:** AI는 CCUT Core가 아니라 AI Staff / Boundary Provider로 정의한다. CCUT Core는 StoryIntentPatch 계약을 통해서만 AI의 조언을 수용하며, 최종 제안 생성 로직(ProposalEngine)은 Core가 직접 소유한다.
 
