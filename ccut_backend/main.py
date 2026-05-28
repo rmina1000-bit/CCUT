@@ -2618,6 +2618,51 @@ async def smart_analyze_video(video_path: str | None = None):
     }
 
 
+# [STEP 15] YouTube Robot Learner REST endpoints
+class YouTubeRobotRequest(BaseModel):
+    query: str
+    limit: int = 3
+    media: bool = False
+
+@app.post("/learning/robot/run")
+async def run_youtube_learning_robot(req: YouTubeRobotRequest):
+    try:
+        from learning.youtube_robot import YouTubeRobotLearner
+        import asyncio
+        loop = asyncio.get_event_loop()
+        res = await loop.run_in_executor(
+            None,
+            YouTubeRobotLearner.execute_learning_step,
+            req.query,
+            req.limit,
+            req.media
+        )
+        return {"status": "SUCCESS", "data": res}
+    except Exception as e:
+        return {"status": "ERROR", "message": str(e)}
+
+@app.get("/learning/robot/stats")
+async def get_youtube_learning_stats():
+    try:
+        from database import SessionLocal
+        from learning.learning_models import UserEditDecisionTable
+        with SessionLocal() as db:
+            runs = db.query(UserEditDecisionTable).filter_by(decision_type="YOUTUBE_ROBOT_LEARN").all()
+            stats = []
+            for r in runs:
+                stats.append({
+                    "decision_id": r.decision_id,
+                    "project_id": r.project_id,
+                    "query": r.user_intent.get("query") if r.user_intent else "",
+                    "url": r.user_intent.get("url") if r.user_intent else "",
+                    "activated_patterns": r.selected_fragments,
+                    "created_at": r.created_at.isoformat() if r.created_at else ""
+                })
+            return {"status": "SUCCESS", "stats": stats}
+    except Exception as e:
+        return {"status": "ERROR", "message": str(e)}
+
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="127.0.0.1", port=8000)
