@@ -115,16 +115,35 @@ class RenderEngine:
         return {"ok": True, "reason": None}
 
     def _resolve_source_paths(self, clips: List[Dict[str, Any]], export_input: Dict[str, Any]) -> Dict[str, Any]:
-        source_id = export_input["source_id"]
-        source = self.bams.get_source(source_id)
-        if not source:
-            return {"ok": False, "reason": f"Source {source_id} not found in DB"}
-        
-        path = source.file_path
-        if not os.path.exists(path):
-            return {"ok": False, "reason": f"Source file not found at {path}"}
-        
-        return {"ok": True, "paths": {source_id: path}}
+        paths = {}
+        unique_source_ids = set()
+        for clip in clips:
+            s_id = clip.get("source_id")
+            if s_id:
+                unique_source_ids.add(s_id)
+                
+        top_sid = export_input.get("source_id")
+        if top_sid:
+            unique_source_ids.add(top_sid)
+            
+        for sid in unique_source_ids:
+            if sid.startswith("proj_calib_"):
+                continue
+            source = self.bams.get_source(sid)
+            if not source:
+                if sid == top_sid and len(paths) > 0:
+                    continue
+                return {"ok": False, "reason": f"Source {sid} not found in DB"}
+            
+            path = source.file_path
+            if not os.path.exists(path):
+                return {"ok": False, "reason": f"Source file not found at {path}"}
+            paths[sid] = path
+            
+        if not paths:
+            return {"ok": False, "reason": "No valid source paths resolved"}
+            
+        return {"ok": True, "paths": paths}
 
     def _render_with_ffmpeg(self, clips: List[Dict[str, Any]], source_paths: Dict[str, str], output_path: str) -> Dict[str, Any]:
         # Concat Demuxer 방식

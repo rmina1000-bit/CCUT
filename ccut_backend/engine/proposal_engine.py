@@ -112,6 +112,25 @@ class ProposalEngine:
         after_dist = self._calculate_source_distribution(p_b["sequence"])
         print(f"[PROPOSAL_BALANCED_SOURCES_AFTER] selected_count={len(p_b['sequence'])}, source_distribution={json.dumps(after_dist, ensure_ascii=False)}, used_source_count={after_dist['source_count']}, total_duration={p_b['duration']}")
 
+        # [STEP 11-A] Swarm Audit Integration
+        try:
+            from engine.proposal_audit_engine import ProposalAuditEngine
+            audit_engine = ProposalAuditEngine(self.bams)
+            for p in proposals:
+                p["swarm_audit"] = audit_engine.audit_proposal(p, project_id)
+        except Exception as audit_err:
+            print(f"[SWARM_AUDIT][ERROR] Failed to run engine swarm audit: {audit_err}")
+
+        # [STEP 12-L] Human Reality Score Integration
+        try:
+            from ai.perception.human_reality_score import HumanRealityScore
+            hrs_evaluator = HumanRealityScore()
+            for p in proposals:
+                if "sequence" in p and p["sequence"]:
+                    p["human_reality_score_data"] = hrs_evaluator.evaluate_sequence(p["sequence"])
+        except Exception as hrs_err:
+            print(f"[HUMAN_REALITY_SCORE][ERROR] Failed to evaluate human reality score: {hrs_err}")
+
         for p in proposals:
             p["project_id"] = project_id
             p["source_ids"] = source_ids
@@ -185,6 +204,9 @@ class ProposalEngine:
                 current_len += f_dur
                 source_counts[f_sid] = source_counts.get(f_sid, 0) + 1
         
+        if not selected and fragments:
+            selected.append(sorted_frags[0])
+            
         print(f"[PROPOSAL ENGINE] Market Proposal (A) - Selected {len(selected)} fragments, total {current_len:.1f}s")
         # [STEP 10-K-C1-R37] Disable Bridge Reinsertion to prevent contiguous fragment leakage
         # selected, bridge_details = self._insert_bridges(selected, fragments)
@@ -234,16 +256,114 @@ class ProposalEngine:
         return re.sub(r'_P\d+$', '', fragment_id or "")
 
     def _create_user_proposal(self, source_id, fragments, target_len, intent, source_ids=None, overlap_ids=None, story_context=None):
-        """B: User Mode (User Intent 엄격 반영 + A안 중복 페널티)"""
+        """B: User Mode (User Intent 엄격 반영 + A안 중복 페널티 + 외부 연출 감독 계층 연동)"""
         # [STEP 2-C-R4] B-mode Diversity Scoring
-        # A안이 이미 선택한 group과 B가 현재 선택한 group을 추적하여 diversity 유도
+        # A안이 이미 선택한 group하고 B가 현재 선택한 group을 추적하여 diversity 유도
         a_fragment_ids = overlap_ids if overlap_ids else set()
         a_group_keys = {self._semantic_group_key(fid) for fid in a_fragment_ids}
         selected_b_group_keys = set()
 
+        # [STEP 10-L-INTEGRATION] Qwen Narrative Translator & Director Integration
+        try:
+            from ai.narrative.emotion_timeline import EmotionalTimeline
+            from ai.narrative.reaction_signal_detector import ReactionSignalDetector
+            from ai.narrative.external_narrative_adapter import ExternalNarrativeAdapter
+            from ai.narrative.qwen_narrative_translator import QwenNarrativeTranslator
+            
+            # Extract emotional timeline and reaction signals
+            try:
+                et = EmotionalTimeline(self.bams)
+                emotional_timeline = et.build_timeline(source_id)
+            except Exception as e_err:
+                print(f"[NARRATIVE_DIRECTOR_BRIDGE] EmotionalTimeline compilation failed: {e_err}")
+                emotional_timeline = []
+
+            try:
+                rsd = ReactionSignalDetector(self.bams)
+                reaction_signals = rsd.detect_signals(source_id)
+            except Exception as r_err:
+                print(f"[NARRATIVE_DIRECTOR_BRIDGE] ReactionSignalDetector compilation failed: {r_err}")
+                reaction_signals = {}
+            
+            # 1. Qwen Orchestration (Compress context metadata)
+            source_desc = ""
+            if fragments:
+                source_desc = " ".join([
+                    f.get("intelligence", {}).get("description", "") 
+                    if isinstance(f.get("intelligence"), dict) else ""
+                    for f in fragments[:5]
+                ])
+                
+            context_metadata = {
+                "source_summary": source_desc,
+                "fragments_pool": fragments,
+                "num_fragments": len(fragments),
+                "scenery_count": sum(1 for f in fragments if f.get("structural", {}).get("role") == "scenery"),
+                "reaction_count": sum(1 for f in fragments if f.get("structural", {}).get("role") == "reaction"),
+                "scene_rhythm": [f.get("structural", {}).get("role", "main") for f in fragments],
+                "target_length": target_len,
+                "user_intent_text": intent.get("instruction_text", "") if intent else "",
+                "emotional_timeline": emotional_timeline,
+                "reaction_signals": reaction_signals
+            }
+            
+            # [NARRATIVE_DIRECTOR_REQUEST] is called inside get_narrative_direction()
+            adapter = ExternalNarrativeAdapter(provider="mock")
+            direction = adapter.get_narrative_direction(context_metadata)
+            
+            # [NARRATIVE_TRANSLATION] is called inside translate_direction()
+            translator = QwenNarrativeTranslator()
+            constraints = translator.translate_direction(direction)
+            
+        except Exception as narrative_err:
+            print(f"[NARRATIVE_DIRECTOR_BRIDGE][ERROR] Failed to load narrative modules: {narrative_err}")
+            emotional_timeline = []
+            reaction_signals = {}
+            constraints = {
+                "prefer_reaction_fragments": False,
+                "reaction_priority_multiplier": 1.0,
+                "hold_after_emotion_sec": 0.0,
+                "avoid_fast_cut_after_laughter": False,
+                "reduce_scenery_ratio": 1.0,
+                "breathing_multiplier": 1.0,
+                "emotional_continuity_weight": 1.0,
+                "pace_curve": "stable",
+                "pacing_style": "medium",
+                "narrative_priority": "dialogue"
+            }
+
+        # Build map for quick access
+        timeline_map = {item["fragment_id"]: item for item in emotional_timeline}
+        sorted_chronological = sorted(fragments, key=lambda x: x.get("start", 0))
+        chronological_indices = {f["fragment_id"]: i for i, f in enumerate(sorted_chronological)}
+
+        evidence_board_cache = None
+        if hasattr(self.bams, "get_evidence_board"):
+            evidence_board_cache = self.bams.get_evidence_board(source_id) or []
+
+        # Import Step 13 Engines
+        from ai.perception.learned_pattern_registry import LearnedPatternRegistry
+        from ai.perception.story_pressure_engine import StoryPressureEngine
+        from ai.perception.rhythm_engine import RhythmEngine
+        
+        pattern_registry = LearnedPatternRegistry()
+        story_engine = StoryPressureEngine()
+        rhythm_eng = RhythmEngine()
+        
+        # Determine rhythm template name based on intent text
+        intent_text = (intent.get("instruction_text") or "") if intent else ""
+        template_name = "YouTube Vlog"
+        if "다큐" in intent_text or "documentary" in intent_text.lower():
+            template_name = "Documentary"
+        elif "영화" in intent_text or "cinema" in intent_text.lower() or "film" in intent_text.lower():
+            template_name = "Cinematic Film"
+        elif "쇼츠" in intent_text or "shorts" in intent_text.lower() or "short" in intent_text.lower():
+            template_name = "Shorts"
+
         def edit_score(f):
+            fid = f.get("fragment_id")
             base_val = float(f.get("structural", {}).get("edit_value", 0.5))
-            group_key = self._semantic_group_key(f.get("fragment_id"))
+            group_key = self._semantic_group_key(fid)
             
             score = base_val
             
@@ -259,7 +379,102 @@ class ProposalEngine:
             if group_key not in a_group_keys and group_key not in selected_b_group_keys:
                 score *= 1.15   # 새로운 group 보너스
                 
-            return score
+            # [PROPOSAL_CINEMATIC_SCORE]
+            # Apply dynamic scoring modifiers based on translated narrative constraints
+            role = f.get("structural", {}).get("role", "main")
+            multiplier = 1.0
+            
+            # Get local chronological neighbors for continuity heuristics
+            chron_idx = chronological_indices.get(fid)
+            prev_chron = sorted_chronological[chron_idx - 1] if chron_idx is not None and chron_idx > 0 else None
+            
+            # --- [STEP 13] Story Pressure Evaluation ---
+            story_scores = story_engine.evaluate_story_pressure(f, prev_chron)
+            story_multiplier = (
+                story_scores["narrative_pressure"] * 0.4 +
+                story_scores["emotional_density"] * 0.3 +
+                story_scores["watchability"] * 0.3
+            )
+            if story_scores["callback_strength"] > 0:
+                multiplier *= 1.1
+            multiplier *= (1.0 + story_multiplier * 0.5)
+            
+            # --- [STEP 13] Pacing & Rhythm Engine ---
+            start_time = float(f.get("start") or f.get("start_time") or 0.0)
+            rhythm_scores = rhythm_eng.evaluate_rhythm(f, template_name, start_time)
+            multiplier *= rhythm_scores["rhythm_bonus"]
+            
+            # --- [STEP 13] Learned Patterns ---
+            pattern_scores = pattern_registry.evaluate_patterns(f, prev_chron, start_time)
+            multiplier *= pattern_scores["pattern_bonus"]
+            
+            # 1. Emotional Continuity
+            t_item = timeline_map.get(fid)
+            if t_item:
+                if constraints.get("narrative_priority") == "emotion" or constraints.get("hold_after_emotion_sec", 0) > 0:
+                    multiplier *= (1.0 + (t_item["intensity"] * 0.25 * constraints.get("emotional_continuity_weight", 1.0)))
+                
+                if prev_chron:
+                    prev_t_item = timeline_map.get(prev_chron.get("fragment_id"))
+                    if prev_t_item:
+                        if prev_t_item["emotion"] == "joyful" and t_item["emotion"] == "warm":
+                            multiplier *= 1.2
+                        elif prev_t_item["emotion"] == "tense" and t_item["emotion"] == "calm":
+                            multiplier *= 1.25
+            
+            # 2. Breathing Quality & Silence Value
+            if role in ["scenery", "reaction"] or not f.get("semantic", {}).get("transcript_refs"):
+                multiplier *= constraints.get("breathing_multiplier", 1.0)
+                
+            # 3. Reaction Preservation
+            r_sig = reaction_signals.get(fid)
+            if role == "reaction":
+                multiplier *= constraints.get("reaction_priority_multiplier", 1.0)
+                if r_sig:
+                    multiplier *= 1.25
+                    
+            # Avoid fast cut after laughter constraint
+            if constraints.get("avoid_fast_cut_after_laughter") and prev_chron:
+                if evidence_board_cache is not None:
+                    prev_text = evidence_board_cache
+                    prev_ev = next((e for e in prev_text if e["fragment_id"] == prev_chron.get("fragment_id")), {})
+                    prev_content = (prev_ev.get("text", "") or "").lower()
+                    if "하하" in prev_content or "ㅋㅋㅋ" in prev_content or "laugh" in prev_content:
+                        duration = f.get("structural", {}).get("duration", 5.0)
+                        if duration < 3.0:
+                            multiplier *= 0.5
+            
+            # 4. Scenery reduction
+            if role == "scenery":
+                multiplier *= constraints.get("reduce_scenery_ratio", 1.0)
+                
+            # 5. Pacing adjustment
+            duration = f.get("structural", {}).get("duration", 5.0)
+            if constraints.get("pace_curve") == "fast":
+                if duration <= 3.0:
+                    multiplier *= 1.2
+                elif duration >= 8.0:
+                    multiplier *= 0.8
+            elif constraints.get("pace_curve") == "slow":
+                if duration >= 7.0:
+                    multiplier *= 1.25
+                elif duration <= 2.5:
+                    multiplier *= 0.75
+                    
+            # 6. Visual Memory Continuity (Chronological topic similarity)
+            if prev_chron:
+                prev_topic = prev_chron.get("semantic", {}).get("topic")
+                curr_topic = f.get("semantic", {}).get("topic")
+                if prev_topic and curr_topic and prev_topic == curr_topic:
+                    multiplier *= 1.1
+                    
+            cinematic_score = score * multiplier
+            
+            # Log specific scoring transitions for visibility
+            print(f"[PROPOSAL_CINEMATIC_SCORE] Fragment: {fid}, "
+                  f"Base: {score:.3f}, Multiplier: {multiplier:.3f}, Final: {cinematic_score:.3f}")
+                
+            return cinematic_score
 
         # 정렬 기준: 1. b_score 내림차순, 2. start 오름차순 (결정론 유지)
         sorted_frags = sorted(fragments, key=lambda x: (edit_score(x), -x.get("start", 0)), reverse=True)
@@ -356,6 +571,7 @@ class ProposalEngine:
 
                     if next_frag:
                         has_more = True
+                        used_fids.add(next_frag.get("fragment_id"))
                         f_dur = self._safe_duration(next_frag)
 
                         # 같은 source 과다 점유 제한 (share > 0.55 시 skip)

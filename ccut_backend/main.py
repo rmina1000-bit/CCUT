@@ -7,7 +7,7 @@ from typing import Optional
 
 logger = logging.getLogger(__name__)
 
-from fastapi import FastAPI, Depends, BackgroundTasks, UploadFile, File
+from fastapi import FastAPI, Depends, BackgroundTasks, UploadFile, File, Request, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -15,7 +15,7 @@ from sqlalchemy.orm import Session
 
 from archive.manager import bams
 from archive.models import SourceVideo
-from archive.db_models import PublishedTable, ProgramTable, FragmentTable, SourceTable
+from archive.db_models import PublishedTable, ProgramTable, FragmentTable, SourceTable, ProposalTable
 from database import get_db
 
 from engine.boundary_editor import pbe_engine
@@ -71,6 +71,100 @@ def build_dubbing_static_url(filename: str) -> str:
 
 
 app = FastAPI()
+
+def get_video_range_response(file_path: Path, request: Request):
+    from fastapi.responses import StreamingResponse, FileResponse
+    from fastapi import HTTPException
+    
+    file_size = file_path.stat().st_size
+    range_header = request.headers.get("range")
+    
+    ext = file_path.suffix.lower()
+    content_type = "video/mp4"
+    if ext == ".webm":
+        content_type = "video/webm"
+    elif ext in (".mov", ".qt"):
+        content_type = "video/quicktime"
+    elif ext == ".ogg":
+        content_type = "video/ogg"
+
+    if not range_header:
+        return FileResponse(file_path, media_type=content_type)
+        
+    try:
+        range_str = range_header.replace("bytes=", "").strip()
+        parts = range_str.split("-")
+        start = int(parts[0]) if parts[0] else 0
+        end = int(parts[1]) if (len(parts) > 1 and parts[1]) else (file_size - 1)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid Range Header")
+        
+    if start >= file_size or end >= file_size or start > end:
+        return StreamingResponse(
+            iter([]),
+            status_code=416,
+            headers={
+                "Content-Range": f"bytes */{file_size}",
+                "Accept-Ranges": "bytes"
+            },
+            media_type=content_type
+        )
+        
+    chunk_size = end - start + 1
+    
+    def range_generator():
+        with open(file_path, "rb") as f:
+            f.seek(start)
+            remaining = chunk_size
+            while remaining > 0:
+                chunk = f.read(min(remaining, 64 * 1024))
+                if not chunk:
+                    break
+                remaining -= len(chunk)
+                yield chunk
+                
+    headers = {
+        "Content-Range": f"bytes {start}-{end}/{file_size}",
+        "Accept-Ranges": "bytes",
+        "Content-Length": str(chunk_size),
+    }
+    
+    return StreamingResponse(
+        range_generator(),
+        status_code=206,
+        headers=headers,
+        media_type=content_type
+    )
+
+@app.get("/static/{path:path}")
+async def serve_static_range(path: str, request: Request):
+    from fastapi.responses import FileResponse
+    from fastapi import HTTPException
+    full_path = (STORAGE_DIR / path).resolve()
+    if not str(full_path).startswith(str(STORAGE_DIR)):
+        raise HTTPException(status_code=403, detail="Forbidden")
+    if not full_path.exists() or not full_path.is_file():
+        raise HTTPException(status_code=404, detail="File not found")
+        
+    ext = full_path.suffix.lower()
+    if ext in (".mp4", ".webm", ".mov", ".ogg"):
+        return get_video_range_response(full_path, request)
+    return FileResponse(full_path)
+
+@app.get("/api/static/{path:path}")
+async def serve_api_static_range(path: str, request: Request):
+    from fastapi.responses import FileResponse
+    from fastapi import HTTPException
+    full_path = (STORAGE_DIR / path).resolve()
+    if not str(full_path).startswith(str(STORAGE_DIR)):
+        raise HTTPException(status_code=403, detail="Forbidden")
+    if not full_path.exists() or not full_path.is_file():
+        raise HTTPException(status_code=404, detail="File not found")
+        
+    ext = full_path.suffix.lower()
+    if ext in (".mp4", ".webm", ".mov", ".ogg"):
+        return get_video_range_response(full_path, request)
+    return FileResponse(full_path)
 
 app.mount("/static", StaticFiles(directory=str(STORAGE_DIR)), name="static")
 app.mount("/api/static", StaticFiles(directory=str(STORAGE_DIR)), name="api_static")
@@ -1532,6 +1626,8 @@ async def post_generate_project_proposals(req: ProjectProposalRequest):
         # [PROPOSAL_PREVIEW_INJECT] preview_url 주입 (동기, 렌더 후 응답)
         proposals = inject_proposal_previews(proposals)
 
+
+
         return {
             "status": "PROPOSAL_READY",
             "project_id": project_id,
@@ -1597,6 +1693,8 @@ async def post_generate_proposals(source_id: str):
         # [PROPOSAL_PREVIEW_INJECT] preview_url 주입
         proposals = inject_proposal_previews(proposals)
 
+
+
         return {
             "status": "PROPOSAL_READY",
             "source_id": source_id,
@@ -1640,6 +1738,16 @@ async def post_generate_proposals(source_id: str):
 async def get_proposals_api(source_id: str):
     """[STEP 6] 저장된 제안 조회"""
     proposals = bams.get_proposals(source_id)
+    
+    # [STEP 11-A] Swarm Audit Integration
+    try:
+        from engine.proposal_audit_engine import ProposalAuditEngine
+        audit_engine = ProposalAuditEngine(bams)
+        for p in proposals:
+            p["swarm_audit"] = audit_engine.audit_proposal(p, source_id)
+    except Exception as audit_err:
+        print(f"[SWARM_AUDIT][ERROR] Failed to audit loaded proposals: {audit_err}")
+
     return {
         "status": "SUCCESS",
         "source_id": source_id,
@@ -2155,24 +2263,38 @@ async def extract_pbe_panoramas(req: PanoramaExtractRequest, background_tasks: B
     if not req.fragments:
         return {"status": "EMPTY"}
     
-    # 임의의 첫 번째 fragment에서 source_id를 구하고, 이를 이용해 source video path 획득
-    first_frag = req.fragments[0]
-    source_id = first_frag.get("source_id")
-    if not source_id:
-        return {"status": "ERROR", "message": "source_id missing"}
-        
-    source_data = bams.get_source(source_id)
-    if not source_data or not source_data.file_path:
-        return {"status": "ERROR", "message": "Source video not found"}
+    # 각 fragment의 source_id 별로 file_path를 조회해 fragment 정보에 video_path 주입
+    enriched_fragments = []
+    source_cache = {}
+    for f in req.fragments:
+        source_id = f.get("source_id")
+        if not source_id:
+            continue
+            
+        if source_id not in source_cache:
+            source_data = bams.get_source(source_id)
+            if source_data and source_data.file_path:
+                source_cache[source_id] = source_data.file_path
+            else:
+                source_cache[source_id] = None
+                
+        v_path = source_cache.get(source_id)
+        if v_path:
+            f_copy = dict(f)
+            f_copy["video_path"] = v_path
+            enriched_fragments.append(f_copy)
+            
+    if not enriched_fragments:
+        return {"status": "ERROR", "message": "No valid source video found for fragments"}
         
     # ffmpeg batch panorama 추출을 백그라운드로 예약
     background_tasks.add_task(
         video_engine.batch_extract_panoramas,
-        source_data.file_path,
-        req.fragments,
+        None,
+        enriched_fragments,
         4
     )
-    return {"status": "STARTED", "count": len(req.fragments)}
+    return {"status": "STARTED", "count": len(enriched_fragments)}
 
 
 @app.post("/pbe/context")
