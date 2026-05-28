@@ -2712,6 +2712,31 @@ async def get_contrast_learning_logs():
         return {"status": "ERROR", "message": str(e)}
 
 
+# [STEP 18] Temporal Narrative Flow Learning REST endpoints
+class TemporalFlowRequest(BaseModel):
+    project_id: str
+    proposal: dict
+    success: bool
+
+@app.post("/learning/temporal/flow")
+async def run_temporal_flow_learning(req: TemporalFlowRequest):
+    try:
+        from learning.temporal_flow_learner import TemporalFlowLearner
+        res = TemporalFlowLearner.analyze_and_learn_proposal_flow(req.project_id, req.proposal, req.success)
+        return {"status": "SUCCESS", "data": res}
+    except Exception as e:
+        return {"status": "ERROR", "message": str(e)}
+
+@app.get("/learning/temporal/logs")
+async def get_temporal_flow_logs():
+    try:
+        from learning.temporal_flow_learner import TemporalFlowLearner
+        logs = TemporalFlowLearner.get_flow_logs()
+        return {"status": "SUCCESS", "logs": logs}
+    except Exception as e:
+        return {"status": "ERROR", "message": str(e)}
+
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="127.0.0.1", port=8000)

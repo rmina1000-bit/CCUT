@@ -57,5 +57,16 @@ class EditingPatternMemoryTable(Base):
     avg_hrs_delta = Column(Float, default=0.0)
     updated_at = Column(DateTime, default=datetime.datetime.now, onupdate=datetime.datetime.now)
 
+class TemporalFlowMemoryTable(Base):
+    __tablename__ = "temporal_flow_memory"
+    
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    flow_id = Column(String, unique=True, index=True, nullable=False)
+    flow_sequence = Column(JSON, nullable=False) # e.g. ["hook", "setup", "tension", "pause", "payoff", "rehook"]
+    success_count = Column(Integer, default=0)
+    failure_count = Column(Integer, default=0)
+    avg_user_acceptance = Column(Float, default=0.5)
+    updated_at = Column(DateTime, default=datetime.datetime.now, onupdate=datetime.datetime.now)
+
 def init_learning_db():
     Base.metadata.create_all(bind=engine)
