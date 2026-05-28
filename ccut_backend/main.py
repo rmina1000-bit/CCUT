@@ -2737,6 +2737,37 @@ async def get_temporal_flow_logs():
         return {"status": "ERROR", "message": str(e)}
 
 
+# [STEP 19] Human Watch Session REST endpoints
+class HumanWatchSessionRequest(BaseModel):
+    project_id: str
+    viewer_id: str
+    playback_actions: list
+    retention_map: dict
+
+@app.post("/learning/watch/session")
+async def log_human_watch_session(req: HumanWatchSessionRequest):
+    try:
+        from learning.human_watch_session import HumanWatchSession
+        res = HumanWatchSession.log_watch_session(
+            req.project_id,
+            req.viewer_id,
+            req.playback_actions,
+            req.retention_map
+        )
+        return {"status": "SUCCESS", "data": res}
+    except Exception as e:
+        return {"status": "ERROR", "message": str(e)}
+
+@app.get("/learning/watch/logs")
+async def get_human_watch_logs():
+    try:
+        from learning.human_watch_session import HumanWatchSession
+        logs = HumanWatchSession.get_watch_logs()
+        return {"status": "SUCCESS", "logs": logs}
+    except Exception as e:
+        return {"status": "ERROR", "message": str(e)}
+
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="127.0.0.1", port=8000)

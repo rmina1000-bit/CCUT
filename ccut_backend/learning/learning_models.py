@@ -68,5 +68,16 @@ class TemporalFlowMemoryTable(Base):
     avg_user_acceptance = Column(Float, default=0.5)
     updated_at = Column(DateTime, default=datetime.datetime.now, onupdate=datetime.datetime.now)
 
+class HumanWatchSessionTable(Base):
+    __tablename__ = "human_watch_sessions"
+    
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    session_id = Column(String, unique=True, index=True, nullable=False)
+    project_id = Column(String, index=True, nullable=False)
+    viewer_id = Column(String, nullable=True)
+    playback_actions = Column(JSON, nullable=False) # e.g. [{"time": 3.2, "action": "skip"}]
+    retention_map = Column(JSON, nullable=False) # e.g. {"frag_1": 1.0, "frag_2": 0.0}
+    created_at = Column(DateTime, default=datetime.datetime.now)
+
 def init_learning_db():
     Base.metadata.create_all(bind=engine)
