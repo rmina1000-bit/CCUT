@@ -1626,7 +1626,12 @@ async def post_generate_project_proposals(req: ProjectProposalRequest):
         # [PROPOSAL_PREVIEW_INJECT] preview_url 주입 (동기, 렌더 후 응답)
         proposals = inject_proposal_previews(proposals)
 
-
+        # [STEP 14-D] Proposal Ranker integration
+        try:
+            from learning.proposal_ranker import ProposalRanker
+            proposals = ProposalRanker.rerank_proposals(proposals)
+        except Exception as rank_err:
+            print(f"[RERANKER][ERROR] Failed to rerank project proposals: {rank_err}")
 
         return {
             "status": "PROPOSAL_READY",
@@ -1693,7 +1698,12 @@ async def post_generate_proposals(source_id: str):
         # [PROPOSAL_PREVIEW_INJECT] preview_url 주입
         proposals = inject_proposal_previews(proposals)
 
-
+        # [STEP 14-D] Proposal Ranker integration
+        try:
+            from learning.proposal_ranker import ProposalRanker
+            proposals = ProposalRanker.rerank_proposals(proposals)
+        except Exception as rank_err:
+            print(f"[RERANKER][ERROR] Failed to rerank source proposals: {rank_err}")
 
         return {
             "status": "PROPOSAL_READY",
@@ -1774,6 +1784,33 @@ async def post_export_input(proposal_id: str, payload: dict = None):
     
     if not export_input:
         return {"status": "NOT_FOUND", "proposal_id": proposal_id}
+        
+    # [STEP 14-A] Log user proposal acceptance decision
+    try:
+        from learning.decision_logger import DecisionLogger
+        with SessionLocal() as db_session:
+            prop_row = db_session.query(ProposalTable).filter_by(proposal_id=proposal_id).first()
+            if prop_row:
+                src_id = prop_row.source_id
+                # Fetch sibling proposals under the same project
+                siblings = bams.get_proposals(src_id)
+                sibling_dicts = []
+                for s in siblings:
+                    sibling_dicts.append({
+                        "proposal_id": s.proposal_id,
+                        "mode": s.mode,
+                        "sequence": s.sequence,
+                        "duration": s.duration,
+                        "original_reason": s.proposal_reason,
+                        "human_reality_score_data": s.proposal_reason.get("human_reality_score") if isinstance(s.proposal_reason, dict) else {}
+                    })
+                DecisionLogger.log_user_proposal_choice(
+                    project_id=src_id,
+                    chosen_mode=prop_row.mode,
+                    proposals=sibling_dicts
+                )
+    except Exception as log_err:
+        print(f"[DECISION_LOGGER][ERROR] Failed to log user proposal choice: {log_err}")
         
     return export_input
 
@@ -2313,7 +2350,23 @@ async def apply_pbe_change(req: BoundaryChangeRequest):
     parts = req.seam_id.split("_")
     left_id = parts[1] if len(parts) > 1 else ""
     right_id = parts[2] if len(parts) > 2 else ""
-    return pbe_ai.commit_pbe_change(left_id, right_id, req.new_split_point, req.user_msg)
+    res = pbe_ai.commit_pbe_change(left_id, right_id, req.new_split_point, req.user_msg)
+    
+    # [STEP 14-A] Log PBE boundary adjustments as negative feedback to predictions
+    try:
+        from learning.decision_logger import DecisionLogger
+        DecisionLogger.log_pbe_manual_edit(
+            project_id="pbe_manual_project",
+            fragment_id=left_id,
+            before_start=0.0,
+            before_end=0.0,
+            after_start=req.new_split_point,
+            after_end=req.new_split_point
+        )
+    except Exception as log_err:
+        print(f"[DECISION_LOGGER][ERROR] Failed to log manual PBE delta shift: {log_err}")
+        
+    return res
 
 
 class SmartSuggestRequest(BaseModel):

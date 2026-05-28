@@ -230,7 +230,7 @@ def run_calibration_loop(sources, run_limit=3):
                 "ffprobe", "-v", "error", "-show_entries", "format=duration",
                 "-of", "default=noprint_wrappers=1:nokey=1", str(file_path)
             ]
-            res = subprocess.run(cmd, capture_output=True, text=True, shell=False, timeout=15)
+            res = subprocess.run(cmd, capture_output=True, text=True, shell=False, timeout=15, encoding="utf-8")
             if res.returncode == 0 and res.stdout.strip():
                 return float(res.stdout.strip())
         except subprocess.TimeoutExpired:
@@ -242,7 +242,7 @@ def run_calibration_loop(sources, run_limit=3):
     def run_playwright_test():
         try:
             cmd = ["npx.cmd", "playwright", "test", "e2e/browser_reality.spec.ts"]
-            res = subprocess.run(cmd, cwd="D:/CCUT1.0.4/ccut_frontend", capture_output=True, text=True, shell=False, timeout=120)
+            res = subprocess.run(cmd, cwd="D:/CCUT1.0.4/ccut_frontend", capture_output=True, text=True, shell=False, timeout=120, encoding="utf-8")
             return res.returncode == 0
         except subprocess.TimeoutExpired:
             print("[TIMEOUT] Playwright test execution timed out (120s limit)")

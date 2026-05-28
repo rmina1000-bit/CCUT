@@ -54,6 +54,14 @@ class ProposalEngine:
         zero_count = sum(1 for d in durations if d <= 0)
         print(f"[PROPOSAL ENGINE] Pool Diagnostics - Total: {len(fragments)}, None: {none_count}, Zero: {zero_count}")
         
+        # [STEP 14-B] Generate weak labels for all fragments in the pool dynamically
+        try:
+            from learning.weak_label_generator import WeakLabelGenerator
+            for f in fragments:
+                WeakLabelGenerator.generate_labels_for_fragment(f, f.get("source_id"))
+        except Exception as wl_err:
+            print(f"[WEAK LABELER][ERROR] Failed to run dynamic weak labeling: {wl_err}")
+            
         target_len = self._safe_target_len(target_len, fragments)
         print(f"[PROPOSAL ENGINE] target_len normalized: {target_len}")
 
