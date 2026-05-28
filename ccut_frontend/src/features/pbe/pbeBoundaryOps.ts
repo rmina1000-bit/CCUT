@@ -62,21 +62,30 @@ function makeFragment(
 /** [Case 3] S|S Boundary Apply */
 export function applySSBoundary(
     L: Fragment, R: Fragment, a: number, b: number
-): { left: Fragment; newN?: Fragment; right: Fragment; removed: string[] } {
+): { left: Fragment; leftTrimmed?: Fragment; rightTrimmed?: Fragment; right: Fragment; removed: string[] } {
     const removed: string[] = [];
-    const Lprime = makeFragment(L, L.start_frame, L.end_frame - a, "S", { parentUid: getUid(L) });
-    const Rprime = makeFragment(R, R.start_frame + b, R.end_frame, "S", { parentUid: getUid(R) });
-    let newN: Fragment | undefined;
-    if (a + b > 0) {
-        newN = makeFragment(L, L.end_frame - a, R.start_frame + b, "N", {
-            displaySuffix: "_M",
-            parentUid: getUid(L),
-            secondaryParentUid: getUid(R)
+    const Lprime = makeFragment(L, L.start_frame, L.end_frame - a, "S", { displaySuffix: a > 0 ? "_L" : "", parentUid: getUid(L) });
+    const Rprime = makeFragment(R, R.start_frame + b, R.end_frame, "S", { displaySuffix: b > 0 ? "_R" : "", parentUid: getUid(R) });
+    
+    let leftTrimmed: Fragment | undefined;
+    if (a > 0) {
+        leftTrimmed = makeFragment(L, L.end_frame - a, L.end_frame, "N", {
+            displaySuffix: "_R",
+            parentUid: getUid(L)
         });
         removed.push(getUid(L));
+    }
+    
+    let rightTrimmed: Fragment | undefined;
+    if (b > 0) {
+        rightTrimmed = makeFragment(R, R.start_frame, R.start_frame + b, "N", {
+            displaySuffix: "_L",
+            parentUid: getUid(R)
+        });
         removed.push(getUid(R));
     }
-    return { left: Lprime, newN, right: Rprime, removed };
+    
+    return { left: Lprime, leftTrimmed, rightTrimmed, right: Rprime, removed };
 }
 
 /** [Case 4/5] S|N|S Boundary Apply */
@@ -92,13 +101,13 @@ export function applySNSBoundary(
     let leftSub, midRem, rightSub;
     const baseN = Ns[0];
     if (safeA > 0) {
-        leftSub = makeFragment(baseN, Nstart, Nstart + safeA, "S", { parentUid: getUid(baseN) });
+        leftSub = makeFragment(baseN, Nstart, Nstart + safeA, "S", { displaySuffix: "_L", parentUid: getUid(baseN) });
     }
     if (safeA + safeB < m) {
-        midRem = makeFragment(baseN, Nstart + safeA, Nend - safeB, "N", { parentUid: getUid(baseN) });
+        midRem = makeFragment(baseN, Nstart + safeA, Nend - safeB, "N", { displaySuffix: "_M", parentUid: getUid(baseN) });
     }
     if (safeB > 0) {
-        rightSub = makeFragment(baseN, Nend - safeB, Nend, "S", { parentUid: getUid(baseN) });
+        rightSub = makeFragment(baseN, Nend - safeB, Nend, "S", { displaySuffix: "_R", parentUid: getUid(baseN) });
     }
     Ns.forEach(n => removed.push(getUid(n)));
     return { left: L, leftSub, midRem, rightSub, right: R, removed };
@@ -111,11 +120,23 @@ export function applySingleTrim(
     if (trimFrames <= 0) return { kept: frag, removed: [] };
     let kept, trimmed;
     if (side === "left") {
-        trimmed = makeFragment(frag, frag.start_frame, frag.start_frame + trimFrames, "N", { parentUid: getUid(frag) });
-        kept = makeFragment(frag, frag.start_frame + trimFrames, frag.end_frame, "S", { parentUid: getUid(frag) });
+        trimmed = makeFragment(frag, frag.start_frame, frag.start_frame + trimFrames, "N", { 
+            displaySuffix: "_L",
+            parentUid: getUid(frag) 
+        });
+        kept = makeFragment(frag, frag.start_frame + trimFrames, frag.end_frame, "S", { 
+            displaySuffix: "_R",
+            parentUid: getUid(frag) 
+        });
     } else {
-        kept = makeFragment(frag, frag.start_frame, frag.end_frame - trimFrames, "S", { parentUid: getUid(frag) });
-        trimmed = makeFragment(frag, frag.end_frame - trimFrames, frag.end_frame, "N", { parentUid: getUid(frag) });
+        kept = makeFragment(frag, frag.start_frame, frag.end_frame - trimFrames, "S", { 
+            displaySuffix: "_L",
+            parentUid: getUid(frag) 
+        });
+        trimmed = makeFragment(frag, frag.end_frame - trimFrames, frag.end_frame, "N", { 
+            displaySuffix: "_R",
+            parentUid: getUid(frag) 
+        });
     }
     return { kept, trimmed, removed: [getUid(frag)] };
 }

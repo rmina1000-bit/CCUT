@@ -113,7 +113,7 @@ export const resolveProposalFragments = (
   const resolvedFragments: ResolvedFragment[] = [];
 
   proposalFragIds.forEach((id: string, idx: number) => {
-    const alias = aliases[idx];
+    const alias = aliases.find((a: any) => a.proposal_fragment_id === id || a.source_fragment_id === id);
     
     // 1. Exact ID match
     let found = editFragments.find((f) => {
@@ -143,9 +143,12 @@ export const resolveProposalFragments = (
 
     if (found) {
       // [STEP 10-I.5.2] Semantic/Proposal 기반 정확한 시간 적용
-      // alias에 기록된 start_sec/end_sec이 있으면 우선 적용하여 30초 고정 문제를 해결함
-      const pStart = alias?.start_sec !== undefined ? alias.start_sec : (found.start_frame / 30);
-      const pEnd = alias?.end_sec !== undefined ? alias.end_sec : (found.end_frame / 30);
+      // alias에 기록된 start_sec/end_sec이 있으면 우선 적용하여 30초 고정 문제를 해결함.
+      // 단, 사용자가 PBE 편집 또는 수동 변경 등을 가한 경우 found의 start_frame / end_frame이 변경되어 
+      // 존재하므로, 이를 최우선하여 사용자가 조작한 범위를 보존합니다.
+      const hasValidFrames = typeof found.start_frame === "number" && typeof found.end_frame === "number";
+      const pStart = hasValidFrames ? (found.start_frame / 30) : (alias?.start_sec !== undefined ? alias.start_sec : 0);
+      const pEnd = hasValidFrames ? (found.end_frame / 30) : (alias?.end_sec !== undefined ? alias.end_sec : (pStart + 5));
       
       resolvedFragments.push({
         ...found,

@@ -204,6 +204,7 @@ const Index: React.FC = () => {
         selection_state: "S" as SelectionState,
         status: "committed" as FragmentStatus,
         source_video: label,
+        source_id: f.source_id || f.sourceId,
         start_frame: startFrame,
         end_frame: endFrame,
         duration: durationFrames,
@@ -665,8 +666,81 @@ const Index: React.FC = () => {
     [logProposalPair, resetAnalysisState, toFullUrl]
   );
 
+  // Hash-based debug hydration for Playwright verification
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    console.log("[Debug] hash hook checking hash:", window.location.hash);
+    if (window.location.hash !== "#debug-hydrate") return;
+    
+    console.log("[Debug] Running Playwright mockup hydration adapter...");
+    const mockProjectId = "proj_1779800484308";
+    
+    // Simulate API fetch successful mapping
+    const mockFragments = [
+      {
+        fragment_id: "SF_4CC312_SRC_CB9107CA_P001",
+        fragment_uid: "SF_4CC312_SRC_CB9107CA_P001",
+        root_fragment_uid: "SF_4CC312_SRC_CB9107CA_P001",
+        display_id: "A1",
+        selection_state: "S",
+        status: "committed",
+        source_video: "A",
+        start_frame: 0,
+        end_frame: 600,
+        duration: 600,
+        thumbnail_hue: 211,
+        thumbnail: { thumbnail_url: "/static/thumbnails/SF_4CC312_SRC_CB9107CA_P001.jpg" },
+        intelligence: { hook_score: 0.8, role: "Main", description: "Verification Mock Clip" },
+      }
+    ];
+
+    setProjects([{ id: mockProjectId, name: "Active Verification Project", date: "5/26", count: 3 }]);
+    setSourceEntries([{
+      source_id: "SRC_CB9107CA",
+      label: "A",
+      video_url: "/static/uploads/test_video.mp4",
+      fragments: mockFragments,
+      file_size_bytes: 1000000,
+      duration_sec: 20
+    }]);
+    setActiveSource("A");
+    setEditFragments(mockFragments);
+    setSourceFragments(mockFragments);
+    setProposals({
+      A: {
+        proposal_id: "PROP_A",
+        mode: "market",
+        title: "시장형 편집 (A)",
+        desc: "Mock Proposal A",
+        score: "95%",
+        key_fragments: ["SF_4CC312_SRC_CB9107CA_P001"],
+        resolved_aliases: [{
+          proposal_fragment_id: "SF_4CC312_SRC_CB9107CA_P001",
+          source_id: "SRC_CB9107CA",
+          source_fragment_id: "SF_4CC312_SRC_CB9107CA_P001",
+          display_id: "A1",
+          start_sec: 0,
+          end_sec: 20
+        }]
+      } as any,
+      B: {
+        proposal_id: "PROP_B",
+        mode: "user",
+        title: "사용자형 편집 (B)",
+        desc: "Mock Proposal B",
+        score: "85%",
+        key_fragments: ["SF_4CC312_SRC_CB9107CA_P001"]
+      } as any
+    });
+    setAppState("complete");
+  }, []);
+
   // [CCUT1.0.4 PROPOSALS PROJECT SOURCES HYDRATION]
   useEffect(() => {
+    if (typeof window !== "undefined" && window.location.hash === "#debug-hydrate") {
+      console.log("[Hydration] Skipping backend hydration because #debug-hydrate is active");
+      return;
+    }
     const savedActiveProject = typeof window !== "undefined" ? localStorage.getItem("ccut_active_project_id") : null;
     if (!savedActiveProject || savedActiveProject === "projects" || !activeNavItem || activeNavItem === "projects" || activeNavItem === "default_project") {
       return;
@@ -861,33 +935,62 @@ const Index: React.FC = () => {
   );
 
   const handleExcludeFromEdit = useCallback((f: Fragment) => {
-    setEditFragments((prev) =>
-      prev.map((fr) => (getUid(fr) === getUid(f) ? { ...fr, excluded: true } : fr))
-    );
-  }, []);
+    const next = editFragments.map((fr) => (getUid(fr) === getUid(f) ? { ...fr, excluded: true } : fr));
+    setEditFragments(next);
+    if (committedProposalId && proposals) {
+      setProposals((pPrev) => {
+        if (!pPrev) return pPrev;
+        const target = committedProposalId as "A" | "B";
+        return {
+          ...pPrev,
+          [target]: {
+            ...pPrev[target],
+            customEditFragments: next,
+            key_fragments: next.filter((x) => !x.excluded && x.status !== "removed").map((x) => getUid(x))
+          }
+        };
+      });
+    }
+  }, [editFragments, committedProposalId, proposals, setProposals]);
 
   const handleRestoreFragment = useCallback((f: Fragment) => {
-    setEditFragments((prev) =>
-      prev.map((fr) => (getUid(fr) === getUid(f) ? { ...fr, excluded: false } : fr))
-    );
-  }, []);
+    const next = editFragments.map((fr) => (getUid(fr) === getUid(f) ? { ...fr, excluded: false } : fr));
+    setEditFragments(next);
+    if (committedProposalId && proposals) {
+      setProposals((pPrev) => {
+        if (!pPrev) return pPrev;
+        const target = committedProposalId as "A" | "B";
+        return {
+          ...pPrev,
+          [target]: {
+            ...pPrev[target],
+            customEditFragments: next,
+            key_fragments: next.filter((x) => !x.excluded && x.status !== "removed").map((x) => getUid(x))
+          }
+        };
+      });
+    }
+  }, [editFragments, committedProposalId, proposals, setProposals]);
 
   const handleMoveToHold = useCallback(
     (f: Fragment) => {
       setReservedFragments((prev) => appendUniqueByUid(prev, { ...f, excluded: false }));
-      setEditFragments((prev) => removeByUid(prev, f));
-
+      const next = removeByUid(editFragments, f);
+      setEditFragments(next);
       if (committedProposalId && proposals) {
-        setProposals((prev) => {
-          if (!prev) return prev;
-          const proposal = prev[committedProposalId as "A" | "B"];
-          if (!proposal) return prev;
+        setProposals((pPrev) => {
+          if (!pPrev) return pPrev;
+          const target = committedProposalId as "A" | "B";
+          const proposal = pPrev[target];
+          if (!proposal) return pPrev;
+          const keys = proposal.key_fragments.filter((k) => k !== getUid(f));
           return {
-            ...prev,
-            [committedProposalId]: {
+            ...pPrev,
+            [target]: {
               ...proposal,
-              key_fragments: proposal.key_fragments.filter((k) => k !== getUid(f)),
-            },
+              key_fragments: keys,
+              customEditFragments: next
+            }
           };
         });
       }
@@ -896,7 +999,7 @@ const Index: React.FC = () => {
         setSelectedFragment(null);
       }
     },
-    [appendUniqueByUid, removeByUid, selectedFragment, committedProposalId, proposals]
+    [appendUniqueByUid, removeByUid, selectedFragment, editFragments, committedProposalId, proposals, setProposals]
   );
 
   const handleDropToHold = useCallback(
@@ -922,15 +1025,33 @@ const Index: React.FC = () => {
 
       const fromEdit = editFragments.find((f) => getUid(f) === fid);
       if (fromEdit) {
-        setEditFragments((prev) => prev.filter((f) => getUid(f) !== fid));
+        const next = editFragments.filter((f) => getUid(f) !== fid);
+        setEditFragments(next);
+        if (committedProposalId && proposals) {
+          setProposals((pPrev) => {
+            if (!pPrev) return pPrev;
+            const target = committedProposalId as "A" | "B";
+            const proposal = pPrev[target];
+            if (!proposal) return pPrev;
+            return {
+              ...pPrev,
+              [target]: {
+                ...proposal,
+                key_fragments: proposal.key_fragments.filter((k) => k !== fid),
+                customEditFragments: next
+              }
+            };
+          });
+        }
         setDeletedFragments((prev) => appendUniqueByUid(prev, fromEdit));
       }
     },
-    [appendUniqueByUid, editFragments, reservedFragments]
+    [appendUniqueByUid, editFragments, reservedFragments, committedProposalId, proposals, setProposals]
   );
 
   const handleFragmentsReorder = useCallback(
     (reorderedFrags: Fragment[]) => {
+      setEditFragments(reorderedFrags);
       const newKeyOrder = reorderedFrags.map((f) => f.fragment_id);
 
       if (!committedProposalId || !proposals) return;
@@ -943,50 +1064,59 @@ const Index: React.FC = () => {
           [target]: {
             ...prev[target],
             key_fragments: newKeyOrder,
+            customEditFragments: reorderedFrags
           },
         };
       });
     },
-    [committedProposalId, proposals]
+    [committedProposalId, proposals, setProposals]
   );
 
   const handleRestoreFromHold = useCallback(
     (f: Fragment, insertAt?: number) => {
       setReservedFragments((prev) => removeByUid(prev, f));
 
-      setEditFragments((prev) => {
-        const already = prev.some((x) => getUid(x) === getUid(f));
-        if (already) return prev;
-        const newFrag = { ...f, excluded: false };
-        if (insertAt === undefined) return [...prev, newFrag];
-        const arr = [...prev];
+      const already = editFragments.some((x) => getUid(x) === getUid(f));
+      if (already) return;
+      
+      const newFrag = { ...f, excluded: false };
+      let next: Fragment[] = [];
+      if (insertAt === undefined) {
+        next = [...editFragments, newFrag];
+      } else {
+        const arr = [...editFragments];
         arr.splice(insertAt, 0, newFrag);
-        return arr;
-      });
+        next = arr;
+      }
+      setEditFragments(next);
 
       if (committedProposalId && proposals) {
-        setProposals((prev) => {
-          if (!prev) return prev;
-          const proposal = prev[committedProposalId as "A" | "B"];
-          if (!proposal) return prev;
+        setProposals((pPrev) => {
+          if (!pPrev) return pPrev;
+          const target = committedProposalId as "A" | "B";
+          const proposal = pPrev[target];
+          if (!proposal) return pPrev;
           const keys = proposal.key_fragments.filter((k) => k !== getUid(f));
           const idx = insertAt !== undefined ? Math.min(insertAt, keys.length) : keys.length;
           const newKeys = [...keys.slice(0, idx), getUid(f), ...keys.slice(idx)];
           return {
-            ...prev,
-            [committedProposalId]: { ...proposal, key_fragments: newKeys },
+            ...pPrev,
+            [target]: {
+              ...proposal,
+              key_fragments: newKeys,
+              customEditFragments: next
+            }
           };
         });
       }
     },
-    [removeByUid, committedProposalId, proposals]
+    [removeByUid, editFragments, committedProposalId, proposals, setProposals]
   );
 
   const handleAddFromSource = useCallback(
     (f: Fragment, insertAt?: number) => {
       if (!committedProposalId || !proposals) return;
 
-      // 새 고유 ID 부여 — 원본과 구분되는 복사본
       const copyId = `${f.fragment_id}_copy_${Date.now()}`;
       const newFrag: Fragment = {
         ...f,
@@ -996,25 +1126,28 @@ const Index: React.FC = () => {
         excluded: false,
       };
 
-      setEditFragments((prev) => [...prev, newFrag]);
+      const next = [...editFragments, newFrag];
+      setEditFragments(next);
 
-      setProposals((prev) => {
-        if (!prev) return prev;
-        const proposal = prev[committedProposalId as "A" | "B"];
-        if (!proposal) return prev;
+      setProposals((pPrev) => {
+        if (!pPrev) return pPrev;
+        const target = committedProposalId as "A" | "B";
+        const proposal = pPrev[target];
+        if (!proposal) return pPrev;
         const keys = [...proposal.key_fragments];
         const idx = insertAt !== undefined ? Math.min(insertAt, keys.length) : keys.length;
         keys.splice(idx, 0, copyId);
         return {
-          ...prev,
-          [committedProposalId]: {
+          ...pPrev,
+          [target]: {
             ...proposal,
             key_fragments: keys,
-          },
+            customEditFragments: next
+          }
         };
       });
     },
-    [committedProposalId, proposals]
+    [editFragments, committedProposalId, proposals, setProposals]
   );
 
   const handleDeleteFromHold = useCallback(
@@ -1041,33 +1174,100 @@ const Index: React.FC = () => {
     (f: Fragment, insertAt?: number) => {
       setDeletedFragments((prev) => removeByUid(prev, f));
 
-      setEditFragments((prev) => {
-        const already = prev.some((x) => getUid(x) === getUid(f));
-        if (already) return prev;
-        const newFrag = { ...f, excluded: false };
-        if (insertAt === undefined) return [...prev, newFrag];
-        const arr = [...prev];
+      const already = editFragments.some((x) => getUid(x) === getUid(f));
+      if (already) return;
+      
+      const newFrag = { ...f, excluded: false };
+      let next: Fragment[] = [];
+      if (insertAt === undefined) {
+        next = [...editFragments, newFrag];
+      } else {
+        const arr = [...editFragments];
         arr.splice(insertAt, 0, newFrag);
-        return arr;
-      });
+        next = arr;
+      }
+      setEditFragments(next);
 
       if (committedProposalId && proposals) {
-        setProposals((prev) => {
-          if (!prev) return prev;
-          const proposal = prev[committedProposalId as "A" | "B"];
-          if (!proposal) return prev;
+        setProposals((pPrev) => {
+          if (!pPrev) return pPrev;
+          const target = committedProposalId as "A" | "B";
+          const proposal = pPrev[target];
+          if (!proposal) return pPrev;
           const keys = proposal.key_fragments.filter((k) => k !== getUid(f));
           const idx = insertAt !== undefined ? Math.min(insertAt, keys.length) : keys.length;
           const newKeys = [...keys.slice(0, idx), getUid(f), ...keys.slice(idx)];
           return {
-            ...prev,
-            [committedProposalId]: { ...proposal, key_fragments: newKeys },
+            ...pPrev,
+            [target]: {
+              ...proposal,
+              key_fragments: newKeys,
+              customEditFragments: next
+            }
           };
         });
       }
     },
-    [removeByUid, committedProposalId, proposals]
+    [removeByUid, editFragments, committedProposalId, proposals, setProposals]
   );
+
+  // A/B안 토글 시 각 안의 편집 상태(editFragments) 복원
+  useEffect(() => {
+    if (!committedProposalId || !proposals) return;
+
+    const target = committedProposalId as "A" | "B";
+    const proposal = proposals[target];
+    if (!proposal) return;
+
+    if ((proposal as any).customEditFragments) {
+      setEditFragments((proposal as any).customEditFragments);
+    } else {
+      const rawSeq = (proposal as any).resolved_aliases || (proposal as any).sequence || [];
+      if (rawSeq.length > 0) {
+        const initialFrags = rawSeq.map((s: any) => {
+          const fragId = s.proposal_fragment_id || s.fragment_id || s.id;
+          const matchSource = sourceFragments.find(
+            (sf) => sf.fragment_id === (s.source_fragment_id || s.fragment_id || fragId)
+          );
+          
+          const startF = s.start_sec !== undefined 
+            ? Math.round(s.start_sec * 30) 
+            : (s.start !== undefined ? Math.round(s.start * 30) : (matchSource?.start_frame ?? 0));
+          const endF = s.end_sec !== undefined 
+            ? Math.round(s.end_sec * 30) 
+            : (s.end !== undefined ? Math.round(s.end * 30) : (matchSource?.end_frame ?? 150));
+          
+          return {
+            fragment_id: fragId,
+            fragment_uid: fragId,
+            source_video: s.source_video || matchSource?.source_video || activeSource,
+            source_id: s.source_id || matchSource?.source_id || currentSourceId,
+            display_id: s.display_id || matchSource?.display_id,
+            start_frame: startF,
+            end_frame: endF,
+            duration: endF - startF,
+            selection_state: "S",
+            excluded: false,
+            thumbnail: s.thumbnail_url || matchSource?.thumbnail,
+            intelligence: matchSource?.intelligence
+          };
+        });
+
+        setEditFragments(initialFrags);
+        
+        setProposals((prev) => {
+          if (!prev || !prev[target]) return prev;
+          return {
+            ...prev,
+            [target]: {
+              ...prev[target],
+              customEditFragments: initialFrags
+            }
+          };
+        });
+      }
+    }
+  }, [committedProposalId]);
 
   const resolverResult = useMemo(() => {
     if (!committedProposalId || !proposals) {
@@ -1242,8 +1442,8 @@ const Index: React.FC = () => {
         const payloadFrags = pbeFragments.map(f => ({
           fragment_id: f.fragment_id,
           source_id: f.source_id || currentSourceId,
-          start_time: f.start ?? f.start_time ?? 0.0,
-          end_time: (f.start ?? f.start_time ?? 0.0) + (f.duration ?? f.duration_sec ?? 0.0)
+          start_time: (f.start_frame ?? 0) / 30,
+          end_time: (f.end_frame ?? 0) / 30
         }));
 
         fetch(`${videoService.API_BASE_URL}/pbe/extract-panoramas`, {
@@ -1258,11 +1458,69 @@ const Index: React.FC = () => {
     [filteredFragments, reservedFragments, currentSourceId]
   );
 
+  // Expose PBE trigger on window object for Playwright script
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      (window as any).triggerPBEMock = () => {
+        const frags = sourceFragments.length > 0 ? sourceFragments : editFragments;
+        if (frags.length === 0) {
+          console.warn("[triggerPBEMock] Source and Edit fragments are empty!");
+          return;
+        }
+        const pbeFragments = frags.map(f => ({
+          ...f,
+          start_frame: f.start_frame ?? Math.round((f.start ?? f.start_time ?? 0) * 30),
+          end_frame: f.end_frame ?? Math.round(((f.start ?? f.start_time ?? 0) + (f.duration ?? 0)) * 30),
+          selection_state: f.selection_state || "S",
+        }));
+        setPbeWindow(pbeFragments);
+        setEditorTarget({
+          leftRealIndex: 0,
+          rightRealIndex: pbeFragments.length - 1,
+          clickSide: "center",
+        });
+        setEditorOpen(true);
+      };
+    }
+  }, [sourceFragments, editFragments]);
+
   const handleEditorApply = useCallback(async (result: { updatedFragments: Fragment[]; removedFragmentIds: string[] }) => {
     const { updatedFragments } = result;
     setEditFragments(updatedFragments);
     setPbeWindow([]);
     setEditorOpen(false);
+
+    if (committedProposalId && proposals) {
+      setProposals((prev) => {
+        if (!prev) return prev;
+        const target = committedProposalId as "A" | "B";
+        const newKeyOrder = updatedFragments
+          .filter((f) => f.status !== "removed")
+          .map((f) => getUid(f));
+        return {
+          ...prev,
+          [target]: {
+            ...prev[target],
+            key_fragments: newKeyOrder,
+            customEditFragments: updatedFragments
+          },
+        };
+      });
+    }
+
+    setStoryPlan((prev: any) => {
+      if (!prev) return prev;
+      const systemMessage = {
+        id: `pbe_apply_${Date.now()}`,
+        sender: "ai" as const,
+        text: `정밀 편집(PBE)을 통해 조각 경계가 수정되었습니다. 수정된 프레임 범위가 타임라인에 반영되었으며 새 편집안으로 저장되었습니다.`,
+        timestamp: Date.now(),
+      };
+      return {
+        ...prev,
+        messages: [...(prev.messages ?? []), systemMessage],
+      };
+    });
 
     try {
       await fetch(`${videoService.API_BASE_URL}/save_edit`, {
@@ -1276,7 +1534,77 @@ const Index: React.FC = () => {
     } catch (e) {
       console.error("Save edit error:", e);
     }
-  }, []);
+  }, [setStoryPlan, committedProposalId, proposals, setProposals]);
+
+
+  const handleOnConsultation = useCallback(async (text: string) => {
+    if (editorOpen) {
+      const userMsgId = `user_${Date.now()}`;
+      const aiMsgId = `ai_${Date.now() + 1}`;
+
+      const userMsg = {
+        id: userMsgId,
+        sender: "user" as const,
+        text,
+        timestamp: Date.now(),
+      };
+
+      const aiMsg = {
+        id: aiMsgId,
+        sender: "ai" as const,
+        text: "비례바 명령을 처리 중입니다...",
+        timestamp: Date.now() + 1,
+        isInterpreting: true
+      };
+
+      setStoryPlan((prev: any) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          messages: [...(prev.messages ?? []), userMsg, aiMsg],
+        };
+      });
+
+      try {
+        const seamId = pbeWindow.length > 0
+          ? `SEAM_${pbeWindow[0]?.fragment_id}_${pbeWindow[pbeWindow.length - 1]?.fragment_id}`
+          : "";
+        const res = await fetch(`${videoService.API_BASE_URL}/pbe/analyze`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ message: text, seam_id: seamId })
+        });
+        if (res.ok) {
+          const data = await res.json();
+          window.dispatchEvent(new CustomEvent("pbe-chat-command", { detail: data }));
+
+          setStoryPlan((prev: any) => {
+            if (!prev) return prev;
+            return {
+              ...prev,
+              messages: (prev.messages ?? []).map((m: any) =>
+                m.id === aiMsgId ? { ...m, text: data.ai_msg || "처리 완료.", isInterpreting: false } : m
+              )
+            };
+          });
+        }
+      } catch (e) {
+        console.error("PBE chat command failed:", e);
+        setStoryPlan((prev: any) => {
+          if (!prev) return prev;
+          return {
+            ...prev,
+            messages: (prev.messages ?? []).map((m: any) =>
+              m.id === aiMsgId ? { ...m, text: "오류가 발생했습니다.", isInterpreting: false } : m
+            )
+          };
+        });
+      }
+      return;
+    }
+
+    handleConsultation(text);
+  }, [editorOpen, handleConsultation, pbeWindow, setStoryPlan]);
 
   const handleBackgroundClick = useCallback((e: React.MouseEvent) => {
     const target = e.target as HTMLElement;
@@ -1333,7 +1661,7 @@ const Index: React.FC = () => {
             onPreviewProposal={handleProposalPreview}
             onCommitProposal={handleProposalCommit}
             onExport={handleExport}
-            onConsultation={handleConsultation}
+            onConsultation={handleOnConsultation}
             onReproposal={(dir: any) => {
               handleReproposal(dir);
             }}
@@ -1444,6 +1772,8 @@ const Index: React.FC = () => {
         fragments={pbeWindow}
         editFragments={editFragments}
         target={editorTarget}
+        videoUrl={toFullUrl(currentVideoUrl)}
+        sources={sourceEntries.map(s => ({ source_id: s.source_id, label: s.label, video_url: toFullUrl(s.video_url) || "" }))}
         onApply={handleEditorApply}
       />
     </div>

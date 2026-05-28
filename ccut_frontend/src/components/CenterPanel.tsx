@@ -281,6 +281,8 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
   const isUserSeekingBRef = useRef(false);
   const isDraggingProposalSeekARef = useRef(false);
   const isDraggingProposalSeekBRef = useRef(false);
+  const isSeekingRefA = useRef(false);
+  const isSeekingRefB = useRef(false);
 
   const [playerSrcA, setPlayerSrcA] = useState<string | null>(null);
   const [playerSrcB, setPlayerSrcB] = useState<string | null>(null);
@@ -378,10 +380,12 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
   );
 
   // [PROPOSAL_PREVIEW] proposal.preview_url 우선, 없으면 fragment URL fallback
-  const previewUrlA: string | null = (proposals?.A as any)?.preview_url
+  // 만약 현재 제안서가 확정되어 편집 중(committedProposalId)이거나, 이미 편집한 상태(customEditFragments 존재)인 경우
+  // preview_url을 무시하고 dynamic sequence로 재생하도록 강제
+  const previewUrlA: string | null = (proposals?.A as any)?.preview_url && committedProposalId !== "A" && !(proposals?.A as any)?.customEditFragments
     ? normalizeMediaUrl((proposals.A as any).preview_url)
     : null;
-  const previewUrlB: string | null = (proposals?.B as any)?.preview_url
+  const previewUrlB: string | null = (proposals?.B as any)?.preview_url && committedProposalId !== "B" && !(proposals?.B as any)?.customEditFragments
     ? normalizeMediaUrl((proposals.B as any).preview_url)
     : null;
 
@@ -390,6 +394,12 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
 
   const buildSeqFrags = useCallback(
     (proposalKey: "A" | "B"): Fragment[] => {
+      // 만약 해당 제안서의 사용자 수동 편집 캐시(customEditFragments)가 존재한다면 이를 우선적으로 재생에 사용
+      const cachedFrags = (proposals?.[proposalKey] as any)?.customEditFragments;
+      if (cachedFrags && cachedFrags.length > 0) {
+        return cachedFrags.filter((f: any) => !f.excluded);
+      }
+
       // 만약 재생하려는 제안서(A or B)가 현재 커밋/편집 중인 제안서(committedProposalId)이고,
       // 사용자 수동 편집 목록(fragments)이 존재한다면 이를 우선적으로 재생에 사용
       if (proposalKey === committedProposalId && fragments && fragments.length > 0) {
@@ -710,6 +720,8 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
       playFrag(player, targetFrag, isA ? seqEndARef : seqEndBRef, resolved.offset);
     } else {
       const startSec = (targetFrag.start_frame ?? 0) / 30;
+      if (isA) isSeekingRefA.current = true;
+      else isSeekingRefB.current = true;
       video.current.currentTime = startSec + resolved.offset;
       if (isPlaying) video.current.play().catch(() => {});
     }
@@ -1147,10 +1159,17 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
                       setIsPlayingA(true);
                     }}
                     onPause={() => setIsPlayingA(false)}
+                    onSeeking={() => {
+                      isSeekingRefA.current = true;
+                    }}
+                    onSeeked={() => {
+                      isSeekingRefA.current = false;
+                    }}
                     onTimeUpdate={(e) => {
                       // [DUAL_PLAY_GUARD] inactive player는 advance 차단
                       if (activePlayerRef.current !== "A") return;
                       if (isDraggingProposalSeekARef.current) return;
+                      if (isSeekingRefA.current || e.currentTarget.seeking) return;
                       // [PREVIEW_MODE_GUARD] preview_url 재생 중 fragment seq 개입 차단
                       if (previewUrlA) {
                         setProposalTimeA(e.currentTarget.currentTime);
@@ -1386,10 +1405,17 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
                       setIsPlayingB(true);
                     }}
                     onPause={() => setIsPlayingB(false)}
+                    onSeeking={() => {
+                      isSeekingRefB.current = true;
+                    }}
+                    onSeeked={() => {
+                      isSeekingRefB.current = false;
+                    }}
                     onTimeUpdate={(e) => {
                       // [DUAL_PLAY_GUARD] inactive player는 advance 차단
                       if (activePlayerRef.current !== "B") return;
                       if (isDraggingProposalSeekBRef.current) return;
+                      if (isSeekingRefB.current || e.currentTarget.seeking) return;
                       // [PREVIEW_MODE_GUARD] preview_url 재생 중 fragment seq 개입 차단
                       if (previewUrlB) {
                         setProposalTimeB(e.currentTarget.currentTime);

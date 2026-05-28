@@ -108,7 +108,7 @@ class VideoEngine:
             return None
             
         cmd = [
-            'ffmpeg', '-y', '-ss', str(timestamp), '-i', video_path,
+            'ffmpeg', '-y', '-i', video_path, '-ss', str(timestamp),
             '-vframes', '1', '-q:v', '2', str(output_path)
         ]
         try:
@@ -185,7 +185,7 @@ class VideoEngine:
                 print(f"[PBE][ACCURACY] Frame timestamps: {planned}")
 
                 cmd = [
-                    'ffmpeg', '-y', '-ss', str(start), '-t', str(duration), '-i', video_path, 
+                    'ffmpeg', '-y', '-i', video_path, '-ss', str(start), '-t', str(duration),
                     '-vf', f"fps={num_frames}/{duration},scale=320:-1",
                     '-vframes', str(num_frames), '-start_number', '0',
                     str(self.thumbnails_path / f"P_{prefix}_%d.jpg")
@@ -213,9 +213,11 @@ class VideoEngine:
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
             futures = []
             for f in fragments:
+                # 각 fragment의 video_path 속성을 우선 사용하고 없으면 인자로 들어온 video_path를 사용
+                frag_video_path = f.get("video_path") or video_path
                 futures.append(executor.submit(
                     self.extract_panorama_frames,
-                    video_path,
+                    frag_video_path,
                     f['start_time'],
                     f['end_time'],
                     12,
