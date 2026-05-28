@@ -2688,6 +2688,30 @@ async def get_teacher_coaching_logs():
         return {"status": "ERROR", "message": str(e)}
 
 
+# [STEP 17] Success-Failure Contrastive Learning REST endpoints
+class ContrastLearningRequest(BaseModel):
+    query: str
+    limit: int = 2
+
+@app.post("/learning/contrast/run")
+async def run_contrast_learning(req: ContrastLearningRequest):
+    try:
+        from learning.contrast_learner import ContrastLearner
+        res = ContrastLearner.execute_contrast_learning_session(req.query, req.limit)
+        return {"status": "SUCCESS", "data": res}
+    except Exception as e:
+        return {"status": "ERROR", "message": str(e)}
+
+@app.get("/learning/contrast/logs")
+async def get_contrast_learning_logs():
+    try:
+        from learning.contrast_learner import ContrastLearner
+        logs = ContrastLearner.get_contrast_logs()
+        return {"status": "SUCCESS", "logs": logs}
+    except Exception as e:
+        return {"status": "ERROR", "message": str(e)}
+
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="127.0.0.1", port=8000)
