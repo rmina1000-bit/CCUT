@@ -2663,6 +2663,31 @@ async def get_youtube_learning_stats():
         return {"status": "ERROR", "message": str(e)}
 
 
+# [STEP 16] Teacher Mentorship Coaching REST endpoints
+class TeacherCoachingRequest(BaseModel):
+    project_id: str
+    prop_a: dict
+    prop_b: dict
+
+@app.post("/learning/teacher/coaching")
+async def run_teacher_coaching(req: TeacherCoachingRequest):
+    try:
+        from learning.teacher_mentor import TeacherMentor
+        res = TeacherMentor.coach_student_if_uncertain(req.project_id, req.prop_a, req.prop_b)
+        return {"status": "SUCCESS", "data": res}
+    except Exception as e:
+        return {"status": "ERROR", "message": str(e)}
+
+@app.get("/learning/teacher/logs")
+async def get_teacher_coaching_logs():
+    try:
+        from learning.teacher_mentor import TeacherMentor
+        logs = TeacherMentor.get_coaching_logs()
+        return {"status": "SUCCESS", "logs": logs}
+    except Exception as e:
+        return {"status": "ERROR", "message": str(e)}
+
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="127.0.0.1", port=8000)
