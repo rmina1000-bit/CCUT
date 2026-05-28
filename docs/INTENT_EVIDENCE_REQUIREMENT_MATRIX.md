@@ -1,22 +1,22 @@
-# Intent & Evidence Requirement Matrix
+# 사용자 의도 및 에비던스 필요 매트릭스
 
-This document provides a matrix mapping user editing intents to their necessary metadata signals, current database feasibility, and implementation status.
+본 문서는 사용자의 편집 의도(Intent)별 필요한 비디오/오디오 에비던스 신호와 현재 로컬 DB 기준의 실현 가능성 및 상태 판정을 매핑한 매트릭스입니다.
 
 ---
 
-## Intent Feasibility Matrix
+## 사용자 의도별 피저빌리티 매트릭스 (Feasibility Matrix)
 
-| User Intent | Required Evidence Signals | Feasibility Status | Limitation & Evaluation |
+| 사용자 의도 (Intent) | 필요한 에비던스 데이터 신호 | 현재 실현 가능 상태 | 한계 요인 및 개선 과제 |
 | :--- | :--- | :---: | :--- |
-| **더 빠르게 (fast_pace)** | Scene change cuts, Candidate duration boundaries, Audio energy peaks. | **POSSIBLE** | Can be calculated using micro candidate duration and scene change points. Confirmed to reduce clip lengths. |
-| **여러 영상 골고루 (balanced_sources)** | Source ID mapping, Parent block ID, temporal offsets. | **POSSIBLE** | Runs dynamic penalties against parent/source frequency. Project-level multi-source solver is operational. |
-| **말/대화 중심 (speech_human)** | ASR transcripts, Word-level timestamps, Voice Activity Detection (VAD). | **PARTIAL** | Only functions on sources with non-empty Whisper segments. Currently, only 4 out of 28 database sources contain text. |
-| **사람 중심 visual (visual_human)** | YOLO person detection bounding boxes, FaceNet facial boxes, speaker identities. | **DATA_INSUFFICIENT** | Missing database columns and detection results. Handled as an exception due to lack of visual data. |
-| **풍경 줄임 (reduce_scenery)** | YOLO nature/outdoor class tags, Scenery CNN classification. | **WEAK_EFFECT** | Inferred weakly through the absence of speech and motion, yielding poor scenery filtering. |
-| **하이라이트 / motion** | Optical flow intensity vectors, Audio peak levels, visual transition peaks. | **HOLD** | Blocked due to database-wide collapsed `motion_score` (all values are `0.0000`). |
+| **더 빠르게 (fast_pace)** | 씬 체인지(Scene change) 편집점, 후보 조각 길이(Duration), 오디오 RMS 에너지. | **POSSIBLE (가능)** | 마이크로 캔디데이트 분할 및 씬 경계 snap 알고리즘을 통해 클립 길이 단축 및 템포 조절 가능. 검증 완료. |
+| **여러 영상 골고루 (balanced_sources)** | 비디오 소스 ID, 부모 조각 ID 관계도, 시간 오프셋. | **POSSIBLE (가능)** | 소스 및 부모 조각 중복 선택 방지를 위한 동적 감점 수식 적용. 다중 소스 분산 선택(Project-level) 가능 확인. |
+| **말/대화 중심 (speech_human)** | 음성 전사(ASR) 단어 리스트, 단어 단위 시간 오프셋(Word-level offsets), 목소리 존재 여부(VAD). | **PARTIAL (일부 가능)** | 자막/단어가 DB에 적재되어 있는 극소수 영상(예: `SRC_CB9107CA`)에서만 동작 가능. 24개 소스는 단어 없음으로 불가. |
+| **사람 중심 visual (visual_human)** | YOLO 인물 영역(Person box), 얼굴 감지 신뢰도(Face confidence), 화자 인식 정보. | **DATA_INSUFFICIENT (데이터 부족)** | DB 내에 얼굴 및 사람 객체 감지 로그가 완전히 부재함. 비주얼 감지 분석이 선행되지 않는 한 구동 불가능. |
+| **풍경 줄임 (reduce_scenery)** | YOLO 풍경/실외 클래스 태그, Scene 배경 분류 인덱스. | **WEAK_EFFECT (효과 미흡)** | 음성 및 모션의 부재만을 바탕으로 간접 역산하여 풍경 점수를 판단하므로, 풍경이 10% 미만으로 미비하게 감소함. |
+| **하이라이트 / motion** | 프레임 광학 흐름(Optical Flow), 데시벨 피크 오디오, 역동적 화면 전환. | **HOLD (기각 / 홀드)** | DB의 모든 영상의 모션 점수(`motion_score`)가 일괄 `0.0`으로 유실되어 있어, 모션 기반 제안은 현재 작동 불가. |
 
 ---
 
-## Key Matrix Conclusion
+## 매트릭스 결론
 
-Due to collapsed motion scores and absent visual object logs, any intent that relies on visual character tracking or motion highlight rendering is placed on **HOLD**. The system will report `DATA_INSUFFICIENT` or `WEAK_EFFECT` for these intents until the visual worker pipelines are integrated.
+현재 로컬 데이터베이스 환경에서는 **음성(Speech) 일부**와 **컷 속도(Pace)**, **소스 분산(Balanced)**에 의존한 마이크로 선택까지만 동작 가능하며, 비주얼 객체 및 얼굴 정보, 카메라 움직임 등을 종합 판단하는 "인물 위주" 또는 "하이라이트/모션" 등의 의도는 **추가적인 비주얼 탐지 작업이 선행되지 않는 한 실제 동작할 수 없음**을 판정하였습니다.

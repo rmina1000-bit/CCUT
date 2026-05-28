@@ -1,0 +1,13 @@
+{
+  "run_id": "QA_BRUTAL_TEST",
+  "seed": 999999,
+  "case_id": "CASE_000999",
+  "mode": "brutal",
+  "failure_type": "ValueError",
+  "failure_message": "Intentionally simulated failure to test replay correctness",
+  "chaos_injected": [
+    "db_locked"
+  ],
+  "timestamp": "2026-05-28T20:00:00",
+  "replay_command": "python tools/qa_factory/run_qa_factory.py --replay CASE_000999"
+}

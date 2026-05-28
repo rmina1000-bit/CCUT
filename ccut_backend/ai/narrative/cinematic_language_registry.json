@@ -1,0 +1,150 @@
+{
+  "reaction_hold": {
+    "description": "Maintain emotional reaction after dialogue",
+    "pacing_effect": "slow",
+    "role_multiplier": {
+      "reaction": 1.35
+    }
+  },
+  "breathing_gap": {
+    "description": "Allow silence between emotional beats",
+    "pacing_effect": "slow",
+    "role_multiplier": {
+      "context": 1.2
+    }
+  },
+  "establishing_bridge": {
+    "description": "Use scenery for location grounding",
+    "pacing_effect": "normal",
+    "role_multiplier": {
+      "scenery": 1.25
+    }
+  },
+  "fast_cut": {
+    "description": "High pacing cuts, prioritizing main dialogues",
+    "pacing_effect": "fast",
+    "role_multiplier": {
+      "scenery": 0.5,
+      "main": 1.3
+    }
+  },
+  "delayed_reaction": {
+    "description": "Delay the cut after dialogue to capture late emotional reaction",
+    "pacing_effect": "slow",
+    "role_multiplier": {
+      "reaction": 1.45
+    }
+  },
+  "emotional_carry_over": {
+    "description": "Let the emotional atmosphere carry over to the next scene",
+    "pacing_effect": "slow",
+    "role_multiplier": {
+      "context": 1.3
+    }
+  },
+  "silence_after_emotion": {
+    "description": "Leave a brief silent gap after a highly emotional fragment",
+    "pacing_effect": "slow",
+    "role_multiplier": {
+      "silence": 1.4
+    }
+  },
+  "tension_release": {
+    "description": "Transition from high tension to a relaxed pace",
+    "pacing_effect": "normal",
+    "role_multiplier": {
+      "scenery": 1.25,
+      "reaction": 1.1
+    }
+  },
+  "emotional_wave": {
+    "description": "Alternating pacing matching the wave of dramatic events",
+    "pacing_effect": "dynamic",
+    "role_multiplier": {
+      "reaction": 1.3,
+      "main": 1.1
+    }
+  },
+  "emotional_pause": {
+    "description": "Insert a deliberate pause during emotional peaks",
+    "pacing_effect": "slow",
+    "role_multiplier": {
+      "silence": 1.5
+    }
+  },
+  "observational_hold": {
+    "description": "Hold on the subject observing their environment without cut",
+    "pacing_effect": "slow",
+    "role_multiplier": {
+      "main": 1.25,
+      "scenery": 1.15
+    }
+  },
+  "breathing_landscape": {
+    "description": "Let scenery clips breathe, acting as emotional resets",
+    "pacing_effect": "slow",
+    "role_multiplier": {
+      "scenery": 1.4
+    }
+  },
+  "reflective_gap": {
+    "description": "Insert silent space for viewers to reflect on narrative points",
+    "pacing_effect": "slow",
+    "role_multiplier": {
+      "context": 1.35,
+      "silence": 1.25
+    }
+  },
+  "scenic_reset": {
+    "description": "Use scenic shots between major structural chapters to reset rhythm",
+    "pacing_effect": "normal",
+    "role_multiplier": {
+      "scenery": 1.5
+    }
+  },
+  "narrative_breathing": {
+    "description": "Allow natural breathing pauses in speech fragments",
+    "pacing_effect": "slow",
+    "role_multiplier": {
+      "context": 1.25
+    }
+  },
+  "visual_memory_callback": {
+    "description": "Call back to visually similar scenery or cues",
+    "pacing_effect": "normal",
+    "role_multiplier": {
+      "scenery": 1.3,
+      "context": 1.2
+    }
+  },
+  "emotional_bridge": {
+    "description": "Use reaction shots or silent close-ups to bridge narrative peaks",
+    "pacing_effect": "slow",
+    "role_multiplier": {
+      "reaction": 1.4
+    }
+  },
+  "contrast_transition": {
+    "description": "Abrupt rhythm or context change to create contrast",
+    "pacing_effect": "fast",
+    "role_multiplier": {
+      "main": 1.2,
+      "scenery": 0.6
+    }
+  },
+  "anticipation_hold": {
+    "description": "Hold tension before a key dialogue or action sequence",
+    "pacing_effect": "slow",
+    "role_multiplier": {
+      "reaction": 1.3,
+      "context": 1.2
+    }
+  },
+  "slow_reveal": {
+    "description": "Gradual introduction of scenery or subject",
+    "pacing_effect": "slow",
+    "role_multiplier": {
+      "scenery": 1.35
+    }
+  }
+}

@@ -1,0 +1,132 @@
+{
+  "documentary_director": {
+    "name": "Documentary Director",
+    "description": "A veteran documentary filmmaker valuing depth, slow pacing, and reflection.",
+    "focus": ["breathing", "emotional continuity", "reaction pacing"],
+    "pacing_preference": "slow",
+    "weights": {
+      "cinematic_flow": 1.4,
+      "boredom": 0.4,
+      "pacing_fatigue": 1.5,
+      "reaction_preservation": 1.3,
+      "scenery_overuse": 0.8
+    }
+  },
+  "cinematic_editor": {
+    "name": "Cinematic Editor",
+    "description": "A feature film editor focused on visual tension release, continuity, and memory.",
+    "focus": ["visual continuity", "tension release", "delayed reaction"],
+    "pacing_preference": "medium",
+    "weights": {
+      "cinematic_flow": 1.5,
+      "boredom": 0.6,
+      "pacing_fatigue": 1.2,
+      "reaction_preservation": 1.4,
+      "scenery_overuse": 0.7
+    }
+  },
+  "general_viewer": {
+    "name": "General YouTube Viewer",
+    "description": "An average viewer looking for a clear story that is neither too fast nor too slow.",
+    "focus": ["readability", "narrative pacing", "context"],
+    "pacing_preference": "medium",
+    "weights": {
+      "cinematic_flow": 1.0,
+      "boredom": 1.0,
+      "pacing_fatigue": 1.0,
+      "reaction_preservation": 1.0,
+      "scenery_overuse": 1.0
+    }
+  },
+  "shorts_addict": {
+    "name": "Shorts Addict",
+    "description": "An ultra-fast consumer with zero tolerance for scenery, silence, or slow setups.",
+    "focus": ["extreme speed", "immediate hook", "high motion"],
+    "pacing_preference": "fast",
+    "weights": {
+      "cinematic_flow": 0.4,
+      "boredom": 2.0,
+      "pacing_fatigue": 0.2,
+      "reaction_preservation": 0.5,
+      "scenery_overuse": 1.8
+    }
+  },
+  "travel_vlogger": {
+    "name": "Travel Vlog Fan",
+    "description": "Enjoys travel and lifestyle vlogs, preferring high tempo and quick visual scenery changes.",
+    "focus": ["audience retention", "hooks", "scenery pacing"],
+    "pacing_preference": "fast",
+    "weights": {
+      "cinematic_flow": 0.8,
+      "boredom": 1.5,
+      "pacing_fatigue": 0.5,
+      "reaction_preservation": 0.7,
+      "scenery_overuse": 1.4
+    }
+  },
+  "emotional_purist": {
+    "name": "Emotional Video Lover",
+    "description": "Highly sensitive to character expressions, background melodies, and narrative emotion.",
+    "focus": ["emotional valence", "character expression", "vibe"],
+    "pacing_preference": "slow",
+    "weights": {
+      "cinematic_flow": 1.2,
+      "boredom": 0.5,
+      "pacing_fatigue": 1.1,
+      "reaction_preservation": 1.6,
+      "scenery_overuse": 0.9
+    }
+  },
+  "slow_breather": {
+    "name": "Slow Breathing Enthusiast",
+    "description": "Values silent pauses, quiet scenes, ambient sounds, and cinematic pacing.",
+    "focus": ["breathing", "silence", "ambient rhythm"],
+    "pacing_preference": "slow",
+    "weights": {
+      "cinematic_flow": 1.3,
+      "boredom": 0.5,
+      "pacing_fatigue": 1.4,
+      "reaction_preservation": 1.1,
+      "scenery_overuse": 1.0
+    }
+  },
+  "fast_tempo": {
+    "name": "Fast Pacing Enthusiast",
+    "description": "Demands active cuts, constant motion, and snappy dialogue exchanges.",
+    "focus": ["tempo", "constant motion", "edit values"],
+    "pacing_preference": "fast",
+    "weights": {
+      "cinematic_flow": 0.7,
+      "boredom": 1.8,
+      "pacing_fatigue": 0.4,
+      "reaction_preservation": 0.6,
+      "scenery_overuse": 1.6
+    }
+  },
+  "info_centric": {
+    "name": "Information-Centric Viewer",
+    "description": "Focuses on text accuracy, spoken facts, narration layout, and clear information flow.",
+    "focus": ["narration", "text coherence", "facts"],
+    "pacing_preference": "medium",
+    "weights": {
+      "cinematic_flow": 1.0,
+      "boredom": 0.9,
+      "pacing_fatigue": 1.1,
+      "reaction_preservation": 0.5,
+      "scenery_overuse": 1.3
+    }
+  },
+  "emotion_centric": {
+    "name": "Emotion-Centric Viewer",
+    "description": "Focuses on faces, character dialogue, reaction timing, and empathetic narrative flow.",
+    "focus": ["empathy", "dialogue carryover", "faces"],
+    "pacing_preference": "medium",
+    "weights": {
+      "cinematic_flow": 1.1,
+      "boredom": 0.8,
+      "pacing_fatigue": 1.0,
+      "reaction_preservation": 1.5,
+      "scenery_overuse": 0.8
+    }
+  }
+}

@@ -1,55 +1,54 @@
-# Micro Candidate Layer Specification
+# 마이크로 캔디데이트 레이어 스펙 (Micro Candidate Layer Specification)
 
-This document defines the structural specifications for the **Micro Candidate Layer** in CCUT, detailing the split-level clip design, schema models, and caching strategies.
-
----
-
-## 1. Limits of Coarse Semantic Fragments
-
-In the current CCUT pipeline, the video is partitioned into coarse **Semantic Fragments** (typically 20 seconds). While this size is appropriate for visual timeline display and user comprehension in the UI, it presents severe limitations for AI proposal engines:
-- **Mixed Content Context**: A single 20-second fragment often contains a mix of speech, silent gaps, panning scenic background, and highlight motion.
-- **Binary Decision Bottleneck**: If the `ProposalEngine` attempts to prioritize "speech-only" or "motion-only" clips, it is forced to select or exclude the entire 20-second chunk. This binary logic leads to proposals that barely change in response to different user intents.
+본 문서는 CCUT 시스템 내 **마이크로 캔디데이트 레이어(Micro Candidate Layer)**의 구조 설계, 스키마 모델 및 캐싱 전략을 정의합니다.
 
 ---
 
-## 2. Visible vs Internal Candidate Separation Principle
+## 1. 기존 거친 의미 조각(Semantic Fragment)의 한계
 
-To maintain a responsive UI while ensuring highly precise, intent-driven editing, CCUT splits the editing representations into two distinct layers:
-1. **Visible Layer (Semantic Fragment)**: Placed on the Evidence Board and timeline for the user. These represent semantic topics and long-form narrative arcs.
-2. **Internal Layer (Micro Candidate)**: Hidden from the user interface, these represent **2 to 6-second clips** parsed within the boundaries of the parent fragment. The ProposalEngine uses this micro layer to score, select, and combine clips dynamically.
+현재 CCUT 파이프라인에서는 영상을 보통 20초 단위의 거친 **의미 조각(Semantic Fragment)**으로 분할합니다. 이 크기는 타임라인 시각화 및 사용자의 의미적 이해에는 적합하지만, AI 제안 엔진(ProposalEngine)이 편집 판단을 내릴 때는 다음과 같은 한계가 발생합니다:
+- **콘텐츠의 혼합**: 20초짜리 한 조각 내에 음성 대화, 무음 구간, 정적인 풍경, 역동적인 하이라이트 액션이 모두 혼합되어 존재합니다.
+- **선택의 이분법적 한계**: ProposalEngine이 "사람 중심" 또는 "풍경 제외" 같은 사용자 의도를 반영하려 해도, 20초 조각 전체를 넣거나 빼는 선택밖에 할 수 없습니다. 이로 인해 사용자 의도가 바뀌어도 실제 제안(Proposal) 비디오의 조각 구성이 거의 달라지지 않는 문제가 발생합니다.
 
 ---
 
-## 3. Micro Candidate Data Schema
+## 2. 사용자용 노출 조각(Visible)과 내부 엔진용 조각(Internal) 분리 원칙
 
-Each micro candidate is modeled using the following metadata fields:
+동작 반응 속도를 극대화하면서 의도에 맞춘 정밀 편집 제안을 생성하기 위해, CCUT은 편집 조각 단위를 다음과 같이 이중화하여 관리합니다:
+1. **노출 레이어 (Semantic Fragment)**: 타임라인 및 에비던스 보드(Evidence Board) 상에서 사용자에게 보여지는 20초 단위 큰 조각입니다. 서사적 흐름과 주제를 전달합니다.
+2. **내부 엔진 레이어 (Micro Candidate)**: 사용자에게는 보이지 않는 백엔드 판단용 조각으로, 부모 조각 내부에서 씬 체인지(Scene Change) 경계에 맞추어 **2초 ~ 6초 단위**로 세밀하게 쪼갠 후보들입니다. ProposalEngine은 내부적으로 이 마이크로 후보들을 가중 점수화하고 조합하여 최적의 제안을 구성합니다.
 
-| Field Name | Type | Description |
+---
+
+## 3. 마이크로 캔디데이트 데이터 스키마 (Micro Candidate Data Schema)
+
+각 마이크로 캔디데이트는 데이터베이스에 다음과 같은 필드 모델로 캐싱됩니다:
+
+| 필드명 | 타입 | 설명 |
 | :--- | :---: | :--- |
-| `micro_candidate_id` | String | Unique identifier (e.g., `MC_SF_ABC123_001`). |
-| `parent_semantic_fragment_id`| String | References the parent Semantic Fragment ID. |
-| `source_id` | String | References the raw video source ID. |
-| `start` | Float | Start time offset relative to raw video source (seconds). |
-| `end` | Float | End time offset relative to raw video source (seconds). |
-| `duration` | Float | Clip length (between 2.0 and 6.0 seconds). |
-| `tags` | Array | Category tags representing detected scene features (e.g. `["Active Speech"]`). |
-| `scores` | Object | Normalized intent evaluation scores mapping speech, scenery, motion, weak human voice, highlight, and filler coefficients. |
-| `evidence_refs` | Array | References to the source `evidence_board` indices. |
-| `confidence` | Float | Overall extraction quality coefficient. |
+| `micro_candidate_id` | String | 고유 식별자 (예: `MC_SF_ABC123_001`). |
+| `parent_semantic_fragment_id`| String | 부모 의미 조각(Semantic Fragment)의 ID 참조. |
+| `source_id` | String | 원본 비디오 소스 ID 참조. |
+| `start` | Float | 원본 영상 내 시작 시간 오프셋 (초 단위). |
+| `end` | Float | 원본 영상 내 종료 시간 오프셋 (초 단위). |
+| `duration` | Float | 캔디데이트 길이 (2.0초 ~ 6.0초 범위). |
+| `tags` | Array | 검출된 장면 특징 태그 목록 (예: `["Active Speech"]`). |
+| `scores` | Object | 정규화된 의도별 분석 점수 (speech, scenery, motion, weak human, highlight, filler 등). |
+| `evidence_refs` | Array | 관련된 `evidence_board` 인덱스 참조 목록. |
+| `confidence` | Float | 추출 및 장면 분석 신뢰도 계수. |
 
 ---
 
-## 4. Cache & Re-scoring Strategy
+## 4. 캐시 및 재점수화(Re-scoring) 전략
 
-To ensure sub-millisecond page responsiveness during clip regeneration:
-- **No Repeated Analysis**: Micro candidates must be generated **exactly once** during the initial video ingestion and parsing phase. Running heavy analysis workers (Whisper, object detectors, optical flow) during intent regeneration is strictly forbidden.
-- **Ingest-Time Caching**: The generated candidate boundaries and raw data signals are serialized and stored as cached arrays in the database (or JSON files).
-- **Runtime Re-Scoring**: When the user requests a proposal update (e.g., "reduce scenery"), the ProposalEngine queries the cached micro candidates and runs a lightweight math-based scoring formula. 
-- **Time Profiling**: Simulation tests confirm that runtime re-scoring and greedy solver loops on 48 candidates take less than **0.0004 seconds**, guaranteeing zero performance bottlenecks.
+사용자가 자연어 인텐트를 변경하여 재생성을 요청할 때 sub-millisecond 단위의 즉각적인 응답을 보장하기 위한 규칙입니다:
+- **재분석 전면 금지**: 마이크로 캔디데이트는 최초 비디오 업로드 및 분석(Ingestion) 시점에 **단 한 번만** 생성 및 캐싱됩니다. 재생성 시점에 음성 인식(Whisper)이나 객체 탐지 모델을 다시 가동하는 것은 절대 금지됩니다.
+- **최초 분석 캐시**: 분할된 경계 정보 및 기초 특징량(음성 비율, 모션 값 등)은 DB에 직렬화되어 즉시 저장됩니다.
+- **실시간 재점수화 (Runtime Re-Scoring)**: 재생성 요청 시 ProposalEngine은 캐싱된 후보들을 조회하여 가중치 수식 연산만 수행합니다. 48개 후보 기준 연산 시간이 **0.0004초 미만**으로 소요되므로 극도로 빠른 응답이 가능합니다.
 
 ---
 
-## 5. Integration Status
+## 5. 현재 통합 상태
 
 > [!IMPORTANT]
-> The Micro Candidate Layer is currently under **HOLD** status. The ProposalEngine, database schema, and frontend systems have **not** been modified to integrate this architecture. Full integration is blocked pending visual/motion evidence ingestion.
+> 마이크로 캔디데이트 레이어 연산은 현재 **통합 HOLD** 상태입니다. 데이터베이스 실제 스키마 변경 및 백엔드 본체(ProposalEngine) 소스 코드는 수정되지 않았으며, 추후 비주얼/모션 데이터 분석 스펙이 선행 완료된 후 연결이 허용됩니다.

@@ -1,55 +1,54 @@
-# Session Report: Micro Candidate Layer & Visual Ingestion (STEP 2-G / 2-H)
+# 세션 최종 보고서: 마이크로 캔디데이트 및 비주얼 에비던스 분석 (STEP 2-G / 2-H)
 
-This session report summarizes the progress, analysis outcomes, and current status of the Micro Candidate Layer feasibility test.
-
----
-
-## 1. Context & Commit History
-
-### A. Completed Commits (STEP 2-D Push)
-The following commits constitute the baseline pipeline and Whisper ASR fixes:
-- `690bcf1` - Upload/analyze pipeline operation & thumbnail path fixes
-- `3ea4b64` - Evidence Board and Semantic Fragment generation core logic
-- `edfcf0c` - Whisper ASR restoration & Proposal preview rendering
-- `871388f` - R16 sentence-aware boundary snapping & intent logger paths
-
-### B. Previous Outcomes (STEP 2-E/F)
-- **Status**: The frontend buttons and natural language input routing succeeded in saving user intents and triggering Proposal regeneration.
-- **Problem**: In practice, selecting "human priority" or "shorter clips" did not result in any significant change in the selected proposal clips.
-- **Insight**: The editing unit was too coarse. At 20 seconds, each parent fragment contains a mixture of content. To allow scoring weights to affect clip choices, the engine requires a **2 to 6-second Micro Candidate Layer** internally.
+본 보고서는 마이크로 캔디데이트 레이어의 피저빌리티 테스트 및 로컬 데이터 신호 감사 세션의 진행 결과와 상태를 기록한 문서입니다.
 
 ---
 
-## 2. Simulation Results (STEP 2-G)
+## 1. 세션 히스토리 및 개발 맥락
 
-To verify the feasibility of the micro layer, we developed a standalone simulation program `tools/simulate_micro_candidate_layer.py` (upgraded to v0.2). The simulation yielded the following outcomes:
+### A. 진행 완료된 커밋 이력 (STEP 2-D 푸시)
+다음 커밋들은 본 세션 시작 전 파이프라인 및 복구 작업에 대한 커밋 내용입니다:
+- `690bcf1` - 업로드/분석 파이프라인 동작 확인 및 썸네일 경로 정상화
+- `3ea4b64` - 에비던스 보드(Evidence Board) 및 의미 조각(Semantic Fragment) 생성 핵심 로직
+- `edfcf0c` - Whisper 기반 ASR 전사 복구 및 Proposal 프리뷰 렌더러 구조 도입
+- `871388f` - R16 문장 인식 기반 경계 스냅(boundary snap) 연동
 
-- **fast_pace**: **PASS**. Clip lengths successfully reduced from 20s to ~3.4s, pacing edits dynamically.
-- **balanced_sources**: **PASS**. The project-level multi-source solver successfully pooled candidates from 27 sources and balanced selections.
-- **speech_human_priority**: **PARTIAL**. Operates correctly only on sources containing ASR transcript words.
-- **visual_human_priority**: **DATA_INSUFFICIENT**. Fails to calculate visual metrics because facial/person metadata is completely absent in the database.
-- **reduce_scenery**: **WEAK_EFFECT**. The lack of visual/motion classification tags limited scenery score reduction to under 10%.
-
----
-
-## 3. Specifier & Design Pass (STEP 2-H)
-
-Due to missing visual signals, we suspended direct integration with `ProposalEngine` (**HOLD**). We drafted a comprehensive design specification to address metadata requirements:
-- **Specification Document**: `docs/VISUAL_MOTION_EVIDENCE_SPEC.md`
-- **Goal**: Define schemas for YOLO object trackers, FaceNet detections, Optical Flow calculations, and pipeline integration points.
+### B. 이전 단계의 문제 사항 (STEP 2-E/F)
+- **현상**: 프론트엔드 UI 화면에서 자연어로 "풍경 줄여줘", "더 빠르게" 인텐트를 전달하고 재생성을 돌려도, 제안 비디오(Proposal)의 조각 구성이 거의 바뀌지 않았습니다.
+- **원인 통찰**: 의미 조각 단위가 20초로 너무 거칠었습니다. 20초짜리 큰 덩어리 안에는 풍경과 사람이 다 섞여 있어서, ProposalEngine이 가중치를 줘봤자 조각 전체를 넣거나 빼는 거친 선택만 가능했습니다. 따라서, 내부적으로 **2초 ~ 6초 단위의 세부 후보 조각(Micro Candidate Layer)으로 세분화**해야 한다는 기술적 결론을 내렸습니다.
 
 ---
 
-## 4. Current Status & Safety Verification
+## 2. 독립 시뮬레이션 결과 (STEP 2-G)
 
-- **Codebase Integrity**: `git status` verifies that `ccut_backend/` and `ccut_frontend/` remain completely unchanged.
-- **Proposal Engine**: Direct integration remains on **HOLD** until visual analysis pipeline workers are built.
+본체 소스코드를 수정하기 전, 실제 DB 기반으로 이 마이크로 구조가 동작 가능한지 검증하는 독립 시뮬레이터 `tools/simulate_micro_candidate_layer.py` (v0.2)를 설계하여 구동한 결과는 다음과 같습니다:
+
+- **fast_pace (더 빠르게)**: **SUCCESS (성공)**. 평균 클립 길이가 20초에서 3.4초 수준으로 단축되어 역동적인 템포 조절이 가능함을 증명.
+- **balanced_sources (여러 영상 골고루)**: **SUCCESS (성공)**. 단일 소스가 아닌 27개 영상 프로젝트 풀에서 클립을 균등하게 다중 소스 분산 선택함.
+- **speech_human_priority (말소리 중심)**: **PARTIAL (일부 가능)**. 실제 음성 전사 단어가 들어있는 일부 소스 비디오(63단어 검출 등)에서만 동작하며, 단어 정보가 없는 대다수 비디오에서는 데이터 부족 판정을 받음.
+- **visual_human_priority (비주얼 인물 중심)**: **DATA_INSUFFICIENT (데이터 부족)**. 얼굴 영역 및 YOLO 사람 객체 탐지 정보가 DB에 전혀 저장되어 있지 않아 점수 연산 불가능 판정.
+- **reduce_scenery (풍경 줄임)**: **WEAK_EFFECT (효과 미흡)**. 모션과 비주얼 분류 태그가 없어 음성/모션 부재를 역산하는 소극적 점수화에 그침. 풍경 감소폭이 10% 미만으로 미미함.
 
 ---
 
-## 5. Instructions for Next Session
+## 3. 아키텍처 스펙 설계 및 기각/HOLD 판정 (STEP 2-H)
 
-When starting the next session, immediately execute the following diagnostic commands to check status and commit history:
+비주얼 데이터의 명백한 부재로 인해, 실제 백엔드 소스코드(`ccut_backend/`) 통합은 전면 **HOLD(보류)** 처리되었습니다. 대신, 추후 분석 워커 파이프라인 개발을 지원하기 위한 설계 문서를 독립 문서로 작성하여 기획 합의를 이루었습니다:
+- **작성된 설계 명세서**: `docs/VISUAL_MOTION_EVIDENCE_SPEC.md`
+- **의의**: YOLO 객체, 얼굴, 광학 흐름(Optical Flow), 데시벨 피크 오디오 연산 적재 사양을 명문화하여 차후 분석 작업의 명확한 가이드를 마련함.
+
+---
+
+## 4. 본체 형상 및 안전성 보고
+
+- **본체 소스코드 오염 없음**: `git status` 확인 결과, 백엔드(`ccut_backend/`) 및 프론트엔드(`ccut_frontend/`) 소스코드는 단 한 줄도 수정되지 않고 완벽하게 롤백 보존되었습니다.
+- **ProposalEngine 연동**: 실제 가동 연동은 금지된 상태이며, 시뮬레이션 검증 및 아키텍처 설계 합의 단계로 이번 세션을 마무리합니다.
+
+---
+
+## 5. 다음 방 세션 시작 시 확인 명령 (Handover)
+
+다음 방 세션에 진입하면 즉시 터미널에서 다음 진단 명령을 가동해 코드 형상 상태를 확인하십시오:
 ```powershell
 git status --short
 git diff --stat
