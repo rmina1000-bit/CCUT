@@ -45,7 +45,9 @@ class VisualAttentionSimulator:
             
             # Retrieve evidence metrics
             intel = clip.get("intelligence") or {}
-            txt = str(intel.get("transcript", "") or clip.get("semantic", {}).get("transcript_refs", ""))
+            raw_refs = clip.get("semantic", {}).get("transcript_refs", "")
+            refs_str = raw_refs if isinstance(raw_refs, str) else ""
+            txt = str(intel.get("transcript", "") or refs_str)
             motion_score = float(clip.get("motion_score") or clip.get("evidence", {}).get("motion_score", 0.3))
             
             # --- 1. Dynamic Attention Decay (Gaze Drift) ---

@@ -876,13 +876,13 @@ class SemanticFragmentGenerator:
         final = []
         for frag in res:
             if frag["structural"]["duration"] > 20.0:
-                final.extend(self._split_long_fragment(frag, boundaries))
+                final.extend(self._split_long_fragment(frag, boundaries, evidences=evidences))
             else:
                 final.append(frag)
 
         return final
 
-    def _split_long_fragment(self, frag, boundaries, max_duration=20.0):
+    def _split_long_fragment(self, frag, boundaries, max_duration=20.0, evidences=None):
         """[STEP 1-R3] 긴 조각을 _P001/_P002 형식으로 안정 분할.
         _S1/_S2 suffix 재귀 누적 없음. depth limit 불필요.
         기존 _S1/_S2 suffix가 붙어있으면 제거 후 base_id 사용."""
@@ -927,6 +927,23 @@ class SemanticFragmentGenerator:
             child["start"] = round(cursor, 2)
             child["end"] = part_end
             child["structural"]["duration"] = part_duration
+
+            # Time range ref re-filtering
+            c_start = child["start"]
+            c_end = child["end"]
+            child_refs = []
+            if "evidence_refs" in frag["semantic"] and evidences:
+                # Find matching evidence_refs based on time bounds
+                child_refs = [
+                    ref for ref in frag["semantic"]["evidence_refs"]
+                    if any(
+                        e["fragment_id"] == ref and not (e["end"] <= c_start or e["start"] >= c_end)
+                        for e in evidences
+                    )
+                ]
+            
+            child["semantic"]["evidence_refs"] = child_refs
+            child["semantic"]["transcript_refs"] = child_refs
 
             parts.append(child)
             cursor = part_end
