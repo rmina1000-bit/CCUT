@@ -133,8 +133,47 @@ class ProposalEngine:
         try:
             from ai.perception.human_reality_score import HumanRealityScore
             hrs_evaluator = HumanRealityScore()
+            evidence_boards_cache = {}
             for p in proposals:
                 if "sequence" in p and p["sequence"]:
+                    for f in p["sequence"]:
+                        sid = f.get("source_id")
+                        if sid:
+                            if sid not in evidence_boards_cache:
+                                if hasattr(self.bams, "get_evidence_board"):
+                                    evidence_boards_cache[sid] = self.bams.get_evidence_board(sid) or []
+                                else:
+                                    evidence_boards_cache[sid] = []
+                            evidences = evidence_boards_cache[sid]
+                            start = float(f.get("start", f.get("start_time", 0.0)))
+                            end = float(f.get("end", f.get("end_time", 0.0)))
+                            overlap_evs = [
+                                e for e in evidences
+                                if not (float(e.get("end") or 0.0) <= start or float(e.get("start") or 0.0) >= end)
+                            ]
+                            motions = [e["motion_score"] for e in overlap_evs if e.get("motion_score") is not None]
+                            audios = [e["audio_energy"] for e in overlap_evs if e.get("audio_energy") is not None]
+                            texts = [e["text"] for e in overlap_evs if e.get("text") and str(e["text"]).strip()]
+                            
+                            avg_motion = sum(motions) / len(motions) if motions else None
+                            avg_audio = sum(audios) / len(audios) if audios else None
+                            combined_text = " ".join(str(t) for t in texts).strip()
+                            
+                            if "intelligence" not in f or not isinstance(f["intelligence"], dict):
+                                f["intelligence"] = {}
+                            f["intelligence"]["transcript"] = combined_text
+                            
+                            f["motion_score"] = avg_motion
+                            f["audio_energy"] = avg_audio
+                            
+                            dur = max(0.0, end - start)
+                            f["duration"] = dur
+                            f["duration_sec"] = dur
+                            
+                            if "evidence" not in f or not isinstance(f["evidence"], dict):
+                                f["evidence"] = {}
+                            f["evidence"]["motion_score"] = avg_motion
+                            f["evidence"]["audio_energy"] = avg_audio
                     p["human_reality_score_data"] = hrs_evaluator.evaluate_sequence(p["sequence"])
         except Exception as hrs_err:
             print(f"[HUMAN_REALITY_SCORE][ERROR] Failed to evaluate human reality score: {hrs_err}")

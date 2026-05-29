@@ -41,7 +41,7 @@ class AuditoryFatigueSimulator:
             
             # Extract transcript presence and audio energy
             intel = clip.get("intelligence") or {}
-            has_speech = bool(intel.get("transcript") or clip.get("semantic", {}).get("transcript_refs"))
+            has_speech = bool(intel.get("transcript"))
             audio_energy = float(clip.get("audio_energy") or clip.get("evidence", {}).get("audio_energy", 0.4))
             
             # Save energy value for instability tracking

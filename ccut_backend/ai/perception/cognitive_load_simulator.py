@@ -44,7 +44,7 @@ class CognitiveLoadSimulator:
             
             # Extract transcript text
             intel = clip.get("intelligence") or {}
-            txt = str(intel.get("transcript", "") or clip.get("semantic", {}).get("transcript_refs", ""))
+            txt = str(intel.get("transcript", ""))
             word_count = len(txt.split())
             
             # --- 1. Working Memory Buffer & Context Switching Fatigue ---
