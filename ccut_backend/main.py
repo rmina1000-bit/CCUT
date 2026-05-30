@@ -1,4 +1,14 @@
 import os
+import sys
+
+try:
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    if hasattr(sys.stderr, "reconfigure"):
+        sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+except Exception:
+    pass
+
 import time
 import uuid
 import logging
@@ -362,6 +372,15 @@ async def upload_video(background_tasks: BackgroundTasks, file: UploadFile = Fil
 # ═══════════════════════════════════════════════════════════════════
 
 def _background_whisper(source_id: str, video_path: str, fragments: list):
+    try:
+        _background_whisper_impl(source_id, video_path, fragments)
+    except Exception as outer_err:
+        print(f"[ASR BG] Outer error occurred: {outer_err}")
+        if source_id in _fragment_job_registry:
+            _fragment_job_registry[source_id]["status"] = "FAILED"
+            _fragment_job_registry[source_id]["error"] = str(outer_err)
+
+def _background_whisper_impl(source_id: str, video_path: str, fragments: list):
     print("[PIPELINE] Whisper pipeline STARTED")
 
     # Update registry: 시작 상태 기록
@@ -396,7 +415,7 @@ def _background_whisper(source_id: str, video_path: str, fragments: list):
         return
 
     if not fragments:
-        print(f"[ASR BG] {source_id} — 조각 없음")
+        print(f"[ASR BG] {source_id} - 조각 없음")
         if source_id in _fragment_job_registry:
             _fragment_job_registry[source_id]["status"] = "FAILED"
             _fragment_job_registry[source_id]["error"] = "No fragments to analyze"
@@ -755,6 +774,7 @@ async def generate_fragments(
         except Exception as e:
             print(f"[GENERATE-FRAGMENTS] 신호 전처리 실패: {e}")
             smart_segments = [{"index": 0, "start": 0, "end": total_duration, "duration": total_duration}]
+            triggers = []
             analysis_mode = "FALLBACK"
 
         fragments = []
@@ -1881,7 +1901,7 @@ def _run_batch_export(batch_id: str, program_ids: list[str], db_session_factory=
     if not batch:
         return
 
-    print(f"[BATCH] {batch_id} 시작 — {len(program_ids)}개 프로그램")
+    print(f"[BATCH] {batch_id} 시작 - {len(program_ids)}개 프로그램")
     batch["status"] = "RUNNING"
 
     from database import SessionLocal
@@ -1957,7 +1977,7 @@ def _run_batch_export(batch_id: str, program_ids: list[str], db_session_factory=
     for pid in program_ids:
         _program_to_batch.pop(pid, None)
 
-    print(f"[BATCH] {batch_id} 완료 — 최종 상태: {batch['status']}")
+    print(f"[BATCH] {batch_id} 완료 - 최종 상태: {batch['status']}")
 
 
 class BatchExportRequest(BaseModel):
@@ -2010,7 +2030,7 @@ async def export_batch(
 
     background_tasks.add_task(_run_batch_export, batch_id, req.program_ids, None)
 
-    print(f"[BATCH] 새 배치 생성: {batch_id} — {len(req.program_ids)}개 프로그램")
+    print(f"[BATCH] 새 배치 생성: {batch_id} - {len(req.program_ids)}개 프로그램")
     return {
         "status": "ACCEPTED",
         "batch_id": batch_id,
@@ -2075,7 +2095,7 @@ async def retry_batch_failed(
 
     background_tasks.add_task(_run_batch_export, batch_id, retry_ids, None)
 
-    print(f"[BATCH RETRY] {batch_id} — {len(retry_ids)}개 항목 재시도")
+    print(f"[BATCH RETRY] {batch_id} - {len(retry_ids)}개 항목 재시도")
     return {
         "status": "RETRY_ACCEPTED",
         "batch_id": batch_id,
@@ -2186,7 +2206,7 @@ async def publish_to_sns(publish_id: str, db: Session = Depends(get_db)):
         "platform": "YouTube",
         "video_id": result["video_id"],
         "url": result["url"],
-        "message": f"'{asset.title}' — 전 세계 송출 완료!",
+        "message": f"'{asset.title}' - 전 세계 송출 완료!",
     }
 
 

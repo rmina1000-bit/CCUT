@@ -256,7 +256,7 @@ def rebalance_roles(fragments: list) -> list:
         return fragments
 
     if len(fragments) == 1:
-        print(f"[REBALANCE] 조각 1개 — Hook 단독 배정")
+        print(f"[REBALANCE] 조각 1개 - Hook 단독 배정")
         fragments[0].setdefault("intelligence", {})["role"] = "Hook"
         return fragments
 

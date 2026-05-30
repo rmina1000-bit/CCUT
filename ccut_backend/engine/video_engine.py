@@ -108,11 +108,11 @@ class VideoEngine:
             return None
             
         cmd = [
-            'ffmpeg', '-y', '-i', video_path, '-ss', str(timestamp),
+            'ffmpeg', '-y', '-ss', str(timestamp), '-i', video_path,
             '-vframes', '1', '-q:v', '2', str(output_path)
         ]
         try:
-            subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
+            subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True, timeout=10)
             if output_path.exists():
                 return str(output_path)
         except Exception as e:
@@ -185,13 +185,16 @@ class VideoEngine:
                 print(f"[PBE][ACCURACY] Frame timestamps: {planned}")
 
                 cmd = [
-                    'ffmpeg', '-y', '-i', video_path, '-ss', str(start), '-t', str(duration),
+                    'ffmpeg', '-y', '-ss', str(start), '-t', str(duration), '-i', video_path,
                     '-vf', f"fps={num_frames}/{duration},scale=320:-1",
                     '-vframes', str(num_frames), '-start_number', '0',
                     str(self.thumbnails_path / f"P_{prefix}_%d.jpg")
                 ]
-                subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-                print(f"[PBE][OK] Panorama created for {prefix}")
+                try:
+                    subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=15)
+                    print(f"[PBE][OK] Panorama created for {prefix}")
+                except Exception as e:
+                    print(f"[PBE][ERROR] Panorama creation failed for {prefix}: {e}")
             finally:
                 with self.lock:
                     if prefix in self.ongoing_tasks:
