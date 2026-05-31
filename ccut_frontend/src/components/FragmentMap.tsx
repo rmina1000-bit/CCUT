@@ -26,8 +26,8 @@ interface FragmentMapProps {
   onTrashRestore?: (f: Fragment, insertAt?: number) => void;
   onSourceRestore?: (f: Fragment, insertAt: number) => void;
   onBoundaryClick?: (
-    leftRealIndex: number,
-    rightRealIndex: number,
+    leftFragId: string | null,
+    rightFragId: string | null,
     clickSide: "left" | "right" | "center"
   ) => void;
 }
@@ -313,7 +313,7 @@ const FragmentMap: React.FC<FragmentMapProps> = ({
                       title="첫 조각 좌측 경계"
                       onClick={(e) => {
                         e.stopPropagation();
-                        onBoundaryClick?.(realIndex, realIndex, "left");
+                        onBoundaryClick?.(null, f.fragment_id, "left");
                       }}
                     >
                       <div className="w-[2px] h-[55%] rounded-full bg-primary/20 group-hover:bg-primary/60 transition-all" />
@@ -342,7 +342,7 @@ const FragmentMap: React.FC<FragmentMapProps> = ({
                       title="경계 편집"
                       onClick={(e) => {
                         e.stopPropagation();
-                        onBoundaryClick?.(realIndex, nextVisible.realIndex, "center");
+                        onBoundaryClick?.(f.fragment_id, nextVisible.fragment.fragment_id, "center");
                       }}
                     >
                       <div className="w-[2px] h-[55%] rounded-full bg-primary/20 group-hover:bg-primary/60 transition-all" />
@@ -356,7 +356,7 @@ const FragmentMap: React.FC<FragmentMapProps> = ({
                       title="마지막 조각 우측 경계"
                       onClick={(e) => {
                         e.stopPropagation();
-                        onBoundaryClick?.(realIndex, realIndex, "right");
+                        onBoundaryClick?.(f.fragment_id, null, "right");
                       }}
                     >
                       <div className="w-[2px] h-[55%] rounded-full bg-primary/20 group-hover:bg-primary/60 transition-all" />
@@ -375,7 +375,7 @@ const FragmentMap: React.FC<FragmentMapProps> = ({
                           onClick={(e) => {
                             e.preventDefault();
                             e.stopPropagation();
-                            onBoundaryClick?.(seam.leftRealIndex, seam.rightRealIndex, "right");
+                            onBoundaryClick?.(seam.leftVisibleFragmentId, seam.rightVisibleFragmentId, "right");
                           }}
                         >
                           <div className="h-full flex flex-col items-center justify-center gap-[3px]">

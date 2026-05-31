@@ -5,6 +5,7 @@ import { generateProposals } from "@/proposal/proposalOrchestrator";
 import { Fragment } from "@/data/fragmentData";
 import { narrativeService } from "@/services/narrativeService";
 import { videoService } from "@/services/videoService";
+import { assignShortDisplayIds, recalcDisplayIds } from "@/lib/fragmentIdentity";
 
 /**
  * [STEP 10-K-C1-R39] Frontend Commit-Time Sequence Guard
@@ -110,12 +111,22 @@ export const useProposalState = (
         .map((f: any) => f.fragment_id || f.proposal_fragment_id || f.id)
         .filter(Boolean);
       
+      const normalizedGuardedSeq = guardedSeq.map((f: any) => {
+        const fid = f.fragment_id || f.proposal_fragment_id || f.id;
+        return {
+          ...f,
+          fragment_id: fid,
+        };
+      });
+
+      const mappedSeq = assignShortDisplayIds(recalcDisplayIds(normalizedGuardedSeq));
+
       console.log("[R41_COMMIT_WEAK_GUARD_RESULT]", {
         id,
         beforeCount: rawSeq.length,
         afterCount: guardedSeq.length,
         key_fragments: guardedKeyFrags,
-        resolved_aliases: guardedSeq.map((f: any) => ({
+        resolved_aliases: mappedSeq.map((f: any) => ({
           fragment_id: f.fragment_id,
           display_id: f.display_id,
           source_video: f.source_video,
@@ -132,8 +143,8 @@ export const useProposalState = (
           [mode]: {
             ...prev[mode],
             key_fragments: guardedKeyFrags,
-            resolved_aliases: guardedSeq,
-            sequence: guardedSeq
+            resolved_aliases: mappedSeq,
+            sequence: mappedSeq
           }
         };
       });

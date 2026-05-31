@@ -36,6 +36,99 @@ const FragmentTile: React.FC<FragmentTileProps> = ({
   const cardWidth = `${Math.max(70, Math.min(350, seconds * 20 * widthScale))}px`;
   const hookWidth = `${(fragment.intelligence?.hook_score || 0.5) * 100}%`;
 
+  const getBaseFragmentId = (frag: any): string => {
+    if (!frag) return "";
+    const explicitBase = frag.root_fragment_uid || frag.parent_fragment_uid || frag.source_fragment_id || frag.derivedFrom || frag.fragment_id || frag.fragment_uid || "";
+    return explicitBase.replace(/(_M|_R|_L|_copy_\d+|\+).*$/, "");
+  };
+
+  const resolveThumbnailUrl = (frag: any): string | null => {
+    if (!frag) return null;
+    
+    // 1. Check if the fragment itself has a valid thumbnail_url
+    const directUrl = frag.thumbnail?.thumbnail_url || frag.thumbnail_url || frag.intelligence?.thumb_url || null;
+    if (directUrl) {
+      return directUrl;
+    }
+
+    // 2. We can search all source fragments or loaded project fragments.
+    // Index.tsx stores these in sourceEntries or editFragments, and window.triggerPBEMock might hydrate them.
+    // Let's find any loaded fragments in the application memory to locate the parent/base fragment.
+    // In React, we can retrieve them by checking if they are exposed globally, or we can search the current DOM or window.
+    // When Index.tsx maps/updates fragments, we can register them or check window context.
+    // Wait, let's see if we can locate the base fragment inside sourceEntries or editFragments.
+    // Let's write a lookup function that queries window.ccutFragments or similar, OR we can check common patterns.
+    // To make this robust, let's look up using the base fragment ID since base ID is VF... which has a real thumbnail URL.
+    // For example, if getBaseFragmentId returns 'VF1_SRC_CB9107CA', its thumbnail is '/static/thumbnails/VF1_SRC_CB9107CA.jpg'.
+    // Wait, is that true? Let's check the database sample output:
+    // Fragment VF1_SRC_CB9107CA -> thumb_url is '/static/thumbnails/VF1_SRC_CB9107CA.jpg'.
+    // Fragment VF2_SRC_CB9107CA -> thumb_url is '/static/thumbnails/VF2_SRC_CB9107CA.jpg'.
+    // Yes! The base fragments (the primary video fragments) are named VF1_SRC_..., VF2_SRC_...
+    // Their actual thumbnail url is indeed '/static/thumbnails/VF{N}_SRC_{HASH}.jpg'.
+    // Therefore, if the base fragment ID is a VF... ID (or contains VF), we can resolve it directly!
+    // But what if it's a semantic fragment ID (SF_...)? Let's check:
+    // A semantic fragment has parent_vf_id (e.g. parent_vf_id = 'VF1_SRC_CB9107CA').
+    // So if the fragment is a modified semantic fragment (e.g., SF_..._M), its parent is SF_... which has a lineage to VF1_SRC_...
+    // Let's implement parent lookups using any global reference if available, or fall back to the base ID lookup.
+    // Let's check if the window/globally exposed objects have these fragments.
+    // We can query all rendered tiles, or check if we can store them in a window variable in Index.tsx or inside custom hooks.
+    // Let's look up dynamically:
+    const baseId = getBaseFragmentId(frag);
+    if (baseId) {
+      // If baseId is a VF (Video Fragment), we can format it directly or look up if it's registered.
+      // Wait, the instruction says: "ID로 파일경로 조립 금지. 진짜 파일명은 ID와 다른 체계다. 실재하는 thumbnail_url 문자열을 상속하라."
+      // Ah! "ID로 파일경로 조립 금지... 실재하는 thumbnail_url 문자열을 상속하라."
+      // This means we must NOT do `/static/thumbnails/${baseId}.jpg` (which is assembly from ID).
+      // We must inherit the actual `thumbnail_url` string from the parent fragment itself.
+      // How do we find the parent fragment object?
+      // Let's check if we can query the parent fragment from the DOM or globally.
+      // Let's look at the global window object. We can check if there are any arrays on window.
+      // Or we can save a global registry of fragment IDs to their actual thumbnail URLs whenever a FragmentTile is rendered!
+      // Yes! Since FragmentTile is rendered for all visible fragments (including VF base fragments or parent fragments when they are loaded/rendered),
+      // we can save their direct thumbnail URLs in a global map: `window.__ccut_thumbnail_cache`.
+      // Let's check if `window.__ccut_thumbnail_cache` exists, and if not, initialize it.
+      // When a fragment has a direct thumbnail, we store it: `window.__ccut_thumbnail_cache[frag.fragment_id] = directUrl`.
+      // Then, if a fragment does NOT have a direct thumbnail, we look up its parent/base IDs in the cache:
+      // `root_fragment_uid`, `parent_fragment_uid`, `source_fragment_id`, `derivedFrom`, `baseId`.
+      if (typeof window !== 'undefined') {
+        const cache = (window as any).__ccut_thumbnail_cache || {};
+        if (!(window as any).__ccut_thumbnail_cache) {
+          (window as any).__ccut_thumbnail_cache = cache;
+        }
+        
+        // Cache this fragment's direct URL if it exists
+        const explicitId = frag.fragment_id || frag.fragment_uid;
+        if (explicitId && directUrl) {
+          cache[explicitId] = directUrl;
+        }
+
+        // Try to look up using parent keys in priority order: root_fragment_uid -> parent_fragment_uid -> source_fragment_id -> derivedFrom -> baseId
+        const parents = [
+          frag.root_fragment_uid,
+          frag.parent_fragment_uid,
+          frag.source_fragment_id,
+          frag.derivedFrom,
+          baseId
+        ].filter(Boolean);
+
+        for (const pId of parents) {
+          if (cache[pId]) {
+            return cache[pId];
+          }
+          // Also try cleaned versions of pId (e.g. without suffix)
+          const cleanPId = pId.replace(/(_M|_R|_L|_copy_\d+|\+).*$/, "");
+          if (cache[cleanPId]) {
+            return cache[cleanPId];
+          }
+        }
+      }
+    }
+
+    return null;
+  };
+
+  const resolvedUrl = resolveThumbnailUrl(fragment);
+
   return (
     <div
       onClick={onClick}
@@ -67,23 +160,30 @@ const FragmentTile: React.FC<FragmentTileProps> = ({
         </div>
       </div>
 
-      {!hasImageError && (
+      {hasImageError || !resolvedUrl ? (
+        <div className="absolute inset-0 flex flex-col items-center justify-center bg-muted/20 border border-dashed border-muted-foreground/30 z-[1]">
+          <span className="text-[10px] text-muted-foreground font-medium">이미지 없음</span>
+        </div>
+      ) : (
         <img
           draggable={false}
-          src={
-            fragment.thumbnail?.thumbnail_url ||
-            "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7"
-          }
+          src={resolvedUrl}
           alt={fragment.fragment_id}
           className="absolute inset-0 w-full h-full object-cover opacity-80 group-hover:opacity-100 transition-opacity duration-200 z-[1]"
+          onLoad={(e) => {
+            const img = e.currentTarget;
+            const naturalWidth = img.naturalWidth;
+            const fallbackUsed = naturalWidth > 0 ? 0 : 1;
+            console.log(`[THUMB_RESOLVE] fragId=${fragment.fragment_id} display_id=${fragment.display_id || fragment.fragment_id} directThumbnail=${fragment.thumbnail?.thumbnail_url || "none"} base=${getBaseFragmentId(fragment)} resolvedThumbnail=${resolvedUrl} naturalWidth=${naturalWidth} fallbackUsed=${fallbackUsed}`);
+          }}
           onError={(e) => {
-            // [STEP 10-I.5.27-E6-R1] Suppress SF_*.jpg failed requests
             setHasImageError(true);
+            console.log(`[THUMB_RESOLVE] fragId=${fragment.fragment_id} display_id=${fragment.display_id || fragment.fragment_id} directThumbnail=${fragment.thumbnail?.thumbnail_url || "none"} base=${getBaseFragmentId(fragment)} resolvedThumbnail=${resolvedUrl} naturalWidth=0 fallbackUsed=1`);
           }}
         />
       )}
 
-      {videoPath && (hasImageError || !fragment.thumbnail?.thumbnail_url) && (
+      {videoPath && (hasImageError || !resolvedUrl) && (
         <video
           draggable={false}
           src={videoPath}

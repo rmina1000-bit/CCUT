@@ -10,6 +10,7 @@ import {
     recalcDisplayIds,
     assignShortDisplayIds,
 } from '@/lib/fragmentIdentity';
+import { collectFragmentAliases } from '@/utils/proposalFragmentResolver';
 
 export interface BoundaryEditorTarget {
     clickSide: 'left' | 'right' | 'center';
@@ -276,14 +277,19 @@ const PrecisionBoundaryEditor: React.FC<PrecisionBoundaryEditorProps> = ({
     // Find the correct video URL
     const activeVideoUrl = useMemo(() => {
         if (!activeGroup) return videoUrl;
-        const srcLabel = activeGroup.fragment.source_video;
-        const srcId = activeGroup.fragment.source_id;
+        const frag = activeGroup.fragment;
         
-        // Find matching source using both source_id and label to handle various data aliases
-        const matchedSource = sources?.find(s => 
-            (s.source_id && (s.source_id === srcId || s.source_id === srcLabel)) || 
-            s.label === srcLabel
-        );
+        // Unify alias collection using import helper
+        const fragAliases = collectFragmentAliases(frag);
+
+        const matchedSource = sources?.find(s => {
+            const sid = s.source_id;
+            const label = s.label;
+            
+            // Check if fragment aliases include this source's ID or label, or matching source_id/source_video directly
+            return (sid && (fragAliases.includes(sid) || frag.source_id === sid || frag.source_video === sid)) ||
+                   (label && (fragAliases.includes(label) || frag.source_video === label));
+        });
         return matchedSource ? matchedSource.video_url : videoUrl;
     }, [activeGroup, sources, videoUrl]);
 
@@ -684,6 +690,7 @@ const PrecisionBoundaryEditor: React.FC<PrecisionBoundaryEditorProps> = ({
     const visualClips = useMemo(() => {
         const list: Array<{
             id: string;
+            display_id?: string;
             selection_state: 'S' | 'N';
             duration: number;
             start_frame: number;
@@ -705,6 +712,7 @@ const PrecisionBoundaryEditor: React.FC<PrecisionBoundaryEditorProps> = ({
                 if (a > 0) {
                     list.push({
                         id: `${frag.fragment_id}_trimmed_N`,
+                        display_id: frag.display_id ? `${frag.display_id}_trimmed_N` : undefined,
                         selection_state: 'N',
                         duration: a,
                         start_frame: frag.start_frame,
@@ -715,6 +723,7 @@ const PrecisionBoundaryEditor: React.FC<PrecisionBoundaryEditorProps> = ({
                 }
                 list.push({
                     id: frag.fragment_id,
+                    display_id: frag.display_id,
                     selection_state: 'S',
                     duration: origDur - a,
                     start_frame: frag.start_frame + a,
@@ -727,6 +736,7 @@ const PrecisionBoundaryEditor: React.FC<PrecisionBoundaryEditorProps> = ({
                 const trim = -b;
                 list.push({
                     id: frag.fragment_id,
+                    display_id: frag.display_id,
                     selection_state: 'S',
                     duration: origDur - trim,
                     start_frame: frag.start_frame,
@@ -737,6 +747,7 @@ const PrecisionBoundaryEditor: React.FC<PrecisionBoundaryEditorProps> = ({
                 if (trim > 0) {
                     list.push({
                         id: `${frag.fragment_id}_trimmed_N`,
+                        display_id: frag.display_id ? `${frag.display_id}_trimmed_N` : undefined,
                         selection_state: 'N',
                         duration: trim,
                         start_frame: frag.end_frame - trim,
@@ -758,6 +769,7 @@ const PrecisionBoundaryEditor: React.FC<PrecisionBoundaryEditorProps> = ({
 
             list.push({
                 id: L.fragment_id,
+                display_id: L.display_id,
                 selection_state: 'S',
                 duration: (L.end_frame - L.start_frame) - a,
                 start_frame: L.start_frame,
@@ -768,6 +780,7 @@ const PrecisionBoundaryEditor: React.FC<PrecisionBoundaryEditorProps> = ({
             if (a > 0) {
                 list.push({
                     id: `${L.fragment_id}_trimmed_N`,
+                    display_id: L.display_id ? `${L.display_id}_trimmed_N` : undefined,
                     selection_state: 'N',
                     duration: a,
                     start_frame: L.end_frame - a,
@@ -779,6 +792,7 @@ const PrecisionBoundaryEditor: React.FC<PrecisionBoundaryEditorProps> = ({
             if (b > 0) {
                 list.push({
                     id: `${R.fragment_id}_trimmed_N`,
+                    display_id: R.display_id ? `${R.display_id}_trimmed_N` : undefined,
                     selection_state: 'N',
                     duration: b,
                     start_frame: R.start_frame,
@@ -789,6 +803,7 @@ const PrecisionBoundaryEditor: React.FC<PrecisionBoundaryEditorProps> = ({
             }
             list.push({
                 id: R.fragment_id,
+                display_id: R.display_id,
                 selection_state: 'S',
                 duration: (R.end_frame - R.start_frame) - b,
                 start_frame: R.start_frame + b,
@@ -1861,6 +1876,7 @@ const PrecisionBoundaryEditor: React.FC<PrecisionBoundaryEditorProps> = ({
                     >
                         <div 
                             onMouseDown={handleTimelineMouseDown}
+                            data-testid="pbe-timeline-track"
                             style={{
                                 position: 'relative',
                                 width: `${totalWidth}px`,
@@ -1997,7 +2013,7 @@ const PrecisionBoundaryEditor: React.FC<PrecisionBoundaryEditorProps> = ({
                                                 gap: '4px',
                                                 alignItems: 'center',
                                             }}>
-                                                <span style={{ fontWeight: 600 }}>{clip.id}</span>
+                                                <span style={{ fontWeight: 600 }}>{clip.display_id || clip.id}</span>
                                                 <span style={{ opacity: 0.6, fontSize: '9px' }}>({clip.source_video})</span>
                                             </div>
                                         </React.Fragment>
@@ -2100,6 +2116,7 @@ const PrecisionBoundaryEditor: React.FC<PrecisionBoundaryEditorProps> = ({
                             {/* Playhead absolute overlay line */}
                             <div 
                                 id="pbe-playhead-line"
+                                data-testid="pbe-playhead-line"
                                 style={{
                                     position: 'absolute',
                                     left: `${playheadPx}px`,

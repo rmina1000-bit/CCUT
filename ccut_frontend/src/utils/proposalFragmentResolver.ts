@@ -152,6 +152,7 @@ export const resolveProposalFragments = (
       
       resolvedFragments.push({
         ...found,
+        display_id: alias?.display_id || found.display_id,
         start_frame: Math.round(pStart * 30),
         end_frame: Math.round(pEnd * 30),
         duration: Math.round((pEnd - pStart) * 30),

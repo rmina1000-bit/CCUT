@@ -19,7 +19,7 @@ interface OriginalPanoramaProps {
   onToggleIntelligence: () => void;
   fragmentOverrides?: Map<string, Fragment>;
   boundaryHighlightIds?: string[];
-  onBoundaryClick?: (leftIndex: number, rightIndex: number) => void;
+  onBoundaryClick?: (leftFragId: string | null, rightFragId: string | null) => void;
   sourceFragments?: Fragment[];
   sources?: { source_id: string; label?: string; file_path?: string; video_url?: string }[];
 }
@@ -153,9 +153,9 @@ const OriginalPanorama: React.FC<OriginalPanoramaProps> = ({
                       className="boundary-link w-px h-8 bg-border/30 flex-shrink-0 mx-0.5 cursor-pointer hover:bg-primary/50 hover:w-[2px] transition-all"
                       onClick={(e) => {
                         e.stopPropagation();
-                        // Note: panorama boundaries use source-local indices, not edit indices.
-                        // For now, this is a visual affordance. In production it would resolve to edit indices.
-                        onBoundaryClick?.(i, i + 1);
+                        const leftFrag = fragments[i];
+                        const rightFrag = fragments[i + 1];
+                        onBoundaryClick?.(leftFrag ? leftFrag.fragment_id : null, rightFrag ? rightFrag.fragment_id : null);
                       }}
                     />
                   </TooltipTrigger>

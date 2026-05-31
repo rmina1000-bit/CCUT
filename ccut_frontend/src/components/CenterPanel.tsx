@@ -5,6 +5,7 @@ import { Fragment } from "@/data/fragmentData";
 import { videoService } from "@/services/videoService";
 import { Direction, StoryPlanPreview } from "@/proposal/proposalTypes";
 import { PhysicalClip, validateExportClips } from "@/utils/exportClipBuilder";
+import { collectFragmentAliases } from "@/utils/proposalFragmentResolver";
 
 type AppState = "empty" | "analyzing" | "complete";
 
@@ -358,15 +359,32 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
     (fragId: string): string | null => {
       if (sourceEntries.length === 0) return videoUrl ?? null;
 
+      const allPossibleFragments = [
+        ...(fragments || []),
+        ...(sourceFragments || []),
+        ...sourceEntries.flatMap(e => e.fragments || [])
+      ];
+
+      const targetFrag = allPossibleFragments.find(f => collectFragmentAliases(f).includes(fragId));
+      const queryAliases = targetFrag ? collectFragmentAliases(targetFrag) : [fragId];
+
       for (const entry of sourceEntries) {
-        if (entry.fragments.some((f) => f.fragment_id === fragId)) {
-          return entry.video_url || videoUrl || null;
+        for (const f of entry.fragments) {
+          const fAliases = collectFragmentAliases(f);
+          const hasMatch = fAliases.some(alias => queryAliases.includes(alias));
+          if (hasMatch) {
+            const resolvedVideoUrl = entry.video_url || videoUrl || null;
+            console.log(`[VIDEO_URL_RESOLVE] fragId=${fragId} matchedAlias=${f.fragment_id} resolvedVideoUrl=${resolvedVideoUrl} fallbackUsed=0`);
+            return resolvedVideoUrl;
+          }
         }
       }
 
-      return videoUrl ?? null;
+      const finalFallback = videoUrl ?? null;
+      console.log(`[VIDEO_URL_RESOLVE] fragId=${fragId} matchedAlias=null resolvedVideoUrl=${finalFallback} fallbackUsed=1`);
+      return finalFallback;
     },
-    [sourceEntries, videoUrl]
+    [fragments, sourceFragments, sourceEntries, videoUrl]
   );
 
   const getVideoUrlForProposal = useCallback(

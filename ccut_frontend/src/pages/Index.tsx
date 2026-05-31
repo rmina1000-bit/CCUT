@@ -195,12 +195,24 @@ const Index: React.FC = () => {
       const endFrame = Math.round(f.end_frame ?? (endSec * fps));
       const durationFrames = Math.max(1, endFrame - startFrame);
       const rawThumb = f.intelligence?.thumb_url || f.thumb || f.thumbnail_url;
+      const fullThumbUrl = toFullUrl(rawThumb) ?? null;
+
+      // Populate global cache
+      if (typeof window !== "undefined") {
+        const cache = (window as any).__ccut_thumbnail_cache || {};
+        if (!(window as any).__ccut_thumbnail_cache) {
+          (window as any).__ccut_thumbnail_cache = cache;
+        }
+        if (f.fragment_id && fullThumbUrl) {
+          cache[f.fragment_id] = fullThumbUrl;
+        }
+      }
 
       return {
         fragment_id: f.fragment_id,
         fragment_uid: f.fragment_id,
         root_fragment_uid: f.root_fragment_uid || f.fragment_id,
-        display_id: f.fragment_id,
+        display_id: f.display_id || f.fragment_id,
         selection_state: "S" as SelectionState,
         status: "committed" as FragmentStatus,
         source_video: label,
@@ -210,7 +222,7 @@ const Index: React.FC = () => {
         duration: durationFrames,
         thumbnail_hue: idx % 2 === 0 ? 211 : 30,
         thumbnail: {
-          thumbnail_url: toFullUrl(rawThumb) ?? null,
+          thumbnail_url: fullThumbUrl,
         },
         intelligence: {
           hook_score: f.intelligence?.hook_score || f.structural?.market_value || 0.5,
@@ -673,67 +685,50 @@ const Index: React.FC = () => {
     if (window.location.hash !== "#debug-hydrate") return;
     
     console.log("[Debug] Running Playwright mockup hydration adapter...");
-    const mockProjectId = "proj_1779800484308";
     
-    // Simulate API fetch successful mapping
-    const mockFragments = [
-      {
-        fragment_id: "SF_4CC312_SRC_CB9107CA_P001",
-        fragment_uid: "SF_4CC312_SRC_CB9107CA_P001",
-        root_fragment_uid: "SF_4CC312_SRC_CB9107CA_P001",
-        display_id: "A1",
-        selection_state: "S",
-        status: "committed",
-        source_video: "A",
-        start_frame: 0,
-        end_frame: 600,
-        duration: 600,
-        thumbnail_hue: 211,
-        thumbnail: { thumbnail_url: "/static/thumbnails/SF_4CC312_SRC_CB9107CA_P001.jpg" },
-        intelligence: { hook_score: 0.8, role: "Main", description: "Verification Mock Clip" },
+    (window as any).triggerPBEMock = (caseTypeOrData?: any) => {
+      if (typeof caseTypeOrData === "object" && caseTypeOrData !== null) {
+        console.log("[Debug] Hydrating mock data from caller...");
+        const { projects, sourceEntries, editFragments, proposals } = caseTypeOrData;
+        if (projects) setProjects(projects);
+        if (sourceEntries) setSourceEntries(sourceEntries);
+        if (editFragments) {
+          setEditFragments(editFragments);
+          setSourceFragments(editFragments);
+        }
+        if (proposals) setProposals(proposals);
+        setAppState("complete");
+        return;
       }
-    ];
 
-    setProjects([{ id: mockProjectId, name: "Active Verification Project", date: "5/26", count: 3 }]);
-    setSourceEntries([{
-      source_id: "SRC_CB9107CA",
-      label: "A",
-      video_url: "/static/uploads/test_video.mp4",
-      fragments: mockFragments,
-      file_size_bytes: 1000000,
-      duration_sec: 20
-    }]);
-    setActiveSource("A");
-    setEditFragments(mockFragments);
-    setSourceFragments(mockFragments);
-    setProposals({
-      A: {
-        proposal_id: "PROP_A",
-        mode: "market",
-        title: "시장형 편집 (A)",
-        desc: "Mock Proposal A",
-        score: "95%",
-        key_fragments: ["SF_4CC312_SRC_CB9107CA_P001"],
-        resolved_aliases: [{
-          proposal_fragment_id: "SF_4CC312_SRC_CB9107CA_P001",
-          source_id: "SRC_CB9107CA",
-          source_fragment_id: "SF_4CC312_SRC_CB9107CA_P001",
-          display_id: "A1",
-          start_sec: 0,
-          end_sec: 20
-        }]
-      } as any,
-      B: {
-        proposal_id: "PROP_B",
-        mode: "user",
-        title: "사용자형 편집 (B)",
-        desc: "Mock Proposal B",
-        score: "85%",
-        key_fragments: ["SF_4CC312_SRC_CB9107CA_P001"]
-      } as any
-    });
-    setAppState("complete");
-  }, []);
+      const caseType = typeof caseTypeOrData === "string" ? caseTypeOrData : "mid";
+      console.log(`[Debug] triggerPBEMock called with caseType: ${caseType}`);
+
+      const targetFps = 30.0;
+      let targetFrags = [];
+      const currentFrags = editFragments;
+
+      if (caseType === "first") {
+        targetFrags = [currentFrags[0]].filter(Boolean);
+      } else if (caseType === "mid") {
+        targetFrags = [currentFrags[0], currentFrags[1]].filter(Boolean);
+      } else {
+        targetFrags = [currentFrags[0], currentFrags[1], currentFrags[4] || currentFrags[2]].filter(Boolean);
+      }
+
+      setPbeWindow(targetFrags);
+      setEditorTarget({
+        leftRealIndex: 0,
+        rightRealIndex: targetFrags.length - 1,
+        clickSide: caseType === "first" ? "left" : caseType === "mid" ? "right" : "center",
+      });
+      setEditorOpen(true);
+
+      const logDisplayIds = targetFrags.map(f => f.display_id || f.fragment_id);
+      const logSelectionStates = targetFrags.map(f => f.selection_state || "S");
+      console.log(`[PBE_OPEN_CONTEXT] leftFragId=${targetFrags[0]?.fragment_id || 'null'} rightFragId=${targetFrags[targetFrags.length - 1]?.fragment_id || 'null'} clickSide=${caseType === "first" ? "left" : caseType === "mid" ? "right" : "center"} targetFrags=[${logDisplayIds.join(', ')}] selection_states=[${logSelectionStates.join('/')}]`);
+    };
+  }, [editFragments]);
 
   // [CCUT1.0.4 PROPOSALS PROJECT SOURCES HYDRATION]
   useEffect(() => {
@@ -1373,10 +1368,14 @@ const Index: React.FC = () => {
   }, [committedProposalId, editFragments, proposals]);
 
   const handleOpenBoundaryEditor = useCallback(
-    async (leftRealIndex: number, rightRealIndex: number, clickSide?: "left" | "right" | "center") => {
-      // 1. Get left and right fragments based on the indices in the timeline (filteredFragments)
-      const leftFrag = filteredFragments[leftRealIndex];
-      const rightFrag = filteredFragments[rightRealIndex];
+    async (leftFragId: string | null, rightFragId: string | null, clickSide?: "left" | "right" | "center") => {
+      // 1. Get left and right fragments based on the ID/UID strings in the timeline (filteredFragments)
+      const leftFrag = leftFragId
+        ? filteredFragments.find(f => f.fragment_id === leftFragId || getUid(f) === leftFragId)
+        : null;
+      const rightFrag = rightFragId
+        ? filteredFragments.find(f => f.fragment_id === rightFragId || getUid(f) === rightFragId)
+        : null;
 
       if (!leftFrag && !rightFrag) return;
 
@@ -1458,31 +1457,6 @@ const Index: React.FC = () => {
     [filteredFragments, reservedFragments, currentSourceId]
   );
 
-  // Expose PBE trigger on window object for Playwright script
-  useEffect(() => {
-    if (typeof window !== "undefined") {
-      (window as any).triggerPBEMock = () => {
-        const frags = sourceFragments.length > 0 ? sourceFragments : editFragments;
-        if (frags.length === 0) {
-          console.warn("[triggerPBEMock] Source and Edit fragments are empty!");
-          return;
-        }
-        const pbeFragments = frags.map(f => ({
-          ...f,
-          start_frame: f.start_frame ?? Math.round((f.start ?? f.start_time ?? 0) * 30),
-          end_frame: f.end_frame ?? Math.round(((f.start ?? f.start_time ?? 0) + (f.duration ?? 0)) * 30),
-          selection_state: f.selection_state || "S",
-        }));
-        setPbeWindow(pbeFragments);
-        setEditorTarget({
-          leftRealIndex: 0,
-          rightRealIndex: pbeFragments.length - 1,
-          clickSide: "center",
-        });
-        setEditorOpen(true);
-      };
-    }
-  }, [sourceFragments, editFragments]);
 
   const handleEditorApply = useCallback(async (result: { updatedFragments: Fragment[]; removedFragmentIds: string[] }) => {
     const { updatedFragments } = result;
@@ -1713,7 +1687,7 @@ const Index: React.FC = () => {
               fragmentOverrides={fragmentOverrides}
 
               boundaryHighlightIds={boundaryHighlightIds}
-              onBoundaryClick={(leftIdx, rightIdx) => handleOpenBoundaryEditor(leftIdx, rightIdx, "center")}
+              onBoundaryClick={(leftFragId, rightFragId) => handleOpenBoundaryEditor(leftFragId, rightFragId, "center")}
               sourceFragments={
                 sourceEntries.length > 0
                   ? sourceEntries.find((e) => e.label === activeSource)?.fragments ?? []
