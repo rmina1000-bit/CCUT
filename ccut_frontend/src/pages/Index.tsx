@@ -1385,36 +1385,11 @@ const Index: React.FC = () => {
       // - If S|N|S: [leftFrag, ...middle_N_fragments, rightFrag]
       // - If Left single trim: [leftFrag]
       // - If Right single trim: [rightFrag]
+      // [BETA1 PBE REDUCTION] PBE는 parent fragment 1개만 편집한다.
+      // 두 조각 경계 / S|N|S / cross-source 편집은 1차 베타에서 제외.
+      // 어떤 클릭이 들어와도 단일 조각으로 축소한다 (이음새/center = 좌측 조각).
       let targetFrags: Fragment[] = [];
-      const isSameSource = leftFrag && rightFrag && leftFrag.source_video === rightFrag.source_video;
-
-      if (leftFrag && rightFrag && isSameSource) {
-        // Find if there are any excluded 'N' fragments between leftFrag and rightFrag in the full order of that source
-        const sFrags = filteredFragments.map((f) => ({ ...f, selection_state: "S" as const }));
-        const nFrags = reservedFragments.map((f) => ({ ...f, selection_state: "N" as const }));
-        const rawAll = [...sFrags, ...nFrags];
-
-        const uniqueMap = new Map<string, Fragment>();
-        rawAll.forEach((f) => uniqueMap.set(f.fragment_id, f));
-
-        const sourceOrdered = Array.from(uniqueMap.values())
-          .filter((f) => f.source_video === leftFrag.source_video)
-          .sort((a, b) => (a.start_frame ?? 0) - (b.start_frame ?? 0));
-
-        const leftIdxInSource = sourceOrdered.findIndex((f) => getUid(f) === getUid(leftFrag));
-        const rightIdxInSource = sourceOrdered.findIndex((f) => getUid(f) === getUid(rightFrag));
-
-        if (leftIdxInSource >= 0 && rightIdxInSource >= 0) {
-          const startIdx = Math.min(leftIdxInSource, rightIdxInSource);
-          const endIdx = Math.max(leftIdxInSource, rightIdxInSource);
-          targetFrags = sourceOrdered.slice(startIdx, endIdx + 1);
-        } else {
-          targetFrags = [leftFrag, rightFrag];
-        }
-      } else if (leftFrag && rightFrag && !isSameSource) {
-        // Cross source boundary editor: edit adjacent clips
-        targetFrags = [leftFrag, rightFrag];
-      } else if (leftFrag) {
+      if (leftFrag) {
         targetFrags = [leftFrag];
       } else if (rightFrag) {
         targetFrags = [rightFrag];
