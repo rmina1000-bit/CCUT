@@ -38,7 +38,9 @@ export const collectFragmentAliases = (f: any): string[] => {
   if (f.fragment_uid) ids.add(f.fragment_uid);
   if (f.id) ids.add(f.id);
   if (f.uid) ids.add(f.uid);
-  if (f.display_id) ids.add(f.display_id);
+  // [BETA1 닭정복 차단] display_id는 apply가 재부여하는 불안정 식별자라 video/source 매칭 alias에서 제외.
+  // 매칭은 fragment_id / fragment_uid / root_fragment_uid 등으로 성립함(H2·H3 확인). 복원 시 아래 주석 해제.
+  // if (f.display_id) ids.add(f.display_id);
   if (f.original_id) ids.add(f.original_id);
   if (f.source_fragment_id) ids.add(f.source_fragment_id);
   if (f.root_fragment_uid) ids.add(f.root_fragment_uid);
@@ -146,16 +148,19 @@ export const resolveProposalFragments = (
       // alias에 기록된 start_sec/end_sec이 있으면 우선 적용하여 30초 고정 문제를 해결함.
       // 단, 사용자가 PBE 편집 또는 수동 변경 등을 가한 경우 found의 start_frame / end_frame이 변경되어 
       // 존재하므로, 이를 최우선하여 사용자가 조작한 범위를 보존합니다.
+      // [BETA1 identity drift 차단 / fps 최소안] found.start_frame/end_frame은 이미 frame이다.
+      // ÷30→×30 왕복(fps 30 가정)을 제거하고 frame을 그대로 보존한다. frame 없을 때만 alias 초→frame fallback.
       const hasValidFrames = typeof found.start_frame === "number" && typeof found.end_frame === "number";
-      const pStart = hasValidFrames ? (found.start_frame / 30) : (alias?.start_sec !== undefined ? alias.start_sec : 0);
-      const pEnd = hasValidFrames ? (found.end_frame / 30) : (alias?.end_sec !== undefined ? alias.end_sec : (pStart + 5));
+      const sFrame = hasValidFrames ? found.start_frame : Math.round((alias?.start_sec ?? 0) * 30);
+      const eFrame = hasValidFrames ? found.end_frame : Math.round((alias?.end_sec ?? ((alias?.start_sec ?? 0) + 5)) * 30);
       
       resolvedFragments.push({
         ...found,
-        display_id: alias?.display_id || found.display_id,
-        start_frame: Math.round(pStart * 30),
-        end_frame: Math.round(pEnd * 30),
-        duration: Math.round((pEnd - pStart) * 30),
+        // [BETA1 identity drift 차단] alias.display_id로 덮어쓰지 않는다. apply가 보존한 found의 정체성 유지.
+        display_id: found.display_id,
+        start_frame: sFrame,
+        end_frame: eFrame,
+        duration: eFrame - sFrame,
         stable_key: makeStableFragmentKey(proposalId, idx, found)
       });
       diagnostics.matchedCount++;

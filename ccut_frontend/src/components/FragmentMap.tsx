@@ -64,7 +64,8 @@ const FragmentMap: React.FC<FragmentMapProps> = ({
     () =>
       fragments
         .map((f, i) => ({ fragment: f, realIndex: i }))
-        .filter(({ fragment }) => !fragment.excluded),
+        // [BETA1] 조각맵 기본 화면에는 active(S)만 표시. 비활성(N)은 내부 보존하되 숨긴다.
+        .filter(({ fragment }) => !fragment.excluded && fragment.selection_state !== "N"),
     [fragments]
   );
 
