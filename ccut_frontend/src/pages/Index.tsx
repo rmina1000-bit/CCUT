@@ -9,7 +9,9 @@ import { useProposalState } from "@/hooks/useProposalState";
 import { ArchivePanel } from "@/components/ArchivePanel";
 import { SnsUploadPanel } from "@/components/SnsUploadPanel";
 import { AccountPanel } from "@/components/AccountPanel";
-import PrecisionBoundaryEditor, { BoundaryEditorTarget } from "@/features/pbe/PrecisionBoundaryEditor";
+// [PBE REBUILD 2-1] 기존 PBE 컴포넌트 runtime import 제거. 타입만 임시 유지(새 편집창 신설 시 완전 제거).
+// import PrecisionBoundaryEditor from "@/features/pbe/PrecisionBoundaryEditor";
+import type { BoundaryEditorTarget } from "@/features/pbe/PrecisionBoundaryEditor";
 
 
 import {
@@ -1369,6 +1371,10 @@ const Index: React.FC = () => {
 
   const handleOpenBoundaryEditor = useCallback(
     async (leftFragId: string | null, rightFragId: string | null, clickSide?: "left" | "right" | "center") => {
+      // [PBE REBUILD 2-1] 기존 편집창 진입 차단. 새 편집창 준비 중.
+      console.log("[PBE_DISABLED] open blocked (rebuild in progress)");
+      return;
+      // ↓ 이하 기존 본문은 새 편집창 연결 시 정리 (지금은 도달 불가)
       // 1. Get left and right fragments based on the ID/UID strings in the timeline (filteredFragments)
       const leftFrag = leftFragId
         ? filteredFragments.find(f => f.fragment_id === leftFragId || getUid(f) === leftFragId)
@@ -1715,6 +1721,7 @@ const Index: React.FC = () => {
           </div>
         </>
       )}
+      {/* [PBE REBUILD 2-1] 기존 편집창 진입 차단. 새 SingleFragmentEditor로 교체 예정.
       <PrecisionBoundaryEditor
         open={editorOpen}
         onOpenChange={setEditorOpen}
@@ -1725,6 +1732,7 @@ const Index: React.FC = () => {
         sources={sourceEntries.map(s => ({ source_id: s.source_id, label: s.label, video_url: toFullUrl(s.video_url) || "" }))}
         onApply={handleEditorApply}
       />
+      */}
     </div>
   );
 };
