@@ -13,6 +13,7 @@ interface FragmentTileProps {
   videoPath?: string | null;
   onClick?: () => void;
   onDoubleClick?: () => void;
+  onEditFragment?: () => void;   // [2-2b] 조각편집 진입 (variant=edit에서만 버튼 노출)
 
   widthScale?: number;
 }
@@ -28,6 +29,7 @@ const FragmentTile: React.FC<FragmentTileProps> = ({
   videoPath,
   onClick,
   onDoubleClick,
+  onEditFragment,
 
   widthScale = 0.7,
 }) => {
@@ -201,6 +203,19 @@ const FragmentTile: React.FC<FragmentTileProps> = ({
 
       <div className="absolute inset-0 bg-black/38" />
       <div className="absolute inset-0 bg-gradient-to-t from-black/72 via-transparent to-black/16 pointer-events-none" />
+
+      {/* [2-2b] 조각편집 진입 버튼: variant=edit + onEditFragment 있을 때만, hover 시 중앙 표시. 선택 토글(onClick)과 분리. */}
+      {variant === "edit" && onEditFragment && (
+        <div className="absolute inset-0 z-20 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none">
+          <button
+            type="button"
+            onClick={(e) => { e.stopPropagation(); onEditFragment(); }}
+            className="pointer-events-auto px-2.5 py-1 rounded-md bg-black/60 hover:bg-black/80 text-white text-[11px] font-bold border border-white/20 backdrop-blur-sm"
+          >
+            ✂ 조각편집
+          </button>
+        </div>
+      )}
 
       <div className="absolute inset-0 z-10 p-3 flex flex-col justify-between">
         <div className="flex items-start justify-between gap-2">

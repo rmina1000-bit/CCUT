@@ -19,6 +19,7 @@ interface FragmentMapProps {
   selectedFragmentId: string | null;
   expandedFragmentId: string | null;
   onFragmentClick: (f: Fragment) => void;
+  onEditFragment?: (f: Fragment) => void;   // [2-2b] 조각편집 진입
   onFragmentDoubleClick: (f: Fragment) => void;
   onExcludeFragment: (f: Fragment) => void;
   onRestoreFragment: (f: Fragment, insertAt?: number) => void;
@@ -38,6 +39,7 @@ const FragmentMap: React.FC<FragmentMapProps> = ({
   selectedFragmentId,
   expandedFragmentId,
   onFragmentClick,
+  onEditFragment,
   onFragmentDoubleClick,
   onExcludeFragment,
   onRestoreFragment,
@@ -307,20 +309,6 @@ const FragmentMap: React.FC<FragmentMapProps> = ({
                   {visIdx === visibleFragments.length - 1 && dragOverIndex === fragments.length && (
                     <div className="absolute right-0 top-0 bottom-0 w-0.5 bg-primary rounded-full z-50 pointer-events-none" style={{ transform: "translateX(2px)" }} />
                   )}
-                  {visIdx === 0 && (
-                    <div
-                      className="self-stretch flex-shrink-0 flex items-center justify-center cursor-pointer group relative"
-                      style={{ width: 8 }}
-                      title="첫 조각 좌측 경계"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onBoundaryClick?.(null, f.fragment_id, "left");
-                      }}
-                    >
-                      <div className="w-[2px] h-[55%] rounded-full bg-primary/20 group-hover:bg-primary/60 transition-all" />
-                    </div>
-                  )}
-
                   <div className="relative group/frag flex items-stretch">
                     <FragmentTile
                       fragment={f}
@@ -330,81 +318,24 @@ const FragmentMap: React.FC<FragmentMapProps> = ({
                       hasActiveSelection={!!selectedFragmentId}
                       onClick={() => onFragmentClick(f)}
                       onDoubleClick={() => onFragmentDoubleClick(f)}
+                      onEditFragment={onEditFragment ? () => onEditFragment(f) : undefined}
 
                       widthScale={0.7}
                       variant="edit"
                     />
                   </div>
 
-                  {nextVisible && !seam && (
-                    <div
-                      className="self-stretch flex-shrink-0 flex items-center justify-center cursor-pointer group relative"
-                      style={{ width: 8 }}
-                      title="경계 편집"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onBoundaryClick?.(f.fragment_id, nextVisible.fragment.fragment_id, "center");
-                      }}
-                    >
-                      <div className="w-[2px] h-[55%] rounded-full bg-primary/20 group-hover:bg-primary/60 transition-all" />
-                    </div>
-                  )}
-
-                  {!nextVisible && (
-                    <div
-                      className="self-stretch flex-shrink-0 flex items-center justify-center cursor-pointer group relative"
-                      style={{ width: 8 }}
-                      title="마지막 조각 우측 경계"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onBoundaryClick?.(f.fragment_id, null, "right");
-                      }}
-                    >
-                      <div className="w-[2px] h-[55%] rounded-full bg-primary/20 group-hover:bg-primary/60 transition-all" />
-                    </div>
-                  )}
-
                   {nextVisible && seam && (
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <div
-                          className={`synthetic-seam self-stretch flex-shrink-0 flex items-center justify-center cursor-pointer group relative ${hoveredSeamKey === seamKey ? "synthetic-seam-hover" : ""
-                            }`}
-                          style={{ width: 10 }}
-                          onMouseEnter={() => setHoveredSeamKey(seamKey)}
-                          onMouseLeave={() => setHoveredSeamKey(null)}
-                          onClick={(e) => {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            onBoundaryClick?.(seam.leftVisibleFragmentId, seam.rightVisibleFragmentId, "right");
-                          }}
-                        >
-                          <div className="h-full flex flex-col items-center justify-center gap-[3px]">
-                            <div
-                              className={`w-[3px] h-[3px] rounded-full ${hoveredSeamKey === seamKey
-                                ? "bg-[hsl(var(--ccut-amber))]"
-                                : "bg-muted-foreground/25"
-                                }`}
-                            />
-                            <div
-                              className={`w-[3px] h-[3px] rounded-full ${hoveredSeamKey === seamKey
-                                ? "bg-[hsl(var(--ccut-amber))]"
-                                : "bg-muted-foreground/25"
-                                }`}
-                            />
-                            <div
-                              className={`w-[3px] h-[3px] rounded-full ${hoveredSeamKey === seamKey
-                                ? "bg-[hsl(var(--ccut-amber))]"
-                                : "bg-muted-foreground/25"
-                                }`}
-                            />
-                          </div>
-                        </div>
-                      </TooltipTrigger>
-                      <TooltipContent side="bottom" className="text-[9px]">
-                        숨겨진 공간 포함 편집
-                      </TooltipContent>
-                    </Tooltip>
+                    <div
+                      className="self-stretch flex-shrink-0 flex items-center justify-center"
+                      style={{ width: 10 }}
+                    >
+                      <div className="h-full flex flex-col items-center justify-center gap-[3px]">
+                        <div className="w-[3px] h-[3px] rounded-full bg-muted-foreground/25" />
+                        <div className="w-[3px] h-[3px] rounded-full bg-muted-foreground/25" />
+                        <div className="w-[3px] h-[3px] rounded-full bg-muted-foreground/25" />
+                      </div>
+                    </div>
                   )}
                 </div>
               </React.Fragment>

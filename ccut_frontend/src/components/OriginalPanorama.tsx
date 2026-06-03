@@ -145,24 +145,11 @@ const OriginalPanorama: React.FC<OriginalPanoramaProps> = ({
                   }
                 />
               </div>
-              {/* Boundary divider — click to open precision editor */}
+              {/* Boundary divider */}
               {i < fragments.length - 1 && (
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <div
-                      className="boundary-link w-px h-8 bg-border/30 flex-shrink-0 mx-0.5 cursor-pointer hover:bg-primary/50 hover:w-[2px] transition-all"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        const leftFrag = fragments[i];
-                        const rightFrag = fragments[i + 1];
-                        onBoundaryClick?.(leftFrag ? leftFrag.fragment_id : null, rightFrag ? rightFrag.fragment_id : null);
-                      }}
-                    />
-                  </TooltipTrigger>
-                  <TooltipContent side="bottom" className="text-[9px]">
-                    경계 편집 열기
-                  </TooltipContent>
-                </Tooltip>
+                <div
+                  className="w-px h-8 bg-border/30 flex-shrink-0 mx-0.5"
+                />
               )}
             </React.Fragment>
           ))}

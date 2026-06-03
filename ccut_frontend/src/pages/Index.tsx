@@ -898,6 +898,14 @@ const Index: React.FC = () => {
     [selectedFragment]
   );
 
+  // [2-2b] 조각편집 진입 (단일 조각 1개). 아직 편집창 안 엶 — parent 1개 검증 로그만.
+  const handleSingleFragmentEdit = useCallback(
+    (f: Fragment) => {
+      console.log(`[SINGLE_FRAGMENT_EDIT_OPEN] fragment_id=${f.fragment_id} source_id=${(f as any).source_id} source_video=${f.source_video} start_frame=${f.start_frame} end_frame=${f.end_frame}`);
+    },
+    []
+  );
+
   const handleEditFragmentDoubleClick = useCallback((f: Fragment) => {
     setSelectedFragment(f);
     setActiveSource(f.source_video);
@@ -1694,6 +1702,7 @@ const Index: React.FC = () => {
                 selectedFragmentId={selectedFragment ? getUid(selectedFragment) : null}
                 expandedFragmentId={expandedFragment}
                 onFragmentClick={handleEditFragmentClick}
+                onEditFragment={handleSingleFragmentEdit}
                 onFragmentDoubleClick={handleEditFragmentDoubleClick}
                 onExcludeFragment={handleExcludeFromEdit}
                 onRestoreFragment={handleRestoreFromHold}
