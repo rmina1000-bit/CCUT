@@ -9,6 +9,7 @@ import { useProposalState } from "@/hooks/useProposalState";
 import { ArchivePanel } from "@/components/ArchivePanel";
 import { SnsUploadPanel } from "@/components/SnsUploadPanel";
 import { AccountPanel } from "@/components/AccountPanel";
+import { SingleFragmentEditor } from "@/components/SingleFragmentEditor";
 // [PBE REBUILD 2-1] 기존 PBE 컴포넌트 runtime import 제거. 타입만 임시 유지(새 편집창 신설 시 완전 제거).
 // import PrecisionBoundaryEditor from "@/features/pbe/PrecisionBoundaryEditor";
 import type { BoundaryEditorTarget } from "@/features/pbe/PrecisionBoundaryEditor";
@@ -85,6 +86,8 @@ const Index: React.FC = () => {
   const [editorTarget, setEditorTarget] = useState<BoundaryEditorTarget | null>(null);
   const [pbeWindow, setPbeWindow] = useState<Fragment[]>([]);
   const [editorOpen, setEditorOpen] = useState(false);
+  const [singleEditOpen, setSingleEditOpen] = useState(false);
+  const [singleEditTarget, setSingleEditTarget] = useState<Fragment | null>(null);
   const [fragmentOverrides, setFragmentOverrides] = useState<Map<string, Fragment>>(new Map());
 
 // selectedProposalId, committedProposalId moved to useProposalState
@@ -518,6 +521,8 @@ const Index: React.FC = () => {
                       ...row,
                       start_frame: startFrame,
                       end_frame: endFrame,
+                      start_time: row.start_time ?? row.start,
+                      end_time:   row.end_time   ?? row.end,
                       lineage_match_method: "time_overlap_failed",
                       lineage_unit_source: unitSource
                     };
@@ -527,6 +532,8 @@ const Index: React.FC = () => {
                       // [R41] Lineage 보존
                       start_frame: startFrame,
                       end_frame: endFrame,
+                      start_time: row.start_time ?? row.start,
+                      end_time:   row.end_time   ?? row.end,
                       parent_vf_id: parentVF.fragment_id,
                       lineage_match_method: "source_id_time_overlap",
                       lineage_unit_source: unitSource,
@@ -898,10 +905,11 @@ const Index: React.FC = () => {
     [selectedFragment]
   );
 
-  // [2-2b] 조각편집 진입 (단일 조각 1개). 아직 편집창 안 엶 — parent 1개 검증 로그만.
+  // [2-2b] 조각편집 진입 (단일 조각 1개).
   const handleSingleFragmentEdit = useCallback(
     (f: Fragment) => {
-      console.log(`[SINGLE_FRAGMENT_EDIT_OPEN] fragment_id=${f.fragment_id} source_id=${(f as any).source_id} source_video=${f.source_video} start_frame=${f.start_frame} end_frame=${f.end_frame}`);
+      setSingleEditTarget(f);
+      setSingleEditOpen(true);
     },
     []
   );
@@ -1242,6 +1250,10 @@ const Index: React.FC = () => {
             ? Math.round(s.end_sec * 30) 
             : (s.end !== undefined ? Math.round(s.end * 30) : (matchSource?.end_frame ?? 150));
           
+          // [2-2c-Fix2] 초 원본 보존 — 이미 존재하는 초 키에서만. 없으면 undefined. /30 역산 금지.
+          const startSecVal = s.start_sec ?? s.start ?? s.start_time ?? matchSource?.start_time ?? matchSource?.start;
+          const endSecVal   = s.end_sec   ?? s.end   ?? s.end_time   ?? matchSource?.end_time   ?? matchSource?.end;
+
           return {
             fragment_id: fragId,
             fragment_uid: fragId,
@@ -1251,6 +1263,8 @@ const Index: React.FC = () => {
             start_frame: startF,
             end_frame: endF,
             duration: endF - startF,
+            start_time: startSecVal,
+            end_time: endSecVal,
             selection_state: "S",
             excluded: false,
             thumbnail: s.thumbnail_url || matchSource?.thumbnail,
@@ -1742,6 +1756,11 @@ const Index: React.FC = () => {
         onApply={handleEditorApply}
       />
       */}
+      <SingleFragmentEditor
+        open={singleEditOpen}
+        onOpenChange={setSingleEditOpen}
+        fragment={singleEditTarget}
+      />
     </div>
   );
 };
