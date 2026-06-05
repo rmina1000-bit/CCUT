@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Fragment } from "@/data/fragmentData";
+import { getUid } from "@/lib/fragmentIdentity";
 
 const LocalDialogContent = React.forwardRef<
   React.ElementRef<typeof DialogPrimitive.Content>,
@@ -54,7 +55,13 @@ interface SingleFragmentEditorProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   fragment: Fragment | null;
-  onApply?: () => void;
+  onApply?: (payload: {
+    fragmentUid: string;
+    newStartSec: number;
+    newEndSec: number;
+    origStart: number;
+    origEnd: number;
+  }) => void;
 }
 
 export const SingleFragmentEditor: React.FC<SingleFragmentEditorProps> = ({
@@ -87,11 +94,27 @@ export const SingleFragmentEditor: React.FC<SingleFragmentEditorProps> = ({
   const startSec = fragment ? readNumber((fragment as any).start_sec, (fragment as any).start, (fragment as any).start_time) : undefined;
   const endSec   = fragment ? readNumber((fragment as any).end_sec,   (fragment as any).end,   (fragment as any).end_time) : undefined;
 
+  const baseStartSec = (fragment as any)?.orig_start_sec ?? startSec;   // 원본 전체 시작
+  const baseEndSec   = (fragment as any)?.orig_end_sec   ?? endSec;     // 원본 전체 끝
+  const currentStartSec = startSec;   // 현재 살아남은 시작(이미 trim 반영됨)
+  const currentEndSec   = endSec;     // 현재 살아남은 끝
+  const baseDuration = (baseStartSec !== undefined && baseEndSec !== undefined) ? (baseEndSec - baseStartSec) : undefined;
+
   useEffect(() => {
     if (!open || !fragment) return;
 
-    setLeftCut(0);
-    setRightCut(12);
+    if (baseDuration && baseDuration > 0 && currentStartSec !== undefined && currentEndSec !== undefined) {
+      let lc = Math.round(((currentStartSec - baseStartSec) / baseDuration) * 12);
+      let rc = Math.round(((currentEndSec   - baseStartSec) / baseDuration) * 12);
+      lc = Math.max(0, Math.min(12, lc));
+      rc = Math.max(0, Math.min(12, rc));
+      if (rc <= lc) rc = Math.min(12, lc + 1);   // 최소 1칸 보장
+      setLeftCut(lc);
+      setRightCut(rc);
+    } else {
+      setLeftCut(0);
+      setRightCut(12);
+    }
     setLoadedFrames({});
     setImageErrorAttempts({});
     setFrameCacheBuster({});
@@ -212,7 +235,7 @@ export const SingleFragmentEditor: React.FC<SingleFragmentEditorProps> = ({
   };
 
   const activeRatio = (rightCut - leftCut) / 12;
-  const aliveDuration = durationSec !== undefined ? durationSec * activeRatio : 0;
+  const aliveDuration = baseDuration !== undefined ? baseDuration * activeRatio : 0;
 
   const handlePlayToggle = () => {
     setIsPlaying((prev) => {
@@ -222,6 +245,23 @@ export const SingleFragmentEditor: React.FC<SingleFragmentEditorProps> = ({
       }
       return false;
     });
+  };
+
+  const handleApply = () => {
+    if (!fragment) return;
+    const origStart = baseStartSec ?? 0;
+    const origEnd   = baseEndSec ?? 0;
+    const duration  = origEnd - origStart;
+    const newStartSec = origStart + (leftCut / 12) * duration;
+    const newEndSec   = origStart + (rightCut / 12) * duration;
+    onApply?.({
+      fragmentUid: getUid(fragment),
+      newStartSec,
+      newEndSec,
+      origStart,
+      origEnd
+    });
+    onOpenChange(false);
   };
 
   const updateIndexFromX = (clientX: number) => {
@@ -336,7 +376,7 @@ export const SingleFragmentEditor: React.FC<SingleFragmentEditorProps> = ({
             {startSec === undefined || endSec === undefined ? (
               <span className="text-red-400 font-semibold">시간 정보 없음</span>
             ) : (
-              `살아남는 길이 ${aliveDuration.toFixed(1)}s / 전체 ${formatSec(durationSec)}`
+              `살아남는 길이 ${aliveDuration.toFixed(1)}s / 전체 ${formatSec(baseDuration)}`
             )}
           </DialogDescription>
         </DialogHeader>
@@ -506,8 +546,8 @@ export const SingleFragmentEditor: React.FC<SingleFragmentEditorProps> = ({
           </Button>
           <Button
             type="button"
-            disabled
-            className="text-xs h-8 bg-primary/45 text-white/50 cursor-not-allowed"
+            onClick={handleApply}
+            className="text-xs h-8 bg-primary text-white hover:bg-primary/90"
           >
             적용
           </Button>

@@ -914,6 +914,47 @@ const Index: React.FC = () => {
     []
   );
 
+  const handleSingleFragmentApply = useCallback(
+    (payload: {
+      fragmentUid: string;
+      newStartSec: number;
+      newEndSec: number;
+      origStart: number;
+      origEnd: number;
+    }) => {
+      const { fragmentUid, newStartSec, newEndSec, origStart, origEnd } = payload;
+      const next = editFragments.map((fr) => {
+        if (getUid(fr) !== fragmentUid) return fr;
+        return {
+          ...fr,
+          start_sec: newStartSec,
+          end_sec: newEndSec,
+          start_time: newStartSec,
+          end_time: newEndSec,
+          orig_start_sec: (fr as any).orig_start_sec ?? origStart,
+          orig_end_sec:   (fr as any).orig_end_sec   ?? origEnd,
+          trim_applied: true,
+        };
+      });
+      setEditFragments(next);
+
+      if (committedProposalId && proposals) {
+        setProposals((pPrev) => {
+          if (!pPrev) return pPrev;
+          const target = committedProposalId as "A" | "B";
+          return {
+            ...pPrev,
+            [target]: {
+              ...pPrev[target],
+              customEditFragments: next,
+            },
+          };
+        });
+      }
+    },
+    [editFragments, committedProposalId, proposals, setProposals]
+  );
+
   const handleEditFragmentDoubleClick = useCallback((f: Fragment) => {
     setSelectedFragment(f);
     setActiveSource(f.source_video);
@@ -1760,6 +1801,7 @@ const Index: React.FC = () => {
         open={singleEditOpen}
         onOpenChange={setSingleEditOpen}
         fragment={singleEditTarget}
+        onApply={handleSingleFragmentApply}
       />
     </div>
   );
