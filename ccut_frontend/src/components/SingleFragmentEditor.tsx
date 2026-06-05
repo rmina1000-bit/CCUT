@@ -70,6 +70,8 @@ export const SingleFragmentEditor: React.FC<SingleFragmentEditorProps> = ({
   const [frameCacheBuster, setFrameCacheBuster] = useState<Record<number, number>>({});
   const [dragging, setDragging] = useState<'left' | 'right' | null>(null);
   const [position, setPosition] = useState<{ x: number; y: number } | null>(null);
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const [isPlaying, setIsPlaying] = useState(false);
 
   const containerRef = useRef<HTMLDivElement>(null);
   const dialogRef = useRef<HTMLDivElement>(null);
@@ -94,6 +96,8 @@ export const SingleFragmentEditor: React.FC<SingleFragmentEditorProps> = ({
     setImageErrorAttempts({});
     setFrameCacheBuster({});
     setPosition(null);
+    setCurrentIndex(0);
+    setIsPlaying(false);
 
     if (startSec === undefined || endSec === undefined) return;
 
@@ -154,15 +158,35 @@ export const SingleFragmentEditor: React.FC<SingleFragmentEditorProps> = ({
     };
   }, [dragging, leftCut, rightCut]);
 
-  if (!fragment) return null;
-
-  const formatSec = (value: number | undefined) =>
-    typeof value === "number" ? `${value.toFixed(1)}s` : "—";
-
   const durationSec =
     typeof startSec === "number" && typeof endSec === "number"
       ? Math.max(0, endSec - startSec)
       : undefined;
+
+  useEffect(() => {
+    if (!isPlaying) return;
+
+    const frameDuration = durationSec && durationSec > 0 
+      ? (durationSec / 12) * 1000 
+      : 200;
+
+    const interval = setInterval(() => {
+      setCurrentIndex((prev) => {
+        if (prev >= 11) {
+          setIsPlaying(false);
+          return 11;
+        }
+        return prev + 1;
+      });
+    }, frameDuration);
+
+    return () => clearInterval(interval);
+  }, [isPlaying, durationSec]);
+
+  if (!fragment) return null;
+
+  const formatSec = (value: number | undefined) =>
+    typeof value === "number" ? `${value.toFixed(1)}s` : "—";
 
   const handleImageError = (index: number) => {
     const attempts = imageErrorAttempts[index] || 0;
@@ -176,16 +200,58 @@ export const SingleFragmentEditor: React.FC<SingleFragmentEditorProps> = ({
 
   const handleMouseDown = (type: 'left' | 'right') => (e: React.MouseEvent) => {
     e.preventDefault();
+    e.stopPropagation();
     setDragging(type);
   };
 
   const handleReset = () => {
     setLeftCut(0);
     setRightCut(12);
+    setCurrentIndex(0);
+    setIsPlaying(false);
   };
 
   const activeRatio = (rightCut - leftCut) / 12;
   const aliveDuration = durationSec !== undefined ? durationSec * activeRatio : 0;
+
+  const handlePlayToggle = () => {
+    setIsPlaying((prev) => {
+      if (!prev) {
+        setCurrentIndex((curr) => (curr >= 11 ? 0 : curr));
+        return true;
+      }
+      return false;
+    });
+  };
+
+  const updateIndexFromX = (clientX: number) => {
+    if (!containerRef.current) return;
+    const rect = containerRef.current.getBoundingClientRect();
+    const x = clientX - rect.left;
+    const percentage = Math.max(0, Math.min(1, x / rect.width));
+    const index = Math.floor(percentage * 12);
+    setCurrentIndex(Math.max(0, Math.min(11, index)));
+  };
+
+  const handleRailMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
+    if ((e.target as HTMLElement).closest('.cursor-ew-resize')) {
+      return;
+    }
+    e.preventDefault();
+    updateIndexFromX(e.clientX);
+
+    const handleMouseMove = (moveEvent: MouseEvent) => {
+      updateIndexFromX(moveEvent.clientX);
+    };
+
+    const handleMouseUp = () => {
+      window.removeEventListener("mousemove", handleMouseMove);
+      window.removeEventListener("mouseup", handleMouseUp);
+    };
+
+    window.addEventListener("mousemove", handleMouseMove);
+    window.addEventListener("mouseup", handleMouseUp);
+  };
 
   const handleTitleMouseDown = (e: React.MouseEvent) => {
     if (!dialogRef.current) return;
@@ -275,13 +341,58 @@ export const SingleFragmentEditor: React.FC<SingleFragmentEditorProps> = ({
           </DialogDescription>
         </DialogHeader>
 
+        {/* Playback Preview Box */}
+        {startSec !== undefined && endSec !== undefined && (
+          <div className="relative aspect-video w-full bg-[hsl(228,12%,6%)] border border-border/10 rounded-md overflow-hidden flex items-center justify-center mb-4">
+            <img
+              src={`http://127.0.0.1:8000/static/thumbnails/P_${fragment.fragment_id}_${currentIndex}.jpg` +
+                (frameCacheBuster[currentIndex] ? `?t=${frameCacheBuster[currentIndex]}` : "")}
+              alt="Preview"
+              className="w-full h-full object-contain"
+            />
+            <div className="absolute top-2 right-2 bg-black/75 px-2 py-1 rounded text-white text-[11px] font-mono shadow-md">
+              {((currentIndex / 12) * (durationSec || 0)).toFixed(1)}s / {durationSec !== undefined ? `${durationSec.toFixed(1)}s` : "—"}
+            </div>
+          </div>
+        )}
+
+        {/* Play / Pause Toggle Button */}
+        {startSec !== undefined && endSec !== undefined && (
+          <div className="flex items-center justify-center mb-4">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={handlePlayToggle}
+              className="h-8 px-4 text-xs flex items-center gap-1.5 hover:bg-secondary/40 text-foreground"
+            >
+              {isPlaying ? (
+                <>
+                  <svg className="w-3.5 h-3.5 fill-current" viewBox="0 0 24 24">
+                    <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/>
+                  </svg>
+                  일시정지
+                </>
+              ) : (
+                <>
+                  <svg className="w-3.5 h-3.5 fill-current" viewBox="0 0 24 24">
+                    <path d="M8 5v14l11-7z"/>
+                  </svg>
+                  재생
+                </>
+              )}
+            </Button>
+          </div>
+        )}
+
         {/* 12 Frame Panorama Rail */}
         {startSec !== undefined && endSec !== undefined ? (
           <div className="space-y-3 mb-6 mt-4">
             <div className="relative pt-6">
               <div
                 ref={containerRef}
-                className="relative w-full h-[84px] bg-[hsl(228,12%,6%)] border border-border/10 rounded-md overflow-hidden flex select-none"
+                onMouseDown={handleRailMouseDown}
+                className="relative w-full h-[84px] bg-[hsl(228,12%,6%)] border border-border/10 rounded-md overflow-hidden flex select-none cursor-pointer"
               >
                 {Array.from({ length: 12 }).map((_, index) => {
                   const isGrayscale = index < leftCut || index >= rightCut;
@@ -292,7 +403,7 @@ export const SingleFragmentEditor: React.FC<SingleFragmentEditorProps> = ({
                   return (
                     <div
                       key={index}
-                      className="relative flex-1 h-full border-r border-border/10 last:border-r-0 overflow-hidden bg-black/40 flex items-center justify-center"
+                      className="relative flex-1 h-full border-r border-border/10 last:border-r-0 overflow-hidden bg-black/40 flex items-center justify-center pointer-events-none"
                     >
                       {!isLoaded && (
                         <div className="absolute inset-0 flex items-center justify-center bg-black/70 z-10">
@@ -315,6 +426,17 @@ export const SingleFragmentEditor: React.FC<SingleFragmentEditorProps> = ({
                     </div>
                   );
                 })}
+
+                {/* Playhead Handle & Line */}
+                <div
+                  className="absolute top-0 bottom-0 w-1 bg-yellow-400 z-20 pointer-events-none"
+                  style={{
+                    left: `calc(${(currentIndex + 0.5) * (100 / 12)}%)`,
+                    transform: "translateX(-50%)",
+                  }}
+                >
+                  <div className="absolute -top-1.5 left-1/2 -translate-x-1/2 w-3 h-3 bg-yellow-400 rounded-full border border-black shadow" />
+                </div>
 
                 {/* Left Handle */}
                 <div
