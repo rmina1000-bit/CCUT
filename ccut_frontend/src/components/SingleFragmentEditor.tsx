@@ -1,7 +1,9 @@
 import React, { useState, useEffect, useRef } from "react";
+import * as DialogPrimitive from "@radix-ui/react-dialog";
+import { X } from "lucide-react";
+import { cn } from "@/lib/utils";
 import {
   Dialog,
-  DialogContent,
   DialogHeader,
   DialogTitle,
   DialogDescription,
@@ -9,6 +11,44 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Fragment } from "@/data/fragmentData";
+
+const LocalDialogContent = React.forwardRef<
+  React.ElementRef<typeof DialogPrimitive.Content>,
+  React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content> & {
+    position: { x: number; y: number } | null;
+  }
+>(({ className, children, position, ...props }, ref) => {
+  const inlineStyle: React.CSSProperties = position
+    ? {
+        position: "fixed",
+        left: `${position.x}px`,
+        top: `${position.y}px`,
+        transform: "none",
+        margin: 0,
+      }
+    : {};
+
+  return (
+    <DialogPrimitive.Portal>
+      <DialogPrimitive.Content
+        ref={ref}
+        style={inlineStyle}
+        className={cn(
+          "fixed left-[50%] top-[50%] z-50 grid w-full max-w-lg translate-x-[-50%] translate-y-[-50%] gap-4 border bg-background p-6 shadow-lg duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[state=closed]:slide-out-to-left-1/2 data-[state=closed]:slide-out-to-top-[48%] data-[state=open]:slide-in-from-left-1/2 data-[state=open]:slide-in-from-top-[48%] sm:rounded-lg",
+          className
+        )}
+        {...props}
+      >
+        {children}
+        <DialogPrimitive.Close className="absolute right-4 top-4 rounded-sm opacity-70 ring-offset-background transition-opacity data-[state=open]:bg-accent data-[state=open]:text-muted-foreground hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none">
+          <X className="h-4 w-4" />
+          <span className="sr-only">Close</span>
+        </DialogPrimitive.Close>
+      </DialogPrimitive.Content>
+    </DialogPrimitive.Portal>
+  );
+});
+LocalDialogContent.displayName = "LocalDialogContent";
 
 interface SingleFragmentEditorProps {
   open: boolean;
@@ -29,8 +69,11 @@ export const SingleFragmentEditor: React.FC<SingleFragmentEditorProps> = ({
   const [imageErrorAttempts, setImageErrorAttempts] = useState<Record<number, number>>({});
   const [frameCacheBuster, setFrameCacheBuster] = useState<Record<number, number>>({});
   const [dragging, setDragging] = useState<'left' | 'right' | null>(null);
+  const [position, setPosition] = useState<{ x: number; y: number } | null>(null);
 
   const containerRef = useRef<HTMLDivElement>(null);
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const dragRafRef = useRef<number | null>(null);
 
   const readNumber = (...values: unknown[]) => {
     for (const value of values) {
@@ -50,6 +93,7 @@ export const SingleFragmentEditor: React.FC<SingleFragmentEditorProps> = ({
     setLoadedFrames({});
     setImageErrorAttempts({});
     setFrameCacheBuster({});
+    setPosition(null);
 
     if (startSec === undefined || endSec === undefined) return;
 
@@ -143,10 +187,79 @@ export const SingleFragmentEditor: React.FC<SingleFragmentEditorProps> = ({
   const activeRatio = (rightCut - leftCut) / 12;
   const aliveDuration = durationSec !== undefined ? durationSec * activeRatio : 0;
 
+  const handleTitleMouseDown = (e: React.MouseEvent) => {
+    if (!dialogRef.current) return;
+    
+    e.preventDefault();
+
+    const rect = dialogRef.current.getBoundingClientRect();
+    const startX = e.clientX;
+    const startY = e.clientY;
+    const initialLeft = rect.left;
+    const initialTop = rect.top;
+
+    let latestLeft = initialLeft;
+    let latestTop = initialTop;
+
+    const handleMouseMove = (moveEvent: MouseEvent) => {
+      const deltaX = moveEvent.clientX - startX;
+      const deltaY = moveEvent.clientY - startY;
+
+      let newLeft = initialLeft + deltaX;
+      let newTop = initialTop + deltaY;
+
+      const minLeft = 0;
+      const maxLeft = Math.max(0, window.innerWidth - rect.width);
+      const minTop = 0;
+      const maxTop = Math.max(0, window.innerHeight - rect.height);
+
+      newLeft = Math.max(minLeft, Math.min(maxLeft, newLeft));
+      newTop = Math.max(minTop, Math.min(maxTop, newTop));
+
+      latestLeft = newLeft;
+      latestTop = newTop;
+
+      if (dragRafRef.current === null) {
+        dragRafRef.current = requestAnimationFrame(() => {
+          dragRafRef.current = null;
+          if (dialogRef.current) {
+            dialogRef.current.style.left = `${latestLeft}px`;
+            dialogRef.current.style.top = `${latestTop}px`;
+            dialogRef.current.style.transform = "none";
+          }
+        });
+      }
+    };
+
+    const handleMouseUp = () => {
+      window.removeEventListener("mousemove", handleMouseMove);
+      window.removeEventListener("mouseup", handleMouseUp);
+
+      if (dragRafRef.current !== null) {
+        cancelAnimationFrame(dragRafRef.current);
+        dragRafRef.current = null;
+      }
+
+      if (dialogRef.current) {
+        dialogRef.current.style.left = `${latestLeft}px`;
+        dialogRef.current.style.top = `${latestTop}px`;
+        dialogRef.current.style.transform = "none";
+      }
+      setPosition({ x: latestLeft, y: latestTop });
+    };
+
+    window.addEventListener("mousemove", handleMouseMove);
+    window.addEventListener("mouseup", handleMouseUp);
+  };
+
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[720px] w-[90vw] bg-[hsl(228,12%,10%)] border-border/15 text-foreground p-6">
-        <DialogHeader className="mb-4">
+    <Dialog open={open} onOpenChange={onOpenChange} modal={false}>
+      <LocalDialogContent
+        ref={dialogRef}
+        position={position}
+        className="sm:max-w-[720px] w-[90vw] bg-[hsl(228,12%,10%)] border-border/15 text-foreground p-6"
+      >
+        <DialogHeader className="mb-4 select-none cursor-move" onMouseDown={handleTitleMouseDown}>
           <div className="flex items-center justify-between">
             <DialogTitle className="text-base font-bold text-foreground">조각 정밀 편집 (1단계 파노라마)</DialogTitle>
             <span className="text-[10px] text-muted-foreground/50 font-mono bg-secondary/30 px-2 py-0.5 rounded">
@@ -277,7 +390,7 @@ export const SingleFragmentEditor: React.FC<SingleFragmentEditorProps> = ({
             적용
           </Button>
         </DialogFooter>
-      </DialogContent>
+      </LocalDialogContent>
     </Dialog>
   );
 };
