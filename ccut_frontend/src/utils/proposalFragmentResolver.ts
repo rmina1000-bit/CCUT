@@ -158,6 +158,8 @@ export const resolveProposalFragments = (
         ...found,
         // [BETA1 identity drift 차단] alias.display_id로 덮어쓰지 않는다. apply가 보존한 found의 정체성 유지.
         display_id: found.display_id,
+        start_time: getFragmentTimeRange(found).start,
+        end_time: getFragmentTimeRange(found).end,
         start_frame: sFrame,
         end_frame: eFrame,
         duration: eFrame - sFrame,
