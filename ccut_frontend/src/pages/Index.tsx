@@ -222,6 +222,8 @@ const Index: React.FC = () => {
         status: "committed" as FragmentStatus,
         source_video: label,
         source_id: f.source_id || f.sourceId,
+        start_time: startSec,
+        end_time: endSec,
         start_frame: startFrame,
         end_frame: endFrame,
         duration: durationFrames,
