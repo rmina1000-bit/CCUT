@@ -2300,6 +2300,73 @@ async def save_edit(req: SaveEditRequest, db: Session = Depends(get_db)):
         return {"status": "ERROR", "message": str(e)}
 
 
+class EditOverlayRequest(BaseModel):
+    source_id: str
+    fragment_id: str
+    effective_start_sec: float
+    effective_end_sec: float
+    excluded: bool = False
+    edit_type: str = "TRIM"
+    root_fragment_id: str | None = None
+    parent_fragment_id: str | None = None
+    overlay_id: str | None = None
+    metadata_json: dict | None = None
+
+
+@app.post("/edit-overlay")
+async def upsert_edit_overlay(req: EditOverlayRequest, db: Session = Depends(get_db)):
+    from archive.db_models import EditOverlayTable
+    import datetime as _dt
+    oid = req.overlay_id or f"OVL_{req.source_id}_{req.fragment_id}"
+    row = db.query(EditOverlayTable).filter_by(overlay_id=oid).first()
+    if row:
+        row.effective_start_sec = req.effective_start_sec
+        row.effective_end_sec = req.effective_end_sec
+        row.excluded = req.excluded
+        row.edit_type = req.edit_type
+        row.root_fragment_id = req.root_fragment_id
+        row.parent_fragment_id = req.parent_fragment_id
+        row.metadata_json = req.metadata_json or {}
+        row.updated_at = _dt.datetime.now()
+    else:
+        row = EditOverlayTable(
+            overlay_id=oid,
+            source_id=req.source_id,
+            fragment_id=req.fragment_id,
+            effective_start_sec=req.effective_start_sec,
+            effective_end_sec=req.effective_end_sec,
+            excluded=req.excluded,
+            edit_type=req.edit_type,
+            root_fragment_id=req.root_fragment_id,
+            parent_fragment_id=req.parent_fragment_id,
+            metadata_json=req.metadata_json or {},
+        )
+        db.add(row)
+    db.commit()
+    return {"ok": True, "overlay_id": oid}
+
+
+@app.get("/edit-overlay/{source_id}")
+async def get_edit_overlay(source_id: str, db: Session = Depends(get_db)):
+    from archive.db_models import EditOverlayTable
+    rows = db.query(EditOverlayTable).filter_by(source_id=source_id).all()
+    return [
+        {
+            "overlay_id": r.overlay_id,
+            "source_id": r.source_id,
+            "fragment_id": r.fragment_id,
+            "effective_start_sec": r.effective_start_sec,
+            "effective_end_sec": r.effective_end_sec,
+            "excluded": r.excluded,
+            "edit_type": r.edit_type,
+            "root_fragment_id": r.root_fragment_id,
+            "parent_fragment_id": r.parent_fragment_id,
+            "metadata_json": r.metadata_json,
+        }
+        for r in rows
+    ]
+
+
 # ── PBE 라우트 ──────────────────────────────────────────────────────
 
 class ContextRequest(BaseModel):

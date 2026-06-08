@@ -1,4 +1,4 @@
-﻿from sqlalchemy import Column, String, Float, DateTime, JSON, ForeignKey
+from sqlalchemy import Column, String, Float, DateTime, JSON, ForeignKey, Boolean
 from database import Base
 import datetime
 
@@ -156,3 +156,19 @@ class ExportResultTable(Base):
     ffmpeg_command_summary = Column(String, nullable=True)
     ffmpeg_stderr = Column(String, nullable=True)
     created_at = Column(DateTime, default=datetime.datetime.now)
+
+class EditOverlayTable(Base):
+    __tablename__ = "edit_overlay"
+    overlay_id = Column(String, primary_key=True, index=True)
+    source_id = Column(String, index=True)
+    fragment_id = Column(String, index=True)
+    effective_start_sec = Column(Float)
+    effective_end_sec = Column(Float)
+    excluded = Column(Boolean, default=False, nullable=False)
+    edit_type = Column(String, index=True)
+    root_fragment_id = Column(String, index=True)
+    parent_fragment_id = Column(String, nullable=True)
+    metadata_json = Column(JSON, default=dict)
+    created_at = Column(DateTime, default=datetime.datetime.now)
+    updated_at = Column(DateTime, default=datetime.datetime.now)
+
