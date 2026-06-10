@@ -93,5 +93,26 @@ export const videoService = {
 
     getProjectSources: async (projectId: string) => {
         return await fetcher(`/proposals/project/${encodeURIComponent(projectId)}/sources`);
+    },
+    upsertEditOverlay: async (payload: {
+        source_id: string;
+        fragment_id: string;
+        effective_start_sec: number;
+        effective_end_sec: number;
+        excluded?: boolean;
+        edit_type?: string;
+        root_fragment_id?: string | null;
+        parent_fragment_id?: string | null;
+        overlay_id?: string | null;
+    }) => {
+        const response = await fetch(`${API_BASE_URL}/edit-overlay`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+        });
+        return await response.json();
+    },
+    getEditOverlay: async (sourceId: string) => {
+        return await fetcher(`/edit-overlay/${encodeURIComponent(sourceId)}`);
     }
 };

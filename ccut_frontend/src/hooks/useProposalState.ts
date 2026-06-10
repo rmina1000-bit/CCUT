@@ -101,8 +101,10 @@ export const useProposalState = (
     const mode = id as "A" | "B";
     const originalProposal = proposals[mode];
     
-    // resolved_aliases나 sequence 필드에 객체 형태의 메타데이터가 포함되어 있음
-    const rawSeq = (originalProposal as any).resolved_aliases || (originalProposal as any).sequence || [];
+    const customFrags = (originalProposal as any).customEditFragments;
+    const rawSeq = (Array.isArray(customFrags) && customFrags.length > 0)
+      ? customFrags
+      : ((originalProposal as any).resolved_aliases || (originalProposal as any).sequence || []);
     if (rawSeq.length > 0) {
       const guardedSeq = guardProposalSequence(rawSeq);
       

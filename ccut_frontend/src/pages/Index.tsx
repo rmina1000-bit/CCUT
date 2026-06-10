@@ -940,6 +940,24 @@ const Index: React.FC = () => {
       });
       setEditFragments(next);
 
+      // [F-2a-FIX] 편집 영속: 적용된 조각을 edit_overlay에 저장 (단건)
+      try {
+        const edited = next.find((fr) => getUid(fr) === fragmentUid) as any;
+        if (edited?.source_id) {
+          videoService.upsertEditOverlay({
+            source_id: edited.source_id,
+            fragment_id: edited.fragment_id ?? fragmentUid,
+            effective_start_sec: newStartSec,
+            effective_end_sec: newEndSec,
+            excluded: edited.excluded === true || edited.status === "removed",
+            edit_type: "TRIM",
+            root_fragment_id: edited.root_fragment_uid ?? edited.fragment_id ?? fragmentUid,
+          }).catch((err) => console.error("edit-overlay save error:", err));
+        }
+      } catch (err) {
+        console.error("edit-overlay save error:", err);
+      }
+
       if (committedProposalId && proposals) {
         setProposals((pPrev) => {
           if (!pPrev) return pPrev;
@@ -1182,7 +1200,14 @@ const Index: React.FC = () => {
         excluded: false,
       };
 
-      const next = [...editFragments, newFrag];
+      let next: Fragment[];
+      if (insertAt === undefined) {
+        next = [...editFragments, newFrag];
+      } else {
+        const arr = [...editFragments];
+        arr.splice(insertAt, 0, newFrag);
+        next = arr;
+      }
       setEditFragments(next);
 
       setProposals((pPrev) => {
@@ -1553,6 +1578,26 @@ const Index: React.FC = () => {
       });
     } catch (e) {
       console.error("Save edit error:", e);
+    }
+
+    // [F-2a] 편집 영속: 유효 조각을 edit_overlay에 저장 (기존 save_edit 유지, 별도)
+    try {
+      for (const f of updatedFragments) {
+        const s = (f as any).start_time ?? (f as any).start_sec ?? (f as any).start;
+        const e = (f as any).end_time ?? (f as any).end_sec ?? (f as any).end;
+        if (typeof s !== "number" || typeof e !== "number") continue;
+        await videoService.upsertEditOverlay({
+          source_id: (f as any).source_id,
+          fragment_id: f.fragment_id,
+          effective_start_sec: s,
+          effective_end_sec: e,
+          excluded: (f as any).excluded === true || (f as any).status === "removed",
+          edit_type: "TRIM",
+          root_fragment_id: (f as any).root_fragment_uid ?? f.fragment_id,
+        });
+      }
+    } catch (err) {
+      console.error("edit-overlay save error:", err);
     }
   }, [setStoryPlan, committedProposalId, proposals, setProposals]);
 
