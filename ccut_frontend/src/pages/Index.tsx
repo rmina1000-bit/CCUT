@@ -1528,6 +1528,42 @@ const Index: React.FC = () => {
     [filteredFragments, reservedFragments, currentSourceId]
   );
 
+  // [F-2b] overlay 복원: currentSourceId 변경 시 DB trim값 merge
+  useEffect(() => {
+    if (!currentSourceId) return;
+    (async () => {
+      try {
+        const res = await videoService.getEditOverlay(currentSourceId);
+        const overlays: any[] = Array.isArray(res) ? res : [];
+        if (overlays.length === 0) return;
+        setEditFragments(prev => {
+          const map = new Map(overlays.map((o: any) => [o.fragment_id, o]));
+          let changed = false;
+          const next = prev.map(fr => {
+            const o = map.get((fr as any).fragment_id ?? getUid(fr));
+            if (!o) return fr;
+            if ((fr as any).start_sec === o.effective_start_sec &&
+                (fr as any).end_sec   === o.effective_end_sec) return fr;
+            changed = true;
+            return {
+              ...fr,
+              start_sec:    o.effective_start_sec,
+              end_sec:      o.effective_end_sec,
+              start_time:   o.effective_start_sec,
+              end_time:     o.effective_end_sec,
+              trim_applied: true,
+            };
+          });
+          if (!changed) return prev;
+          console.log("[F-2b] overlay merge applied:",
+            next.filter(f => (f as any).trim_applied).length, "frags");
+          return next;
+        });
+      } catch (err) {
+        console.warn("[F-2b] overlay fetch failed:", err);
+      }
+    })();
+  }, [currentSourceId]);
 
   const handleEditorApply = useCallback(async (result: { updatedFragments: Fragment[]; removedFragmentIds: string[] }) => {
     const { updatedFragments } = result;
