@@ -99,7 +99,7 @@ class SignalProcessor:
         # Quick FFmpeg run for silence detection
         cmd = [
             "ffmpeg", "-y", "-i", self.video_path,
-            "-af", "asetpts=PTS-STARTPTS,silencedetect=n=-30dB:d=0.3",
+            "-af", "asetpts=PTS-STARTPTS,silencedetect=n=-30dB:d=0.8",
             "-f", "null", "NUL"
         ]
         pts = []
