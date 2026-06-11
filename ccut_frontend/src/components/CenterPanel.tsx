@@ -1374,8 +1374,20 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
               onClick={() => {
                 if (!videoRefB.current) return;
 
+                // [CLIP_SEQ_FIRST_B] sequence 조각이 있으면 fragment 재생 우선
+                const bSeqFrags = buildSeqFrags("B");
+                if (bSeqFrags.length > 0) {
+                  if (!isSeqBRef.current || videoRefB.current.paused) {
+                    startSeq("B");
+                    handleProposalPreview("B");
+                  } else {
+                    stopSeq("B");
+                  }
+                  return;
+                }
+
                 if (previewUrlB) {
-                  // [PROPOSAL_PREVIEW_PLAY] preview mp4 직접 재생 — seek 없음
+                  // [PROPOSAL_PREVIEW_PLAY] preview mp4 직접 재생 — seek 없음 (fragment 없을 때 fallback)
                   stopOtherPlayer("B");
                   setActivePlayerSafe("B");
                   // [PREVIEW_MODE_GUARD] fragment seq 상태 초기화
