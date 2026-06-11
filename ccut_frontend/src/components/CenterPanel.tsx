@@ -1472,6 +1472,23 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
                           seqIdxBRef.current = nextIdx;
                           setProposalTimeB(seqElapsedSecBRef.current);
                           reportActiveId(frags[nextIdx].fragment_id);
+                          // [CLIP_SWITCH_GUARD_B] 조각 전환 중 잔상 숨김
+                          if (videoRefB.current) {
+                            videoRefB.current.style.opacity = "0";
+                            let restored = false;
+                            const onSeeked = () => {
+                              if (restored) return;
+                              restored = true;
+                              videoRefB.current?.removeEventListener("seeked", onSeeked);
+                              if (videoRefB.current) videoRefB.current.style.opacity = "1";
+                            };
+                            videoRefB.current.addEventListener("seeked", onSeeked);
+                            setTimeout(() => {
+                              if (restored) return;
+                              restored = true;
+                              if (videoRefB.current) videoRefB.current.style.opacity = "1";
+                            }, 400);
+                          }
                           playFrag("B", frags[nextIdx], seqEndBRef);
                         } else {
                           isSeqBRef.current = false;
