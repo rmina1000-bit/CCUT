@@ -129,3 +129,100 @@ class SignalProcessor:
             print(f"[SignalProcessor] Scene detect skipped: {e}")
         return pts
 
+
+def pre_profile_source(
+    audio_energies: list,
+    scene_changes: list,
+    duration_sec: float,
+) -> dict:
+    """[단계1-A] ASR 이전 사전 판정.
+    mean_energy < 0.02 AND scene_rate < 0.05 -> static 확정.
+    그 외 pending. 입력이 비면 static 오판 금지 -> pending.
+    """
+    if not audio_energies:
+        return {
+            "profile": "pending",
+            "asr_skipped": False,
+            "mean_audio_energy": None,
+            "scene_rate": round(len(scene_changes) / max(duration_sec, 1.0), 4),
+            "note": "no_energy_input",
+        }
+
+    mean_energy = sum(audio_energies) / len(audio_energies)
+    scene_rate = len(scene_changes) / max(duration_sec, 1.0)
+
+    if mean_energy < 0.02 and scene_rate < 0.05:
+        return {
+            "profile": "static",
+            "asr_skipped": True,
+            "asr_yield": 0.0,
+            "mean_audio_energy": round(mean_energy, 4),
+            "scene_rate": round(scene_rate, 4),
+            "confidence": 0.3,
+        }
+
+    return {
+        "profile": "pending",
+        "asr_skipped": False,
+        "mean_audio_energy": round(mean_energy, 4),
+        "scene_rate": round(scene_rate, 4),
+    }
+
+
+def profile_source(
+    source_id: str,
+    all_words: list,
+    scene_changes: list,
+    audio_energies: list,
+    duration_sec: float,
+    pre: dict = None,
+) -> dict:
+    """[단계1-B] ASR 이후 최종 판정 + logs/source_profile 저장."""
+    import json, os
+    from datetime import datetime
+
+    mean_energy = (sum(audio_energies) / len(audio_energies)) if audio_energies else 0.0
+    scene_rate = len(scene_changes) / max(duration_sec, 1.0)
+    asr_yield = len(all_words) / max(duration_sec, 1.0)
+
+    if pre and pre.get("profile") == "static":
+        final_profile = "static"
+        confidence = 0.3
+        asr_skipped = bool(pre.get("asr_skipped"))
+    else:
+        asr_skipped = False
+        if asr_yield >= 0.5:
+            final_profile = "speech_led"
+            confidence = round(min(0.5 + asr_yield * 0.3, 1.0), 4)
+        elif scene_rate >= 0.05:
+            final_profile = "visual_led"
+            confidence = round(min(0.5 + scene_rate * 2.0, 1.0), 4)
+        else:
+            final_profile = "static"
+            confidence = 0.3
+
+    result = {
+        "source_id": source_id,
+        "profile": final_profile,
+        "asr_skipped": asr_skipped,
+        "asr_yield": round(asr_yield, 4),
+        "mean_audio_energy": round(mean_energy, 4),
+        "scene_rate": round(scene_rate, 4),
+        "confidence": round(confidence, 4),
+        "pre_profile": pre,
+        "timestamp": datetime.now().isoformat(),
+    }
+
+    log_dir = "logs/source_profile"
+    log_path = f"{log_dir}/{source_id}.json"
+    try:
+        os.makedirs(log_dir, exist_ok=True)
+        with open(log_path, "w", encoding="utf-8") as f:
+            json.dump(result, f, ensure_ascii=False, indent=2)
+        print(f"[profile_source] {source_id} -> {final_profile} "
+              f"(conf={confidence:.2f}) asr_skipped={asr_skipped}")
+    except Exception as e:
+        print(f"[profile_source] 저장 실패 (무시): {e}")
+
+    return result
+

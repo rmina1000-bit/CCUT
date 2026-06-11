@@ -423,6 +423,57 @@ def _background_whisper_impl(source_id: str, video_path: str, fragments: list):
 
     try:
         total_duration = max(float(f.get("end_time", 0)) for f in fragments)
+        # [단계1] ASR 이전 사전 프로파일링 — ffmpeg 직접 측정 (DB 의존 없음)
+        import os as _os
+        from engine.signal_processor import (
+            SignalProcessor as _SP,
+            pre_profile_source as _pps,
+            profile_source as _ps,
+        )
+
+        _total_dur = max(
+            (float(f.get("end_time", 0) or 0) for f in fragments), default=0.0
+        )
+        try:
+            _full_rms = float(_SP(video_path).get_rms_energy(0.0, _total_dur))
+            _rms_list = [_full_rms]
+        except Exception as _e:
+            print(f"[PRE_PROFILE] RMS 측정 실패 — pending 처리: {_e}")
+            _rms_list = []  # pre_profile이 pending 반환 (static 오판 금지)
+
+        _scene_changes = []
+        for _f in fragments:
+            _sc = (_f.get("intelligence") or {}).get("scene_change")
+            if _sc is None:
+                _sc = _f.get("scene_change")
+            if isinstance(_sc, list):
+                _scene_changes.extend(_sc)
+
+        _pre = _pps(
+            audio_energies=_rms_list,
+            scene_changes=_scene_changes,
+            duration_sec=_total_dur,
+        )
+        print(f"[PRE_PROFILE] {source_id} -> {_pre}")
+
+        _enforce = _os.getenv("CCUT_PROFILE_ENFORCE", "0") == "1"
+        if _pre.get("profile") == "static" and _enforce:
+            print(f"[PRE_PROFILE] {source_id} static 확정 — ASR 스킵 (ENFORCE)")
+            _ps(
+                source_id=source_id,
+                all_words=[],
+                scene_changes=_scene_changes,
+                audio_energies=_rms_list,
+                duration_sec=_total_dur,
+                pre=_pre,
+            )
+            if source_id in _fragment_job_registry:
+                _fragment_job_registry[source_id]["status"] = "DONE"
+                _fragment_job_registry[source_id]["stage"] = "static_source"
+            return
+        elif _pre.get("profile") == "static":
+            print(f"[PRE_PROFILE] {source_id} static 판정 — DRY-RUN: ASR 계속 진행")
+
         whisper_res    = asr.transcribe_fragments(video_path, fragments)
         
         transcripts  = whisper_res.get("fragment_transcripts", {})
