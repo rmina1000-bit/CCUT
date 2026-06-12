@@ -226,3 +226,68 @@ def profile_source(
 
     return result
 
+
+def refine_boundaries_to_words(
+    fragments: list,
+    all_words: list,
+    max_shift_sec: float = 2.0,
+    min_gap_sec: float = 0.15,
+    min_fragment_sec: float = 1.0,
+) -> list:
+    """[단계2] 인접 조각 사이 경계를 가장 가까운 발화 휴지로 스냅.
+    조각 생성/삭제 없음. 제안 목록만 반환 (적용은 호출측 책임).
+    """
+    proposals = []
+    if not all_words or len(fragments) < 2:
+        return proposals
+
+    gaps = []
+    for i in range(len(all_words) - 1):
+        try:
+            prev_end = float(all_words[i].get("end", 0))
+            next_start = float(all_words[i + 1].get("start", 0))
+        except (TypeError, ValueError):
+            continue
+        gap = next_start - prev_end
+        if gap >= min_gap_sec:
+            gaps.append({"mid": (prev_end + next_start) / 2.0, "len": gap})
+
+    if not gaps:
+        return proposals
+
+    frs = sorted(fragments, key=lambda f: float(f.get("start_time", 0)))
+
+    for i in range(len(frs) - 1):
+        left, right = frs[i], frs[i + 1]
+        boundary = float(left.get("end_time", 0))
+        best = None
+        for g in gaps:
+            dist = abs(g["mid"] - boundary)
+            if dist <= max_shift_sec and (
+                best is None or dist < abs(best["mid"] - boundary)
+            ):
+                best = g
+        entry = {
+            "left_id": left.get("fragment_id"),
+            "right_id": right.get("fragment_id"),
+            "old_boundary": round(boundary, 3),
+            "new_boundary": round(boundary, 3),
+            "shift": 0.0,
+            "gap_len": 0.0,
+            "snapped": False,
+        }
+        if best is not None:
+            nb = best["mid"]
+            left_len = nb - float(left.get("start_time", 0))
+            right_len = float(right.get("end_time", 0)) - nb
+            if left_len >= min_fragment_sec and right_len >= min_fragment_sec:
+                entry.update({
+                    "new_boundary": round(nb, 3),
+                    "shift": round(nb - boundary, 3),
+                    "gap_len": round(best["len"], 3),
+                    "snapped": True,
+                })
+        proposals.append(entry)
+
+    return proposals
+

@@ -483,6 +483,70 @@ def _background_whisper_impl(source_id: str, video_path: str, fragments: list):
         provider_error = whisper_res.get("provider_error")
         rejected_fragments = whisper_res.get("rejected_fragments", {})
 
+        # [단계2] 경계 스냅 보정 — 발화 휴지 정렬 (기본 dry-run)
+        _all_words = whisper_res.get("words", []) or []
+        if _all_words:
+            from engine.signal_processor import refine_boundaries_to_words
+
+            def _recompute_overlap(_frag, _segments):
+                _s = float(_frag.get("start_time", 0))
+                _e = float(_frag.get("end_time", 0))
+                _parts, _ws = [], []
+                for _seg in _segments:
+                    if float(_seg["end"]) <= _s or float(_seg["start"]) >= _e:
+                        continue
+                    _parts.append(_seg.get("text", ""))
+                    _ws.extend(_seg.get("words", []) or [])
+                return " ".join(_parts).strip(), _ws
+
+            _props = refine_boundaries_to_words(fragments, _all_words)
+            _snapped = [p for p in _props if p["snapped"]]
+            if _snapped:
+                _avg = sum(abs(p["shift"]) for p in _snapped) / len(_snapped)
+                print(f"[BOUNDARY_SNAP] {source_id} 경계 {len(_props)}개 중 "
+                      f"{len(_snapped)}개 스냅 가능, 평균 이동 {_avg:.2f}s")
+                for _p in _snapped:
+                    print(f"[BOUNDARY_SNAP]   {_p['left_id']} | "
+                          f"{_p['old_boundary']} -> {_p['new_boundary']} "
+                          f"(shift {_p['shift']:+.2f}s, gap {_p['gap_len']:.2f}s)")
+            else:
+                print(f"[BOUNDARY_SNAP] {source_id} 스냅 가능 경계 없음")
+
+            if _os.getenv("CCUT_SNAP_ENFORCE", "0") == "1" and _snapped:
+                _by_id = {f["fragment_id"]: f for f in fragments}
+                _touched = set()
+                for _p in _snapped:
+                    _l = _by_id.get(_p["left_id"])
+                    _r = _by_id.get(_p["right_id"])
+                    if not _l or not _r:
+                        continue
+                    _nb = float(_p["new_boundary"])
+                    _l["end_time"] = _nb
+                    _l["duration"] = round(_nb - float(_l["start_time"]), 3)
+                    _r["start_time"] = _nb
+                    _r["duration"] = round(float(_r["end_time"]) - _nb, 3)
+                    _touched.update([_p["left_id"], _p["right_id"]])
+
+                try:
+                    _fps = float(video_engine.get_metadata(video_path).get("fps", 30.0)) or 30.0
+                except Exception:
+                    _fps = 30.0
+
+                for _fid in _touched:
+                    _f = _by_id[_fid]
+                    _f["start_frame"] = int(round(float(_f["start_time"]) * _fps))
+                    _f["end_frame"] = int(round(float(_f["end_time"]) * _fps))
+                    _t, _w = _recompute_overlap(_f, all_segments)
+                    transcripts[_fid] = _t
+                    fragment_words[_fid] = _w
+                    bams.update_fragment_boundary(
+                        _fid,
+                        float(_f["start_time"]),
+                        float(_f["end_time"]),
+                    )
+                print(f"[BOUNDARY_SNAP] {source_id} {len(_touched)}개 조각 "
+                      f"적용 완료 (ENFORCE)")
+
         # [R14] Read current model_size from config.yaml for metadata persistence
         import yaml as _yaml
         _config_path = os.path.join(os.path.dirname(__file__), "ai", "config.yaml")

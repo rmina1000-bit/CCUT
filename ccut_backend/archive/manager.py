@@ -86,6 +86,7 @@ class BAMSManager:
 
     def archive_fragments(self, fragments):
         with SessionLocal() as db:
+            from archive.db_models import SemanticFragmentTable, SourceTable
             f_list = []
             for f in fragments:
                 fd = f.dict() if hasattr(f, 'dict') else f
@@ -98,12 +99,51 @@ class BAMSManager:
                     "_proxy_video_path": fd.get("_proxy_video_path")
                 })
 
+                source_fps = 30.0
+                source_id = fd.get("source_id") or "SRC_mock"
+                if source_id and source_id != "SRC_mock":
+                    src_obj = db.query(SourceTable).filter_by(source_id=source_id).first()
+                    if src_obj and src_obj.fps:
+                        source_fps = float(src_obj.fps)
+
+                frag_id = fd.get("fragment_id") or fd.get("id")
+
+                start_val = fd.get("start_time")
+                if start_val is None:
+                    start_val = fd.get("start")
+                if start_val is None and frag_id:
+                    sf_record = db.query(SemanticFragmentTable).filter_by(fragment_id=frag_id).first()
+                    if sf_record and sf_record.start is not None:
+                        start_val = sf_record.start
+                if start_val is None:
+                    start_frame = fd.get("start_frame")
+                    if start_frame is not None:
+                        start_val = float(start_frame) / source_fps
+
+                end_val = fd.get("end_time")
+                if end_val is None:
+                    end_val = fd.get("end")
+                if end_val is None and frag_id:
+                    sf_record = db.query(SemanticFragmentTable).filter_by(fragment_id=frag_id).first()
+                    if sf_record and sf_record.end is not None:
+                        end_val = sf_record.end
+                if end_val is None:
+                    end_frame = fd.get("end_frame")
+                    if end_frame is not None:
+                        end_val = float(end_frame) / source_fps
+
+                duration_val = fd.get("duration")
+                if start_val is not None and end_val is not None:
+                    duration_val = end_val - start_val
+                elif duration_val is not None:
+                    duration_val = float(duration_val)
+
                 fd_data = {
-                    "fragment_id": fd.get("fragment_id", f.get("id")),
-                    "source_id": fd.get("source_id", "SRC_mock"),
-                    "start_time": fd.get("start_time", fd.get("start")),
-                    "end_time": fd.get("end_time", fd.get("start", 0) + fd.get("duration", 0)),
-                    "duration": fd.get("duration"),
+                    "fragment_id": frag_id,
+                    "source_id": source_id,
+                    "start_time": start_val,
+                    "end_time": end_val,
+                    "duration": duration_val,
                     "intelligence": intelligence,
                     "status": fd.get("status", "AVAILABLE")
                 }
@@ -125,6 +165,18 @@ class BAMSManager:
                 # 병합
                 frag.intelligence = {**existing, **intelligence}
                 db.commit()
+
+    def update_fragment_boundary(self, fragment_id: str, start_time: float, end_time: float) -> bool:
+        """[단계2] 경계 스냅 적용 — 물리 경계만 갱신."""
+        with SessionLocal() as db:
+            frag = db.query(FragmentTable).filter_by(fragment_id=fragment_id).first()
+            if not frag:
+                return False
+            frag.start_time = float(start_time)
+            frag.end_time = float(end_time)
+            frag.duration = round(float(end_time) - float(start_time), 3)
+            db.commit()
+            return True
 
     def update_fragment_thumb(self, fragment_id: str, thumb_path: str):
         """[STEP 2] 썸네일 경로를 Frag intelligence 및 Evidence Board에 동기화"""
