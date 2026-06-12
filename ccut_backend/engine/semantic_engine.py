@@ -111,6 +111,7 @@ class SemanticFragmentGenerator:
         
         source = self.bams.get_source(source_id)
         total_duration = source.duration if (source and source.duration) else (evidences[-1]["end"] if evidences else 0)
+        self._current_total_duration = total_duration
 
         # [STEP 10-I.5.9] Diagnostic Logging
         print(f"\n{'='*60}")
@@ -620,7 +621,10 @@ class SemanticFragmentGenerator:
         for ev in evidences:
             wn = ev.get("worker_name", "unknown")
             # [STEP 10-I.5.9] Skip boundaries from workers that just repeat VF boundaries
-            if wn in ["audio", "signal_processor", "whisper", "qwen3_asr", "asr"]:
+            # [단계3] 텍스트가 없는 evidence의 scene_change는 스킵 면제.
+            # ASR worker 중복 방지는 텍스트가 실제로 있을 때만 적용.
+            has_text = bool(ev.get("text", "").strip())
+            if has_text and wn in ["audio", "signal_processor", "whisper", "qwen3_asr", "asr"]:
                 continue
 
             if ev.get("scene_change") and isinstance(ev["scene_change"], list):
@@ -921,12 +925,35 @@ class SemanticFragmentGenerator:
 
             child = dict(frag)
             child["semantic"] = dict(frag["semantic"])
-            child["structural"] = dict(frag["structural"])
             child["continuity"] = dict(frag.get("continuity", {}))
             child["fragment_id"] = f"{base_id}_P{index:03d}"
             child["start"] = round(cursor, 2)
             child["end"] = part_end
-            child["structural"]["duration"] = part_duration
+            # [단계3] structural 복제 금지 — 자식별 재계산.
+            # role/edit_value/market_value는 부모에서 복사하지 않는다.
+            child["structural"] = {
+                "role": "context",          # 임시값; 아래에서 재계산
+                "edit_value": 0.5,          # 임시값; 아래에서 재계산
+                "market_value": 0.5,        # 임시값; 아래에서 재계산
+                "duration": part_duration,
+            }
+            # 자식의 실제 start_ratio로 role 재분류
+            _total_dur = getattr(self, '_current_total_duration', frag.get("end", part_end))
+            _pos = round(cursor, 2) / max(_total_dur, 1.0)
+            _edit_v = frag["structural"].get("edit_value", 0.5)
+            if _pos < 0.2 and _edit_v >= 0.6:
+                child["structural"]["role"] = "hook"
+            elif _pos > 0.85:
+                child["structural"]["role"] = "closing"
+            elif _pos > 0.55 and _edit_v >= 0.55:
+                child["structural"]["role"] = "payoff"
+            else:
+                child["structural"]["role"] = "context"
+            child["structural"]["edit_value"] = round(
+                _edit_v * (part_duration / max(frag.get("structural", {}).get("duration", part_duration), 0.1)),
+                4,
+            )
+            child["structural"]["market_value"] = child["structural"]["edit_value"]
 
             # Time range ref re-filtering
             c_start = child["start"]
