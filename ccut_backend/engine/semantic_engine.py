@@ -112,6 +112,7 @@ class SemanticFragmentGenerator:
         source = self.bams.get_source(source_id)
         total_duration = source.duration if (source and source.duration) else (evidences[-1]["end"] if evidences else 0)
         self._current_total_duration = total_duration
+        self._current_source_id = source_id
 
         # [STEP 10-I.5.9] Diagnostic Logging
         print(f"\n{'='*60}")
@@ -662,11 +663,15 @@ class SemanticFragmentGenerator:
         sorted_b = unique_b
         if not sorted_b: return [0.0]
         
+        # [단계3.5] 경계 후보 밀도 적응 간격.
+        # 후보가 4초당 1개를 넘는 과밀 상태면 간격을 2.5초로 넓혀
+        # scene threshold 과발화로 인한 과분쇄를 방지한다.
+        _density = (len(sorted_b) / total_duration) if total_duration > 0 else 0.0
+        _min_gap = 0.8 if _density <= 0.25 else 2.5
+        print(f"[SEMANTIC DIAGNOSTIC] boundary density={_density:.3f}/s -> min_gap={_min_gap}s")
         filtered = [sorted_b[0]]
         for b in sorted_b[1:]:
-            # [STEP 10-I.5.9] 텍스트 기반인 경우 조금 더 촘촘하게 (0.8초)
-            # 단, 너무 뒤로 밀리지 않도록 함
-            if b - filtered[-1] >= 0.8:
+            if b - filtered[-1] >= _min_gap:
                 filtered.append(b)
         
         # 마지막 경계가 total_duration보다 작으면 추가 (전체 영상 커버 보장)
@@ -677,6 +682,47 @@ class SemanticFragmentGenerator:
         elif target_end > 0.0 and filtered[-1] < target_end - 0.5:
             filtered.append(target_end)
              
+        # [단계3.6] 경계 기근 감지: 평균 조각 길이 25초 초과 시 보강
+        _avg_len = (total_duration / max(len(filtered) - 1, 1)) if total_duration > 0 else 0
+        if total_duration > 0 and _avg_len > 25.0:
+            print(f"[BOUNDARY_RESCUE] 기근 감지 (avg={_avg_len:.1f}s) - 보강 시작")
+            _added = []
+
+            # (B) 저임계 장면 재스캔
+            _src = self.bams.get_source(getattr(self, '_current_source_id', None) or '')
+            _fp = getattr(_src, 'file_path', None) if _src else None
+            if _fp:
+                from engine.signal_processor import detect_scenes_rescan
+                _rescan = detect_scenes_rescan(_fp, total_duration)
+                print(f"[BOUNDARY_RESCUE] 저임계 재스캔 후보: {len(_rescan)}개")
+                _added.extend(_rescan)
+
+            # (C) VF 물리 경계 폴백 (VF 접두사 필수 — fragments 테이블 오염 방어)
+            if not _added:
+                _vf_pts = []
+                for _ev in evidences:
+                    _fid = _ev.get("fragment_id", "")
+                    if _fid.startswith("VF"):
+                        _vf_pts.extend([_ev["start"], _ev["end"]])
+                print(f"[BOUNDARY_RESCUE] VF 경계 폴백: {len(_vf_pts)}개")
+                _added.extend(_vf_pts)
+
+            if _added:
+                _all = sorted(set(
+                    [round(b, 2) for b in (filtered + _added)]
+                ))
+                # 기존 밀도 적응 간격 재적용
+                _d2 = len(_all) / max(total_duration, 1.0)
+                _g2 = 0.8 if _d2 <= 0.25 else 2.5
+                _ref = [_all[0]]
+                for _b in _all[1:]:
+                    if _b - _ref[-1] >= _g2:
+                        _ref.append(_b)
+                if _ref[-1] < total_duration - 0.5:
+                    _ref.append(total_duration)
+                filtered = _ref
+                print(f"[BOUNDARY_RESCUE] 보강 후 boundary {len(filtered)}개")
+
         return filtered
 
     def build_fragments(self, source_id, evidences, boundaries):
@@ -849,10 +895,13 @@ class SemanticFragmentGenerator:
             else:
                 res.append(frag)
         
-        # [STEP 10-I.5.3] 조각 수 강제 제한 (8~18개)
-        if is_fast_path and len(res) > 18:
-            print(f"[SEMANTIC] Fast Path Limit: {len(res)} -> 18 merging...")
-            while len(res) > 18:
+        # [단계3.5] 조각 수 상한 일반화.
+        # 짧은 영상(<=60s)은 기존 18개 유지, 긴 영상은 길이 비례
+        # (평균 8초/조각 목표, 12~30개 범위로 클램프).
+        max_frags = 18 if is_fast_path else max(12, min(30, int(total_duration / 8.0)))
+        if len(res) > max_frags:
+            print(f"[SEMANTIC] Fragment Limit: {len(res)} -> {max_frags} merging...")
+            while len(res) > max_frags:
                 min_idx = -1
                 min_dur = 9999.0
                 for i, f in enumerate(res):
@@ -911,7 +960,14 @@ class SemanticFragmentGenerator:
             if candidates:
                 part_end = sorted(candidates, key=lambda x: abs(x - mid))[0]
             else:
-                part_end = round(seg_end_limit, 2)
+                # [단계3.6.1] 인지 경계 없는 강제 분할은 잔여 구간을
+                # 균등 분할한다 (20+9.5 같은 비대칭 꼬리 방지).
+                import math as _math
+                _remaining = end - cursor
+                _n_parts = max(1, _math.ceil(_remaining / max_duration))
+                part_end = round(cursor + (_remaining / _n_parts), 2)
+                # [단계3.6] 인지 경계 없는 시간 분할 — 정직 기록
+                frag.setdefault("semantic", {})["forced_time_split"] = True
 
             # 마지막 조각이 3초 미만이면 현재 파트에 흡수
             if end - part_end < 3.0:

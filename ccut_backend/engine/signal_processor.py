@@ -291,3 +291,29 @@ def refine_boundaries_to_words(
 
     return proposals
 
+
+def detect_scenes_rescan(video_path: str, duration_sec: float,
+                         threshold: float = 0.22) -> list:
+    """[단계3.6] 경계 기근 소스용 저임계 장면 재스캔.
+    기존 _detect_scenes(0.4)가 후보 0개일 때만 호출되는 보강 경로.
+    반환: 장면 전환 타임스탬프(float) 목록.
+    """
+    import subprocess, re
+    cmd = [
+        "ffmpeg", "-y", "-i", video_path,
+        "-vf", f"setpts=PTS-STARTPTS,select=gt(scene,{threshold}),showinfo",
+        "-f", "null", "NUL",
+    ]
+    try:
+        proc = subprocess.Popen(
+            cmd, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE,
+            text=True, encoding="utf-8", errors="replace",
+        )
+        _, stderr = proc.communicate(timeout=max(60, int(duration_sec)))
+        pts = [float(m) for m in re.findall(r"pts_time:([\d.]+)", stderr)]
+        return [p for p in pts if 0.0 < p < duration_sec]
+    except Exception as e:
+        print(f"[RESCAN] 저임계 장면 재스캔 실패 (무시): {e}")
+        return []
+
+
