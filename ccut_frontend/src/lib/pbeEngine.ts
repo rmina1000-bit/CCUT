@@ -24,12 +24,3 @@ export {
     recalcDisplayIds,
     commitFragments
 } from "./fragmentIdentity";
-
-export {
-    applySSBoundary,
-    applySNSBoundary,
-    applySingleTrim,
-    applyPBEResultToFragments,
-    getRemovedLog,
-    clearRemovedLog
-} from "@/features/pbe/pbeBoundaryOps";

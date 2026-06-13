@@ -18,3 +18,9 @@ export type PBEApplyPayload = {
     updated_fragments: Fragment[];
     removed_fragment_ids: string[];
 };
+
+export interface BoundaryEditorTarget {
+    clickSide: 'left' | 'right' | 'center';
+    leftRealIndex: number;
+    rightRealIndex: number;
+}

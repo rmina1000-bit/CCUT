@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
-import { playheadToPixel } from '../src/features/pbe/pbeModel';
+// [PBE PURGE] pbeModel 삭제로 비활성화. 아래 describe.skip 처리. 부활 시 import·skip 동시 복원.
+// import { playheadToPixel } from '../src/features/pbe/pbeModel';
 import {
   MOCK_PROJECTS,
   MOCK_SOURCE_ENTRIES,
@@ -7,7 +8,7 @@ import {
   MOCK_PROPOSALS_THUMBNAIL_FIX
 } from './verification_mock_fragments';
 
-test.describe('PBE-D4-C: Browser playhead drift & playback reality tests', () => {
+test.describe.skip('PBE-D4-C: Browser playhead drift & playback reality tests', () => {
 
   // We keep a history of measured values to detect if all cases are identical
   const measurements: Array<{ label: string; currentTime: number; barX: number }> = [];

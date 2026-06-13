@@ -12,7 +12,7 @@ import { AccountPanel } from "@/components/AccountPanel";
 import { SingleFragmentEditor } from "@/components/SingleFragmentEditor";
 // [PBE REBUILD 2-1] 기존 PBE 컴포넌트 runtime import 제거. 타입만 임시 유지(새 편집창 신설 시 완전 제거).
 // import PrecisionBoundaryEditor from "@/features/pbe/PrecisionBoundaryEditor";
-import type { BoundaryEditorTarget } from "@/features/pbe/PrecisionBoundaryEditor";
+import type { BoundaryEditorTarget } from "@/features/pbe/pbeTypes";
 
 
 import {
@@ -768,7 +768,16 @@ const Index: React.FC = () => {
 
         // 3. 응답 sources.length === 0 이면 기존 세션 sourceEntries를 덮어쓰지 않도록 skip
         if (!data.sources || data.sources.length === 0) {
-          console.log("[Hydration] Response sources length is 0. Guarding against empty override.");
+          console.log("[Hydration] Response sources length is 0. Clearing stale source state.");
+          setSourceEntries([]);
+          setSourceFragments([]);
+          setEditFragments([]);
+          setCurrentSourceId(null);
+          setCurrentVideoUrl(null);
+          setSemanticFragments([]);
+          setSelectedFragment(null);
+          setHighlightedPanoramaFrag(null);
+          setExpandedFragment(null);
           return;
         }
 

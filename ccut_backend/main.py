@@ -1768,6 +1768,9 @@ async def post_generate_project_proposals(req: ProjectProposalRequest):
         except Exception as rank_err:
             print(f"[RERANKER][ERROR] Failed to rerank project proposals: {rank_err}")
 
+        # [PROJECT PROPOSAL PERSIST] inject·rerank 후 저장 — GET 복원(filter_by source_id=project_id)과 맞물림
+        bams.save_proposals(project_id, proposals)
+
         return {
             "status": "PROPOSAL_READY",
             "project_id": project_id,
