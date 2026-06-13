@@ -286,6 +286,44 @@ const Index: React.FC = () => {
     setSourceEntries([]);
     setQuickScanData(null);
     setSemanticFragments([]);
+    setAppState("empty");  // [B-5-FIX] 리셋/새 프로젝트 → 빈 업로드 화면 (FAILURE 아님)
+  }, []);
+
+  // [B-5-FIX] 저장된 백엔드 proposals → UI proposals 형태 매핑 (복원용, 업로드 매핑과 동일 형태)
+  const mapBackendProposals = useCallback((proposals: any[]) => {
+    const out: Record<"A" | "B", any> = {} as any;
+    (proposals || []).forEach((p: any) => {
+      const mode = p.mode === "A" ? "A" : "B";
+      out[mode] = {
+        id: mode,
+        proposal_id: p.proposal_id,
+        mode: p.mode === "A" ? "market" : "user",
+        title: p.mode === "A" ? "시장형 편집 (A)" : "사용자친화형 편집 (B)",
+        desc: p.proposal_reason?.mode_reason || "백엔드 분석 기반 추천 편집안입니다.",
+        score: String(Math.round((p.confidence ?? 0) * 100)) + "%",
+        key_fragments: (p.sequence || []).map((s: any) => s.fragment_id),
+        proposal_story: p.proposal_story,
+        proposal_explanation: p.proposal_explanation,
+        direction: {},
+        snapshot_id: "R1",
+        template_id: p.mode,
+        slot_trace: [],
+        preview_url: p.preview_url ?? null,
+        preview_duration: p.preview_duration ?? 0,
+      };
+      if (out[mode].key_fragments.length > 0) {
+        out[mode].resolved_aliases = (p.sequence || []).map((s: any) => ({
+          proposal_fragment_id: s.fragment_id,
+          source_id: s.source_id,
+          source_fragment_id: s.fragment_id,
+          display_id: s.display_id,
+          start_sec: s.start,
+          end_sec: s.end,
+          thumbnail_url: s.thumbnail_url
+        }));
+      }
+    });
+    return out;
   }, []);
 
   // [STEP 10-I.5.27-E7-M2] Debug Log Guard
@@ -359,18 +397,20 @@ const Index: React.FC = () => {
 
         const today = new Date();
         const dateStrYYMMDD = `${today.getFullYear().toString().slice(2)}${String(today.getMonth() + 1).padStart(2, "0")}${String(today.getDate()).padStart(2, "0")}`;
-        const projectId = `proj_${Date.now()}`;
         const fileCount = allFiles.length;
+        const dateStr = String(today.getMonth() + 1) + "/" + String(today.getDate());
 
-        setProjects((prev) => {
-          const newProject = {
-            id: projectId,
-            name: dateStrYYMMDD + "-" + String(prev.length + 1).padStart(3, "0"),
-            date: String(today.getMonth() + 1) + "/" + String(today.getDate()),
-            count: fileCount,
-          };
-          return [newProject, ...prev];
-        });
+        // [B-5d] 기존 프로젝트(proj_ prefix)면 귀속. 아니면(새 프로젝트 또는 레거시) 지금 DB 생성.
+        let projectId: string;
+        if (activeNavItem && activeNavItem.startsWith("proj_")) {
+          projectId = activeNavItem;
+          setProjects((prev) => prev.map((p) => (p.id === projectId ? { ...p, count: fileCount } : p)));
+        } else {
+          const newRes = await videoService.createProject(dateStrYYMMDD + "-new");
+          projectId = newRes.program_id;
+          setActiveNavItem(projectId);
+          setProjects((prev) => [{ id: projectId, name: newRes.name, date: dateStr, count: fileCount }, ...prev]);
+        }
 
 
         setSourceEntries(collectedEntries);
@@ -579,26 +619,17 @@ const Index: React.FC = () => {
               markTiming("proposal_requested");
 
               try {
-                if (completedSourceIds.length >= 2) {
-                  // [STEP 10-I.5.27-E6] Source Identity Normalize: 업로드 순서(uploadedSourceIds) 유지
-                  const orderedSourceIds = uploadedSourceIds.filter(id => completedSourceIds.includes(id));
-                  
-                  // 멀티 소스 프로젝트 제안
-                  proposalData = await videoService.requestProjectProposals(projectId, orderedSourceIds, 60.0);
-                  console.log("[proposal-project] Diagnostics:", {
-                    project_id: proposalData.project_id,
-                    source_ids: proposalData.source_ids,
-                    source_usage: proposalData.source_usage,
-                    warnings: proposalData.warnings,
-                    completed: completedSourceIds,
-                    failed: failedSourceIds
-                  });
-                } else {
-                  // 단일 소스 제안
-                  const sid = completedSourceIds[0];
-                  const res = await fetch(`${videoService.API_BASE_URL}/proposals/${sid}`, { method: "POST" });
-                  if (res.ok) proposalData = await res.json();
-                }
+                // [B-5-FIX] 단일/멀티 모두 프로젝트(program_id) 경로로 일원화 — program_id 저장돼야 복원 가능
+                const orderedSourceIds = uploadedSourceIds.filter(id => completedSourceIds.includes(id));
+                proposalData = await videoService.requestProjectProposals(projectId, orderedSourceIds, 60.0);
+                console.log("[proposal-project] Diagnostics:", {
+                  project_id: proposalData.project_id,
+                  source_ids: proposalData.source_ids,
+                  source_usage: proposalData.source_usage,
+                  warnings: proposalData.warnings,
+                  completed: completedSourceIds,
+                  failed: failedSourceIds
+                });
                 markTiming("proposal_received");
 
                 if (proposalData && proposalData.proposals) {
@@ -686,7 +717,7 @@ const Index: React.FC = () => {
         return false;
       }
     },
-    [logProposalPair, resetAnalysisState, toFullUrl]
+    [logProposalPair, resetAnalysisState, toFullUrl, activeNavItem]
   );
 
   // Hash-based debug hydration for Playwright verification
@@ -741,6 +772,27 @@ const Index: React.FC = () => {
     };
   }, [editFragments]);
 
+  // [B-5c] 마운트 시 백엔드 프로젝트 목록 로드 (재기동/새로고침 후에도 프로젝트 영속)
+  useEffect(() => {
+    if (typeof window !== "undefined" && window.location.hash === "#debug-hydrate") return;
+    let alive = true;
+    (async () => {
+      try {
+        const res = await videoService.listProjects();
+        if (!alive || !res || !Array.isArray(res.projects)) return;
+        const mapped = res.projects.map((p: any) => {
+          const d = p.created_at ? new Date(p.created_at) : null;
+          const dateStr = d ? (String(d.getMonth() + 1) + "/" + String(d.getDate())) : "";
+          return { id: p.program_id, name: p.name, date: dateStr, count: 0 };
+        });
+        setProjects(mapped);
+      } catch (e) {
+        console.warn("[B-5c] 프로젝트 목록 로드 실패", e);
+      }
+    })();
+    return () => { alive = false; };
+  }, []);
+
   // [CCUT1.0.4 PROPOSALS PROJECT SOURCES HYDRATION]
   useEffect(() => {
     if (typeof window !== "undefined" && window.location.hash === "#debug-hydrate") {
@@ -748,13 +800,29 @@ const Index: React.FC = () => {
       return;
     }
     const savedActiveProject = typeof window !== "undefined" ? localStorage.getItem("ccut_active_project_id") : null;
-    if (!savedActiveProject || savedActiveProject === "projects" || !activeNavItem || activeNavItem === "projects" || activeNavItem === "default_project") {
+    if (!savedActiveProject || savedActiveProject === "projects" || !activeNavItem || activeNavItem === "projects" || activeNavItem === "default_project" || activeNavItem === "__new__") {
       return;
     }
 
     let isMounted = true;
     
     const hydrateProjectSources = async () => {
+      // fetch 전 즉시 클리어 — 이전 프로젝트 state가 새 프로젝트에 잔류하는 현상 제거
+      setSourceEntries([]);
+      setEditFragments([]);
+      setSourceFragments([]);
+      setProposals(null);
+      setCommittedProposalId(null);
+      setSelectedProposalId(null);
+      setReservedFragments([]);
+      setHoldPositions({});
+      setDeletedFragments([]);
+      setCurrentSourceId(null);
+      setCurrentVideoUrl(null);
+      setSingleEditOpen(false);
+      setSingleEditTarget(null);
+      setAppState("empty");
+
       try {
         console.log(`[Hydration] Loading sources for project: ${activeNavItem}`);
         const data = await videoService.getProjectSources(activeNavItem);
@@ -778,6 +846,7 @@ const Index: React.FC = () => {
           setSelectedFragment(null);
           setHighlightedPanoramaFrag(null);
           setExpandedFragment(null);
+          setAppState("empty");  // [B-5-FIX] 빈 프로젝트 → 업로드 화면 (FAILURE 아님)
           return;
         }
 
@@ -806,7 +875,47 @@ const Index: React.FC = () => {
             setCurrentSourceId(firstEntry.source_id);
             setCurrentVideoUrl(firstEntry.video_url);
 
-            console.log(`[Hydration] Successfully hydrated ${restoredEntries.length} sources for project: ${activeNavItem}`);
+            // [B-5-FIX] 저장된 A/B 제안 복원 → 돌아오면 하던 그대로
+            if (data.proposals && data.proposals.length > 0) {
+              setProposals(mapBackendProposals(data.proposals));
+              setAppState("complete");
+            } else {
+              setAppState("empty");
+            }
+
+            // [B-5d] ui_state 스냅샷 복원 (단일 스냅샷 패턴)
+            try {
+              const stateRes = await videoService.getProjectState(activeNavItem);
+              if (stateRes && stateRes.ui_state && isMounted) {
+                const snap = JSON.parse(stateRes.ui_state);
+                if (snap.reservedFragments?.length) setReservedFragments(snap.reservedFragments);
+                if (snap.holdPositions) setHoldPositions(snap.holdPositions);
+                if (snap.committedProposalId) setCommittedProposalId(snap.committedProposalId);
+                if (snap.selectedProposalId) setSelectedProposalId(snap.selectedProposalId);
+                if (snap.activeSource) setActiveSource(snap.activeSource);
+                if (snap.deletedFragments?.length) setDeletedFragments(snap.deletedFragments);
+                // [수정 6] proposals.key_fragments + customEditFragments 복원
+                // DB proposals 원본 위에 저장된 현재 상태를 덮어씀
+                if (snap.proposalsKeyFragments || snap.proposalsCustomFragments) {
+                  setProposals((prev) => {
+                    if (!prev) return prev;
+                    const next: any = { ...prev };
+                    for (const mode of ["A", "B"] as const) {
+                      if (!next[mode]) continue;
+                      if (snap.proposalsKeyFragments?.[mode] !== undefined) {
+                        next[mode] = { ...next[mode], key_fragments: snap.proposalsKeyFragments[mode] };
+                      }
+                      if (snap.proposalsCustomFragments?.[mode] !== undefined) {
+                        next[mode] = { ...next[mode], customEditFragments: snap.proposalsCustomFragments[mode] };
+                      }
+                    }
+                    return next;
+                  });
+                }
+              }
+            } catch (_) {}
+
+            console.log(`[Hydration] Successfully hydrated ${restoredEntries.length} sources, ${(data.proposals || []).length} proposals for project: ${activeNavItem}`);
           }
         }
       } catch (err) {
@@ -820,6 +929,7 @@ const Index: React.FC = () => {
       isMounted = false;
     };
   }, [activeNavItem, mapFragments]);
+
 
   // [STEP 10-I.5.28-E9-R1] StoryPlanPreview 자동 생성 (Skeleton)
   useEffect(() => {
@@ -1319,14 +1429,14 @@ const Index: React.FC = () => {
           const matchSource = sourceFragments.find(
             (sf) => sf.fragment_id === (s.source_fragment_id || s.fragment_id || fragId)
           );
-          
-          const startF = s.start_sec !== undefined 
-            ? Math.round(s.start_sec * 30) 
+
+          const startF = s.start_sec !== undefined
+            ? Math.round(s.start_sec * 30)
             : (s.start !== undefined ? Math.round(s.start * 30) : (matchSource?.start_frame ?? 0));
-          const endF = s.end_sec !== undefined 
-            ? Math.round(s.end_sec * 30) 
+          const endF = s.end_sec !== undefined
+            ? Math.round(s.end_sec * 30)
             : (s.end !== undefined ? Math.round(s.end * 30) : (matchSource?.end_frame ?? 150));
-          
+
           // [2-2c-Fix2] 초 원본 보존 — 이미 존재하는 초 키에서만. 없으면 undefined. /30 역산 금지.
           const startSecVal = s.start_sec ?? s.start ?? s.start_time ?? matchSource?.start_time ?? matchSource?.start;
           const endSecVal   = s.end_sec   ?? s.end   ?? s.end_time   ?? matchSource?.end_time   ?? matchSource?.end;
@@ -1349,18 +1459,67 @@ const Index: React.FC = () => {
           };
         });
 
+        // 즉시 rawSeq 버전으로 표시
         setEditFragments(initialFrags);
-        
-        setProposals((prev) => {
-          if (!prev || !prev[target]) return prev;
-          return {
-            ...prev,
-            [target]: {
-              ...prev[target],
-              customEditFragments: initialFrags
+
+        // [F-2b-MERGE] overlay 비동기 조회 → mergedFrags를 customEditFragments에 저장
+        // 이렇게 해야 다음 L1395 재실행(A→B→A 전환) 시 overlay가 보존됨
+        const snapSourceId = currentSourceId;
+        if (snapSourceId) {
+          (async () => {
+            try {
+              const res = await videoService.getEditOverlay(snapSourceId);
+              const overlays: any[] = Array.isArray(res) ? res : [];
+              let mergedFrags: any[] = initialFrags;
+              if (overlays.length > 0) {
+                const overlayMap = new Map(overlays.map((o: any) => [o.fragment_id, o]));
+                let changed = false;
+                const merged = initialFrags.map((fr: any) => {
+                  const o = overlayMap.get(fr.fragment_id ?? getUid(fr));
+                  if (!o) return fr;
+                  if (fr.start_sec === o.effective_start_sec && fr.end_sec === o.effective_end_sec) return fr;
+                  changed = true;
+                  return {
+                    ...fr,
+                    start_sec: o.effective_start_sec,
+                    end_sec: o.effective_end_sec,
+                    start_time: o.effective_start_sec,
+                    end_time: o.effective_end_sec,
+                    trim_applied: true,
+                  };
+                });
+                if (changed) mergedFrags = merged;
+              }
+              setEditFragments(mergedFrags as any);
+              setProposals((prev) => {
+                if (!prev || !prev[target]) return prev;
+                return {
+                  ...prev,
+                  [target]: {
+                    ...prev[target],
+                    customEditFragments: mergedFrags,
+                  },
+                };
+              });
+            } catch (_) {
+              setProposals((prev) => {
+                if (!prev || !prev[target]) return prev;
+                return {
+                  ...prev,
+                  [target]: { ...prev[target], customEditFragments: initialFrags },
+                };
+              });
             }
-          };
-        });
+          })();
+        } else {
+          setProposals((prev) => {
+            if (!prev || !prev[target]) return prev;
+            return {
+              ...prev,
+              [target]: { ...prev[target], customEditFragments: initialFrags },
+            };
+          });
+        }
       }
     }
   }, [committedProposalId]);
@@ -1445,7 +1604,11 @@ const Index: React.FC = () => {
     const proposalFragIds = proposal?.key_fragments || [];
     if (proposalFragIds.length === 0) return [];
 
+    // 보류탭에 있는 조각은 조각탭에서 제외 (중복 방지)
+    const reservedIds = new Set(reservedFragments.map(f => getUid(f)));
+
     const matched = editFragments.filter((f) => {
+      if (reservedIds.has(getUid(f))) return false;
       if (proposalFragIds.includes(f.fragment_id)) return true;
       if (f.root_fragment_uid && proposalFragIds.includes(f.root_fragment_uid)) return true;
       if (f.parent_fragment_uid && proposalFragIds.includes(f.parent_fragment_uid)) return true;
@@ -1454,6 +1617,7 @@ const Index: React.FC = () => {
     });
 
     const result = proposalFragIds
+      .filter(id => !reservedIds.has(id))
       .map((id) =>
         matched.find(
           (f) =>
@@ -1466,7 +1630,7 @@ const Index: React.FC = () => {
       .filter(Boolean) as Fragment[];
 
     return result;
-  }, [committedProposalId, editFragments, proposals]);
+  }, [committedProposalId, editFragments, proposals, reservedFragments]);
 
   const handleOpenBoundaryEditor = useCallback(
     async (leftFragId: string | null, rightFragId: string | null, clickSide?: "left" | "right" | "center") => {
@@ -1734,7 +1898,29 @@ const Index: React.FC = () => {
       <div className="relative flex-shrink-0" style={{ width: navCollapsed ? 48 : 320 }}>
         <LeftNav
           activeItem={activeNavItem}
-          onItemClick={setActiveNavItem}
+          onItemClick={(newId) => {
+            // [B-5d] 전환 직전: 현재 프로젝트 UI 스냅샷 저장 (백그라운드, non-blocking)
+            if (activeNavItem && activeNavItem.startsWith("proj_") && appState === "complete") {
+              const uiSnap = {
+                reservedFragments,
+                holdPositions,
+                committedProposalId,
+                selectedProposalId,
+                activeSource,
+                deletedFragments,
+                proposalsKeyFragments: proposals ? {
+                  A: (proposals as any).A?.key_fragments,
+                  B: (proposals as any).B?.key_fragments,
+                } : undefined,
+                proposalsCustomFragments: proposals ? {
+                  A: (proposals as any).A?.customEditFragments,
+                  B: (proposals as any).B?.customEditFragments,
+                } : undefined,
+              };
+              videoService.saveProjectState(activeNavItem, { ui_state: JSON.stringify(uiSnap) }).catch(() => {});
+            }
+            setActiveNavItem(newId);
+          }}
           projects={projects}
           collapsed={navCollapsed}
           onToggleCollapse={() => setNavCollapsed((prev) => !prev)}
@@ -1742,7 +1928,36 @@ const Index: React.FC = () => {
             setProjects((prev) => prev.map((p) => (p.id === id ? { ...p, name: newName } : p)));
           }}
           onDeleteProject={(id) => {
+            videoService.deleteProject(id).catch(() => {});
             setProjects((prev) => prev.filter((p) => p.id !== id));
+            if (activeNavItem === id) {
+              setActiveNavItem("__new__");
+            }
+          }}
+          onNewProject={() => {
+            // [B-5d] + 버튼도 전환으로 취급: 현재 프로젝트 스냅샷 저장 후 빈 화면으로
+            if (activeNavItem && activeNavItem.startsWith("proj_") && appState === "complete") {
+              const uiSnap = {
+                reservedFragments,
+                holdPositions,
+                committedProposalId,
+                selectedProposalId,
+                activeSource,
+                deletedFragments,
+                proposalsKeyFragments: proposals ? {
+                  A: (proposals as any).A?.key_fragments,
+                  B: (proposals as any).B?.key_fragments,
+                } : undefined,
+                proposalsCustomFragments: proposals ? {
+                  A: (proposals as any).A?.customEditFragments,
+                  B: (proposals as any).B?.customEditFragments,
+                } : undefined,
+              };
+              videoService.saveProjectState(activeNavItem, { ui_state: JSON.stringify(uiSnap) }).catch(() => {});
+            }
+            // [B-5b-v2] '+' → DB 즉시 생성 없음. 빈 상태 전환만 (업로드 시 createProject 실행)
+            resetAnalysisState();
+            setActiveNavItem("__new__");
           }}
         />
       </div>

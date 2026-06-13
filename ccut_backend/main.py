@@ -25,7 +25,7 @@ from sqlalchemy.orm import Session
 
 from archive.manager import bams
 from archive.models import SourceVideo
-from archive.db_models import PublishedTable, ProgramTable, FragmentTable, SourceTable, ProposalTable
+from archive.db_models import PublishedTable, ProgramTable, FragmentTable, SourceTable, ProposalTable, ProjectSourceTable
 from database import get_db
 
 from engine.boundary_editor import pbe_engine
@@ -1607,8 +1607,8 @@ async def get_project_sources(project_id: str):
     source_ids = []
     
     with SessionLocal() as db:
-        # 1. Proposals 테이블에서 source_id가 project_id인 것들을 쿼리
-        props = db.query(ProposalTable).filter_by(source_id=project_id).all()
+        # 1. [B-3b-3] 프로젝트 제안을 program_id 기준으로 조회 (신규 구조). 레거시 source_id=proj_ 행은 미조회(C=신규부터)
+        props = db.query(ProposalTable).filter_by(program_id=project_id).all()
         for p in props:
             # sequence JSON 파싱
             seq = p.sequence or []
@@ -1643,10 +1643,12 @@ async def get_project_sources(project_id: str):
             frags = bams.get_semantic_fragments(sid)
             if not frags:
                 frags = bams.get_fragments_by_source(sid)
+            else:
+                frags = inject_semantic_thumbnails(frags)
 
             # 비디오 URL 변환 (file_path가 절대 경로이면 basename을 따옴)
             video_name = os.path.basename(src.file_path) if src.file_path else f"{sid}.mp4"
-            vurl = f"/static/{video_name}"
+            vurl = f"/static/uploads/{video_name}"
 
             # Label 순서대로 부여 (A, B, C, D...)
             label = chr(65 + idx)
@@ -1660,10 +1662,22 @@ async def get_project_sources(project_id: str):
                 "duration_sec": src.duration or 0.0
             })
 
+        # [B-5-FIX] 저장된 프로젝트 제안도 함께 복원 (program_id 기준 props 재사용) — 돌아오면 A/B 그대로
+        collected_proposals = [{
+            "proposal_id": p.proposal_id,
+            "mode": p.mode,
+            "sequence": p.sequence,
+            "duration": p.duration,
+            "proposal_reason": p.proposal_reason,
+            "confidence": p.confidence,
+            "fallback_reason": p.fallback_reason,
+        } for p in props]
+
     return {
         "status": "OK",
         "project_id": project_id,
-        "sources": collected_sources
+        "sources": collected_sources,
+        "proposals": collected_proposals
     }
 
 @app.post("/proposals/project")
@@ -1768,8 +1782,22 @@ async def post_generate_project_proposals(req: ProjectProposalRequest):
         except Exception as rank_err:
             print(f"[RERANKER][ERROR] Failed to rerank project proposals: {rank_err}")
 
-        # [PROJECT PROPOSAL PERSIST] inject·rerank 후 저장 — GET 복원(filter_by source_id=project_id)과 맞물림
-        bams.save_proposals(project_id, proposals)
+        # [B-3b-3] inject·rerank 후 program_id 기준 저장 — GET 복원(filter_by program_id)과 맞물림
+        bams.save_project_proposals(project_id, proposals)
+
+        # [B-4] 프로젝트-소스 다대다 기록 (project_sources upsert, 멱등). 실패해도 응답엔 영향 없음
+        try:
+            from database import SessionLocal as _SL
+            import datetime as _dt
+            with _SL() as _db:
+                for _i, _sid in enumerate(source_ids):
+                    _ex = _db.query(ProjectSourceTable).filter_by(program_id=project_id, source_id=_sid).first()
+                    if not _ex:
+                        _db.add(ProjectSourceTable(program_id=project_id, source_id=_sid,
+                                                   display_order=_i, added_at=_dt.datetime.now().isoformat()))
+                _db.commit()
+        except Exception as _e:
+            print(f"[B-4][project_sources] upsert skip: {_e}")
 
         return {
             "status": "PROPOSAL_READY",
@@ -2632,6 +2660,90 @@ async def create_program(req: ProgramCreateRequest, db: Session = Depends(get_db
     db.add(new_pg)
     db.commit()
     return {"status": "SUCCESS", "program_id": req.program_id}
+
+
+# ── [B-4] 프로젝트 생애주기 라우트 (1급 독립체: 생성/목록/작업상태) ──────────────
+
+class ProjectCreateRequest(BaseModel):
+    name: Optional[str] = None
+
+@app.post("/projects")
+async def create_project(req: ProjectCreateRequest, db: Session = Depends(get_db)):
+    """[B-4] '+' 버튼이 부르는 진짜 새 프로젝트 생성. 빈 그릇(schema_version=2)을 만들고 program_id 반환."""
+    import uuid, datetime
+    program_id = f"proj_{uuid.uuid4().hex[:12]}"
+    name = req.name or (datetime.datetime.now().strftime("%y%m%d") + "-new")
+    now = datetime.datetime.now()
+    pg = ProgramTable(program_id=program_id, name=name, status="DRAFT",
+                      schema_version=2, last_updated_at=now, created_at=now)
+    db.add(pg)
+    db.commit()
+    return {"status": "SUCCESS", "program_id": program_id, "name": name}
+
+@app.get("/projects")
+async def list_projects(db: Session = Depends(get_db)):
+    """[B-4] 신규 구조(schema_version=2) 프로젝트 목록. project_sources 있는 것만 반환 (빈 프로젝트 숨김)."""
+    import datetime
+    used_ids = {r.program_id for r in db.query(ProjectSourceTable.program_id).distinct().all()}
+    rows = db.query(ProgramTable).filter(
+        ProgramTable.schema_version == 2,
+        ProgramTable.program_id.in_(used_ids)
+    ).all()
+    rows = sorted(rows, key=lambda p: (p.last_updated_at or p.created_at or datetime.datetime.min), reverse=True)
+    return {"projects": [{
+        "program_id": p.program_id,
+        "name": p.name,
+        "created_at": p.created_at.isoformat() if p.created_at else None,
+        "last_updated_at": p.last_updated_at.isoformat() if p.last_updated_at else None,
+    } for p in rows]}
+
+class ProjectStateRequest(BaseModel):
+    active_mode: Optional[str] = None
+    chat_state: Optional[str] = None
+    reserve_state: Optional[str] = None
+    ui_state: Optional[str] = None
+
+@app.post("/projects/{program_id}/state")
+async def save_project_state(program_id: str, req: ProjectStateRequest, db: Session = Depends(get_db)):
+    """[B-4] 작업상태 영속(A=전부): active_mode/chat/reserve/ui. None인 필드는 미변경."""
+    import datetime
+    pg = db.query(ProgramTable).filter_by(program_id=program_id).first()
+    if not pg:
+        return {"status": "NOT_FOUND", "program_id": program_id}
+    if req.active_mode is not None: pg.active_mode = req.active_mode
+    if req.chat_state is not None: pg.chat_state = req.chat_state
+    if req.reserve_state is not None: pg.reserve_state = req.reserve_state
+    if req.ui_state is not None: pg.ui_state = req.ui_state
+    pg.last_updated_at = datetime.datetime.now()
+    db.commit()
+    return {"status": "SAVED", "program_id": program_id}
+
+@app.get("/projects/{program_id}/state")
+async def get_project_state(program_id: str, db: Session = Depends(get_db)):
+    """[B-4] 작업상태 복원."""
+    pg = db.query(ProgramTable).filter_by(program_id=program_id).first()
+    if not pg:
+        return {"status": "NOT_FOUND", "program_id": program_id}
+    return {
+        "status": "OK",
+        "program_id": program_id,
+        "name": pg.name,
+        "active_mode": pg.active_mode,
+        "chat_state": pg.chat_state,
+        "reserve_state": pg.reserve_state,
+        "ui_state": pg.ui_state,
+    }
+
+@app.delete("/projects/{program_id}")
+async def delete_project(program_id: str, db: Session = Depends(get_db)):
+    """프로젝트 삭제: project_sources + programs 레코드 제거."""
+    pg = db.query(ProgramTable).filter_by(program_id=program_id).first()
+    if not pg:
+        return {"status": "NOT_FOUND", "program_id": program_id}
+    db.query(ProjectSourceTable).filter_by(program_id=program_id).delete()
+    db.delete(pg)
+    db.commit()
+    return {"status": "DELETED", "program_id": program_id}
 
 
 # ── 유저 라우트 ────────────────────────────────────────────────────

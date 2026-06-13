@@ -114,5 +114,33 @@ export const videoService = {
     },
     getEditOverlay: async (sourceId: string) => {
         return await fetcher(`/edit-overlay/${encodeURIComponent(sourceId)}`);
-    }
+    },
+
+    // [B-5a] 프로젝트 생애주기 API (1급 독립체)
+    createProject: async (name?: string) => {
+        return await fetcher(`/projects`, {
+            method: "POST",
+            body: JSON.stringify({ name: name ?? null }),
+        });
+    },
+    listProjects: async () => {
+        return await fetcher(`/projects`);
+    },
+    saveProjectState: async (programId: string, state: {
+        active_mode?: string | null;
+        chat_state?: string | null;
+        reserve_state?: string | null;
+        ui_state?: string | null;
+    }) => {
+        return await fetcher(`/projects/${encodeURIComponent(programId)}/state`, {
+            method: "POST",
+            body: JSON.stringify(state),
+        });
+    },
+    getProjectState: async (programId: string) => {
+        return await fetcher(`/projects/${encodeURIComponent(programId)}/state`);
+    },
+    deleteProject: async (programId: string) => {
+        return await fetcher(`/projects/${encodeURIComponent(programId)}`, { method: "DELETE" });
+    },
 };
