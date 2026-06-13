@@ -697,6 +697,32 @@ class SemanticFragmentGenerator:
                 print(f"[BOUNDARY_RESCUE] 저임계 재스캔 후보: {len(_rescan)}개")
                 _added.extend(_rescan)
 
+            # (B2) [M-2] 모션 변곡점 — 점진 변화 영상용
+            # (저임계 재스캔 0개일 때. 컷 없는 원테이크의 내용 경계)
+            if not _added:
+                from engine.signal_processor import (
+                    extract_motion_curve,
+                    find_motion_inflections,
+                )
+                import os as _os2
+                _sid = getattr(self, '_current_source_id', '') or ''
+                # [M-2.2] proxy 위치는 원본 위치와 무관하게
+                # 레포 루트의 storage/proxies 고정 —
+                # 코드 위치(__file__) 앵커로 CWD·원본경로 모두 독립.
+                _repo_root = _os2.path.dirname(_os2.path.dirname(
+                    _os2.path.dirname(_os2.path.abspath(__file__))))
+                _proxy = _os2.path.join(
+                    _repo_root, "storage", "proxies",
+                    f"{_sid}_proxy.mp4")
+                _mpath = _proxy if _os2.path.exists(_proxy) else _fp
+                if _mpath:
+                    _curve = extract_motion_curve(_mpath, total_duration)
+                    _infl = find_motion_inflections(_curve)
+                    print(f"[BOUNDARY_RESCUE] 모션 변곡점: "
+                          f"후보 {len(_infl)}개 "
+                          f"(curve {len(_curve)} samples)")
+                    _added.extend([c["t"] for c in _infl])
+
             # (C) VF 물리 경계 폴백 (VF 접두사 필수 — fragments 테이블 오염 방어)
             if not _added:
                 _vf_pts = []

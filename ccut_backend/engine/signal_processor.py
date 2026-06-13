@@ -317,3 +317,108 @@ def detect_scenes_rescan(video_path: str, duration_sec: float,
         return []
 
 
+def extract_motion_curve(video_path: str, duration_sec: float,
+                         fps_sample: float = 2.0) -> list:
+    """[M-1] 프레임 간 변화량(scene score)을 연속 곡선으로 추출.
+    임계 비교 없음 — 곡선 자체를 반환.
+    반환: [{"t": float, "score": float}, ...] (t 오름차순)
+    실패 시 빈 리스트 (호출측이 폴백 판단).
+    """
+    import subprocess, re, tempfile, os
+    out = []
+    tmp = None
+    try:
+        # [M-1.1] Windows: 절대경로의 드라이브 콜론(C:)이
+        # ffmpeg 필터 옵션 파서와 충돌 — CWD에 생성 후
+        # 필터에는 파일명(상대)만 전달한다.
+        fd, tmp = tempfile.mkstemp(suffix=".txt", dir=os.getcwd())
+        os.close(fd)
+        tmp_name = os.path.basename(tmp)
+        cmd = [
+            "ffmpeg", "-y", "-i", video_path,
+            "-vf", f"fps={fps_sample},select='gte(scene,0)',"
+                   f"metadata=print:file={tmp_name}",
+            "-f", "null", "NUL",
+        ]
+        proc = subprocess.Popen(
+            cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+        )
+        proc.communicate(timeout=max(120, int(duration_sec * 2)))
+        with open(tmp, encoding="utf-8", errors="replace") as f:
+            txt = f.read()
+        pairs = re.findall(
+            r"pts_time:([\d.]+).*?lavfi\.scene_score=([\d.]+)",
+            txt, re.S,
+        )
+        for t, s in pairs:
+            tv = float(t)
+            if 0.0 <= tv <= duration_sec:
+                out.append({"t": tv, "score": float(s)})
+    except Exception as e:
+        print(f"[MOTION_CURVE] 추출 실패 (무시): {e}")
+        return []
+    finally:
+        if tmp and os.path.exists(tmp):
+            try: os.remove(tmp)
+            except Exception: pass
+    return sorted(out, key=lambda x: x["t"])
+
+
+def find_motion_inflections(curve: list, min_gap_sec: float = 3.0,
+                            smooth_window: int = 4,
+                            k_smooth: float = 1.0,
+                            k_raw: float = 0.5) -> list:
+    """[M-1] 모션 곡선에서 변곡점(국소 최대) 검출.
+    D1: 평활 피크 ±2샘플 창에서 raw 최대점 시각 채택.
+    D2: 그 raw 최대 < raw_mean + k_raw*raw_std 이면 기각.
+    반환: [{"t": float, "score": float,
+            "reason": "motion_inflection"}, ...]
+    """
+    n = len(curve)
+    if n < smooth_window + 2:
+        return []
+
+    raw = [c["score"] for c in curve]
+    ts = [c["t"] for c in curve]
+
+    raw_mean = sum(raw) / n
+    raw_var = sum((x - raw_mean) ** 2 for x in raw) / n
+    raw_std = raw_var ** 0.5
+    raw_floor = raw_mean + k_raw * raw_std
+
+    # 이동평균 (트레일링이지만 D1 보정으로 시각 지연 해소)
+    sm = []
+    for i in range(n):
+        lo = max(0, i - smooth_window + 1)
+        win = raw[lo:i + 1]
+        sm.append(sum(win) / len(win))
+
+    sm_mean = sum(sm) / n
+    sm_var = sum((x - sm_mean) ** 2 for x in sm) / n
+    sm_std = sm_var ** 0.5
+    sm_thresh = sm_mean + k_smooth * sm_std
+
+    candidates = []
+    for i in range(1, n - 1):
+        if sm[i] < sm_thresh:
+            continue
+        if not (sm[i] >= sm[i - 1] and sm[i] >= sm[i + 1]):
+            continue
+        # D1: ±2샘플 창에서 raw 최대점
+        lo, hi = max(0, i - 2), min(n - 1, i + 2)
+        j = max(range(lo, hi + 1), key=lambda k: raw[k])
+        # D2: raw 동반 조건
+        if raw[j] < raw_floor:
+            continue
+        candidates.append({"t": ts[j], "score": round(raw[j], 6),
+                           "reason": "motion_inflection"})
+
+    # min_gap 중복 제거 (점수 높은 것 우선 유지)
+    candidates.sort(key=lambda c: -c["score"])
+    kept = []
+    for c in candidates:
+        if all(abs(c["t"] - k["t"]) >= min_gap_sec for k in kept):
+            kept.append(c)
+    return sorted(kept, key=lambda c: c["t"])
+
+
