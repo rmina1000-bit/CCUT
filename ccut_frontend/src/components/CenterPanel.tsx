@@ -921,7 +921,7 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
   };
 
   const renderContent = () => {
-    if (appState === "empty") {
+    if (appState === "empty" && (!sourceEntries || sourceEntries.length === 0)) {
       return (
         <div className="flex-1 flex items-center justify-center p-6 text-center">
           <div
@@ -1177,6 +1177,30 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
                       setIsPlayingA(true);
                     }}
                     onPause={() => setIsPlayingA(false)}
+                    onEnded={() => {
+                      // [SEQ-ONENDED] 짧은 영상(≤10s)이 자연 종료되면 onTimeUpdate가 near 감지 전 끝날 수 있음
+                      // → sequence advance를 직접 트리거
+                      if (activePlayerRef.current !== "A") return;
+                      if (!isSeqARef.current) return;
+                      const nextIdx = seqIdxARef.current + 1;
+                      const frags = seqFragsARef.current;
+                      if (nextIdx < frags.length) {
+                        const curFrag = frags[seqIdxARef.current];
+                        const cs = (curFrag.start_frame ?? 0) / 30;
+                        const ce = (curFrag.end_frame ?? 0) / 30;
+                        seqElapsedSecARef.current += Math.max(ce - cs, 1);
+                        seqIdxARef.current = nextIdx;
+                        setProposalTimeA(seqElapsedSecARef.current);
+                        reportActiveId(frags[nextIdx].fragment_id);
+                        playFrag("A", frags[nextIdx], seqEndARef);
+                      } else {
+                        isSeqARef.current = false;
+                        seqIdxARef.current = -1;
+                        seqEndARef.current = -1;
+                        setIsPlayingA(false);
+                        reportActiveId(null);
+                      }
+                    }}
                     onSeeking={() => {
                       isSeekingRefA.current = true;
                     }}
@@ -1435,6 +1459,29 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
                       setIsPlayingB(true);
                     }}
                     onPause={() => setIsPlayingB(false)}
+                    onEnded={() => {
+                      // [SEQ-ONENDED] 짧은 영상이 자연 종료되면 sequence advance 직접 트리거
+                      if (activePlayerRef.current !== "B") return;
+                      if (!isSeqBRef.current) return;
+                      const nextIdx = seqIdxBRef.current + 1;
+                      const frags = seqFragsBRef.current;
+                      if (nextIdx < frags.length) {
+                        const curFrag = frags[seqIdxBRef.current];
+                        const cs = (curFrag.start_frame ?? 0) / 30;
+                        const ce = (curFrag.end_frame ?? 0) / 30;
+                        seqElapsedSecBRef.current += Math.max(ce - cs, 1);
+                        seqIdxBRef.current = nextIdx;
+                        setProposalTimeB(seqElapsedSecBRef.current);
+                        reportActiveId(frags[nextIdx].fragment_id);
+                        playFrag("B", frags[nextIdx], seqEndBRef);
+                      } else {
+                        isSeqBRef.current = false;
+                        seqIdxBRef.current = -1;
+                        seqEndBRef.current = -1;
+                        setIsPlayingB(false);
+                        reportActiveId(null);
+                      }
+                    }}
                     onSeeking={() => {
                       isSeekingRefB.current = true;
                     }}
@@ -1807,16 +1854,7 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
                 </div>
               </div>
             ))
-          ) : (
-            <div className="col-span-2 p-10 rounded-2xl bg-red-500/5 border border-red-500/10 flex flex-col items-center gap-2">
-              <span className="text-[12px] font-bold text-red-400/60 uppercase tracking-widest">
-                Analysis Pipeline Failure
-              </span>
-              <p className="text-[11px] text-muted-foreground/40">
-                제안을 생성하지 못했습니다. 원본 영상 상태를 확인하거나 다시 분석을 시도해 주세요.
-              </p>
-            </div>
-          )}
+          ) : null}
         </div>
 
         {committedProposalId && (

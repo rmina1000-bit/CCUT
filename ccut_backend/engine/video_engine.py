@@ -80,8 +80,8 @@ class VideoEngine:
             '-show_format', '-show_streams', video_path
         ]
         try:
-            result = subprocess.run(cmd, capture_output=True, text=True)
-            data = json.loads(result.stdout)
+            result = subprocess.run(cmd, capture_output=True)
+            data = json.loads(result.stdout.decode("utf-8", errors="replace"))
             duration = float(data['format']['duration'])
             fps = 30.0
             for stream in data.get('streams', []):

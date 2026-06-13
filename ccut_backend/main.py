@@ -63,13 +63,16 @@ video_engine = VideoEngine(storage_path=STORAGE_DIR)
 template_resolver = StoryTemplateResolver()
 
 
+from urllib.parse import quote as _url_quote
+
+
 def build_static_url(*parts: str) -> str:
     normalized = "/".join(str(p).strip("/\\") for p in parts if p)
     return f"{APP_BASE_URL}/static/{normalized}"
 
 
 def build_upload_static_url(filename: str) -> str:
-    return build_static_url("uploads", filename)
+    return f"{APP_BASE_URL}/static/uploads/{_url_quote(filename, safe='')}"
 
 
 def build_export_static_url(filename: str) -> str:
@@ -265,26 +268,35 @@ async def upload_video(background_tasks: BackgroundTasks, file: UploadFile = Fil
     SHA-256 fingerprint를 생성하여 동일 영상 존재 시 기존 source_id를 반환합니다.
     """
     try:
-        print(f"[DEBUG] /upload request received: filename={file.filename}")
-        safe_name = Path(file.filename).name
-        save_path = UPLOAD_DIR / safe_name
+        original_name = Path(file.filename).name if file.filename else "upload.mp4"
+        ext = Path(original_name).suffix.lower() or ".mp4"
+        print(f"[DEBUG] /upload request received: filename={original_name}")
 
-        with open(save_path, "wb") as buf:
+        # 임시 파일명으로 먼저 저장 (fingerprint 계산 후 source_id 기반으로 rename)
+        tmp_name = f"_tmp_{uuid.uuid4().hex[:12]}{ext}"
+        tmp_path = UPLOAD_DIR / tmp_name
+        with open(tmp_path, "wb") as buf:
             while chunk := await file.read(1024 * 1024):
                 buf.write(chunk)
 
-        abs_path = str(save_path.resolve())
-        
+        tmp_abs = str(tmp_path.resolve())
+
         # [STEP 1] Fingerprint 생성 및 중복 확인
-        fingerprint = video_engine.generate_fingerprint(abs_path)
-        
+        fingerprint = video_engine.generate_fingerprint(tmp_abs)
+
         existing = bams.get_source_by_hash(fingerprint)
         source_id = None
         if existing:
+            # 중복 → 임시 파일 삭제, 기존 source 재사용
+            try:
+                tmp_path.unlink()
+            except Exception:
+                pass
             source_id = existing.source_id
+            existing_name = Path(existing.file_path).name
+            existing_url = f"/static/uploads/{_url_quote(existing_name, safe='')}"
             print(f"[UPLOAD] Fingerprint HIT: {fingerprint} -> source_id={source_id}")
-            
-            # [STEP 2-D-R5] Smart Cache Reanalysis: 품질 체크 및 재분석 트리거
+
             quality = bams.get_analysis_quality(source_id)
             print(f"[UPLOAD] Analysis Quality check: {quality}")
 
@@ -301,35 +313,38 @@ async def upload_video(background_tasks: BackgroundTasks, file: UploadFile = Fil
                         "timing": init_job_timing()
                     }
                     _fragment_job_registry[source_id]["timing"]["upload_start"] = time.time()
-                    background_tasks.add_task(_background_whisper, source_id, abs_path, fragments)
-                    background_tasks.add_task(_background_signal_analysis, source_id, abs_path, fragments)
-                    
+                    background_tasks.add_task(_background_whisper, source_id, existing.file_path, fragments)
+                    background_tasks.add_task(_background_signal_analysis, source_id, existing.file_path, fragments)
                     return {
                         "status": "SOURCE_REUSED_REANALYSIS_STARTED",
-                        "file_name": safe_name,
+                        "file_name": original_name,
                         "source_id": source_id,
                         "hash_value": fingerprint,
                         "cache_hit": True,
                         "reused": True,
                         "reanalysis": True,
                         "quality": quality,
-                        "static_url": f"/static/uploads/{Path(existing.file_path).name}"
+                        "static_url": existing_url,
                     }
 
             return {
                 "status": "SOURCE_REUSED",
-                "file_name": safe_name,
+                "file_name": original_name,
                 "source_id": source_id,
                 "hash_value": fingerprint,
                 "cache_hit": True,
                 "reused": True,
-                "static_url": f"/static/uploads/{Path(existing.file_path).name}"
+                "static_url": existing_url,
             }
 
+        # 신규 소스 — source_id 기반 파일명으로 rename (URL-safe 보장)
         source_id = f"SRC_{uuid.uuid4().hex[:8].upper()}"
+        safe_filename = f"{source_id}{ext}"
+        final_path = UPLOAD_DIR / safe_filename
+        tmp_path.rename(final_path)
+        abs_path = str(final_path.resolve())
         _upload_registry[source_id] = abs_path
-        
-        # [STEP 10-I.5.22-D] Initialize registry for new source
+
         _fragment_job_registry[source_id] = {
             "status": "PENDING",
             "progress": 0,
@@ -339,26 +354,25 @@ async def upload_video(background_tasks: BackgroundTasks, file: UploadFile = Fil
         }
         _fragment_job_registry[source_id]["timing"]["upload_start"] = time.time()
 
-        # [STEP 1] 보완: 1차 업로드 시점에 DB에 hash_value를 등록해야 2차 업로드 시 hit 가능
         source_data = {
             "source_id": source_id,
             "file_path": abs_path,
-            "title": safe_name,
-            "duration": 0.0, # /generate-fragments 에서 업데이트됨
+            "title": original_name,   # 원본 파일명은 title에만 보관
+            "duration": 0.0,
             "hash_value": fingerprint
         }
         bams.register_source(source_data)
 
-        print(f"[UPLOAD] 신규 저장 및 DB 등록 완료: {abs_path} → source_id={source_id}")
+        print(f"[UPLOAD] 신규 저장 완료: {original_name} → {safe_filename} (source_id={source_id})")
 
         return {
             "status": "SOURCE_CREATED",
-            "file_name": safe_name,
+            "file_name": original_name,
             "source_id": source_id,
             "hash_value": fingerprint,
             "cache_hit": False,
             "reused": False,
-            "static_url": f"/static/uploads/{safe_name}",
+            "static_url": f"/static/uploads/{safe_filename}",
         }
     except Exception as e:
         import traceback
@@ -865,6 +879,25 @@ async def generate_fragments(
         # 이미 조각 데이터가 있다면 신규 분석 생략 (Dedupe)
         existing_frags = bams.get_fragments_by_source(source_id)
         is_new_source = False if existing_frags else True
+
+        # [DURATION-MISMATCH-FIX] DB duration과 실제 duration이 5초 이상 차이나거나
+        # semantic_fragments가 없으면 → VIRTUAL fragments + semantic_fragments 초기화 후 재분석
+        if not is_new_source and not meta.get("mock"):
+            from archive.db_models import SemanticFragmentTable as _SFT
+            src_row = db.query(SourceTable).filter_by(source_id=source_id).first()
+            db_dur = float(src_row.duration or 0) if src_row else 0.0
+            has_semantic = db.query(_SFT).filter_by(source_id=source_id).count() > 0
+            need_reanalyze = abs(db_dur - total_duration) > 5.0 or not has_semantic
+            if need_reanalyze:
+                reason = f"duration_mismatch(db={db_dur:.1f}s actual={total_duration:.1f}s)" if abs(db_dur - total_duration) > 5.0 else "semantic_fragments_missing"
+                print(f"[REANALYZE] source_id={source_id} reason={reason}")
+                db.query(FragmentTable).filter_by(source_id=source_id, status="VIRTUAL").delete()
+                db.query(_SFT).filter_by(source_id=source_id).delete()
+                if src_row:
+                    src_row.duration = total_duration
+                db.commit()
+                existing_frags = []
+                is_new_source = True
 
     # [STEP 1] Proxy 생성 (분석용 저용량 영상)
     proxy_path = video_engine.create_proxy(resolved_path, source_id)
@@ -1646,9 +1679,9 @@ async def get_project_sources(project_id: str):
             else:
                 frags = inject_semantic_thumbnails(frags)
 
-            # 비디오 URL 변환 (file_path가 절대 경로이면 basename을 따옴)
+            # 비디오 URL 변환 — 파일명을 URL 인코딩하여 한글/공백/특수문자 안전 보장
             video_name = os.path.basename(src.file_path) if src.file_path else f"{sid}.mp4"
-            vurl = f"/static/uploads/{video_name}"
+            vurl = f"/static/uploads/{_url_quote(video_name, safe='')}"
 
             # Label 순서대로 부여 (A, B, C, D...)
             label = chr(65 + idx)
@@ -2667,12 +2700,42 @@ async def create_program(req: ProgramCreateRequest, db: Session = Depends(get_db
 class ProjectCreateRequest(BaseModel):
     name: Optional[str] = None
 
+_PROJECT_NAMES = [
+    # 별 (Stars)
+    "Sirius", "Vega", "Rigel", "Antares", "Deneb", "Betelgeuse", "Aldebaran",
+    "Arcturus", "Spica", "Pollux", "Castor", "Procyon", "Achernar", "Fomalhaut",
+    "Capella", "Altair", "Regulus", "Canopus", "Acrux", "Mimosa", "Hadar",
+    "Adhara", "Shaula", "Gacrux", "Avior", "Sargas", "Atria", "Alnilam",
+    "Alioth", "Dubhe", "Mirach", "Alnitak", "Mizar", "Merak", "Thuban",
+    "Kochab", "Schedar", "Caph", "Tarazed", "Alcyone", "Celaeno", "Merope",
+    "Electra", "Maia", "Sterope", "Pleione", "Atlas", "Alderamin", "Alphecca",
+    "Unukalhai",
+    # 꽃 (Flowers)
+    "Rose", "Dahlia", "Lavender", "Cosmos", "Camellia", "Peony", "Iris",
+    "Lotus", "Magnolia", "Jasmine", "Violet", "Lily", "Orchid", "Tulip",
+    "Poppy", "Zinnia", "Marigold", "Hyacinth", "Freesia", "Gardenia",
+    "Begonia", "Azalea", "Wisteria", "Clover", "Primrose", "Aster",
+    "Narcissus", "Anemone", "Cyclamen", "Verbena", "Delphinium", "Foxglove",
+    "Hollyhock", "Columbine", "Larkspur", "Echinacea", "Lobelia", "Salvia",
+    "Chamomile", "Heather", "Valerian", "Yarrow", "Amaranth", "Bluebell",
+    "Buttercup", "Carnation", "Chrysanthemum", "Daffodil", "Forget-me-not",
+    "Sunflower",
+]
+
 @app.post("/projects")
 async def create_project(req: ProjectCreateRequest, db: Session = Depends(get_db)):
     """[B-4] '+' 버튼이 부르는 진짜 새 프로젝트 생성. 빈 그릇(schema_version=2)을 만들고 program_id 반환."""
     import uuid, datetime
     program_id = f"proj_{uuid.uuid4().hex[:12]}"
-    name = req.name or (datetime.datetime.now().strftime("%y%m%d") + "-new")
+    if req.name:
+        name = req.name
+    else:
+        import random
+        existing = {p.name for p in db.query(ProgramTable).filter_by(schema_version=2).all()}
+        available = [n for n in _PROJECT_NAMES if n not in existing]
+        if not available:
+            available = [f"{n} 2" for n in _PROJECT_NAMES if f"{n} 2" not in existing]
+        name = random.choice(available) if available else f"Project {uuid.uuid4().hex[:6]}"
     now = datetime.datetime.now()
     pg = ProgramTable(program_id=program_id, name=name, status="DRAFT",
                       schema_version=2, last_updated_at=now, created_at=now)
@@ -2684,7 +2747,13 @@ async def create_project(req: ProjectCreateRequest, db: Session = Depends(get_db
 async def list_projects(db: Session = Depends(get_db)):
     """[B-4] 신규 구조(schema_version=2) 프로젝트 목록. project_sources 있는 것만 반환 (빈 프로젝트 숨김)."""
     import datetime
-    used_ids = {r.program_id for r in db.query(ProjectSourceTable.program_id).distinct().all()}
+    from sqlalchemy import func
+    source_counts = {
+        r.program_id: r.cnt
+        for r in db.query(ProjectSourceTable.program_id, func.count().label("cnt"))
+                    .group_by(ProjectSourceTable.program_id).all()
+    }
+    used_ids = set(source_counts.keys())
     rows = db.query(ProgramTable).filter(
         ProgramTable.schema_version == 2,
         ProgramTable.program_id.in_(used_ids)
@@ -2695,6 +2764,7 @@ async def list_projects(db: Session = Depends(get_db)):
         "name": p.name,
         "created_at": p.created_at.isoformat() if p.created_at else None,
         "last_updated_at": p.last_updated_at.isoformat() if p.last_updated_at else None,
+        "source_count": source_counts.get(p.program_id, 0),
     } for p in rows]}
 
 class ProjectStateRequest(BaseModel):
