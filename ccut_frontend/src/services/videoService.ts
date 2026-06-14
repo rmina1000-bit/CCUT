@@ -47,6 +47,47 @@ export const videoService = {
     getThumb: (fragId: string) => null,
     getThumbnailUrl: (fragId: string) => null,
 
+    // [FRAGMENT-SEARCH] 채팅 자연어 -> 조각 검색.
+    // is_search=false면 검색 의도가 아님(호출측이 기존 채팅 흐름으로 위임).
+    chatFragmentSearch: async (
+        message: string,
+        opts?: { top_k?: number; only_curated?: boolean; program_id?: string }
+    ): Promise<{
+        status: string;
+        is_search: boolean;
+        query: string;
+        confidence?: number;
+        count: number;
+        results: Array<{
+            fragment_id: string;
+            source_id: string;
+            start: number;
+            end: number;
+            duration: number;
+            role: string | null;
+            visual_desc: string | null;
+            transcript: string | null;
+            is_curated: boolean;
+            keyframe: string | null;
+            score: number;
+            semantic: number;
+            keyword_hit: boolean;
+        }>;
+    }> => {
+        const response = await fetch(`${API_BASE_URL}/chat/fragment-search`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                message,
+                top_k: opts?.top_k ?? 12,
+                only_curated: opts?.only_curated ?? false,
+                program_id: opts?.program_id ?? null,
+            }),
+        });
+        if (!response.ok) throw new Error(`조각 검색 실패: ${response.status}`);
+        return await response.json();
+    },
+
     getFragmentsFromDB: async (sourceId: string) => {
         return await fetcher(`/fragments/${encodeURIComponent(sourceId)}`);
     },
@@ -142,5 +183,34 @@ export const videoService = {
     },
     deleteProject: async (programId: string) => {
         return await fetcher(`/projects/${encodeURIComponent(programId)}`, { method: "DELETE" });
+    },
+
+    // [SOFT-DELETE] 휴지통 프로젝트 복원 (30일 내)
+    restoreProject: async (programId: string) => {
+        return await fetcher(`/projects/${encodeURIComponent(programId)}/restore`, { method: "POST" });
+    },
+
+    // [PROPOSAL-PREVIEW] 제안 즉석 렌더(또는 캐시) -> 재생용 mp4 URL
+    makeProposalPreview: async (proposalId: string): Promise<{
+        status: string;
+        preview_url: string | null;
+        duration: number;
+    }> => {
+        return await fetcher(`/proposals/${encodeURIComponent(proposalId)}/preview`, { method: "POST" });
+    },
+
+    // [SOURCE] 원본 영상 이름 변경
+    renameSource: async (sourceId: string, name: string) => {
+        return await fetcher(`/sources/${encodeURIComponent(sourceId)}/name`, {
+            method: "PATCH",
+            body: JSON.stringify({ name }),
+        });
+    },
+
+    // [SOURCE] 원본 삭제. mode='source_only'(파일만) | 'full'(조각까지 전부)
+    deleteSource: async (sourceId: string, mode: "source_only" | "full" = "source_only") => {
+        return await fetcher(`/sources/${encodeURIComponent(sourceId)}?mode=${mode}`, {
+            method: "DELETE",
+        });
     },
 };

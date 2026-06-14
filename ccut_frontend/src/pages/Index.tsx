@@ -398,7 +398,7 @@ const Index: React.FC = () => {
         const today = new Date();
         const dateStrYYMMDD = `${today.getFullYear().toString().slice(2)}${String(today.getMonth() + 1).padStart(2, "0")}${String(today.getDate()).padStart(2, "0")}`;
         const fileCount = allFiles.length;
-        const dateStr = String(today.getMonth() + 1) + "/" + String(today.getDate());
+        const dateStr = String(today.getMonth() + 1) + "/" + String(today.getDate()) + " " + String(today.getHours()).padStart(2, "0") + ":" + String(today.getMinutes()).padStart(2, "0");
 
         // [B-5d] 기존 프로젝트(proj_ prefix)면 귀속. 아니면(새 프로젝트 또는 레거시) 지금 DB 생성.
         let projectId: string;
@@ -406,7 +406,7 @@ const Index: React.FC = () => {
           projectId = activeNavItem;
           setProjects((prev) => prev.map((p) => (p.id === projectId ? { ...p, count: fileCount } : p)));
         } else {
-          const newRes = await videoService.createProject(dateStrYYMMDD + "-new");
+          const newRes = await videoService.createProject();
           projectId = newRes.program_id;
           setActiveNavItem(projectId);
           setProjects((prev) => [{ id: projectId, name: newRes.name, date: dateStr, count: fileCount }, ...prev]);
@@ -781,9 +781,10 @@ const Index: React.FC = () => {
         const res = await videoService.listProjects();
         if (!alive || !res || !Array.isArray(res.projects)) return;
         const mapped = res.projects.map((p: any) => {
-          const d = p.created_at ? new Date(p.created_at) : null;
-          const dateStr = d ? (String(d.getMonth() + 1) + "/" + String(d.getDate())) : "";
-          return { id: p.program_id, name: p.name, date: dateStr, count: 0 };
+          const raw = p.last_updated_at || p.created_at;
+          const d = raw ? new Date(raw) : null;
+          const dateStr = d ? (String(d.getMonth() + 1) + "/" + String(d.getDate()) + " " + String(d.getHours()).padStart(2, "0") + ":" + String(d.getMinutes()).padStart(2, "0")) : "";
+          return { id: p.program_id, name: p.name, date: dateStr, count: p.source_count ?? 0 };
         });
         setProjects(mapped);
       } catch (e) {
@@ -1426,8 +1427,14 @@ const Index: React.FC = () => {
       if (rawSeq.length > 0) {
         const initialFrags = rawSeq.map((s: any) => {
           const fragId = s.proposal_fragment_id || s.fragment_id || s.id;
-          const matchSource = sourceFragments.find(
-            (sf) => sf.fragment_id === (s.source_fragment_id || s.fragment_id || fragId)
+          const baseFragId = fragId.replace(/_P\d{3}.*$/, "");
+          const allSourceFrags: Fragment[] = sourceEntries.length > 0
+            ? (sourceEntries as any[]).flatMap((e) => e.fragments ?? [])
+            : sourceFragments;
+          const matchSource = allSourceFrags.find(
+            (sf) =>
+              sf.fragment_id === (s.source_fragment_id || s.fragment_id || fragId) ||
+              sf.fragment_id === baseFragId
           );
 
           const startF = s.start_sec !== undefined
@@ -1446,7 +1453,7 @@ const Index: React.FC = () => {
             fragment_uid: fragId,
             source_video: s.source_video || matchSource?.source_video || activeSource,
             source_id: s.source_id || matchSource?.source_id || currentSourceId,
-            display_id: s.display_id || matchSource?.display_id,
+            display_id: matchSource?.display_id || (s.display_id && !/^\d+$/.test(s.display_id) && !s.display_id.startsWith("?") ? s.display_id : undefined),
             start_frame: startF,
             end_frame: endF,
             duration: endF - startF,
@@ -1919,6 +1926,16 @@ const Index: React.FC = () => {
               };
               videoService.saveProjectState(activeNavItem, { ui_state: JSON.stringify(uiSnap) }).catch(() => {});
             }
+            // 전환된 프로젝트를 목록 맨 위로 올리고 마지막 작업 시각 갱신
+            if (newId && newId.startsWith("proj_")) {
+              const now = new Date();
+              const nowStr = String(now.getMonth() + 1) + "/" + String(now.getDate()) + " " + String(now.getHours()).padStart(2, "0") + ":" + String(now.getMinutes()).padStart(2, "0");
+              setProjects((prev) => {
+                const target = prev.find((p) => p.id === newId);
+                if (!target) return prev;
+                return [{ ...target, date: nowStr }, ...prev.filter((p) => p.id !== newId)];
+              });
+            }
             setActiveNavItem(newId);
           }}
           projects={projects}
@@ -1926,6 +1943,11 @@ const Index: React.FC = () => {
           onToggleCollapse={() => setNavCollapsed((prev) => !prev)}
           onRenameProject={(id, newName) => {
             setProjects((prev) => prev.map((p) => (p.id === id ? { ...p, name: newName } : p)));
+            fetch(`${videoService.API_BASE_URL}/programs/${id}/name`, {
+              method: "PATCH",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ name: newName }),
+            }).catch((e) => console.error("[rename]", e));
           }}
           onDeleteProject={(id) => {
             videoService.deleteProject(id).catch(() => {});
@@ -1964,13 +1986,24 @@ const Index: React.FC = () => {
 
       <div style={!(activeNavItem === "archive" || activeNavItem === "upload" || activeNavItem === "account") ? { width: centerWidth, flexShrink: 0 } : { flex: 1, minWidth: 0 }} className="h-full">
         {activeNavItem === "archive" ? (
-          <ArchivePanel />
+          <ArchivePanel
+            onNavigateToProject={(id) => setActiveNavItem(id)}
+            onRenameProject={(id, newName) => {
+              setProjects((prev) => prev.map((p) => (p.id === id ? { ...p, name: newName } : p)));
+            }}
+          />
         ) : activeNavItem === "upload" ? (
-          <SnsUploadPanel />
+          <SnsUploadPanel
+            onNavigateToProject={(id) => setActiveNavItem(id)}
+            onRenameProject={(id, newName) => {
+              setProjects((prev) => prev.map((p) => (p.id === id ? { ...p, name: newName } : p)));
+            }}
+          />
         ) : activeNavItem === "account" ? (
           <AccountPanel />
         ) : (
           <CenterPanel
+            key={activeNavItem ?? "default"}
             selectedFragment={selectedFragment}
             selectedSource={activeSource}
             appState={appState}
@@ -1994,14 +2027,10 @@ const Index: React.FC = () => {
             exportClips={physicalClips}
             storyPlan={storyPlan}
             onStoryPlanConfirm={setStoryPlan}
-            guidanceMessage={
-              semanticFragments.length > 0
-                ? "Semantic " + semanticFragments.length + " / Quick Scan " + (quickScanData?.status ?? "READY")
-                : quickScanData?.status
-                  ? "Quick Scan " + quickScanData.status
-                  : undefined
-            }
             sourceEntries={sourceEntries}
+            programId={activeNavItem}
+            programTitle={projects.find(p => p.id === activeNavItem)?.name ?? undefined}
+            onExportDone={() => setActiveNavItem("upload")}
           />
         )}
       </div>
@@ -2072,6 +2101,9 @@ const Index: React.FC = () => {
                 onMoveToHold={handleMoveToHold}
                 onTrashRestore={handleRestoreToEdit}
                 onBoundaryClick={handleOpenBoundaryEditor}
+                sourceVideoUrls={Object.fromEntries(
+                  (sourceEntries ?? []).map(e => [e.source_id, e.video_url]).filter(([, v]) => v)
+                )}
               />
             </div>
 

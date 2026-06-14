@@ -1,6 +1,6 @@
 // CCUT 1.0.4 - R9.1 Rollback Verified
 import React, { useRef, useEffect, useState, useCallback, useMemo } from "react";
-import { Upload, Play, Loader2, Send, CheckCircle2, Package, BookOpen, List, ChevronDown, AlertCircle } from "lucide-react";
+import { Upload, Play, Loader2, Send, CheckCircle2, Package, BookOpen, List, ChevronDown, AlertCircle, Search, Film, Sparkles } from "lucide-react";
 import { Fragment } from "@/data/fragmentData";
 import { videoService } from "@/services/videoService";
 import { Direction, StoryPlanPreview } from "@/proposal/proposalTypes";
@@ -49,6 +49,9 @@ interface CenterPanelProps {
   storyPlan?: StoryPlanPreview | null;
   onStoryPlanConfirm?: (plan: StoryPlanPreview) => void;
   onActiveFragmentChange?: (id: string | null) => void;
+  programId?: string | null;
+  programTitle?: string | null;
+  onExportDone?: () => void;
 }
 
 function parseDirectionFromText(text: string): Direction | null {
@@ -173,6 +176,9 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
   storyPlan,
   onStoryPlanConfirm,
   onActiveFragmentChange,
+  programId,
+  programTitle,
+  onExportDone,
 }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const videoRefA = useRef<HTMLVideoElement>(null);
@@ -221,6 +227,13 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
   const [isPlayingA, setIsPlayingA] = useState(false);
   const [isPlayingB, setIsPlayingB] = useState(false);
   const [chatValue, setChatValue] = useState("");
+  // [FRAGMENT-SEARCH] 채팅 자연어 조각 검색 결과
+  const [fragSearch, setFragSearch] = useState<{
+    query: string;
+    searching: boolean;
+    results: any[];
+    done: boolean;
+  } | null>(null);
   const [proposalTimeA, setProposalTimeA] = useState(0);
   const [proposalTimeB, setProposalTimeB] = useState(0);
   const [, setDurationA] = useState(0);
@@ -801,6 +814,22 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
       return;
     }
 
+    // [FRAGMENT-SEARCH] 검색 의도("...찾아줘/불러와줘")면 조각 검색을 먼저 시도.
+    // 백엔드가 is_search=false를 주면 기존 채팅(제안) 흐름으로 위임.
+    try {
+      setFragSearch({ query: raw, searching: true, results: [], done: false });
+      const sr = await videoService.chatFragmentSearch(raw, { top_k: 12 });
+      if (sr.is_search) {
+        setFragSearch({ query: sr.query, searching: false, results: sr.results, done: true });
+        return;
+      }
+      // 검색 의도 아님 -> 검색 UI 닫고 기존 흐름으로
+      setFragSearch(null);
+    } catch (e) {
+      console.warn("[CenterPanel] fragment search failed, fallback to chat:", e);
+      setFragSearch(null);
+    }
+
     const parsedDirection = parseDirectionFromText(raw);
     if (parsedDirection) {
       onReproposal?.(parsedDirection);
@@ -872,7 +901,7 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
       const exportInputRes = await fetch(`${videoService.API_BASE_URL}/export-input/${backendId}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ clips: exportClips })
+        body: JSON.stringify({ clips: exportClips, program_id: programId, program_title: programTitle })
       });
       if (!exportInputRes.ok) throw new Error(`ExportInput 생성 실패 (${exportInputRes.status})`);
       const exportInputData = await exportInputRes.json();
@@ -901,12 +930,7 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
       // [STEP 9] 결과 상태 매핑
       if (resultData.status === "RENDER_SUCCESS") {
         setRenderStatus("완료");
-        setExportUrl(resultData.output_url);
-        setRenderResult({
-          file_size: resultData.file_size,
-          duration: resultData.duration,
-          status: resultData.status
-        });
+        onExportDone?.();
       } else {
         throw new Error(`렌더링 상태 확인 필요: ${resultData.status}`);
       }
@@ -964,7 +988,14 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
       );
     }
 
-    if (appState === "analyzing") {
+    // [LOADING] 분석 중이거나, 분석은 끝났어도(complete) 제안이 준비됐는데
+    // 아직 "이 프로젝트는~" 컨설팅 설명(storyPlan)이 생성되기 전이면 로딩을 유지.
+    // proposals 조건으로 무한 로딩(제안 없는 complete) 방지.
+    const showAnalyzingLoader =
+      appState === "analyzing" ||
+      (appState === "complete" && !!proposals && !storyPlan);
+
+    if (showAnalyzingLoader) {
       return (
         <div className="flex-1 flex items-center justify-center p-6">
           <div className="flex flex-col items-center gap-6 w-full max-w-[280px]">
@@ -997,7 +1028,85 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
 
     return (
       <div className="flex-1 w-full px-4 pt-4 flex flex-col items-center space-y-4 overflow-y-auto no-scrollbar pb-20">
-        
+
+        {/* [FRAGMENT-SEARCH] 채팅 자연어 조각 검색 결과 */}
+        {fragSearch && (
+          <div className="w-full max-w-[800px] flex flex-col gap-3 py-4 animate-in fade-in slide-in-from-top-2 duration-500">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2 text-foreground/90">
+                <Search size={16} className="text-primary" />
+                <span className="text-[14px] font-medium">
+                  “{fragSearch.query}” 조각 검색
+                </span>
+                {fragSearch.done && (
+                  <span className="text-[12px] text-muted-foreground/60">
+                    · {fragSearch.results.length}개
+                  </span>
+                )}
+              </div>
+              <button
+                onClick={() => setFragSearch(null)}
+                className="text-[12px] text-muted-foreground/50 hover:text-foreground/80 transition-colors px-2 py-1"
+              >
+                닫기 ✕
+              </button>
+            </div>
+
+            {fragSearch.searching && (
+              <div className="flex items-center gap-2 text-primary/60 py-6 justify-center">
+                <Loader2 size={16} className="animate-spin" />
+                <span className="text-[13px] animate-pulse">조각 자산을 검색하는 중...</span>
+              </div>
+            )}
+
+            {fragSearch.done && fragSearch.results.length === 0 && (
+              <div className="text-[13px] text-muted-foreground/60 py-6 text-center">
+                관련 조각을 찾지 못했습니다. 다른 표현으로 다시 시도해 보세요.
+              </div>
+            )}
+
+            {fragSearch.done && fragSearch.results.length > 0 && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {fragSearch.results.map((r) => (
+                  <div
+                    key={r.fragment_id}
+                    className="flex flex-col gap-2 p-3 rounded-xl bg-[#161618] border border-white/5 hover:border-primary/30 transition-colors"
+                  >
+                    <div className="flex items-center gap-2 flex-wrap">
+                      {r.role && (
+                        <span className="text-[10px] px-2 py-0.5 rounded-full bg-primary/15 text-primary font-medium">
+                          {r.role}
+                        </span>
+                      )}
+                      {r.is_curated && (
+                        <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-400 font-medium flex items-center gap-1">
+                          <Sparkles size={9} /> 사용된 조각
+                        </span>
+                      )}
+                      <span className="text-[10px] text-muted-foreground/50 ml-auto flex items-center gap-1">
+                        <Film size={10} /> #{(r.source_id || "").replace("SRC_", "").slice(0, 8)}
+                      </span>
+                    </div>
+                    <p className="text-[12px] leading-relaxed text-foreground/75 line-clamp-3">
+                      {r.visual_desc || r.transcript || "(설명 없음)"}
+                    </p>
+                    <div className="flex items-center justify-between text-[10px] text-muted-foreground/50 mt-auto pt-1">
+                      <span>
+                        {r.start?.toFixed(1)}s ~ {r.end?.toFixed(1)}s
+                        <span className="text-muted-foreground/30"> ({r.duration?.toFixed(1)}s)</span>
+                      </span>
+                      <span className="flex items-center gap-2">
+                        {r.keyword_hit && <span className="text-emerald-400/70">키워드</span>}
+                        <span className="text-primary/60">유사도 {(r.score * 100).toFixed(0)}%</span>
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
         {/* [STEP 10-I.5.28-E9-R2-R3-R2] ChatGPT Form Narrative Consultation — always visible */}
         {storyPlan && (storyPlan.messages || []).length > 0 && (
           <div className="w-full max-w-[800px] flex flex-col gap-6 py-8 animate-in fade-in duration-700">
@@ -1032,44 +1141,6 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
               <div ref={chatEndRef} />
             </div>
 
-            {/* Suggestion Chips — hidden after confirmed */}
-            {storyPlan.consultation_status !== "confirmed" && (
-              <div className="flex flex-col gap-3 mt-4 border-t border-white/5 pt-6">
-                <p className="text-[11px] font-bold text-muted-foreground/40 uppercase tracking-widest px-1">의견 제안</p>
-                <div className="flex flex-wrap gap-2">
-                  <button
-                    className="px-4 py-2 bg-secondary/30 text-muted-foreground border border-white/5 rounded-full text-[12px] font-medium hover:bg-secondary/50 hover:text-foreground transition-all"
-                    onClick={() => onConsultation?.("이대로 제안해줘")}
-                  >
-                    이대로 제안해줘
-                  </button>
-                  <button
-                    className="px-4 py-2 bg-secondary/30 text-muted-foreground border border-white/5 rounded-full text-[12px] font-medium hover:bg-secondary/50 hover:text-foreground transition-all"
-                    onClick={() => onConsultation?.("사람 중심으로")}
-                  >
-                    사람 중심으로
-                  </button>
-                  <button
-                    className="px-4 py-2 bg-secondary/30 text-muted-foreground border border-white/5 rounded-full text-[12px] font-medium hover:bg-secondary/50 hover:text-foreground transition-all"
-                    onClick={() => onConsultation?.("풍경은 줄여줘")}
-                  >
-                    풍경은 줄이고
-                  </button>
-                  <button
-                    className="px-4 py-2 bg-secondary/30 text-muted-foreground border border-white/5 rounded-full text-[12px] font-medium hover:bg-secondary/50 hover:text-foreground transition-all"
-                    onClick={() => onConsultation?.("더 빠르게")}
-                  >
-                    더 빠르게
-                  </button>
-                  <button
-                    className="px-4 py-2 bg-secondary/30 text-muted-foreground border border-white/5 rounded-full text-[12px] font-medium hover:bg-secondary/50 hover:text-foreground transition-all"
-                    onClick={() => onConsultation?.("여러 영상 골고루")}
-                  >
-                    여러 영상 골고루
-                  </button>
-                </div>
-              </div>
-            )}
           </div>
         )}
         
@@ -1693,7 +1764,7 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
       </>
     )}
 
-      <div className="w-full grid grid-cols-2 gap-4">
+      <div className="w-full grid grid-cols-2 gap-4 hidden">
           {proposals ? (
             Object.entries(proposals).map(([key, p]: [string, any]) => (
               <div
@@ -1858,74 +1929,31 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
         </div>
 
         {committedProposalId && (
-          <div className="flex flex-col items-center gap-4 animate-in fade-in slide-in-from-bottom-2 duration-500">
+          <div className="flex flex-col items-center gap-2 animate-in fade-in slide-in-from-bottom-2 duration-500">
             <button
               onClick={handleExportClick}
               disabled={isExporting}
-              className="px-10 py-3 rounded-xl bg-primary text-primary-foreground text-[13px] font-bold hover:opacity-90 disabled:opacity-40 transition-all shadow-xl shadow-primary/20 flex items-center gap-2"
+              className="flex items-center gap-2 px-5 py-2 rounded-lg bg-primary/90 text-primary-foreground text-[12px] font-bold hover:bg-primary disabled:opacity-40 transition-all shadow-lg shadow-primary/15"
             >
               {isExporting ? (
                 <>
-                  <Loader2 size={16} className="animate-spin" />
-                  {renderStatus || "처리 중..."}
+                  <Loader2 size={13} className="animate-spin" />
+                  <span>{renderStatus || "처리 중..."}</span>
                 </>
               ) : (
                 <>
-                  <Package size={16} />
-                  {exportUrl
-                    ? `${committedProposalId}안 다시 내보내기`
-                    : `${committedProposalId}안 내보내기`}
+                  <Package size={13} />
+                  <span>{renderStatus === "완료" ? `${committedProposalId}안 다시 내보내기` : `${committedProposalId}안 내보내기`}</span>
                 </>
               )}
             </button>
-
-            {exportUrl && (
-              <div className="flex flex-col items-center gap-4 mt-2 p-6 rounded-2xl bg-white/5 border border-white/10 w-full animate-in fade-in zoom-in duration-300">
-                <div className="relative w-full aspect-video rounded-xl overflow-hidden bg-black shadow-2xl">
-                  <video
-                    src={normalizeMediaUrl(exportUrl)}
-                    controls
-                    className="w-full h-full"
-                  />
-                </div>
-
-                <div className="flex flex-col items-center gap-2">
-                  <div className="flex items-center gap-6 text-[11px] text-muted-foreground/60 font-medium">
-                    <span className="flex items-center gap-1.5">
-                      <CheckCircle2 size={12} className="text-primary" />
-                      상태: {renderResult?.status}
-                    </span>
-                    <span>크기: {renderResult?.file_size?.toLocaleString() || 0} bytes</span>
-                    <span>길이: {renderResult?.duration || 0}초</span>
-                  </div>
-
-                  <a
-                    href={normalizeMediaUrl(exportUrl)}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    download
-                    className="flex items-center gap-2 px-8 py-2.5 rounded-lg bg-primary/10 text-primary text-[12px] font-bold hover:bg-primary/20 transition-all"
-                  >
-                    <Send size={14} />
-                    최종 영상 다운로드
-                  </a>
-                </div>
-              </div>
+            {renderStatus === "완료" && (
+              <p className="text-[11px] text-primary/70 font-medium">아카이브에 저장되었습니다.</p>
             )}
-
             {exportError && <p className="text-[11px] text-red-400/80">{exportError}</p>}
           </div>
         )}
 
-        {guidanceMessage && (
-          <div className="animate-in fade-in slide-in-from-bottom-2 duration-500">
-            <div className="border-l border-primary/20 pl-4">
-              <p className="text-[11px] font-bold text-primary/60 uppercase tracking-widest">
-                {guidanceMessage}
-              </p>
-            </div>
-          </div>
-        )}
       </div>
     );
   };

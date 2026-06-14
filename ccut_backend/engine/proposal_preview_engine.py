@@ -132,6 +132,8 @@ def ensure_proposal_preview(
             "-i", concat_txt,
             "-fflags", "+genpts",
             "-c:v", "libx264", "-preset", "veryfast", "-crf", "23",
+            # [STREAM-FIX] 1초마다 keyframe — 긴 제안에서 조각 경계 멈춤 방지
+            "-g", "30", "-keyint_min", "30", "-sc_threshold", "0",
             "-pix_fmt", "yuv420p",
             "-c:a", "aac", "-b:a", "128k",
             "-movflags", "+faststart",

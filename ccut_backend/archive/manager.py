@@ -614,8 +614,8 @@ class BAMSManager:
         """[STEP 6] Proposal (A/B) 저장"""
         with SessionLocal() as db:
             from archive.db_models import ProposalTable
-            # 기존 제안 삭제 (덮어쓰기)
-            db.query(ProposalTable).filter_by(source_id=source_id).delete()
+            # 기존 제안 삭제 (덮어쓰기) — [B-3b-1] 레거시 단건 경로 격리: program_id 있는 프로젝트 제안은 안 지움
+            db.query(ProposalTable).filter_by(source_id=source_id).filter(ProposalTable.program_id.is_(None)).delete(synchronize_session=False)
             
             for p in proposals:
                 db_p = ProposalTable(
@@ -631,11 +631,33 @@ class BAMSManager:
                 db.add(db_p)
             db.commit()
 
+    def save_project_proposals(self, program_id: str, proposals: list):
+        """[B-3b-2] 프로젝트(다중 소스) 제안 저장. program_id 기준 — 단건(source_id) 경로와 격리.
+        delete/insert 모두 program_id 기준이라 레거시 단건(program_id IS NULL)을 건드리지 않음."""
+        with SessionLocal() as db:
+            from archive.db_models import ProposalTable
+            # 같은 프로젝트의 기존 제안만 삭제 (program_id 기준 — 단건/레거시 무손상)
+            db.query(ProposalTable).filter_by(program_id=program_id).delete(synchronize_session=False)
+            for p in proposals:
+                db_p = ProposalTable(
+                    proposal_id=p["proposal_id"],
+                    program_id=program_id,
+                    source_id=None,  # 프로젝트 제안: 소스는 sequence 내 clip별. 행 source_id는 null
+                    mode=p["mode"],
+                    sequence=p["sequence"],
+                    duration=p["duration"],
+                    proposal_reason=p.get("proposal_reason"),
+                    confidence=p.get("confidence", 1.0),
+                    fallback_reason=p.get("fallback_reason")
+                )
+                db.add(db_p)
+            db.commit()
+
     def get_proposals(self, source_id: str):
         """[STEP 6] 저장된 모든 제안 조회"""
         with SessionLocal() as db:
             from archive.db_models import ProposalTable
-            rows = db.query(ProposalTable).filter_by(source_id=source_id).all()
+            rows = db.query(ProposalTable).filter_by(source_id=source_id).filter(ProposalTable.program_id.is_(None)).all()
             return [
                 {
                     "proposal_id": r.proposal_id,
@@ -726,14 +748,14 @@ class BAMSManager:
         """[STEP 8] Render 결과 저장"""
         with SessionLocal() as db:
             from archive.db_models import ExportResultTable
-            # Upsert
             db.query(ExportResultTable).filter_by(export_input_id=data["export_input_id"]).delete()
-            
             db_res = ExportResultTable(
                 id=data["id"],
                 export_input_id=data["export_input_id"],
                 proposal_id=data["proposal_id"],
                 source_id=data["source_id"],
+                program_id=data.get("program_id"),
+                program_title=data.get("program_title"),
                 output_path_internal=data["output_path_internal"],
                 output_url=data["output_url"],
                 status=data["status"],
@@ -746,6 +768,42 @@ class BAMSManager:
             db.add(db_res)
             db.commit()
             return db_res
+
+    def get_all_exports(self):
+        """내보낸 영상 전체 목록 (최신순, ProgramTable JOIN으로 최신 프로젝트명/작업시각 반영)"""
+        with SessionLocal() as db:
+            from archive.db_models import ExportResultTable, ProgramTable
+            rows = (
+                db.query(ExportResultTable, ProgramTable.name, ProgramTable.last_updated_at)
+                .outerjoin(ProgramTable, ExportResultTable.program_id == ProgramTable.program_id)
+                .filter(ExportResultTable.status == "RENDER_SUCCESS")
+                .order_by(ExportResultTable.created_at.desc())
+                .all()
+            )
+            import os as _os
+            result = []
+            for r, live_name, live_updated_at in rows:
+                # [CACHE-BUST] 파일 mtime을 쿼리로 붙여 재렌더 후 브라우저 캐시 무력화
+                out_url = r.output_url
+                real_size = r.file_size
+                path = r.output_path_internal
+                if path and _os.path.exists(path):
+                    mtime = int(_os.path.getmtime(path))
+                    sep = "&" if (out_url and "?" in out_url) else "?"
+                    out_url = f"{out_url}{sep}v={mtime}"
+                    real_size = _os.path.getsize(path)
+                result.append({
+                    "id": r.id,
+                    "program_id": r.program_id,
+                    "program_title": live_name or r.program_title,
+                    "proposal_id": r.proposal_id,
+                    "output_url": out_url,
+                    "file_size": real_size,
+                    "duration": r.duration,
+                    "created_at": str(r.created_at) if r.created_at else None,
+                    "program_last_updated_at": str(live_updated_at) if live_updated_at else None,
+                })
+            return result
 
     def get_render_result(self, export_input_id: str):
         """[STEP 8] Render 결과 조회"""

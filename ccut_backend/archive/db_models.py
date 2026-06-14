@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, Float, DateTime, JSON, ForeignKey, Boolean
+from sqlalchemy import Column, String, Float, DateTime, JSON, ForeignKey, Boolean, Text, Integer, LargeBinary
 from database import Base
 import datetime
 
@@ -42,6 +42,15 @@ class ProgramTable(Base):
     status = Column(String, default="DRAFT")
     last_updated_at = Column(DateTime, default=datetime.datetime.now)
     created_at = Column(DateTime, default=datetime.datetime.now)
+    # [B-3a] 프로젝트 작업상태 영속 (전부 nullable, 레거시 보존)
+    active_mode = Column(String, nullable=True)
+    chat_state = Column(Text, nullable=True)
+    reserve_state = Column(Text, nullable=True)
+    ui_state = Column(Text, nullable=True)
+    schema_version = Column(Integer, nullable=True)
+    # [SOFT-DELETE] 삭제는 즉시 제거가 아니라 30일 보관 후 자동 완전삭제.
+    # deleted_at IS NULL = 활성. 값 있음 = 휴지통(복원 가능).
+    deleted_at = Column(DateTime, nullable=True)
 
 class PublishedTable(Base):
     __tablename__ = "published"
@@ -117,6 +126,7 @@ class UserIntentTable(Base):
     target_length = Column(Float, nullable=True) # [STEP 5] 저장만 수행 (STEP 6 활용)
     priority_axis = Column(JSON, default=dict)
     updated_at = Column(DateTime, default=datetime.datetime.now)
+    program_id = Column(String, nullable=True)  # [B-3a] 프로젝트 종속. 레거시=null. PK는 source_id 단일 유지
 
 class ProposalTable(Base):
     __tablename__ = "proposals"
@@ -129,6 +139,7 @@ class ProposalTable(Base):
     confidence = Column(Float, default=1.0)
     fallback_reason = Column(String, nullable=True)
     created_at = Column(DateTime, default=datetime.datetime.now)
+    program_id = Column(String, nullable=True)  # [B-3a] 신규 프로젝트 제안. 레거시=null
 
 class ExportInputTable(Base):
     __tablename__ = "export_input"
@@ -147,6 +158,8 @@ class ExportResultTable(Base):
     export_input_id = Column(String, ForeignKey("export_input.export_id"), index=True)
     proposal_id = Column(String, index=True)
     source_id = Column(String, index=True)
+    program_id = Column(String, nullable=True, index=True)
+    program_title = Column(String, nullable=True)
     output_path_internal = Column(String)
     output_url = Column(String)
     status = Column(String) # RENDER_SUCCESS / RENDER_FAILED
@@ -170,5 +183,53 @@ class EditOverlayTable(Base):
     parent_fragment_id = Column(String, nullable=True)
     metadata_json = Column(JSON, default=dict)
     created_at = Column(DateTime, default=datetime.datetime.now)
+    updated_at = Column(DateTime, default=datetime.datetime.now)
+    program_id = Column(String, nullable=True)  # [B-3a] 프로젝트별 편집 분리. 레거시=null
+
+class ProjectSourceTable(Base):
+    __tablename__ = "project_sources"
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    program_id = Column(String, nullable=False)
+    source_id = Column(String, nullable=False)
+    display_order = Column(Integer, nullable=True)
+    added_at = Column(String, nullable=True)
+
+
+class FragmentIndexTable(Base):
+    """[FRAGMENT-SEARCH] 검색 가능한 조각 자산 인덱스.
+    자연어 검색("영국 비 중년 아저씨")의 데이터 기반.
+    - visual_desc: Qwen3-VL 키프레임 장면 설명 (없으면 메타 기반 폴백)
+    - transcript: ASR 전사 텍스트
+    - search_text: FTS5/임베딩 입력용 통합 텍스트
+    - embedding: sentence-transformers float32 벡터 (numpy.tobytes())
+    - is_curated: 사용자가 제안에서 선택/내보낸 조각 = 진짜 자산
+    """
+    __tablename__ = "fragment_index"
+    fragment_id = Column(String, primary_key=True, index=True)
+    source_id = Column(String, ForeignKey("sources.source_id"), index=True)
+    start = Column(Float)
+    end = Column(Float)
+    duration = Column(Float)
+    role = Column(String, nullable=True, index=True)
+    edit_value = Column(Float, default=0.0, index=True)
+    hook_score = Column(Float, default=0.0)
+    motion_score = Column(Float, default=0.0)
+    # 의미 텍스트
+    visual_desc = Column(Text, nullable=True)      # Qwen VL 장면 설명
+    transcript = Column(Text, nullable=True)       # ASR 전사
+    scene_type = Column(String, nullable=True, index=True)
+    main_subjects = Column(JSON, default=list)     # ["person", "elderly", ...]
+    search_text = Column(Text, nullable=True)      # 통합 검색 텍스트
+    # 벡터
+    embedding = Column(LargeBinary, nullable=True) # float32 numpy bytes
+    embedding_model = Column(String, nullable=True)
+    embedding_dim = Column(Integer, nullable=True)
+    # 자산성
+    is_curated = Column(Boolean, default=False, index=True)
+    usage_count = Column(Integer, default=0)
+    keyframe = Column(String, nullable=True)       # 대표 썸네일 경로
+    # 인덱싱 메타
+    desc_source = Column(String, nullable=True)    # qwen_vl / meta_fallback / transcript
+    indexed_at = Column(DateTime, default=datetime.datetime.now)
     updated_at = Column(DateTime, default=datetime.datetime.now)
 

@@ -1,8 +1,8 @@
 # CCUT 1.0.4 진행상황 및 완성 로드맵
 
 branch: ccut-1.0.4-step9  
-최종 갱신: 2026-06-13  
-HEAD: 1c3793b
+최종 갱신: 2026-06-14  
+직전 작업: 영상 6중 버그 해결 + 아카이브 전면 + 조각 검색 토대 (보고서: docs/reports/SESSION_REPORT_2026-06-14_video_archive.md)
 
 ---
 
@@ -54,13 +54,53 @@ HEAD: 1c3793b
 
 ---
 
+## 아카이브 UX 트랙 (2026-06-14)
+
+> 설계 문서: `docs/ARCHIVE_DESIGN.md` · 작업 보고: `docs/reports/SESSION_REPORT_2026-06-14_video_archive.md`
+
+| 항목 | 상태 |
+|------|------|
+| 프로젝트 관리: source_count 필터 + 원본 수 + 드릴다운(원본/제안/내보내기 인라인 재생) | ✅ 완료 |
+| AI 제안 이력: program 귀속 배지 + 즉석 렌더 [재생] + [열기] 복귀 + 삭제안내 | ✅ 완료 |
+| 원본 카드: 해시 + 사용 이력 펼침 + 이름변경 + 재생 + 삭제(원본만/전체) | ✅ 완료 |
+| SNS/아카이브 이름 동기화 + last_updated_at + 캐시버스터 | ✅ 완료 |
+| soft-delete (30일 휴지통 + 강한 경고 + 복원/완전삭제) | ✅ 완료 |
+| 원본 클립 레벨 추적 (어느 구간이 사용됐는지) | 🟢 FUTURE |
+
+---
+
+## 조각 검색 트랙 (2026-06-14 신설) — CCUT의 C 이념
+
+> 채팅 자연어 조각 검색. 큐원VL+임베딩. 메모리 `ccut_fragment_search_feature` 참조.
+
+| 항목 | 상태 |
+|------|------|
+| fragment_index 테이블 + FTS5 + 임베딩/VL/검색/채팅 엔진 5종 | ✅ 완료 |
+| 채팅 검색 API + 결과 카드 (cross-lingual 한↔영) | ✅ 완료 |
+| **단계 6: 전체 조각 인덱싱** (현재 28개 → 전체, ~1시간) | 🔴 다음 방 |
+| **단계 5: 제안 고급화** (curated 가중치 → 편집 품질) | 🔴 다음 방 |
+
+---
+
+## 영상 파이프라인 (2026-06-14 — 6중 버그 해결 완료)
+
+> 함정 메모리 `ccut_video_pipeline_gotchas` 참조. concat 재인코딩/faststart/keyframe/캐시버스터.
+
+| 항목 | 상태 |
+|------|------|
+| faststart + 이중 storage 경로 + fps + keyframe + 캐시 + concat SPS/PPS | ✅ 6중 전부 해결 |
+| 기존 export 47개 일괄 재렌더 (단일 stream, 1/4 크기) | ✅ 완료 |
+| A제안 첫 조각 멈춤 | ✅ 해결 (concat copy → 재인코딩이 근본) |
+
+---
+
 ## 대기 (PENDING)
 
 - ENFORCE 2종 활성화 (dry-run 로그 검토 후 결정)
 - 단계6 — continuity 최소 구현 (Jaccard 토큰 유사도)
 - 단계7 — static UI 배지 (forced_time_split 표시)
 - fragments 테이블 오염 정리 (SF_/_copy_ 혼입 — 감사 선행 필수)
-- A제안 첫 조각 멈춤 (seek 위반 6곳, backend mp4 통합 필요)
+- export_input.clips start/end=null 비정상 데이터 (생성 단계 검증 필요)
 - PBE 잔여 로드맵 (아래)
 
 ---

@@ -25,7 +25,7 @@ from sqlalchemy.orm import Session
 
 from archive.manager import bams
 from archive.models import SourceVideo
-from archive.db_models import PublishedTable, ProgramTable, FragmentTable, SourceTable, ProposalTable, ProjectSourceTable
+from archive.db_models import PublishedTable, ProgramTable, FragmentTable, SourceTable, ProposalTable, ProjectSourceTable, ExportInputTable
 from database import get_db
 
 from engine.boundary_editor import pbe_engine
@@ -52,6 +52,21 @@ from report.generator import report_gen
 BACKEND_DIR = Path(__file__).resolve().parent
 PROJECT_ROOT = BACKEND_DIR.parent
 STORAGE_DIR = Path(os.getenv("CCUT_STORAGE_DIR", str(PROJECT_ROOT / "storage"))).resolve()
+# [STORAGE-FIX] render_engine 등은 BACKEND_DIR/storage(__file__ 앵커)에 저장하지만
+# STORAGE_DIR은 루트 storage를 가리킨다. serve 시 두 경로를 모두 탐색한다.
+BACKEND_STORAGE_DIR = (BACKEND_DIR / "storage").resolve()
+_STATIC_BASES = [STORAGE_DIR, BACKEND_STORAGE_DIR]
+
+
+def _resolve_static_path(path: str):
+    """STORAGE_DIR과 BACKEND_DIR/storage 양쪽에서 파일을 찾는다. 경로탈출 방지."""
+    for base in _STATIC_BASES:
+        fp = (base / path).resolve()
+        if str(fp).startswith(str(base)) and fp.exists() and fp.is_file():
+            return fp
+    return None
+
+
 UPLOAD_DIR = STORAGE_DIR / "uploads"
 APP_BASE_URL = os.getenv("CCUT_BASE_URL", "http://127.0.0.1:8000").rstrip("/")
 
@@ -84,6 +99,28 @@ def build_dubbing_static_url(filename: str) -> str:
 
 
 app = FastAPI()
+
+def _run_db_migrations():
+    """export_results 테이블에 program_id/program_title 컬럼 추가 (SQLite ALTER TABLE)"""
+    import sqlite3
+    db_path = str(Path(__file__).parent / "ccut_app.db")
+    try:
+        conn = sqlite3.connect(db_path)
+        cur = conn.cursor()
+        cur.execute("PRAGMA table_info(export_results)")
+        cols = {row[1] for row in cur.fetchall()}
+        if "program_id" not in cols:
+            cur.execute("ALTER TABLE export_results ADD COLUMN program_id TEXT")
+            print("[MIGRATION] export_results.program_id 컬럼 추가")
+        if "program_title" not in cols:
+            cur.execute("ALTER TABLE export_results ADD COLUMN program_title TEXT")
+            print("[MIGRATION] export_results.program_title 컬럼 추가")
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        print(f"[MIGRATION] export_results 마이그레이션 실패: {e}")
+
+_run_db_migrations()
 
 def get_video_range_response(file_path: Path, request: Request):
     from fastapi.responses import StreamingResponse, FileResponse
@@ -140,8 +177,10 @@ def get_video_range_response(file_path: Path, request: Request):
         "Content-Range": f"bytes {start}-{end}/{file_size}",
         "Accept-Ranges": "bytes",
         "Content-Length": str(chunk_size),
+        # [CACHE-BUST] 같은 URL이라도 파일 변경 시 새로 받도록 재검증 강제
+        "Cache-Control": "no-cache",
     }
-    
+
     return StreamingResponse(
         range_generator(),
         status_code=206,
@@ -153,12 +192,10 @@ def get_video_range_response(file_path: Path, request: Request):
 async def serve_static_range(path: str, request: Request):
     from fastapi.responses import FileResponse
     from fastapi import HTTPException
-    full_path = (STORAGE_DIR / path).resolve()
-    if not str(full_path).startswith(str(STORAGE_DIR)):
-        raise HTTPException(status_code=403, detail="Forbidden")
-    if not full_path.exists() or not full_path.is_file():
+    full_path = _resolve_static_path(path)
+    if full_path is None:
         raise HTTPException(status_code=404, detail="File not found")
-        
+
     ext = full_path.suffix.lower()
     if ext in (".mp4", ".webm", ".mov", ".ogg"):
         return get_video_range_response(full_path, request)
@@ -168,12 +205,10 @@ async def serve_static_range(path: str, request: Request):
 async def serve_api_static_range(path: str, request: Request):
     from fastapi.responses import FileResponse
     from fastapi import HTTPException
-    full_path = (STORAGE_DIR / path).resolve()
-    if not str(full_path).startswith(str(STORAGE_DIR)):
-        raise HTTPException(status_code=403, detail="Forbidden")
-    if not full_path.exists() or not full_path.is_file():
+    full_path = _resolve_static_path(path)
+    if full_path is None:
         raise HTTPException(status_code=404, detail="File not found")
-        
+
     ext = full_path.suffix.lower()
     if ext in (".mp4", ".webm", ".mov", ".ogg"):
         return get_video_range_response(full_path, request)
@@ -1180,6 +1215,98 @@ async def get_fragments_by_source(source_id: str):
         "fragments": fragments
     }
 
+class ChatSearchRequest(BaseModel):
+    message: str
+    top_k: Optional[int] = 12
+    only_curated: Optional[bool] = False
+    program_id: Optional[str] = None
+
+
+@app.get("/fragment-search")
+async def search_fragments(q: str, top_k: int = 12, only_curated: bool = False,
+                           source_id: Optional[str] = None, role: Optional[str] = None):
+    """[FRAGMENT-SEARCH] 조각 자연어 검색.
+    "영국 비오는날 중년 아저씨" -> 관련 조각 목록 (시맨틱 + FTS5 하이브리드).
+    경로는 /fragments/{source_id} 와의 충돌을 피하려 /fragment-search 사용.
+    """
+    from engine import fragment_search as fsx
+    try:
+        result = fsx.search(q, top_k=top_k, only_curated=only_curated,
+                            source_id=source_id, role=role)
+        return {"status": "SUCCESS", **result}
+    except Exception as e:
+        return {"status": "ERROR", "error": str(e), "query": q, "count": 0, "results": []}
+
+
+@app.post("/chat/fragment-search")
+async def chat_fragment_search(req: ChatSearchRequest):
+    """[FRAGMENT-SEARCH] 채팅 메시지에서 검색 의도/쿼리 추출 후 조각 검색.
+    검색 의도가 아니면 is_search=False 반환 (프론트가 기존 채팅 흐름으로 위임).
+    """
+    from engine import fragment_chat as fcx
+    from engine import fragment_search as fsx
+    intent = fcx.detect(req.message)
+    if not intent["is_search"]:
+        return {"status": "SUCCESS", "is_search": False, "query": "",
+                "count": 0, "results": []}
+    try:
+        result = fsx.search(intent["query"], top_k=req.top_k or 12,
+                            only_curated=bool(req.only_curated))
+        return {"status": "SUCCESS", "is_search": True,
+                "query": intent["query"], "confidence": intent["confidence"],
+                "count": result["count"], "results": result["results"]}
+    except Exception as e:
+        return {"status": "ERROR", "is_search": True, "error": str(e),
+                "query": intent["query"], "count": 0, "results": []}
+
+
+@app.get("/fragment-search-status")
+async def fragment_search_status():
+    """[FRAGMENT-SEARCH] 인덱스 현황."""
+    from engine import fragment_search as fsx
+    return {"status": "SUCCESS", **fsx.index_status()}
+
+
+@app.post("/proposals/{proposal_id}/preview")
+async def make_proposal_preview(proposal_id: str, db: Session = Depends(get_db)):
+    """[PROPOSAL-PREVIEW] 제안을 즉석 렌더(또는 캐시)하여 재생용 mp4 반환.
+    제안 sequence -> clips -> ensure_proposal_preview(+faststart, 캐시).
+    모든 제안 재생 가능 (내보내기 불필요).
+    """
+    import json as _j
+    pr = db.query(ProposalTable).filter_by(proposal_id=proposal_id).first()
+    if not pr:
+        return {"status": "NOT_FOUND", "preview_url": None}
+    seq = pr.sequence
+    if isinstance(seq, str):
+        try:
+            seq = _j.loads(seq)
+        except Exception:
+            seq = []
+    variant = (pr.mode or "A").upper()
+    clips = []
+    for frag in (seq or []):
+        sid = frag.get("source_id") or ""
+        start = float(frag.get("start") or frag.get("start_sec") or frag.get("start_time") or 0.0)
+        end = float(frag.get("end") or frag.get("end_sec") or frag.get("end_time") or 0.0)
+        if not sid or end <= start:
+            continue
+        sdata = bams.get_source(sid)
+        spath = sdata.file_path if sdata else None
+        if not spath or not os.path.exists(spath):
+            continue
+        clips.append({"source_path": spath, "start": start, "end": end})
+    if not clips:
+        return {"status": "NO_CLIPS", "preview_url": None}
+    from engine.proposal_preview_engine import ensure_proposal_preview
+    result = ensure_proposal_preview(proposal_id=proposal_id, variant=variant, clips=clips)
+    return {
+        "status": result.get("status", "UNKNOWN"),
+        "preview_url": result.get("preview_url"),
+        "duration": result.get("duration", 0.0),
+    }
+
+
 @app.get("/evidence/{source_id}")
 async def get_evidence_board(source_id: str):
     """[STEP 2] 소스별 Evidence Board 데이터 조회"""
@@ -1259,21 +1386,19 @@ def inject_semantic_thumbnails(fragments: list):
                 start_frame = int(float(start_sec) * fps)
             
             try:
-                # Extract at exact start_frame (start_sec)
                 extract_sec = max(0, start_frame / fps)
-                # Output name format: SF_{fid}_{sid}
-                video_engine.extract_thumbnail(source_data.file_path, extract_sec, fid)
-                
-                url = f"/static/thumbnails/{sf_thumb_filename}"
-                f["thumbnail_url"] = url
-                if not isinstance(f.get("thumbnail"), dict): f["thumbnail"] = {}
-                f["thumbnail"]["thumbnail_url"] = url
-                if not isinstance(f.get("intelligence"), dict): f["intelligence"] = {}
-                f["intelligence"]["thumb_url"] = url
-                
-                # Update cache
-                available_thumbs.add(sf_thumb_filename)
-                continue
+                result_path = video_engine.extract_thumbnail(source_data.file_path, extract_sec, fid)
+                if result_path:
+                    url = f"/static/thumbnails/{sf_thumb_filename}"
+                    f["thumbnail_url"] = url
+                    if not isinstance(f.get("thumbnail"), dict): f["thumbnail"] = {}
+                    f["thumbnail"]["thumbnail_url"] = url
+                    if not isinstance(f.get("intelligence"), dict): f["intelligence"] = {}
+                    f["intelligence"]["thumb_url"] = url
+                    available_thumbs.add(sf_thumb_filename)
+                    continue
+                # result_path is None → fall through to VF parent fallback
+                print(f"[R42] Thumbnail extraction returned None for {fid}, falling through to VF fallback")
             except Exception as e:
                 print(f"[R42] Thumbnail extraction failed for {fid}: {e}")
 
@@ -1979,7 +2104,12 @@ async def post_export_input(proposal_id: str, payload: dict = None):
     engine = ExportEngine(bams)
     
     custom_clips = payload.get("clips") if payload else None
+    program_id = payload.get("program_id") if payload else None
+    program_title = payload.get("program_title") if payload else None
     export_input = engine.create_export_input(proposal_id, custom_clips=custom_clips)
+    if export_input and program_id:
+        export_input["program_id"] = program_id
+        export_input["program_title"] = program_title
     
     if not export_input:
         return {"status": "NOT_FOUND", "proposal_id": proposal_id}
@@ -2036,13 +2166,31 @@ async def get_export_input_proposal(proposal_id: str):
 # ═══════════════════════════════════════════════════════════════════
 
 @app.post("/render/{export_input_id}")
-async def post_render(export_input_id: str):
+async def post_render(export_input_id: str, payload: dict = None, db: Session = Depends(get_db)):
     """
     [STEP 8] Render 실행
     ExportInput ID를 받아 실제 mp4 영상을 생성합니다.
     """
     from engine.render_engine import render_engine
+    # program_id/title: payload 우선, 없으면 proposal → program 역추적
+    program_id = (payload or {}).get("program_id")
+    program_title = (payload or {}).get("program_title")
+    if not program_id:
+        ei = db.query(ExportInputTable).filter_by(export_id=export_input_id).first()
+        if ei and ei.proposal_id:
+            prop = db.query(ProposalTable).filter_by(proposal_id=ei.proposal_id).first()
+            if prop and prop.program_id:
+                program_id = prop.program_id
+                pg = db.query(ProgramTable).filter_by(program_id=program_id).first()
+                program_title = pg.name if pg else None
     result = render_engine.render_from_export_input(export_input_id)
+    if result and result.get("success") and program_id:
+        from archive.db_models import ExportResultTable as _ERT
+        row = db.query(_ERT).filter_by(export_input_id=export_input_id).first()
+        if row:
+            row.program_id = program_id
+            row.program_title = program_title
+            db.commit()
     return result
 
 @app.get("/render-result/{export_input_id}")
@@ -2052,6 +2200,24 @@ async def get_render_result(export_input_id: str):
     if not result:
         return {"status": "NOT_FOUND", "export_input_id": export_input_id}
     return result
+
+@app.get("/exports/list")
+async def get_exports_list():
+    """내보낸 영상 전체 목록 (아카이브/SNS 패널용)"""
+    return {"exports": bams.get_all_exports()}
+
+@app.patch("/programs/{program_id}/name")
+async def rename_program(program_id: str, payload: dict = None, db: Session = Depends(get_db)):
+    """프로젝트 이름 변경 (LeftNav / SNS / Archive 어디서든 호출)"""
+    new_name = ((payload or {}).get("name") or "").strip()
+    if not new_name:
+        raise HTTPException(status_code=400, detail="name is required")
+    pg = db.query(ProgramTable).filter_by(program_id=program_id).first()
+    if not pg:
+        raise HTTPException(status_code=404, detail="Program not found")
+    pg.name = new_name
+    db.commit()
+    return {"status": "SUCCESS", "program_id": program_id, "name": new_name}
 
 @app.get("/generate-fragments/status-legacy/{source_id}")
 async def get_fragment_status_legacy(source_id: str):
@@ -2406,10 +2572,89 @@ async def get_published_list(db: Session = Depends(get_db)):
 @app.get("/archive/list")
 async def get_archive_list(db: Session = Depends(get_db)):
     """[Archive] Get list of historical projects and sources"""
+    import datetime as _dt
+    from sqlalchemy import func as _func
+
     sources = db.query(SourceTable).all()
-    programs = db.query(ProgramTable).all()
     proposals = db.query(ProposalTable).all()
-    
+
+    # program_id → source_count 맵
+    src_count_map = {
+        r.program_id: r.cnt
+        for r in db.query(ProjectSourceTable.program_id, _func.count().label("cnt"))
+                    .group_by(ProjectSourceTable.program_id).all()
+    }
+
+    # source_count > 0 인 schema_version=2 프로젝트만 포함 (빈 auto-created 프로젝트 숨김)
+    valid_ids = {pid for pid, cnt in src_count_map.items() if cnt > 0}
+    programs = db.query(ProgramTable).filter(
+        ProgramTable.schema_version == 2,
+        ProgramTable.program_id.in_(valid_ids) if valid_ids else False,
+    ).all() if valid_ids else []
+
+    # program_id → name / 삭제상태 맵 (전체, 역추적용)
+    all_progs = db.query(ProgramTable).filter(ProgramTable.schema_version == 2).all()
+    prog_name_map = {p.program_id: p.name for p in all_progs}
+    prog_deleted_map = {
+        p.program_id: (p.deleted_at.isoformat() if p.deleted_at else None)
+        for p in all_progs
+    }
+
+    # program_id → 제안 수 / 내보내기 수
+    from archive.db_models import ExportResultTable
+    prop_count_map = {
+        r.program_id: r.cnt
+        for r in db.query(ProposalTable.program_id, _func.count().label("cnt"))
+                    .filter(ProposalTable.program_id.isnot(None))
+                    .group_by(ProposalTable.program_id).all()
+    }
+    exp_count_map = {
+        r.program_id: r.cnt
+        for r in db.query(ExportResultTable.program_id, _func.count().label("cnt"))
+                    .filter(ExportResultTable.program_id.isnot(None))
+                    .group_by(ExportResultTable.program_id).all()
+    }
+
+    # source_id → 사용 이력 맵 (ProjectSourceTable JOIN, 프로젝트별 사용 시각 포함)
+    ps_rows = (
+        db.query(
+            ProjectSourceTable.source_id,
+            ProjectSourceTable.program_id,
+            ProjectSourceTable.added_at,
+            ProgramTable.name,
+            ProgramTable.last_updated_at,
+        )
+        .join(ProgramTable, ProjectSourceTable.program_id == ProgramTable.program_id)
+        .filter(ProgramTable.schema_version == 2)
+        .all()
+    )
+    source_usage_map: dict = {}
+    for sid, pid, added_at, pname, lua in ps_rows:
+        source_usage_map.setdefault(sid, [])
+        if any(u["program_id"] == pid for u in source_usage_map[sid]):
+            continue
+        # 사용 시각: project_sources.added_at 우선, 없으면 프로젝트 last_updated_at
+        used_at = added_at or (lua.isoformat() if lua else None)
+        source_usage_map[sid].append({
+            "program_id": pid,
+            "name": pname,
+            "used_at": used_at,
+        })
+
+    def _names(sid) -> list:
+        return [u["name"] for u in source_usage_map.get(sid, []) if u["name"]]
+
+    # proposal: program_id null → source_id 역추적으로 프로그램 추론
+    def _infer_program(pr) -> tuple:
+        """(program_id, name, inferred: bool)"""
+        if pr.program_id:
+            return (pr.program_id, prog_name_map.get(pr.program_id), False)
+        # source_id 기반 역추적: 사용 이력 첫 프로젝트
+        usage = source_usage_map.get(pr.source_id, [])
+        if usage:
+            return (usage[0]["program_id"], usage[0]["name"], True)
+        return (None, None, False)
+
     return {
         "sources": [{
             "source_id": s.source_id,
@@ -2417,20 +2662,37 @@ async def get_archive_list(db: Session = Depends(get_db)):
             "title": s.title,
             "duration": s.duration,
             "fps": s.fps,
-            "created_at": s.created_at.isoformat() if s.created_at else None
+            "hash_value": s.hash_value,
+            "created_at": s.created_at.isoformat() if s.created_at else None,
+            "program_names": _names(s.source_id),
+            "usage": source_usage_map.get(s.source_id, []),
+            # [SOURCE] 원본 재생 URL (uploads에 있을 때만, 없으면 null = 원본 삭제됨)
+            "play_url": (
+                f"/static/uploads/{_url_quote(os.path.basename(s.file_path), safe='')}"
+                if s.file_path and os.path.exists(s.file_path) else None
+            ),
         } for s in sources],
         "programs": [{
             "program_id": p.program_id,
             "name": p.name,
             "status": p.status,
-            "created_at": p.created_at.isoformat() if p.created_at else None
+            "created_at": p.created_at.isoformat() if p.created_at else None,
+            "last_updated_at": p.last_updated_at.isoformat() if p.last_updated_at else None,
+            "source_count": src_count_map.get(p.program_id, 0),
+            "proposal_count": prop_count_map.get(p.program_id, 0),
+            "export_count": exp_count_map.get(p.program_id, 0),
+            "deleted_at": prog_deleted_map.get(p.program_id),
         } for p in programs],
         "proposals": [{
             "proposal_id": pr.proposal_id,
             "source_id": pr.source_id,
             "mode": pr.mode,
             "duration": pr.duration,
-            "created_at": pr.created_at.isoformat() if pr.created_at else None
+            "created_at": pr.created_at.isoformat() if pr.created_at else None,
+            "program_id": _infer_program(pr)[0],
+            "program_name": _infer_program(pr)[1],
+            "program_name_inferred": _infer_program(pr)[2],
+            "program_deleted": bool(prog_deleted_map.get(_infer_program(pr)[0])) if _infer_program(pr)[0] else False,
         } for pr in proposals]
     }
 
@@ -2754,9 +3016,27 @@ async def list_projects(db: Session = Depends(get_db)):
                     .group_by(ProjectSourceTable.program_id).all()
     }
     used_ids = set(source_counts.keys())
+    if not used_ids:
+        return {"projects": []}
+
+    # [SOFT-DELETE] 30일 경과한 휴지통 프로젝트는 자동 완전삭제(인과응보).
+    import datetime as _dtp
+    cutoff = _dtp.datetime.now() - _dtp.timedelta(days=30)
+    expired = db.query(ProgramTable).filter(
+        ProgramTable.deleted_at.isnot(None),
+        ProgramTable.deleted_at < cutoff,
+    ).all()
+    for ex in expired:
+        db.query(ProjectSourceTable).filter_by(program_id=ex.program_id).delete()
+        db.delete(ex)
+    if expired:
+        db.commit()
+
+    # 활성(deleted_at IS NULL) 프로젝트만 목록에 노출
     rows = db.query(ProgramTable).filter(
         ProgramTable.schema_version == 2,
-        ProgramTable.program_id.in_(used_ids)
+        ProgramTable.program_id.in_(used_ids),
+        ProgramTable.deleted_at.is_(None),
     ).all()
     rows = sorted(rows, key=lambda p: (p.last_updated_at or p.created_at or datetime.datetime.min), reverse=True)
     return {"projects": [{
@@ -2806,14 +3086,125 @@ async def get_project_state(program_id: str, db: Session = Depends(get_db)):
 
 @app.delete("/projects/{program_id}")
 async def delete_project(program_id: str, db: Session = Depends(get_db)):
-    """프로젝트 삭제: project_sources + programs 레코드 제거."""
+    """[SOFT-DELETE] 프로젝트를 휴지통으로 이동(status='DELETED' + deleted_at).
+    원본/제안/내보낸영상 연결은 보존 — 30일간 복원 가능, 이후 자동 완전삭제.
+    """
+    import datetime as _dtd
+    pg = db.query(ProgramTable).filter_by(program_id=program_id).first()
+    if not pg:
+        return {"status": "NOT_FOUND", "program_id": program_id}
+    pg.status = "DELETED"
+    pg.deleted_at = _dtd.datetime.now()
+    db.commit()
+    purge_at = pg.deleted_at + _dtd.timedelta(days=30)
+    return {
+        "status": "SOFT_DELETED",
+        "program_id": program_id,
+        "deleted_at": pg.deleted_at.isoformat(),
+        "purge_at": purge_at.isoformat(),
+    }
+
+
+@app.post("/projects/{program_id}/restore")
+async def restore_project(program_id: str, db: Session = Depends(get_db)):
+    """[SOFT-DELETE] 휴지통 프로젝트를 복원(deleted_at=NULL)."""
+    pg = db.query(ProgramTable).filter_by(program_id=program_id).first()
+    if not pg:
+        return {"status": "NOT_FOUND", "program_id": program_id}
+    pg.deleted_at = None
+    pg.status = "DRAFT"
+    db.commit()
+    return {"status": "RESTORED", "program_id": program_id, "name": pg.name}
+
+
+@app.delete("/projects/{program_id}/purge")
+async def purge_project(program_id: str, db: Session = Depends(get_db)):
+    """[SOFT-DELETE] 즉시 완전삭제(인과응보). 복원 불가."""
     pg = db.query(ProgramTable).filter_by(program_id=program_id).first()
     if not pg:
         return {"status": "NOT_FOUND", "program_id": program_id}
     db.query(ProjectSourceTable).filter_by(program_id=program_id).delete()
     db.delete(pg)
     db.commit()
-    return {"status": "DELETED", "program_id": program_id}
+    return {"status": "PURGED", "program_id": program_id}
+
+
+class SourceNameRequest(BaseModel):
+    name: str
+
+
+@app.patch("/sources/{source_id}/name")
+async def rename_source(source_id: str, req: SourceNameRequest, db: Session = Depends(get_db)):
+    """[SOURCE] 원본 영상 이름(title) 변경."""
+    s = db.query(SourceTable).filter_by(source_id=source_id).first()
+    if not s:
+        return {"status": "NOT_FOUND", "source_id": source_id}
+    s.title = (req.name or "").strip() or s.title
+    db.commit()
+    return {"status": "SUCCESS", "source_id": source_id, "title": s.title}
+
+
+@app.delete("/sources/{source_id}")
+async def delete_source(source_id: str, mode: str = "source_only", db: Session = Depends(get_db)):
+    """[SOURCE] 원본 삭제.
+    - mode='source_only': 원본 mp4 파일만 디스크에서 제거(노출 위험 영상). 조각/편집 메타는 보존.
+    - mode='full': 원본 파일 + 그 source의 모든 조각 데이터 + source 레코드 완전 삭제.
+    proposals/export_results는 프로젝트(program) 단위이므로 건드리지 않는다.
+    """
+    s = db.query(SourceTable).filter_by(source_id=source_id).first()
+    if not s:
+        return {"status": "NOT_FOUND", "source_id": source_id}
+
+    # 1. 원본 mp4 파일 삭제 (양쪽 mode 공통)
+    file_removed = False
+    if s.file_path and os.path.exists(s.file_path):
+        try:
+            os.remove(s.file_path)
+            file_removed = True
+        except Exception as e:
+            print(f"[SOURCE-DELETE] 파일 삭제 실패: {e}")
+
+    if mode == "full":
+        from archive.db_models import (EvidenceTable, SemanticFragmentTable,
+                                        QuickScanTable, SubtitleTable, UserIntentTable)
+        import sqlite3 as _sq
+        # 조각/메타 데이터 삭제 (source_id 참조)
+        for T in [FragmentTable, EvidenceTable, SemanticFragmentTable,
+                  QuickScanTable, SubtitleTable, UserIntentTable]:
+            db.query(T).filter_by(source_id=source_id).delete()
+        # fragment_index (raw, FTS 트리거 동반)
+        db.execute(__import__("sqlalchemy").text(
+            "DELETE FROM fragment_index WHERE source_id = :sid"), {"sid": source_id})
+        db.delete(s)
+        db.commit()
+        return {"status": "DELETED_FULL", "source_id": source_id, "file_removed": file_removed}
+    else:
+        # source_only: 파일만 제거, 레코드는 원본 부재 표시
+        s.file_path = None
+        db.commit()
+        return {"status": "DELETED_SOURCE_ONLY", "source_id": source_id, "file_removed": file_removed}
+
+
+@app.get("/projects/trash")
+async def list_trash(db: Session = Depends(get_db)):
+    """[SOFT-DELETE] 휴지통 목록 (deleted_at 있는 프로젝트, 30일 보관)."""
+    import datetime as _dtt
+    rows = db.query(ProgramTable).filter(ProgramTable.deleted_at.isnot(None)).all()
+    out = []
+    for p in rows:
+        purge_at = (p.deleted_at + _dtt.timedelta(days=30)) if p.deleted_at else None
+        days_left = None
+        if p.deleted_at:
+            days_left = max(0, 30 - (_dtt.datetime.now() - p.deleted_at).days)
+        out.append({
+            "program_id": p.program_id,
+            "name": p.name,
+            "deleted_at": p.deleted_at.isoformat() if p.deleted_at else None,
+            "purge_at": purge_at.isoformat() if purge_at else None,
+            "days_left": days_left,
+        })
+    out.sort(key=lambda x: x["deleted_at"] or "", reverse=True)
+    return {"status": "SUCCESS", "count": len(out), "trash": out}
 
 
 # ── 유저 라우트 ────────────────────────────────────────────────────

@@ -146,53 +146,82 @@ class RenderEngine:
         return {"ok": True, "paths": paths}
 
     def _render_with_ffmpeg(self, clips: List[Dict[str, Any]], source_paths: Dict[str, str], output_path: str) -> Dict[str, Any]:
-        # Concat Demuxer 방식
-        temp_list = Path(output_path).with_suffix(".txt")
+        """[STREAM-FIX] concat inpoint/outpoint는 timestamp를 손상시켜 실제 fps가
+        1~2fps로 떨어진다(프레임당 1초 재생). 각 클립을 -ss/-to로 정밀 추출하면서
+        30fps CFR · 1920x1080 · 48kHz로 정규화한 뒤 concat copy로 합친다.
+        """
+        import shutil
+        out_p = Path(output_path)
+        clip_dir = out_p.parent / f"_tmp_{out_p.stem}"
+        clip_dir.mkdir(parents=True, exist_ok=True)
+        temp_list = out_p.with_suffix(".txt")
+        temp_clips: List[Path] = []
         try:
+            sorted_clips = sorted(clips, key=lambda x: x.get("order", 0))
+
+            # 1. 각 클립 정밀 추출 + 정규화 (가변 fps/해상도/오디오 통일)
+            for i, clip in enumerate(sorted_clips):
+                src_id = clip.get("source_id") or list(source_paths.keys())[0]
+                src_path = source_paths.get(src_id)
+                if not src_path:
+                    continue
+                tmp = clip_dir / f"clip_{i:04d}.mp4"
+                cut_cmd = [
+                    "ffmpeg", "-y", "-loglevel", "error",
+                    "-ss", str(clip["start"]), "-to", str(clip["end"]),
+                    "-i", src_path,
+                    "-vf", "scale=1920:1080:force_original_aspect_ratio=decrease,"
+                           "pad=1920:1080:(ow-iw)/2:(oh-ih)/2,setsar=1",
+                    "-r", "30", "-fps_mode", "cfr",
+                    # [STREAM-FIX] 1초마다 강제 keyframe — keyframe이 드물면 브라우저가
+                    # 조각 경계 이후 디코드를 못 해 멈춘다(seek 불가).
+                    "-g", "30", "-keyint_min", "30", "-sc_threshold", "0",
+                    "-c:v", "libx264", "-preset", "ultrafast", "-crf", "23",
+                    "-c:a", "aac", "-b:a", "128k", "-ar", "48000", "-ac", "2",
+                    str(tmp),
+                ]
+                r = subprocess.run(cut_cmd, capture_output=True, text=True)
+                if r.returncode == 0 and tmp.exists() and tmp.stat().st_size > 0:
+                    temp_clips.append(tmp)
+                else:
+                    print(f"[RENDER] clip {i} 추출 실패: {r.stderr[:200]}")
+
+            if not temp_clips:
+                return {"success": False, "error_msg": "모든 클립 추출 실패",
+                        "command": "", "stderr": ""}
+
+            # 2. concat 재인코딩 (단일 SPS/PPS·단일 stream).
+            # [-c copy 금지] 각 클립이 따로 인코딩돼 SPS/PPS가 경계마다 바뀌면
+            # Chrome 디코더가 조각 경계에서 멈춘다. 재인코딩으로 단일 stream 보장.
             with open(temp_list, "w", encoding="utf-8") as f:
-                # order 기준 정렬
-                sorted_clips = sorted(clips, key=lambda x: x.get("order", 0))
-                for clip in sorted_clips:
-                    src_id = clip.get("source_id") or list(source_paths.keys())[0]
-                    src_path = source_paths.get(src_id)
-                    f.write(f"file '{src_path.replace('\\', '/')}'\n")
-                    f.write(f"inpoint {clip['start']}\n")
-                    f.write(f"outpoint {clip['end']}\n")
-            
-            # FFmpeg 실행 (Encoding for reliability)
+                for t in temp_clips:
+                    f.write(f"file '{str(t).replace(chr(92), '/')}'\n")
             cmd = [
-                "ffmpeg", "-y", 
+                "ffmpeg", "-y", "-loglevel", "error",
                 "-f", "concat", "-safe", "0", "-i", str(temp_list),
-                "-c:v", "libx264", "-preset", "ultrafast", "-crf", "23",
-                "-c:a", "aac", "-b:a", "128k",
-                output_path
+                "-fflags", "+genpts",
+                "-c:v", "libx264", "-preset", "veryfast", "-crf", "23",
+                "-g", "30", "-keyint_min", "30", "-sc_threshold", "0",
+                "-pix_fmt", "yuv420p",
+                "-c:a", "aac", "-b:a", "128k", "-ar", "48000", "-ac", "2",
+                "-movflags", "+faststart", output_path,
             ]
-            
             process = subprocess.run(cmd, capture_output=True, text=True)
-            
+
             if process.returncode != 0:
                 print(f"[RENDER] FFmpeg Failed: {process.stderr}")
-                return {
-                    "success": False,
-                    "stderr": process.stderr,
-                    "command": " ".join(cmd),
-                    "error_msg": "FFmpeg execution failed"
-                }
-            
-            # ffprobe 검증
+                return {"success": False, "stderr": process.stderr,
+                        "command": " ".join(cmd), "error_msg": "FFmpeg execution failed"}
+
             probe_cmd = [
-                "ffprobe", "-v", "error", "-show_entries", "format=duration", 
-                "-of", "default=noprint_wrappers=1:nokey=1", output_path
+                "ffprobe", "-v", "error", "-show_entries", "format=duration",
+                "-of", "default=noprint_wrappers=1:nokey=1", output_path,
             ]
             probe_res = subprocess.run(probe_cmd, capture_output=True, text=True)
             duration = float(probe_res.stdout.strip()) if probe_res.stdout.strip() else 0.0
-            
-            return {
-                "success": True,
-                "duration": duration,
-                "command": " ".join(cmd),
-                "stderr": process.stderr
-            }
+
+            return {"success": True, "duration": duration,
+                    "command": " ".join(cmd), "stderr": process.stderr}
         except Exception as e:
             import traceback
             traceback.print_exc()
@@ -200,6 +229,8 @@ class RenderEngine:
         finally:
             if temp_list.exists():
                 temp_list.unlink()
+            if clip_dir.exists():
+                shutil.rmtree(clip_dir, ignore_errors=True)
 
     def _fail(self, code: str, msg: str) -> Dict[str, Any]:
         return {"success": False, "status": "RENDER_FAILED", "error_code": code, "message": msg}

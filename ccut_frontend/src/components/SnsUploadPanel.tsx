@@ -1,127 +1,86 @@
 import React, { useState, useEffect } from "react";
-import { fetcher, API_BASE_URL } from "@/services/api";
-import { Share2, Video, Globe, Play, Youtube, AlertCircle, CheckCircle, RotateCcw } from "lucide-react";
-import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
-import { Button } from "@/components/ui/button";
+import { RotateCcw, Film, Clock, Calendar, Play, Edit3, X, Youtube, Tv2, Instagram, Check } from "lucide-react";
+import { videoService } from "@/services/videoService";
 
-interface PublishedAsset {
-  publish_id: string;
-  program_id: string;
-  platform: string;
-  final_video_path: string;
-  title: string;
-  published_at: string | null;
+interface ExportRecord {
+  id: string;
+  program_id: string | null;
+  program_title: string | null;
+  output_url: string;
+  file_size: number | null;
+  duration: number | null;
+  created_at: string | null;
+  program_last_updated_at: string | null;
 }
 
-export const SnsUploadPanel: React.FC = () => {
-  const [assets, setAssets] = useState<PublishedAsset[]>([]);
+const formatSecs = (s?: number | null) => {
+  if (!s) return "0초";
+  const m = Math.floor(s / 60), sec = Math.floor(s % 60);
+  return m > 0 ? `${m}분 ${sec}초` : `${sec}초`;
+};
+
+const PLATFORMS = [
+  { key: "youtube", label: "YouTube Shorts", icon: Youtube, color: "text-red-500 bg-red-500/10 hover:bg-red-500/20 border-red-500/20" },
+  { key: "tiktok",  label: "TikTok",         icon: Tv2,     color: "text-pink-400 bg-pink-500/10 hover:bg-pink-500/20 border-pink-500/20" },
+  { key: "instagram", label: "Instagram",    icon: Instagram, color: "text-purple-400 bg-purple-500/10 hover:bg-purple-500/20 border-purple-500/20" },
+];
+
+export const SnsUploadPanel: React.FC<{
+  onNavigateToProject?: (id: string) => void;
+  onRenameProject?: (id: string, newName: string) => void;
+}> = ({ onNavigateToProject, onRenameProject }) => {
+  const [exports, setExports] = useState<ExportRecord[]>([]);
   const [loading, setLoading] = useState(true);
-  const [selectedAsset, setSelectedAsset] = useState<PublishedAsset | null>(null);
-  
-  // Form fields
-  const [videoTitle, setVideoTitle] = useState("");
-  const [description, setDescription] = useState("");
-  const [platform, setPlatform] = useState("YouTube Shorts");
-  const [tags, setTags] = useState("#CCUT #AI #Shorts");
+  const [playingId, setPlayingId] = useState<string | null>(null);
+  const [renamingId, setRenamingId] = useState<string | null>(null);
+  const [renameValue, setRenameValue] = useState("");
 
-  // Progress/Status
-  const [publishing, setPublishing] = useState(false);
-  const [pubProgress, setPubProgress] = useState(0);
-  const [resultMsg, setResultMsg] = useState<{ status: "success" | "error"; text: string; url?: string } | null>(null);
-
-  const fetchAssets = async () => {
+  const fetchExports = async () => {
     setLoading(true);
     try {
-      const data = await fetcher("/publish/list") as PublishedAsset[];
-      setAssets(data || []);
-      if (data && data.length > 0 && !selectedAsset) {
-        handleSelectAsset(data[0]);
-      }
-    } catch (e) {
-      console.error("[SnsUploadPanel] Error loading published assets:", e);
+      const res = await fetch(`${videoService.API_BASE_URL}/exports/list`).then(r => r.json()).catch(() => ({ exports: [] }));
+      setExports(res.exports ?? []);
+    } catch {
+      setExports([]);
     } finally {
       setLoading(false);
     }
   };
 
-  useEffect(() => {
-    fetchAssets();
-  }, []);
+  useEffect(() => { fetchExports(); }, []);
 
-  const handleSelectAsset = (asset: PublishedAsset) => {
-    setSelectedAsset(asset);
-    setVideoTitle(asset.title || `송출본 (${asset.program_id})`);
-    setDescription("CCUT 1.0.6 AI PD가 자동 편집 및 발행한 영상입니다.");
-    setResultMsg(null);
+  const startRename = (ex: ExportRecord) => {
+    setRenamingId(ex.id);
+    setRenameValue(ex.program_title || "");
   };
 
-  const handlePublish = async () => {
-    if (!selectedAsset) return;
-    setPublishing(true);
-    setPubProgress(10);
-    setResultMsg(null);
-
-    // Progress bar simulation
-    const interval = setInterval(() => {
-      setPubProgress((p) => {
-        if (p >= 90) {
-          clearInterval(interval);
-          return 90;
-        }
-        return p + 15;
-      });
-    }, 400);
-
-    try {
-      // Trigger backend publish
-      const res = await fetcher(`/publish/${selectedAsset.publish_id}`, {
-        method: "POST"
-      }) as { status: string; url?: string; message?: string };
-      
-      clearInterval(interval);
-      setPubProgress(100);
-
-      if (res.status === "SUCCESS") {
-        setResultMsg({
-          status: "success",
-          text: res.message || "SNS 채널에 전 세계 송출이 완료되었습니다!",
-          url: res.url
-        });
-        // refresh asset list
-        fetchAssets();
-      } else {
-        setResultMsg({
-          status: "error",
-          text: res.message || "송출 중 에러가 발생했습니다."
-        });
-      }
-    } catch (err: any) {
-      clearInterval(interval);
-      setResultMsg({
-        status: "error",
-        text: err.message || "서버 통신 실패"
-      });
-    } finally {
-      setPublishing(false);
-    }
+  const commitRename = async (ex: ExportRecord) => {
+    const trimmed = renameValue.trim();
+    if (!trimmed || !ex.program_id) { setRenamingId(null); return; }
+    setExports(prev => prev.map(e => e.id === ex.id ? { ...e, program_title: trimmed } : e));
+    setRenamingId(null);
+    onRenameProject?.(ex.program_id, trimmed);
+    await fetch(`${videoService.API_BASE_URL}/programs/${ex.program_id}/name`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: trimmed }),
+    }).catch(e => console.error("[SNS rename]", e));
   };
 
   return (
-    <div className="flex flex-col h-full bg-[hsl(228_10%_9%)] p-6 space-y-6 overflow-y-auto">
+    <div className="flex flex-col h-full bg-[hsl(228_10%_9%)] overflow-y-auto">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between px-8 pt-8 pb-4 flex-shrink-0">
         <div>
           <h1 className="text-2xl font-bold bg-gradient-to-r from-blue-400 to-primary bg-clip-text text-transparent">
-            SNS 채널 원클릭 퍼블리싱
+            SNS 업로드
           </h1>
-          <p className="text-[12px] text-muted-foreground/60 mt-1">
-            렌더링이 완료된 실제 영상을 YouTube Shorts, TikTok 등 소셜 채널로 즉시 송출합니다.
+          <p className="text-[12px] text-muted-foreground/50 mt-1">
+            편집 완료된 영상을 채널로 발행하세요.
           </p>
         </div>
         <button
-          onClick={fetchAssets}
+          onClick={fetchExports}
           className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-secondary/80 hover:bg-secondary text-xs text-foreground/80 transition-colors border border-border/20"
         >
           <RotateCcw size={12} />
@@ -129,182 +88,134 @@ export const SnsUploadPanel: React.FC = () => {
         </button>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-5 gap-6 items-start">
-        {/* Left list of final render exports */}
-        <div className="lg:col-span-2 space-y-3">
-          <h3 className="text-xs font-semibold text-muted-foreground/60 uppercase tracking-widest px-1">
-            송출 가능 렌더링 파일 목록
-          </h3>
-          
-          {loading ? (
-            <div className="flex items-center justify-center h-48 text-muted-foreground/40 text-xs">
-              목록 로딩 중...
-            </div>
-          ) : assets.length > 0 ? (
-            <div className="space-y-2 max-h-[600px] overflow-y-auto pr-1">
-              {assets.map((asset) => (
-                <div
-                  key={asset.publish_id}
-                  onClick={() => handleSelectAsset(asset)}
-                  className={`p-3.5 rounded-xl border transition-all cursor-pointer ${
-                    selectedAsset?.publish_id === asset.publish_id
-                      ? "bg-primary/10 border-primary"
-                      : "bg-card/25 border-border/10 hover:border-border/30"
-                  }`}
-                >
-                  <div className="flex items-start gap-3">
-                    <div className="w-8 h-8 rounded-lg bg-secondary/80 flex items-center justify-center flex-shrink-0">
-                      <Video size={14} className="text-foreground/80" />
+      {/* 내보낸 영상 목록 */}
+      <div className="flex-1 px-8 pb-8">
+        {loading ? (
+          <div className="flex flex-col items-center justify-center h-64 gap-3 text-muted-foreground/40">
+            <div className="w-5 h-5 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
+            <span className="text-xs">불러오는 중...</span>
+          </div>
+        ) : exports.length === 0 ? (
+          <div className="flex flex-col items-center justify-center h-64 gap-3 text-muted-foreground/30">
+            <Film size={36} strokeWidth={1} />
+            <p className="text-sm font-medium">아직 내보낸 영상이 없습니다</p>
+            <p className="text-xs">프로젝트에서 A안 또는 B안을 내보내면 여기에 나타납니다.</p>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {exports.map((ex, idx) => (
+              <div
+                key={ex.id}
+                className="rounded-2xl border border-border/10 bg-card/20 overflow-hidden hover:border-border/20 transition-colors"
+              >
+                {/* 항목 헤더 */}
+                <div className="flex items-center gap-4 p-5">
+                  {/* 인덱스 + 아이콘 */}
+                  <div className="relative flex-shrink-0">
+                    <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center">
+                      <Film size={18} className="text-primary" />
                     </div>
-                    <div className="min-w-0">
-                      <h4 className="text-xs font-bold text-foreground/90 truncate">{asset.title}</h4>
-                      <p className="text-[10px] text-muted-foreground/50 font-mono mt-0.5 truncate">{asset.publish_id}</p>
-                      <div className="flex items-center gap-2 mt-2">
-                        <span className="bg-secondary px-1.5 py-0.5 rounded text-[8px] font-bold text-muted-foreground/80">
-                          {asset.platform || "LOCAL"}
-                        </span>
-                        {asset.published_at && (
-                          <span className="text-[9px] text-muted-foreground/40">
-                            {new Date(asset.published_at).toLocaleDateString()}
-                          </span>
-                        )}
-                      </div>
-                    </div>
+                    <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-primary/80 text-[9px] font-black text-white flex items-center justify-center">
+                      {idx + 1}
+                    </span>
                   </div>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div className="bg-card/10 border border-border/10 rounded-xl p-8 text-center text-xs text-muted-foreground/40">
-              렌더링 완료 파일이 없습니다. 메인 페이지에서 "출력 제어" 또는 "최종 렌더링"을 먼저 실행하십시오.
-            </div>
-          )}
-        </div>
 
-        {/* Right upload form and controls */}
-        <div className="lg:col-span-3">
-          {selectedAsset ? (
-            <Card className="bg-card/30 border-border/15">
-              <CardHeader className="p-4 border-b border-border/10 flex flex-row items-center justify-between">
-                <div>
-                  <CardTitle className="text-sm font-bold text-foreground/90">채널 업로드 설정</CardTitle>
-                  <p className="text-[10px] text-muted-foreground/45 mt-0.5 font-mono">ID: {selectedAsset.publish_id}</p>
-                </div>
-                <Globe size={16} className="text-primary/70" />
-              </CardHeader>
-              <CardContent className="p-6 space-y-4">
-                {/* Platform select */}
-                <div className="space-y-1.5">
-                  <label className="text-[11px] text-muted-foreground/75 font-semibold">대상 채널</label>
-                  <div className="flex items-center gap-2">
-                    {["YouTube Shorts", "TikTok", "Instagram Reels"].map((p) => (
+                  {/* 정보 */}
+                  <div className="flex-1 min-w-0">
+                    {renamingId === ex.id ? (
+                      <input
+                        autoFocus
+                        value={renameValue}
+                        onChange={e => setRenameValue(e.target.value)}
+                        onBlur={() => commitRename(ex)}
+                        onKeyDown={e => {
+                          if (e.key === "Enter") commitRename(ex);
+                          if (e.key === "Escape") setRenamingId(null);
+                        }}
+                        className="w-full text-[15px] font-bold bg-secondary/40 border border-primary/40 rounded px-2 py-0.5 text-foreground/90 outline-none focus:border-primary"
+                      />
+                    ) : (
                       <button
-                        key={p}
-                        onClick={() => setPlatform(p)}
-                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all ${
-                          platform === p
-                            ? "bg-primary/20 border-primary text-primary"
-                            : "bg-secondary/40 border-border/10 text-muted-foreground/70 hover:text-foreground/80"
-                        }`}
+                        onClick={() => startRename(ex)}
+                        title="클릭하여 이름 변경"
+                        className="text-[15px] font-bold text-foreground/90 truncate max-w-full text-left hover:text-primary transition-colors"
                       >
-                        {p === "YouTube Shorts" && <Youtube size={12} className="text-red-500" />}
-                        {p}
+                        {ex.program_title || ex.program_id || "프로젝트"}
                       </button>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Title */}
-                <div className="space-y-1.5">
-                  <label className="text-[11px] text-muted-foreground/75 font-semibold">동영상 제목</label>
-                  <Input
-                    value={videoTitle}
-                    onChange={(e) => setVideoTitle(e.target.value)}
-                    className="bg-secondary/20 border-border/10 text-xs rounded-lg focus-visible:ring-primary/40"
-                  />
-                </div>
-
-                {/* Description */}
-                <div className="space-y-1.5">
-                  <label className="text-[11px] text-muted-foreground/75 font-semibold">설명글</label>
-                  <Textarea
-                    value={description}
-                    rows={4}
-                    onChange={(e) => setDescription(e.target.value)}
-                    className="bg-secondary/20 border-border/10 text-xs rounded-lg focus-visible:ring-primary/40 resize-none"
-                  />
-                </div>
-
-                {/* Tags */}
-                <div className="space-y-1.5">
-                  <label className="text-[11px] text-muted-foreground/75 font-semibold">태그 (쉼표 또는 띄어쓰기 구분)</label>
-                  <Input
-                    value={tags}
-                    onChange={(e) => setTags(e.target.value)}
-                    className="bg-secondary/20 border-border/10 text-xs rounded-lg focus-visible:ring-primary/40"
-                  />
-                </div>
-
-                {/* Result Message / Progress */}
-                {publishing && (
-                  <div className="p-4 bg-secondary/20 rounded-xl space-y-2 border border-border/10">
-                    <div className="flex items-center justify-between text-[11px]">
-                      <span className="text-muted-foreground/60 flex items-center gap-1.5">
-                        <span className="w-2 h-2 rounded-full bg-primary animate-ping" />
-                        SNS API 채널 전송 중...
-                      </span>
-                      <span className="font-mono text-primary font-bold">{pubProgress}%</span>
-                    </div>
-                    <div className="w-full bg-secondary/80 h-1.5 rounded-full overflow-hidden">
-                      <div className="bg-primary h-full transition-all duration-300" style={{ width: `${pubProgress}%` }} />
-                    </div>
-                  </div>
-                )}
-
-                {resultMsg && (
-                  <div className={`p-4 rounded-xl border flex items-start gap-3 ${
-                    resultMsg.status === "success" 
-                      ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-400" 
-                      : "bg-red-500/10 border-red-500/20 text-red-400"
-                  }`}>
-                    {resultMsg.status === "success" ? <CheckCircle size={16} className="mt-0.5" /> : <AlertCircle size={16} className="mt-0.5" />}
-                    <div className="text-xs">
-                      <p className="font-semibold text-foreground/90">{resultMsg.text}</p>
-                      {resultMsg.url && (
-                        <a 
-                          href={resultMsg.url} 
-                          target="_blank" 
-                          rel="noopener noreferrer" 
-                          className="mt-2 inline-flex items-center gap-1 text-primary hover:underline font-bold"
-                        >
-                          <Play size={10} className="fill-primary" />
-                          게시물 직접 보러가기
-                        </a>
+                    )}
+                    <div className="flex items-center gap-3 mt-1 text-[11px] text-muted-foreground/50">
+                      {ex.duration != null && (
+                        <span className="flex items-center gap-1">
+                          <Clock size={10} />
+                          {formatSecs(ex.duration)}
+                        </span>
+                      )}
+                      {ex.file_size != null && (
+                        <span>{(ex.file_size / 1024 / 1024).toFixed(1)} MB</span>
+                      )}
+                      {(ex.program_last_updated_at || ex.created_at) && (
+                        <span className="flex items-center gap-1">
+                          <Calendar size={10} />
+                          {new Date(ex.program_last_updated_at || ex.created_at!).toLocaleString()}
+                        </span>
                       )}
                     </div>
                   </div>
+
+                  {/* 액션 버튼들 */}
+                  <div className="flex items-center gap-2 flex-shrink-0">
+                    <button
+                      onClick={() => setPlayingId(playingId === ex.id ? null : ex.id)}
+                      className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-secondary/60 hover:bg-secondary text-xs font-medium transition-colors"
+                    >
+                      {playingId === ex.id ? <X size={13} /> : <Play size={13} />}
+                      {playingId === ex.id ? "닫기" : "재생"}
+                    </button>
+                    {ex.program_id && (
+                      <button
+                        onClick={() => onNavigateToProject?.(ex.program_id!)}
+                        className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-white/5 hover:bg-white/10 text-foreground/70 text-xs font-medium transition-colors border border-border/15"
+                      >
+                        <Edit3 size={13} />
+                        다시 편집
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {/* 인라인 플레이어 (컴팩트) */}
+                {playingId === ex.id && (
+                  <div className="mx-5 mb-3 rounded-xl overflow-hidden bg-black w-[360px] aspect-video">
+                    <video
+                      src={`${videoService.API_BASE_URL.replace("/api", "")}${ex.output_url}`}
+                      controls
+                      autoPlay
+                      className="w-full h-full"
+                    />
+                  </div>
                 )}
 
-                {/* Action Submit */}
-                <div className="pt-2">
-                  <Button
-                    onClick={handlePublish}
-                    disabled={publishing}
-                    className="w-full flex items-center justify-center gap-2 h-10 text-xs bg-primary hover:bg-primary-hover text-white rounded-lg font-bold"
-                  >
-                    <Share2 size={13} />
-                    {publishing ? "송출 처리 중..." : `${platform} 채널 즉시 업로드`}
-                  </Button>
+                {/* 하단: 저장 배지 + 플랫폼 버튼 */}
+                <div className="flex items-center gap-2 px-5 pb-4 flex-wrap">
+                  <span className="flex items-center gap-1 px-2 py-1 rounded-md bg-emerald-500/10 text-emerald-400 text-[10px] font-semibold border border-emerald-500/20">
+                    <Check size={9} />
+                    아카이브 저장됨
+                  </span>
+                  {PLATFORMS.map(({ key, label, icon: Icon, color }) => (
+                    <button
+                      key={key}
+                      title="연동 준비 중"
+                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border opacity-50 cursor-not-allowed transition-colors ${color}`}
+                    >
+                      <Icon size={12} />
+                      {label}
+                    </button>
+                  ))}
                 </div>
-              </CardContent>
-            </Card>
-          ) : (
-            <div className="bg-card/10 border border-border/10 rounded-xl p-12 text-center text-xs text-muted-foreground/40 h-full flex flex-col items-center justify-center gap-2">
-              <Share2 size={24} className="text-muted-foreground/30" />
-              업로드할 비디오를 왼쪽 목록에서 선택해 주세요.
-            </div>
-          )}
-        </div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );
