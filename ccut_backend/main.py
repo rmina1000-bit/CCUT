@@ -597,14 +597,16 @@ def _background_whisper_impl(source_id: str, video_path: str, fragments: list):
                       f"적용 완료 (ENFORCE)")
 
         # [R14] Read current model_size from config.yaml for metadata persistence
+        # [GPU-LIVE fix] 하드코딩 'whisper' → active.asr provider 참조 (whisper_vulkan 시 small 반영)
         import yaml as _yaml
         _config_path = os.path.join(os.path.dirname(__file__), "ai", "config.yaml")
         try:
             with open(_config_path, encoding="utf-8") as _f:
                 _cfg = _yaml.safe_load(_f)
+            _active_asr = _cfg.get("active", {}).get("asr", "whisper")
             current_model_size = (
                 _cfg.get("providers", {})
-                    .get("whisper", {})
+                    .get(_active_asr, {})
                     .get("config", {})
                     .get("model_size", "unknown")
             )

@@ -72,22 +72,35 @@ class WhisperVulkanAdapter(BaseAdapter, ASRProvider):
     def _ensure_loaded(self):
         if self._loaded:
             return
+        # [GUARD] 외부경로 의존 — 없으면 silent fail 금지, 명확·actionable 에러 발생.
+        #   복구: config.yaml providers.whisper_vulkan.config.cli_path 수정,
+        #         또는 active.asr 를 whisper(openai, CPU)로 되돌려 폴백.
         if not os.path.exists(self.cli_path):
-            self._load_error = f"whisper-cli 없음: {self.cli_path}"
+            self._load_error = (
+                f"whisper_vulkan 비활성: whisper-cli 없음 ({self.cli_path}). "
+                f"config.yaml providers.whisper_vulkan.config.cli_path 확인 또는 active.asr=whisper 로 폴백."
+            )
             self._loaded = False
+            print(f"[WhisperVulkan][FATAL] {self._load_error}", flush=True)
             raise RuntimeError(self._load_error)
         # 모델 선택 (small 1순위, 없으면 base fallback)
         if os.path.exists(self.model_path):
             self._active_model = self.model_path
         elif os.path.exists(self.fallback_model_path):
             self._active_model = self.fallback_model_path
-            print(f"[WhisperVulkan] small 모델 없음 → fallback: {self.fallback_model_path}")
+            print(f"[WhisperVulkan] small 모델 없음 → base fallback: {self.fallback_model_path}", flush=True)
         else:
-            self._load_error = f"모델 없음: {self.model_path} / {self.fallback_model_path}"
+            self._load_error = (
+                f"whisper_vulkan 비활성: 모델 없음 ({self.model_path} / {self.fallback_model_path}). "
+                f"config.yaml model_path 확인 또는 active.asr=whisper 로 폴백."
+            )
             self._loaded = False
+            print(f"[WhisperVulkan][FATAL] {self._load_error}", flush=True)
             raise RuntimeError(self._load_error)
         self._loaded = True
         self._load_error = None
+        # 실제 사용 모델 크기 (metadata 라벨용 — main.py가 active provider에서 읽음)
+        self.active_model_size = "small" if self._active_model == self.model_path else "base"
 
     # ──────────────────────────────────────────────
     def _extract_wav(self, video_path: str) -> str:
