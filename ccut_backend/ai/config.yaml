@@ -1,5 +1,5 @@
 active:
-  asr: whisper
+  asr: whisper_vulkan
   vl: null
   intent: null
 
@@ -9,6 +9,15 @@ providers:
     config:
       model_size: base
       device: cpu
+
+  whisper_vulkan:
+    adapter: WhisperVulkanAdapter
+    config:
+      cli_path: D:/CCUT_EXTERNAL_DATA/whisper_vulkan_test/whisper-cli.exe
+      model_path: D:/CCUT_EXTERNAL_DATA/whisper_vulkan_test/models/ggml-small.bin
+      fallback_model_path: D:/CCUT_EXTERNAL_DATA/whisper_vulkan_test/models/ggml-base.bin
+      model_size: small
+      threads: 6
 
   qwen3_asr:
     adapter: Qwen3ASRAdapter

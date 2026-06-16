@@ -11,6 +11,7 @@ from .interface import ASRProvider, VLProvider
 
 _ADAPTER_CLASS_MAP = {
     "WhisperAdapter": "ccut_backend.ai.adapters.whisper_adapter.WhisperAdapter",
+    "WhisperVulkanAdapter": "ccut_backend.ai.adapters.whisper_vulkan_adapter.WhisperVulkanAdapter",
 }
 
 
@@ -22,6 +23,9 @@ def _load_adapter_class(class_name: str):
     if class_name == "Qwen3ASRAdapter":
         from .adapters.qwen3_asr_adapter import Qwen3ASRAdapter
         return Qwen3ASRAdapter
+    if class_name == "WhisperVulkanAdapter":
+        from .adapters.whisper_vulkan_adapter import WhisperVulkanAdapter
+        return WhisperVulkanAdapter
     raise ValueError(f"Unknown adapter class: {class_name}")
 
 
