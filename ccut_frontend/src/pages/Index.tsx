@@ -1947,16 +1947,8 @@ const Index: React.FC = () => {
               };
               videoService.saveProjectState(activeNavItem, { ui_state: JSON.stringify(uiSnap) }).catch(() => {});
             }
-            // 전환된 프로젝트를 목록 맨 위로 올리고 마지막 작업 시각 갱신
-            if (newId && newId.startsWith("proj_")) {
-              const now = new Date();
-              const nowStr = String(now.getMonth() + 1) + "/" + String(now.getDate()) + " " + String(now.getHours()).padStart(2, "0") + ":" + String(now.getMinutes()).padStart(2, "0");
-              setProjects((prev) => {
-                const target = prev.find((p) => p.id === newId);
-                if (!target) return prev;
-                return [{ ...target, date: nowStr }, ...prev.filter((p) => p.id !== newId)];
-              });
-            }
+            // [FIX-LIST-ORDER] 프로젝트를 '여는(클릭) 것'은 조회이므로 목록 순서를 바꾸지 않는다.
+            // (Claude 채팅 사이드바 방식: 열람으로는 순서 불변, 실제 활동에서만 최상단으로)
             setActiveNavItem(newId);
           }}
           projects={projects}

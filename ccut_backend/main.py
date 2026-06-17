@@ -3073,7 +3073,15 @@ async def save_project_state(program_id: str, req: ProjectStateRequest, db: Sess
     if req.chat_state is not None: pg.chat_state = req.chat_state
     if req.reserve_state is not None: pg.reserve_state = req.reserve_state
     if req.ui_state is not None: pg.ui_state = req.ui_state
-    pg.last_updated_at = datetime.datetime.now()
+    # [FIX-LIST-ORDER] 순수 UI 스냅샷(ui_state만) 저장은 '프로젝트 열람/전환'에 따른 보존일 뿐
+    # 실제 작업 활동이 아니므로 recency(last_updated_at)를 갱신하지 않는다.
+    # (목록이 클릭만으로 맨 위로 튀는 현상 제거 — Claude 채팅 사이드바 방식)
+    is_pure_ui_snapshot = (
+        req.active_mode is None and req.chat_state is None
+        and req.reserve_state is None and req.ui_state is not None
+    )
+    if not is_pure_ui_snapshot:
+        pg.last_updated_at = datetime.datetime.now()
     db.commit()
     return {"status": "SAVED", "program_id": program_id}
 
