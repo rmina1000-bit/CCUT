@@ -794,6 +794,10 @@ const Index: React.FC = () => {
     return () => { alive = false; };
   }, []);
 
+  // [FIX-HYD-A] 마지막으로 하이드레이션한 프로젝트 id. 진짜 '프로젝트 전환'과
+  // '신규 업로드로 막 생성된 프로젝트(첫 하이드레이션)'를 구분하기 위한 기준점.
+  const previousHydratedProjectRef = useRef<string | null>(null);
+
   // [CCUT1.0.4 PROPOSALS PROJECT SOURCES HYDRATION]
   useEffect(() => {
     if (typeof window !== "undefined" && window.location.hash === "#debug-hydrate") {
@@ -805,24 +809,34 @@ const Index: React.FC = () => {
       return;
     }
 
+    // [FIX-HYD-A] '진짜 프로젝트 전환'만 클리어 대상. 첫 하이드레이션(마운트/업로드 직후
+    // 신규 프로젝트로 activeNavItem 최초 진입)은 전환이 아니므로 방금 분석한 세션을 보존한다.
+    const isRealProjectSwitch =
+      previousHydratedProjectRef.current !== null &&
+      previousHydratedProjectRef.current !== activeNavItem;
+    previousHydratedProjectRef.current = activeNavItem;
+
     let isMounted = true;
-    
+
     const hydrateProjectSources = async () => {
-      // fetch 전 즉시 클리어 — 이전 프로젝트 state가 새 프로젝트에 잔류하는 현상 제거
-      setSourceEntries([]);
-      setEditFragments([]);
-      setSourceFragments([]);
-      setProposals(null);
-      setCommittedProposalId(null);
-      setSelectedProposalId(null);
-      setReservedFragments([]);
-      setHoldPositions({});
-      setDeletedFragments([]);
-      setCurrentSourceId(null);
-      setCurrentVideoUrl(null);
-      setSingleEditOpen(false);
-      setSingleEditTarget(null);
-      setAppState("empty");
+      // [FIX-HYD-A] fetch 전 클리어 — 다른 프로젝트로 '전환'할 때만 수행.
+      // 신규 업로드로 막 생성된 프로젝트의 진행 중 세션은 지우지 않는다.
+      if (isRealProjectSwitch) {
+        setSourceEntries([]);
+        setEditFragments([]);
+        setSourceFragments([]);
+        setProposals(null);
+        setCommittedProposalId(null);
+        setSelectedProposalId(null);
+        setReservedFragments([]);
+        setHoldPositions({});
+        setDeletedFragments([]);
+        setCurrentSourceId(null);
+        setCurrentVideoUrl(null);
+        setSingleEditOpen(false);
+        setSingleEditTarget(null);
+        setAppState("empty");
+      }
 
       try {
         console.log(`[Hydration] Loading sources for project: ${activeNavItem}`);
@@ -835,19 +849,26 @@ const Index: React.FC = () => {
           return;
         }
 
-        // 3. 응답 sources.length === 0 이면 기존 세션 sourceEntries를 덮어쓰지 않도록 skip
+        // 3. 응답 sources.length === 0
+        //    NO_PROPOSALS_FOUND 는 "아직 제안 없음(분석 중)"일 수 있으므로,
+        //    [FIX-HYD-A] 세션에 이미 소스가 있으면 업로드 화면으로 내리지 않고 그대로 유지한다.
+        //    세션이 진짜 비어 있을 때만 empty 처리(빈 프로젝트 → 업로드 화면).
         if (!data.sources || data.sources.length === 0) {
-          console.log("[Hydration] Response sources length is 0. Clearing stale source state.");
-          setSourceEntries([]);
-          setSourceFragments([]);
-          setEditFragments([]);
-          setCurrentSourceId(null);
-          setCurrentVideoUrl(null);
-          setSemanticFragments([]);
-          setSelectedFragment(null);
-          setHighlightedPanoramaFrag(null);
-          setExpandedFragment(null);
-          setAppState("empty");  // [B-5-FIX] 빈 프로젝트 → 업로드 화면 (FAILURE 아님)
+          if (sourceEntries.length === 0) {
+            console.log("[Hydration] Response sources length is 0 and session empty. Showing upload screen.");
+            setSourceEntries([]);
+            setSourceFragments([]);
+            setEditFragments([]);
+            setCurrentSourceId(null);
+            setCurrentVideoUrl(null);
+            setSemanticFragments([]);
+            setSelectedFragment(null);
+            setHighlightedPanoramaFrag(null);
+            setExpandedFragment(null);
+            setAppState("empty");  // [B-5-FIX] 빈 프로젝트 → 업로드 화면 (FAILURE 아님)
+          } else {
+            console.log("[Hydration] Response sources length is 0 but session has sources. Keeping current session (proposals likely not generated yet).");
+          }
           return;
         }
 
