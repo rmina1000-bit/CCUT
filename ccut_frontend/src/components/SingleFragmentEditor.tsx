@@ -17,17 +17,29 @@ const LocalDialogContent = React.forwardRef<
   React.ElementRef<typeof DialogPrimitive.Content>,
   React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content> & {
     position: { x: number; y: number } | null;
+    size?: { width: number; height: number } | null;
   }
->(({ className, children, position, ...props }, ref) => {
-  const inlineStyle: React.CSSProperties = position
-    ? {
-        position: "fixed",
-        left: `${position.x}px`,
-        top: `${position.y}px`,
-        transform: "none",
-        margin: 0,
-      }
-    : {};
+>(({ className, children, position, size, ...props }, ref) => {
+  const inlineStyle: React.CSSProperties = {
+    ...(position
+      ? {
+          position: "fixed",
+          left: `${position.x}px`,
+          top: `${position.y}px`,
+          transform: "none",
+          margin: 0,
+        }
+      : {}),
+    // [PBE-RESIZE] 리사이즈된 경우에만 명시 크기 적용. 가로/세로 모두 뷰포트 밖 금지.
+    ...(size
+      ? {
+          width: `${size.width}px`,
+          height: `${size.height}px`,
+          maxWidth: "100vw",
+          maxHeight: "100vh",
+        }
+      : {}),
+  };
 
   return (
     <DialogPrimitive.Portal>
@@ -35,7 +47,7 @@ const LocalDialogContent = React.forwardRef<
         ref={ref}
         style={inlineStyle}
         className={cn(
-          "fixed left-[50%] top-[50%] z-50 grid w-full max-w-lg translate-x-[-50%] translate-y-[-50%] gap-4 border bg-background p-6 shadow-lg duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[state=closed]:slide-out-to-left-1/2 data-[state=closed]:slide-out-to-top-[48%] data-[state=open]:slide-in-from-left-1/2 data-[state=open]:slide-in-from-top-[48%] sm:rounded-lg",
+          "fixed left-[50%] top-[50%] z-50 flex flex-col overflow-hidden w-full max-w-lg translate-x-[-50%] translate-y-[-50%] gap-2 border bg-background px-5 py-3 shadow-lg duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[state=closed]:slide-out-to-left-1/2 data-[state=closed]:slide-out-to-top-[48%] data-[state=open]:slide-in-from-left-1/2 data-[state=open]:slide-in-from-top-[48%] sm:rounded-lg",
           className
         )}
         {...props}
@@ -77,12 +89,14 @@ export const SingleFragmentEditor: React.FC<SingleFragmentEditorProps> = ({
   const [frameCacheBuster, setFrameCacheBuster] = useState<Record<number, number>>({});
   const [dragging, setDragging] = useState<'left' | 'right' | null>(null);
   const [position, setPosition] = useState<{ x: number; y: number } | null>(null);
+  const [size, setSize] = useState<{ width: number; height: number } | null>(null);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
 
   const containerRef = useRef<HTMLDivElement>(null);
   const dialogRef = useRef<HTMLDivElement>(null);
   const dragRafRef = useRef<number | null>(null);
+  const resizeRafRef = useRef<number | null>(null);
 
   const readNumber = (...values: unknown[]) => {
     for (const value of values) {
@@ -119,6 +133,11 @@ export const SingleFragmentEditor: React.FC<SingleFragmentEditorProps> = ({
     setImageErrorAttempts({});
     setFrameCacheBuster({});
     setPosition(null);
+    // [PBE-RESIZE] 열 때 확정 높이를 부여 → flex 세로 분배가 안정적으로 동작(레일 항상 노출).
+    setSize({
+      width: Math.min(720, Math.round(window.innerWidth * 0.92)),
+      height: Math.min(640, Math.round(window.innerHeight * 0.9)),
+    });
     setCurrentIndex(0);
     setIsPlaying(false);
 
@@ -205,6 +224,30 @@ export const SingleFragmentEditor: React.FC<SingleFragmentEditorProps> = ({
 
     return () => clearInterval(interval);
   }, [isPlaying, durationSec]);
+
+  // [PBE-RESIZE] 브라우저 창 크기가 줄어들면 모달 크기/위치를 뷰포트 안으로 다시 가둔다.
+  useEffect(() => {
+    const clampToViewport = () => {
+      setSize((prev) =>
+        prev
+          ? {
+              width: Math.min(prev.width, window.innerWidth),
+              height: Math.min(prev.height, window.innerHeight),
+            }
+          : prev
+      );
+      setPosition((prev) => {
+        if (!prev || !dialogRef.current) return prev;
+        const rect = dialogRef.current.getBoundingClientRect();
+        return {
+          x: Math.max(0, Math.min(prev.x, window.innerWidth - rect.width)),
+          y: Math.max(0, Math.min(prev.y, window.innerHeight - rect.height)),
+        };
+      });
+    };
+    window.addEventListener("resize", clampToViewport);
+    return () => window.removeEventListener("resize", clampToViewport);
+  }, []);
 
   if (!fragment) return null;
 
@@ -358,14 +401,82 @@ export const SingleFragmentEditor: React.FC<SingleFragmentEditorProps> = ({
     window.addEventListener("mouseup", handleMouseUp);
   };
 
+  // [PBE-RESIZE] 우하단 핸들 드래그로 크기 조절. 가로/세로 모두 뷰포트(브라우저) 밖으로 못 나가게 clamp.
+  const MIN_W = 360;
+  const MIN_H = 320;
+  const handleResizeMouseDown = (e: React.MouseEvent) => {
+    if (!dialogRef.current) return;
+    e.preventDefault();
+    e.stopPropagation();
+
+    const rect = dialogRef.current.getBoundingClientRect();
+    const startX = e.clientX;
+    const startY = e.clientY;
+    const initialW = rect.width;
+    const initialH = rect.height;
+    const fixedLeft = rect.left;
+    const fixedTop = rect.top;
+
+    // 리사이즈 중에는 위치를 현재 좌상단에 고정(센터 변환 해제) → 우하단으로만 확장.
+    if (dialogRef.current) {
+      dialogRef.current.style.left = `${fixedLeft}px`;
+      dialogRef.current.style.top = `${fixedTop}px`;
+      dialogRef.current.style.transform = "none";
+      dialogRef.current.style.margin = "0";
+    }
+
+    let latestW = initialW;
+    let latestH = initialH;
+
+    const handleMouseMove = (moveEvent: MouseEvent) => {
+      const deltaX = moveEvent.clientX - startX;
+      const deltaY = moveEvent.clientY - startY;
+
+      // 우/하단 가장자리가 뷰포트를 넘지 못하도록 좌상단 기준 최대치 계산
+      const maxW = Math.max(MIN_W, window.innerWidth - fixedLeft);
+      const maxH = Math.max(MIN_H, window.innerHeight - fixedTop);
+
+      latestW = Math.max(MIN_W, Math.min(maxW, initialW + deltaX));
+      latestH = Math.max(MIN_H, Math.min(maxH, initialH + deltaY));
+
+      if (resizeRafRef.current === null) {
+        resizeRafRef.current = requestAnimationFrame(() => {
+          resizeRafRef.current = null;
+          if (dialogRef.current) {
+            dialogRef.current.style.width = `${latestW}px`;
+            dialogRef.current.style.height = `${latestH}px`;
+            dialogRef.current.style.maxWidth = "100vw";
+            dialogRef.current.style.maxHeight = "100vh";
+          }
+        });
+      }
+    };
+
+    const handleMouseUp = () => {
+      window.removeEventListener("mousemove", handleMouseMove);
+      window.removeEventListener("mouseup", handleMouseUp);
+      if (resizeRafRef.current !== null) {
+        cancelAnimationFrame(resizeRafRef.current);
+        resizeRafRef.current = null;
+      }
+      // 위치도 함께 고정(센터 변환 → 좌표 고정 전환 유지)
+      setPosition({ x: fixedLeft, y: fixedTop });
+      setSize({ width: latestW, height: latestH });
+    };
+
+    window.addEventListener("mousemove", handleMouseMove);
+    window.addEventListener("mouseup", handleMouseUp);
+  };
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange} modal={false}>
       <LocalDialogContent
         ref={dialogRef}
         position={position}
-        className="sm:max-w-[720px] w-[90vw] bg-[hsl(228,12%,10%)] border-border/15 text-foreground p-6"
+        size={size}
+        className="sm:max-w-[720px] w-[90vw] max-h-[100vh] bg-[hsl(228,12%,10%)] border-border/15 text-foreground"
       >
-        <DialogHeader className="mb-4 select-none cursor-move" onMouseDown={handleTitleMouseDown}>
+        <DialogHeader className="mb-1 select-none cursor-move flex-shrink-0" onMouseDown={handleTitleMouseDown}>
           <div className="flex items-center justify-between">
             <DialogTitle className="text-base font-bold text-foreground">조각 정밀 편집 (1단계 파노라마)</DialogTitle>
             <span className="text-[10px] text-muted-foreground/50 font-mono bg-secondary/30 px-2 py-0.5 rounded">
@@ -381,9 +492,12 @@ export const SingleFragmentEditor: React.FC<SingleFragmentEditorProps> = ({
           </DialogDescription>
         </DialogHeader>
 
+        {/* [PBE-RESIZE] 본문 = flex 세로 분배. 미리보기는 남는 공간에서 줄고, 레일은 고정(절대 안 가려짐) */}
+        <div className="flex-1 min-h-0 flex flex-col gap-2 overflow-hidden">
+
         {/* Playback Preview Box */}
         {startSec !== undefined && endSec !== undefined && (
-          <div className="relative aspect-video w-full bg-[hsl(228,12%,6%)] border border-border/10 rounded-md overflow-hidden flex items-center justify-center mb-4">
+          <div className="relative flex-1 min-h-0 w-full bg-[hsl(228,12%,6%)] border border-border/10 rounded-md overflow-hidden flex items-center justify-center">
             <img
               src={`http://127.0.0.1:8000/static/thumbnails/P_${fragment.fragment_id}_${currentIndex}.jpg` +
                 (frameCacheBuster[currentIndex] ? `?t=${frameCacheBuster[currentIndex]}` : "")}
@@ -398,7 +512,7 @@ export const SingleFragmentEditor: React.FC<SingleFragmentEditorProps> = ({
 
         {/* Play / Pause Toggle Button */}
         {startSec !== undefined && endSec !== undefined && (
-          <div className="flex items-center justify-center mb-4">
+          <div className="flex items-center justify-center flex-shrink-0">
             <Button
               type="button"
               variant="outline"
@@ -427,12 +541,14 @@ export const SingleFragmentEditor: React.FC<SingleFragmentEditorProps> = ({
 
         {/* 12 Frame Panorama Rail */}
         {startSec !== undefined && endSec !== undefined ? (
-          <div className="space-y-3 mb-6 mt-4">
-            <div className="relative pt-6">
+          <div className="space-y-1.5 flex-shrink-0">
+            <div className="relative pt-3">
+              {/* [PBE-RAIL] 프레임 폭 고정 → 좁으면 가로 스크롤바로 이동, 넓으면 더 많이 보임 */}
+              <div className="overflow-x-auto pbe-rail-scroll">
               <div
                 ref={containerRef}
                 onMouseDown={handleRailMouseDown}
-                className="relative w-full h-[84px] bg-[hsl(228,12%,6%)] border border-border/10 rounded-md overflow-hidden flex select-none cursor-pointer"
+                className="relative w-max h-[84px] bg-[hsl(228,12%,6%)] border border-border/10 rounded-md overflow-hidden flex select-none cursor-pointer"
               >
                 {Array.from({ length: 12 }).map((_, index) => {
                   const isGrayscale = index < leftCut || index >= rightCut;
@@ -443,7 +559,7 @@ export const SingleFragmentEditor: React.FC<SingleFragmentEditorProps> = ({
                   return (
                     <div
                       key={index}
-                      className="relative flex-1 h-full border-r border-border/10 last:border-r-0 overflow-hidden bg-black/40 flex items-center justify-center pointer-events-none"
+                      className="relative w-[56px] flex-shrink-0 h-full border-r border-border/10 last:border-r-0 overflow-hidden bg-black/40 flex items-center justify-center pointer-events-none"
                     >
                       {!isLoaded && (
                         <div className="absolute inset-0 flex items-center justify-center bg-black/70 z-10">
@@ -506,6 +622,7 @@ export const SingleFragmentEditor: React.FC<SingleFragmentEditorProps> = ({
                   </div>
                 </div>
               </div>
+              </div>
             </div>
 
             {/* Time Labels Rail */}
@@ -515,7 +632,7 @@ export const SingleFragmentEditor: React.FC<SingleFragmentEditorProps> = ({
             </div>
 
             {/* Inactive Zone Labels */}
-            <div className="flex justify-between items-center text-[10px] text-muted-foreground/80 mt-2 px-1">
+            <div className="flex justify-between items-center text-[10px] text-muted-foreground/80 mt-1 px-1">
               <span className={leftCut > 0 ? "text-red-400 font-medium" : "opacity-30"}>앞 버림</span>
               <span className="text-primary font-bold">살아남는 구간</span>
               <span className={rightCut < 12 ? "text-blue-400 font-medium" : "opacity-30"}>뒤 버림</span>
@@ -527,7 +644,9 @@ export const SingleFragmentEditor: React.FC<SingleFragmentEditorProps> = ({
           </div>
         )}
 
-        <DialogFooter className="gap-2 sm:gap-0 border-t border-border/10 pt-4 flex items-center justify-end mt-4">
+        </div>
+
+        <DialogFooter className="gap-1.5 border-t border-border/10 pt-2 flex items-center justify-end flex-shrink-0">
           <Button
             type="button"
             variant="ghost"
@@ -552,6 +671,18 @@ export const SingleFragmentEditor: React.FC<SingleFragmentEditorProps> = ({
             적용
           </Button>
         </DialogFooter>
+
+        {/* [PBE-RESIZE] 우하단 리사이즈 핸들 */}
+        <div
+          onMouseDown={handleResizeMouseDown}
+          title="크기 조절"
+          className="absolute bottom-0 right-0 w-5 h-5 cursor-nwse-resize z-50 flex items-end justify-end p-0.5 text-muted-foreground/50 hover:text-foreground"
+          style={{ touchAction: "none" }}
+        >
+          <svg viewBox="0 0 10 10" className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth="1.2">
+            <path d="M9 3 L3 9 M9 6.5 L6.5 9" strokeLinecap="round" />
+          </svg>
+        </div>
       </LocalDialogContent>
     </Dialog>
   );

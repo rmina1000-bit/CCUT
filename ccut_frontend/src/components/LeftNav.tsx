@@ -38,6 +38,18 @@ const LeftNav: React.FC<LeftNavProps> = ({
   // [SOFT-DELETE] 강한 삭제 경고 모달 대상
   const [confirmDelete, setConfirmDelete] = useState<{ ids: string[]; names: string[] } | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
+  // [NAV-SCROLL] 현재 열린(활성) 프로젝트 항목 — 목록 아래쪽에 있어도 보이도록 스크롤 대상
+  const activeItemRef = useRef<HTMLDivElement>(null);
+
+  // [NAV-SCROLL] 프로젝트가 열릴 때(특히 아카이브에서 이동) 활성 항목을 화면 안으로 끌어온다.
+  // block:"nearest" → 아래에 가려져 있으면 최소한으로 스크롤해 하단 가장자리에 보이게 한다.
+  useEffect(() => {
+    if (!activeItem || !activeItem.startsWith("proj_")) return;
+    const id = window.requestAnimationFrame(() => {
+      activeItemRef.current?.scrollIntoView({ block: "nearest" });
+    });
+    return () => window.cancelAnimationFrame(id);
+  }, [activeItem, projects]);
 
   const requestDelete = (ids: string[], names: string[]) => {
     setConfirmDelete({ ids, names });
@@ -220,7 +232,7 @@ const LeftNav: React.FC<LeftNavProps> = ({
             const isActive = activeItem === proj.id;
             const isChecked = selectedIds.has(proj.id);
             return (
-              <div key={proj.id} className="relative group">
+              <div key={proj.id} className="relative group" ref={isActive ? activeItemRef : undefined}>
                 {renamingId === proj.id ? (
                   <div className="px-2 py-2">
                     <input
