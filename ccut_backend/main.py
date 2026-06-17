@@ -277,6 +277,13 @@ async def health_check():
     return {"status": "OK", "timestamp": time.time()}
 
 
+@app.get("/system/diagnostics")
+async def system_diagnostics():
+    # [FIX-RUNTIME-1a] GPU ASR 런타임 환경진단(read 전용). /health(liveness)와 분리.
+    from ai.diagnostics import collect_diagnostics
+    return collect_diagnostics()
+
+
 @app.get("/static/thumbnails/P_{prefix}_{i}.jpg")
 async def get_panorama_thumbnail(prefix: str, i: int):
     # Serve panorama thumbnail if exists, otherwise fallback or generate on the fly
