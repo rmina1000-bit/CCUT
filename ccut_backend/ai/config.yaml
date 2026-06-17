@@ -13,9 +13,9 @@ providers:
   whisper_vulkan:
     adapter: WhisperVulkanAdapter
     config:
-      cli_path: D:/CCUT_EXTERNAL_DATA/whisper_vulkan_test/whisper-cli.exe
-      model_path: D:/CCUT_EXTERNAL_DATA/whisper_vulkan_test/models/ggml-small.bin
-      fallback_model_path: D:/CCUT_EXTERNAL_DATA/whisper_vulkan_test/models/ggml-base.bin
+      cli_path: runtime/whisper-vulkan/whisper-cli.exe
+      model_path: runtime/whisper-vulkan/models/ggml-small.bin
+      fallback_model_path: runtime/whisper-vulkan/models/ggml-base.bin
       model_size: small
       threads: 6
 

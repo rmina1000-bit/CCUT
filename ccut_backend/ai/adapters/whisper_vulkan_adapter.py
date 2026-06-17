@@ -63,9 +63,18 @@ class WhisperVulkanAdapter(BaseAdapter, ASRProvider):
     def __init__(self, config: dict):
         super().__init__(config)
         cfg = config or {}
-        self.cli_path = cfg.get("cli_path", r"D:/CCUT_EXTERNAL_DATA/whisper_vulkan_test/whisper-cli.exe")
-        self.model_path = cfg.get("model_path", r"D:/CCUT_EXTERNAL_DATA/whisper_vulkan_test/models/ggml-small.bin")
-        self.fallback_model_path = cfg.get("fallback_model_path", r"D:/CCUT_EXTERNAL_DATA/whisper_vulkan_test/models/ggml-base.bin")
+        # [FIX-RUNTIME-0] 표준 런타임 위치(프로젝트 루트/runtime/whisper-vulkan). 외부경로(D:/CCUT_EXTERNAL_DATA) 의존 제거.
+        # _ROOT = 이 파일(ccut_backend/ai/adapters/)에서 3단계 상위 = 프로젝트 루트(D:/CCUT1.0.4).
+        _ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
+        _RT = os.path.join(_ROOT, "runtime", "whisper-vulkan")
+
+        def _resolve(p: str) -> str:
+            # 절대경로는 그대로, 상대경로는 프로젝트 루트 기준으로 해석(서버 실행 cwd 무관 보장).
+            return p if os.path.isabs(p) else os.path.join(_ROOT, p)
+
+        self.cli_path = _resolve(cfg.get("cli_path", os.path.join(_RT, "whisper-cli.exe")))
+        self.model_path = _resolve(cfg.get("model_path", os.path.join(_RT, "models", "ggml-small.bin")))
+        self.fallback_model_path = _resolve(cfg.get("fallback_model_path", os.path.join(_RT, "models", "ggml-base.bin")))
         self.threads = int(cfg.get("threads", 6))
         self._active_model = None
 
