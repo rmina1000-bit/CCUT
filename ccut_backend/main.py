@@ -827,19 +827,39 @@ def _background_signal_analysis(source_id: str, video_path: str, fragments: list
     """
     [STEP 2] Signal Worker: 오디오 에너지(RMS) 분석 및 Evidence Board 업데이트
     """
-    from engine.signal_processor import SignalProcessor
+    from engine.signal_processor import SignalProcessor, extract_motion_curve
     print(f"[SIGNAL BG] Analysis STARTED for source_id={source_id}")
-    
+
     sp = SignalProcessor(video_path)
+
+    # [MOTION-WIRING] 모션 곡선 1패스 추출 → 조각별 평균 → 영상 내 max 기준 [0,1] 스케일.
+    # calculate_edit_value 의 motion_score(가중 0.3)에 실제 시각 변별 신호를 공급한다.
+    motion_by_fid = {}
+    try:
+        total_dur = max((f["start_time"] + f["duration"]) for f in fragments) if fragments else 0.0
+        curve = extract_motion_curve(video_path, total_dur)
+        raw = {}
+        for frag in fragments:
+            s = frag["start_time"]
+            e = s + frag["duration"]
+            scores = [c["score"] for c in curve if s <= c["t"] < e]
+            raw[frag["fragment_id"]] = (sum(scores) / len(scores)) if scores else 0.0
+        hi = max(raw.values()) if raw else 0.0
+        motion_by_fid = {fid: round(v / hi, 4) if hi > 0 else 0.0 for fid, v in raw.items()}
+        print(f"[SIGNAL BG][MOTION] curve {len(curve)} samples, "
+              f"fragments {len(raw)}, max_raw {hi:.4f}")
+    except Exception as e:
+        print(f"[SIGNAL BG][MOTION] 추출 실패(무시, motion=0): {e}")
+
     for frag in fragments:
         fid = frag["fragment_id"]
         start = frag["start_time"]
         dur = frag["duration"]
-        
+
         try:
             # 1. 오디오 에너지(RMS) 추출
             energy = sp.get_rms_energy(start, dur)
-            
+
             # 2. Evidence Board 필드 병합 (Field-level merge)
             bams.update_evidence(fid, {
                 "source_id": source_id,
@@ -847,6 +867,7 @@ def _background_signal_analysis(source_id: str, video_path: str, fragments: list
                 "start": start,
                 "end": start + dur,
                 "audio_energy": energy,
+                "motion_score": motion_by_fid.get(fid, 0.0),
                 "confidence": 0.8
             })
             bams.flush_evidence(fid)
@@ -1103,9 +1124,11 @@ async def generate_fragments(
         }
         _fragment_job_registry[source_id]["timing"]["upload_start"] = upload_start
 
+        # [MOTION-WIRING] signal_analysis(motion+audio)를 whisper(=의미조각화·edit_value 트리거)보다
+        # 먼저 실행해 motion_score가 calculate_edit_value 시점에 evidence에 존재하도록 보장.
+        background_tasks.add_task(_background_signal_analysis, source_id, resolved_path, fragments)
         background_tasks.add_task(_background_whisper, source_id, resolved_path, fragments)
         background_tasks.add_task(_background_panorama, source_id, resolved_path, fragments)
-        background_tasks.add_task(_background_signal_analysis, source_id, resolved_path, fragments)
 
     print(f"[GENERATE-FRAGMENTS] L1 완료. {len(fragments)}개 Virtual Fragment 즉시 반환.")
 
