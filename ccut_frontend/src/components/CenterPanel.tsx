@@ -393,9 +393,22 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
         }
       }
 
-      const finalFallback = videoUrl ?? null;
-      console.log(`[VIDEO_URL_RESOLVE] fragId=${fragId} matchedAlias=null resolvedVideoUrl=${finalFallback} fallbackUsed=1`);
-      return finalFallback;
+      // [PLAYBACK-ORPHAN-A] fragId alias 매칭 실패 = 고아 제안(재분석으로 semantic 조각 재생성되어
+      // 제안 시퀀스의 옛 fragId가 사라진 상태). 전역 1번영상으로 떨어지지 않고,
+      // fragId에 박힌 source_id(SF_<hash>_SRC_<srcid>)로 해당 소스 영상을 해석한다.
+      const sidMatch = fragId.match(/SRC_[0-9A-Za-z]+/);
+      if (sidMatch) {
+        const sid = sidMatch[0];
+        const srcEntry = sourceEntries.find(e => e.source_id === sid);
+        if (srcEntry && srcEntry.video_url) {
+          console.log(`[VIDEO_URL_RESOLVE] fragId=${fragId} matchedAlias=null resolvedBy=source_id:${sid} resolvedVideoUrl=${srcEntry.video_url} fallbackUsed=2`);
+          return srcEntry.video_url;
+        }
+      }
+
+      // source_id 로도 못 찾음 → 전역 1번영상 반복 금지(클립별 오재생 방지). null 반환, 상위에서 처리.
+      console.log(`[VIDEO_URL_RESOLVE] fragId=${fragId} matchedAlias=null source_id 해석 실패 -> null fallbackUsed=3`);
+      return null;
     },
     [fragments, sourceFragments, sourceEntries, videoUrl]
   );
