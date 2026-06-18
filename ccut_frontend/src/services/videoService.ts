@@ -4,6 +4,23 @@
 
 import { fetcher, API_BASE_URL } from "./api";
 
+// [FIX-RUNTIME-1b] /system/diagnostics 응답(라이브 JSON 기준)
+export interface SystemDiagnostics {
+    status: "ok" | "warning" | "fail";
+    current_asr_provider: string;
+    whisper_vulkan_health: { ok?: boolean | null; loaded?: boolean | null; error?: string | null; model_id?: string | null };
+    cli_path_exists: boolean;
+    model_path_exists: boolean;
+    fallback_model_path_exists: boolean;
+    ffmpeg_available: boolean;
+    runtime_dir_exists: boolean;
+    storage_free_gb: number | null;
+    cpu_fallback_available: boolean;
+    cli_path?: string;
+    model_path?: string;
+    fallback_model_path?: string;
+}
+
 export const videoService = {
     API_BASE_URL,
     uploadVideo: async (file: File): Promise<{
@@ -94,6 +111,11 @@ export const videoService = {
 
     getFragmentStatus: async (sourceId: string) => {
         return await fetcher(`/generate-fragments/status/${encodeURIComponent(sourceId)}`);
+    },
+
+    // [FIX-RUNTIME-1b] GPU ASR 런타임 환경진단 (read 전용). 백엔드 /system/diagnostics 소비.
+    getSystemDiagnostics: async (): Promise<SystemDiagnostics> => {
+        return await fetcher(`/system/diagnostics`);
     },
 
     getFragmentsBySource: async (sourceId: string) => {

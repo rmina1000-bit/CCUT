@@ -9,6 +9,7 @@ import { useProposalState } from "@/hooks/useProposalState";
 import { ArchivePanel } from "@/components/ArchivePanel";
 import { SnsUploadPanel } from "@/components/SnsUploadPanel";
 import { AccountPanel } from "@/components/AccountPanel";
+import { SettingsPanel } from "@/components/SettingsPanel";
 import { SingleFragmentEditor } from "@/components/SingleFragmentEditor";
 // [PBE REBUILD 2-1] 기존 PBE 컴포넌트 runtime import 제거. 타입만 임시 유지(새 편집창 신설 시 완전 제거).
 // import PrecisionBoundaryEditor from "@/features/pbe/PrecisionBoundaryEditor";
@@ -805,7 +806,8 @@ const Index: React.FC = () => {
       return;
     }
     const savedActiveProject = typeof window !== "undefined" ? localStorage.getItem("ccut_active_project_id") : null;
-    if (!savedActiveProject || savedActiveProject === "projects" || !activeNavItem || activeNavItem === "projects" || activeNavItem === "default_project" || activeNavItem === "__new__") {
+    if (!savedActiveProject || savedActiveProject === "projects" || !activeNavItem || activeNavItem === "projects" || activeNavItem === "default_project" || activeNavItem === "__new__" || activeNavItem === "settings") {
+      // [FIX-RUNTIME-1b] 'settings'(환경진단 화면) 전환은 프로젝트 hydration 트리거가 아님 → 세션 보존.
       return;
     }
 
@@ -1997,8 +1999,10 @@ const Index: React.FC = () => {
         />
       </div>
 
-      <div style={!(activeNavItem === "archive" || activeNavItem === "upload" || activeNavItem === "account") ? { width: centerWidth, flexShrink: 0 } : { flex: 1, minWidth: 0 }} className="h-full">
-        {activeNavItem === "archive" ? (
+      <div style={!(activeNavItem === "archive" || activeNavItem === "upload" || activeNavItem === "account" || activeNavItem === "settings") ? { width: centerWidth, flexShrink: 0 } : { flex: 1, minWidth: 0 }} className="h-full">
+        {activeNavItem === "settings" ? (
+          <SettingsPanel />
+        ) : activeNavItem === "archive" ? (
           <ArchivePanel
             onNavigateToProject={(id) => setActiveNavItem(id)}
             onRenameProject={(id, newName) => {
