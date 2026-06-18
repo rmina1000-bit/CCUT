@@ -387,7 +387,7 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
           const hasMatch = fAliases.some(alias => queryAliases.includes(alias));
           if (hasMatch) {
             const resolvedVideoUrl = entry.video_url || videoUrl || null;
-            console.log(`[VIDEO_URL_RESOLVE] fragId=${fragId} matchedAlias=${f.fragment_id} resolvedVideoUrl=${resolvedVideoUrl} fallbackUsed=0`);
+            import.meta.env.DEV && console.log(`[VIDEO_URL_RESOLVE] fragId=${fragId} matchedAlias=${f.fragment_id} resolvedVideoUrl=${resolvedVideoUrl} fallbackUsed=0`);
             return resolvedVideoUrl;
           }
         }
@@ -401,13 +401,13 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
         const sid = sidMatch[0];
         const srcEntry = sourceEntries.find(e => e.source_id === sid);
         if (srcEntry && srcEntry.video_url) {
-          console.log(`[VIDEO_URL_RESOLVE] fragId=${fragId} matchedAlias=null resolvedBy=source_id:${sid} resolvedVideoUrl=${srcEntry.video_url} fallbackUsed=2`);
+          import.meta.env.DEV && console.log(`[VIDEO_URL_RESOLVE] fragId=${fragId} matchedAlias=null resolvedBy=source_id:${sid} resolvedVideoUrl=${srcEntry.video_url} fallbackUsed=2`);
           return srcEntry.video_url;
         }
       }
 
       // source_id 로도 못 찾음 → 전역 1번영상 반복 금지(클립별 오재생 방지). null 반환, 상위에서 처리.
-      console.log(`[VIDEO_URL_RESOLVE] fragId=${fragId} matchedAlias=null source_id 해석 실패 -> null fallbackUsed=3`);
+      import.meta.env.DEV && console.log(`[VIDEO_URL_RESOLVE] fragId=${fragId} matchedAlias=null source_id 해석 실패 -> null fallbackUsed=3`);
       return null;
     },
     [fragments, sourceFragments, sourceEntries, videoUrl]
@@ -433,8 +433,16 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
     ? normalizeMediaUrl((proposals.B as any).preview_url)
     : null;
 
-  const playerVideoUrlA = previewUrlA ?? getVideoUrlForProposal("A") ?? videoUrl ?? null;
-  const playerVideoUrlB = previewUrlB ?? getVideoUrlForProposal("B") ?? videoUrl ?? null;
+  // [RENDER-LOOP-A1] 메모이즈 — onTimeUpdate→setProposalTime 재렌더마다 getVideoUrlForProposal
+  // (→getVideoUrlForFrag+console.log)이 재실행되어 로그 폭주·메인스레드 점유하던 핫패스 차단.
+  const playerVideoUrlA = useMemo(
+    () => previewUrlA ?? getVideoUrlForProposal("A") ?? videoUrl ?? null,
+    [previewUrlA, getVideoUrlForProposal, videoUrl]
+  );
+  const playerVideoUrlB = useMemo(
+    () => previewUrlB ?? getVideoUrlForProposal("B") ?? videoUrl ?? null,
+    [previewUrlB, getVideoUrlForProposal, videoUrl]
+  );
 
   const buildSeqFrags = useCallback(
     (proposalKey: "A" | "B"): Fragment[] => {
@@ -502,7 +510,7 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
 
       endSecRef.current = endSec;
 
-      console.log("[PLAYFRAG]", {
+      import.meta.env.DEV && console.log("[PLAYFRAG]", {
         player,
         fragment_id: frag?.fragment_id,
         display_id: (frag as any)?.display_id,
@@ -518,7 +526,7 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
         target_seek: startSec
       });
 
-      console.log(
+      import.meta.env.DEV && console.log(
         "[FPS_AUDIT_PLAYFRAG_JSON]\n" +
         JSON.stringify(
           {
