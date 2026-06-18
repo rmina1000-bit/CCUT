@@ -409,6 +409,8 @@ const Index: React.FC = () => {
         } else {
           const newRes = await videoService.createProject();
           projectId = newRes.program_id;
+          // [FIX-HYD-EMPTY] 업로드-생성 프로젝트 표식 → hydration fetch-전 클리어 스킵(분석 세션 보존)
+          justCreatedProjectRef.current = projectId;
           setActiveNavItem(projectId);
           setProjects((prev) => [{ id: projectId, name: newRes.name, date: dateStr, count: fileCount }, ...prev]);
         }
@@ -798,6 +800,9 @@ const Index: React.FC = () => {
   // [FIX-HYD-A] 마지막으로 하이드레이션한 프로젝트 id. 진짜 '프로젝트 전환'과
   // '신규 업로드로 막 생성된 프로젝트(첫 하이드레이션)'를 구분하기 위한 기준점.
   const previousHydratedProjectRef = useRef<string | null>(null);
+  // [FIX-HYD-EMPTY] 방금 업로드로 생성한 프로젝트 id. 분석 중 신규 프로젝트로 진입할 때
+  // hydration의 fetch-전 클리어가 갓 만든 세션을 비우지 않도록 1회 표식(소비형).
+  const justCreatedProjectRef = useRef<string | null>(null);
 
   // [CCUT1.0.4 PROPOSALS PROJECT SOURCES HYDRATION]
   useEffect(() => {
@@ -816,14 +821,17 @@ const Index: React.FC = () => {
     const isRealProjectSwitch =
       previousHydratedProjectRef.current !== null &&
       previousHydratedProjectRef.current !== activeNavItem;
+    // [FIX-HYD-EMPTY] 방금 업로드로 생성한 프로젝트면 fetch-전 클리어 스킵(분석 세션 보존). 표식은 1회 소비.
+    const isJustCreated = justCreatedProjectRef.current === activeNavItem;
+    if (isJustCreated) justCreatedProjectRef.current = null;
     previousHydratedProjectRef.current = activeNavItem;
 
     let isMounted = true;
 
     const hydrateProjectSources = async () => {
       // [FIX-HYD-A] fetch 전 클리어 — 다른 프로젝트로 '전환'할 때만 수행.
-      // 신규 업로드로 막 생성된 프로젝트의 진행 중 세션은 지우지 않는다.
-      if (isRealProjectSwitch) {
+      // [FIX-HYD-EMPTY] 단, 업로드-생성 직후(분석 중) 프로젝트는 제외 — 갓 만든 세션 보존.
+      if (isRealProjectSwitch && !isJustCreated) {
         setSourceEntries([]);
         setEditFragments([]);
         setSourceFragments([]);
