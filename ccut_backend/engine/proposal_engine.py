@@ -178,6 +178,17 @@ class ProposalEngine:
         except Exception as hrs_err:
             print(f"[HUMAN_REALITY_SCORE][ERROR] Failed to evaluate human reality score: {hrs_err}")
 
+        # [DIRECTOR_LAYER_V0] 배치 재설계 (selection 불변, 순서만). hard_guard 글로벌정렬을 source-lock으로 덮는다.
+        if getattr(self, "ARRANGE_ENABLED", False):
+            for p in proposals:
+                try:
+                    _before = [str(f.get("source_id"))[-4:] for f in p["sequence"]]
+                    p["sequence"] = self.arrange_fragments(p["sequence"])
+                    _after = [str(f.get("source_id"))[-4:] for f in p["sequence"]]
+                    print(f"[DIRECTOR_LAYER_V0] {p.get('mode')} src reorder: {_before} -> {_after}")
+                except Exception as arr_err:
+                    print(f"[DIRECTOR_LAYER_V0][ERROR] arrange failed ({p.get('mode')}): {arr_err}")
+
         for p in proposals:
             p["project_id"] = project_id
             p["source_ids"] = source_ids
@@ -192,6 +203,49 @@ class ProposalEngine:
 
         print(f"[PROPOSAL ENGINE] generate_proposals_from_fragments EXIT: {project_id}")
         return proposals
+
+    # [DIRECTOR_LAYER_V0] config 플래그 — False면 기존 배치(hard_guard 글로벌정렬) 유지
+    ARRANGE_ENABLED = True
+
+    def arrange_fragments(self, sequence):
+        """[DIRECTOR_LAYER_V0] 선택된 조각의 '순서만' 재배치 (selection 불변).
+        - Source-Lock: 같은 source_id 조각을 한 블록으로 묶고 블록 내부는 원본 시간순
+          → '같은 영상이 떠났다 다시 나오는'(왔다갔다=소스 재등장)을 구조적으로 차단.
+        - 블록 순서: tail motion 최저 블록을 마지막(Quiet-End 앵커), 나머지는 mean motion 내림차순.
+        motion_score는 상위 HRS 단계에서 각 조각에 부착됨(없으면 기본 0.5).
+        검증: 격리 블라인드 4/4 + Scorecard before/after.
+        """
+        if not sequence or len(sequence) <= 1:
+            return sequence
+
+        def _m(f):
+            v = f.get("motion_score")
+            return float(v) if isinstance(v, (int, float)) else 0.5
+
+        def _start(f):
+            return float(f.get("start", f.get("start_time", 0.0)) or 0.0)
+
+        from collections import OrderedDict
+        blocks = OrderedDict()
+        for f in sequence:
+            blocks.setdefault(f.get("source_id") or "UNKNOWN", []).append(f)
+
+        block_list = []
+        for sid, clips in blocks.items():
+            clips_sorted = sorted(clips, key=_start)   # 블록 내부 시간순(시간역행 제거)
+            ms = [_m(c) for c in clips_sorted]
+            block_list.append({
+                "clips": clips_sorted,
+                "mean_m": (sum(ms) / len(ms)) if ms else 0.5,
+                "tail_m": _m(clips_sorted[-1]),
+            })
+
+        if len(block_list) <= 1:
+            return [c for b in block_list for c in b["clips"]]
+
+        last = min(block_list, key=lambda b: b["tail_m"])            # Quiet-End: 가장 잔잔한 블록을 끝에
+        others = sorted([b for b in block_list if b is not last], key=lambda b: -b["mean_m"])
+        return [c for b in (others + [last]) for c in b["clips"]]
 
     def _create_market_proposal(self, source_id, fragments, target_len, source_ids=None, overlap_ids=None):
         """A: Market Mode (대중적 호속력)"""
