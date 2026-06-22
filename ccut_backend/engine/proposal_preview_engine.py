@@ -109,7 +109,7 @@ def ensure_proposal_preview(
                 temp_out
             ]
             print(f"[PREVIEW_RENDER] Clip {i+1}/{len(valid_clips)}: {clip['source_path']} [{clip['start']:.1f}~{clip['end']:.1f}s]")
-            result = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
+            result = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=120)
             if result.returncode != 0 or not os.path.exists(temp_out):
                 print(f"[PREVIEW_RENDER] CLIP FAILED: {result.stderr[:300]}")
                 continue
@@ -140,7 +140,7 @@ def ensure_proposal_preview(
             concat_out
         ]
         print(f"[PREVIEW_RENDER] Re-encode concat {len(temp_clips)} clips → {filename}")
-        res_concat = subprocess.run(cmd_concat, capture_output=True, text=True, timeout=600)
+        res_concat = subprocess.run(cmd_concat, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=600)
 
         if res_concat.returncode != 0 or not os.path.exists(concat_out):
             print(f"[PREVIEW_RENDER] CONCAT FAILED: {res_concat.stderr[:300]}")
@@ -153,7 +153,7 @@ def ensure_proposal_preview(
     # STEP D: decode smoke test — 브라우저 decode 실패 사전 차단
     smoke = subprocess.run(
         ["ffmpeg", "-v", "error", "-i", str(output_path), "-f", "null", "NUL"],
-        capture_output=True, text=True, timeout=120
+        capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=120
     )
     if smoke.returncode != 0 or smoke.stderr.strip():
         err_snippet = smoke.stderr.strip()[:300]
@@ -181,7 +181,7 @@ def _probe_duration(path: str) -> float:
         res = subprocess.run(
             ["ffprobe", "-v", "error", "-show_entries", "format=duration",
              "-of", "default=noprint_wrappers=1:nokey=1", path],
-            capture_output=True, text=True, timeout=10
+            capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=10
         )
         return float(res.stdout.strip()) if res.stdout.strip() else 0.0
     except Exception:

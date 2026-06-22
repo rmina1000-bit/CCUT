@@ -152,7 +152,7 @@ class Qwen3ASRAdapter(BaseAdapter, ASRProvider):
                 "-show_entries", "stream=codec_type",
                 "-of", "csv=p=0",
                 video_path,
-            ], capture_output=True, text=True, timeout=10)
+            ], capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=10)
             return bool(result.stdout.strip())
         except Exception:
             # ffprobe 자체 실패 시 기존 경로 진행

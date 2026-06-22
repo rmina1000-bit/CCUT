@@ -129,7 +129,7 @@ def calc_volume_score(video_path: str, start_sec: float, end_sec: float) -> floa
         "-i", video_path, "-af", "volumedetect", "-f", "null", "-"
     ]
     try:
-        result = subprocess.run(cmd, capture_output=True, text=True)
+        result = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace")
         match = re.search(r"max_volume:\s*([-\d.]+)\s*dB", result.stderr)
         if not match:
             return 0.5

@@ -180,7 +180,7 @@ class RenderEngine:
                     "-c:a", "aac", "-b:a", "128k", "-ar", "48000", "-ac", "2",
                     str(tmp),
                 ]
-                r = subprocess.run(cut_cmd, capture_output=True, text=True)
+                r = subprocess.run(cut_cmd, capture_output=True, text=True, encoding="utf-8", errors="replace")
                 if r.returncode == 0 and tmp.exists() and tmp.stat().st_size > 0:
                     temp_clips.append(tmp)
                 else:
@@ -206,7 +206,7 @@ class RenderEngine:
                 "-c:a", "aac", "-b:a", "128k", "-ar", "48000", "-ac", "2",
                 "-movflags", "+faststart", output_path,
             ]
-            process = subprocess.run(cmd, capture_output=True, text=True)
+            process = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace")
 
             if process.returncode != 0:
                 print(f"[RENDER] FFmpeg Failed: {process.stderr}")
@@ -217,7 +217,7 @@ class RenderEngine:
                 "ffprobe", "-v", "error", "-show_entries", "format=duration",
                 "-of", "default=noprint_wrappers=1:nokey=1", output_path,
             ]
-            probe_res = subprocess.run(probe_cmd, capture_output=True, text=True)
+            probe_res = subprocess.run(probe_cmd, capture_output=True, text=True, encoding="utf-8", errors="replace")
             duration = float(probe_res.stdout.strip()) if probe_res.stdout.strip() else 0.0
 
             return {"success": True, "duration": duration,
