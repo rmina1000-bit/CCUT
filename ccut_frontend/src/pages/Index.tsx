@@ -827,6 +827,7 @@ const Index: React.FC = () => {
     previousHydratedProjectRef.current = activeNavItem;
 
     let isMounted = true;
+    let debounceTimer: ReturnType<typeof setTimeout> | null = null;
 
     const hydrateProjectSources = async () => {
       // [FIX-HYD-A] fetch 전 클리어 — 다른 프로젝트로 '전환'할 때만 수행.
@@ -846,6 +847,7 @@ const Index: React.FC = () => {
         setSingleEditOpen(false);
         setSingleEditTarget(null);
         setAppState("empty");
+        setStoryPlan(null);
       }
 
       try {
@@ -955,10 +957,13 @@ const Index: React.FC = () => {
       }
     };
 
-    hydrateProjectSources();
+    debounceTimer = setTimeout(() => {
+      if (isMounted) hydrateProjectSources();
+    }, 150);
 
     return () => {
       isMounted = false;
+      if (debounceTimer) clearTimeout(debounceTimer);
     };
   }, [activeNavItem, mapFragments]);
 
