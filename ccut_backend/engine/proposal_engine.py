@@ -368,7 +368,7 @@ class ProposalEngine:
         try:
             from ai.narrative.emotion_timeline import EmotionalTimeline
             from ai.narrative.reaction_signal_detector import ReactionSignalDetector
-            from ai.narrative.external_narrative_adapter import ExternalNarrativeAdapter
+            from ai.narrative.qwen_narrative_adapter import QwenNarrativeAdapter
             from ai.narrative.qwen_narrative_translator import QwenNarrativeTranslator
             
             # Extract emotional timeline and reaction signals
@@ -409,7 +409,7 @@ class ProposalEngine:
             }
             
             # [NARRATIVE_DIRECTOR_REQUEST] is called inside get_narrative_direction()
-            adapter = ExternalNarrativeAdapter(provider="mock")
+            adapter = QwenNarrativeAdapter()
             direction = adapter.get_narrative_direction(context_metadata)
             
             # [NARRATIVE_TRANSLATION] is called inside translate_direction()
