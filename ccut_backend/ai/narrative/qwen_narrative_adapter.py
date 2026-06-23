@@ -4,7 +4,7 @@ from .narrative_director_contract import NarrativeDirection
 
 OLLAMA_URL = "http://127.0.0.1:11434/api/generate"
 MODEL = "qwen2:latest"
-TIMEOUT = 20.0
+TIMEOUT = 45.0
 
 ALLOWED_PACING = {"fast", "medium", "slow", "slow_to_fast", "fast_to_slow"}
 ALLOWED_EMOTION = {"steady", "dramatic", "peak_at_end", "calm", "dynamic"}
