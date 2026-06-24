@@ -394,12 +394,15 @@ class BAMSManager:
                 with open(config_path, encoding="utf-8") as f:
                     cfg = yaml.safe_load(f)
                 current_provider = (cfg.get("active") or {}).get("asr", "unknown")
-                # [R14] read current model_size
+                # [R1] read model_size from the active ASR provider, not hard-coded whisper
+                providers = cfg.get("providers", {}) or {}
                 current_model_size = (
-                    cfg.get("providers", {})
-                       .get("whisper", {})
-                       .get("config", {})
-                       .get("model_size", "unknown")
+                    providers.get(current_provider, {})
+                             .get("config", {})
+                             .get("model_size")
+                    or providers.get("whisper", {})
+                                .get("config", {})
+                                .get("model_size", "unknown")
                 )
             except Exception:
                 current_provider = "unknown"
