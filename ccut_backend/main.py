@@ -945,6 +945,8 @@ async def generate_fragments(
 
     # [STEP 1] Proxy 생성 (분석용 저용량 영상)
     proxy_path = video_engine.create_proxy(resolved_path, source_id)
+    # [FIX-HEVC-PLAYBACK] 업로드 시 playback sidecar 사전생성
+    video_engine.create_playback_proxy(resolved_path)
 
     # 신규 소스인 경우에만 분석 및 등록 수행
     if is_new_source:
@@ -1776,19 +1778,14 @@ async def get_project_sources(project_id: str):
     with SessionLocal() as db:
         # 1. [B-3b-3] 프로젝트 제안을 program_id 기준으로 조회 (신규 구조). 레거시 source_id=proj_ 행은 미조회(C=신규부터)
         props = db.query(ProposalTable).filter_by(program_id=project_id).all()
-        for p in props:
-            # sequence JSON 파싱
-            seq = p.sequence or []
-            if isinstance(seq, str):
-                try:
-                    seq = json.loads(seq)
-                except Exception:
-                    seq = []
-            
-            for clip in seq:
-                sid = clip.get("source_id")
-                if sid and sid not in source_ids:
-                    source_ids.append(sid)
+        # [FIX-RESTORE-SOURCES] project_sources 기반 전수 복원
+        ps_rows = (
+            db.query(ProjectSourceTable)
+            .filter_by(program_id=project_id)
+            .order_by(ProjectSourceTable.display_order)
+            .all()
+        )
+        source_ids = [row.source_id for row in ps_rows]
         
         # 2. 만약 해당 project_id로 저장된 제안 정보가 없다면, 에러 응답 반환
         if not source_ids:
@@ -1815,7 +1812,13 @@ async def get_project_sources(project_id: str):
 
             # 비디오 URL 변환 — 파일명을 URL 인코딩하여 한글/공백/특수문자 안전 보장
             video_name = os.path.basename(src.file_path) if src.file_path else f"{sid}.mp4"
-            vurl = f"/static/uploads/{_url_quote(video_name, safe='')}"
+            # [FIX-HEVC-PLAYBACK] playback sidecar 존재 시 우선 서빙
+            _play_name = f"play_{os.path.splitext(video_name)[0]}.mp4"
+            _play_full = os.path.join(video_engine.proxies_path, _play_name)
+            if os.path.exists(_play_full):
+                vurl = f"/static/proxies/{_url_quote(_play_name, safe='')}"
+            else:
+                vurl = f"/static/uploads/{_url_quote(video_name, safe='')}"
 
             # Label 순서대로 부여 (A, B, C, D...)
             label = chr(65 + idx)

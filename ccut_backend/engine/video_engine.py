@@ -70,6 +70,59 @@ class VideoEngine:
             print(f"[VideoEngine] Proxy creation failed: {e}")
             return video_path # Fallback
 
+    def create_playback_proxy(self, source_path: str) -> str:
+        """
+        [FIX-HEVC-PLAYBACK] 브라우저 재생용 H.264 8-bit sidecar.
+        HEVC/10-bit 원본만 재인코딩. H.264 8-bit면 원본 경로 반환.
+        """
+        import subprocess
+        from pathlib import Path
+
+        src = Path(source_path)
+        out_path = Path(self.proxies_path) / f"play_{src.stem}.mp4"
+
+        if out_path.exists():
+            probe = subprocess.run(
+                ["ffprobe", "-v", "error", "-select_streams", "v:0",
+                 "-show_entries", "stream=pix_fmt",
+                 "-of", "default=noprint_wrappers=1:nokey=1",
+                 str(out_path)],
+                capture_output=True, text=True
+            )
+            if probe.stdout.strip() == "yuv420p":
+                return str(out_path)
+            out_path.unlink()
+
+        probe = subprocess.run(
+            ["ffprobe", "-v", "error", "-select_streams", "v:0",
+             "-show_entries", "stream=pix_fmt,codec_name",
+             "-of", "default=noprint_wrappers=1:nokey=1",
+             str(src)],
+            capture_output=True, text=True
+        )
+        lines = probe.stdout.strip().splitlines()
+        codec = lines[0] if len(lines) > 0 else ""
+        pix   = lines[1] if len(lines) > 1 else ""
+
+        if codec == "h264" and pix == "yuv420p":
+            return str(src)
+
+        cmd = [
+            "ffmpeg", "-y", "-i", str(src),
+            "-c:v", "libx264", "-preset", "fast", "-crf", "18",
+            "-pix_fmt", "yuv420p",
+            "-c:a", "aac", "-b:a", "128k",
+            "-movflags", "+faststart",
+            str(out_path)
+        ]
+        result = subprocess.run(cmd, capture_output=True, text=True)
+        if result.returncode != 0:
+            print(f"[FIX-HEVC-PLAYBACK] 변환 실패: {result.stderr[:200]}")
+            return str(src)
+
+        print(f"[FIX-HEVC-PLAYBACK] 완료: {out_path}")
+        return str(out_path)
+
     def get_metadata(self, video_path):
         """ffprobe를 이용해 영상의 실제 길이와 정보를 추출"""
         if not os.path.exists(video_path):
