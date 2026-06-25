@@ -178,6 +178,8 @@ const Index: React.FC = () => {
   const toFullUrl = useCallback((path?: string | null) => {
     if (!path) return null;
     if (path.startsWith("http://") || path.startsWith("https://")) return path;
+    // [FIX-THUMB-PREFIX] /api로 시작하는 경로는 이미 prefix 포함
+    if (path.startsWith("/api/")) return path;
     return `${videoService.API_BASE_URL}${path.startsWith("/") ? "" : "/"}${path}`;
   }, []);
 
@@ -400,6 +402,8 @@ const Index: React.FC = () => {
         const dateStrYYMMDD = `${today.getFullYear().toString().slice(2)}${String(today.getMonth() + 1).padStart(2, "0")}${String(today.getDate()).padStart(2, "0")}`;
         const fileCount = allFiles.length;
         const dateStr = String(today.getMonth() + 1) + "/" + String(today.getDate()) + " " + String(today.getHours()).padStart(2, "0") + ":" + String(today.getMinutes()).padStart(2, "0");
+        const uploadedSourceIds = collectedEntries.map(e => e.source_id).filter(Boolean);
+        console.log("[N-01] 분석 대상 source_ids:", uploadedSourceIds);
 
         // [B-5d] 기존 프로젝트(proj_ prefix)면 귀속. 아니면(새 프로젝트 또는 레거시) 지금 DB 생성.
         let projectId: string;
@@ -407,7 +411,14 @@ const Index: React.FC = () => {
           projectId = activeNavItem;
           setProjects((prev) => prev.map((p) => (p.id === projectId ? { ...p, count: fileCount } : p)));
         } else {
-          const newRes = await videoService.createProject();
+          const newRes = await fetch(`${videoService.API_BASE_URL}/projects`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ name: null, source_ids: uploadedSourceIds }),
+          }).then((res) => {
+            if (!res.ok) throw new Error(`프로젝트 생성 실패: ${res.status}`);
+            return res.json();
+          });
           projectId = newRes.program_id;
           // [FIX-HYD-EMPTY] 업로드-생성 프로젝트 표식 → hydration fetch-전 클리어 스킵(분석 세션 보존)
           justCreatedProjectRef.current = projectId;
@@ -427,9 +438,6 @@ const Index: React.FC = () => {
         setAnalyzeProgress(80);
         setAnalyzeMessage("의미분석(Whisper) 진행 중입니다...");
         setAppState("analyzing");
-
-        const uploadedSourceIds = collectedEntries.map(e => e.source_id).filter(Boolean);
-        console.log("[N-01] 분석 대상 source_ids:", uploadedSourceIds);
 
         let pollCount = 0;
         const MAX_POLLS = 100;

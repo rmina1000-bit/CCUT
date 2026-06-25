@@ -78,9 +78,9 @@ const OriginalPanorama: React.FC<OriginalPanoramaProps> = ({
       <div className="flex flex-col bg-card/50 rounded-lg overflow-hidden border border-border/20">
         {/* Header */}
         <div className="flex items-center justify-between px-3 py-2">
-          <div className="flex items-center gap-2.5">
+          <div className="flex items-center gap-2.5 min-w-0 flex-1">
             <h3 className="text-[11px] font-semibold text-foreground/80 uppercase tracking-widest whitespace-nowrap">원본맵</h3>
-            <div className="flex gap-1 overflow-x-auto no-scrollbar max-w-[60%] py-1">
+            <div className="flex gap-1 overflow-x-auto no-scrollbar flex-1 min-w-0 py-1">
               {sources && Array.isArray(sources) && sources.map((s) => (
                 <button
                   key={s.source_id}
@@ -139,8 +139,9 @@ const OriginalPanorama: React.FC<OriginalPanoramaProps> = ({
                   variant="panorama"
                   showIntelligence={intelligenceOn}
                   videoPath={
-                    (sources.find((s) => s.source_id === activeSource)?.video_url ||
-                      sources.find((s) => s.source_id === activeSource)?.file_path) ||
+                    // [FIX-ACTIVE-SOURCE] activeSource는 라벨(A/B/C), source_id와 혼동 금지
+                    (sources.find((s) => s.label === activeSource)?.video_url ||
+                      sources.find((s) => s.label === activeSource)?.file_path) ||
                     null
                   }
                 />

@@ -2973,6 +2973,7 @@ async def create_program(req: ProgramCreateRequest, db: Session = Depends(get_db
 
 class ProjectCreateRequest(BaseModel):
     name: Optional[str] = None
+    source_ids: Optional[list[str]] = None
 
 _PROJECT_NAMES = [
     # 별 (Stars)
@@ -3014,6 +3015,18 @@ async def create_project(req: ProjectCreateRequest, db: Session = Depends(get_db
     pg = ProgramTable(program_id=program_id, name=name, status="DRAFT",
                       schema_version=2, last_updated_at=now, created_at=now)
     db.add(pg)
+    # [FIX-PROJECT-SOURCES-PERSIST] 프로젝트 생성 시 업로드된 source_id를 즉시 연결
+    for idx, sid in enumerate(req.source_ids or []):
+        if not sid:
+            continue
+        existing_link = db.query(ProjectSourceTable).filter_by(program_id=program_id, source_id=sid).first()
+        if not existing_link:
+            db.add(ProjectSourceTable(
+                program_id=program_id,
+                source_id=sid,
+                display_order=idx,
+                added_at=now.isoformat(),
+            ))
     db.commit()
     return {"status": "SUCCESS", "program_id": program_id, "name": name}
 
