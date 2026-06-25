@@ -39,3 +39,9 @@ network_policy:
   trusted_endpoints: []
 
 health_check_interval_sec: 300
+
+pipeline:
+  subtitles_cache_enabled: true
+  quick_scan_enabled: true
+  watchdog_enabled: true
+  watchdog_interval_sec: 300
