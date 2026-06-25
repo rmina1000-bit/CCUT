@@ -978,7 +978,9 @@ const Index: React.FC = () => {
 
   // [STEP 10-I.5.28-E9-R1] StoryPlanPreview 자동 생성 (Skeleton)
   useEffect(() => {
-    if (appState !== "complete" || !proposals || storyPlan) return;
+    if (appState !== "complete" || !proposals) return;
+    // [FIX-STORYPLAN-STALE] 소스 수 변경 시 storyPlan 재생성
+    if (storyPlan && (storyPlan as any).source_count === (sourceEntries ?? []).length) return;
 
     const sourceCount = (sourceEntries ?? []).length;
     const isMulti = sourceCount >= 3;
@@ -1013,6 +1015,7 @@ const Index: React.FC = () => {
 
     const newPlan: StoryPlanPreview = {
         story_plan_id: `STP_${Date.now()}`,
+        source_count: sourceCount,
         project_type: projectType,
         detected_theme: detectedTheme,
         default_direction: isMulti ? "user_memory" : "market_highlight",
@@ -2068,7 +2071,32 @@ const Index: React.FC = () => {
             sourceEntries={sourceEntries}
             programId={activeNavItem}
             programTitle={projects.find(p => p.id === activeNavItem)?.name ?? undefined}
-            onExportDone={() => setActiveNavItem("upload")}
+            onExportDone={() => {
+              // [FIX-EXPORT-UISTATE] 내보내기 완료 시 ui_state 저장
+              if (activeNavItem && activeNavItem.startsWith("proj_")) {
+                const uiSnap = {
+                  reservedFragments,
+                  holdPositions,
+                  committedProposalId,
+                  selectedProposalId,
+                  activeSource,
+                  deletedFragments,
+                  proposalsKeyFragments: proposals ? {
+                    A: (proposals as any).A?.key_fragments,
+                    B: (proposals as any).B?.key_fragments,
+                  } : undefined,
+                  proposalsCustomFragments: proposals ? {
+                    A: (proposals as any).A?.customEditFragments,
+                    B: (proposals as any).B?.customEditFragments,
+                  } : undefined,
+                };
+                videoService.saveProjectState(
+                  activeNavItem,
+                  { ui_state: JSON.stringify(uiSnap) }
+                ).catch(() => {});
+              }
+              setActiveNavItem("upload");
+            }}
           />
         )}
       </div>
