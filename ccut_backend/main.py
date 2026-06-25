@@ -100,6 +100,17 @@ def build_dubbing_static_url(filename: str) -> str:
 
 app = FastAPI()
 
+
+@app.on_event("startup")
+async def _startup_watchdog():
+    # [A-4] 시작 시 파이프라인 자가진단
+    try:
+        from engine.pipeline_watchdog import run_watchdog
+        run_watchdog()
+    except Exception as _wd_e:
+        print(f"[WATCHDOG] 초기 진단 실패 (non-blocking): {_wd_e}")
+
+
 def _run_db_migrations():
     """export_results 테이블에 program_id/program_title 컬럼 추가 (SQLite ALTER TABLE)"""
     import sqlite3
@@ -275,6 +286,17 @@ def get_timing_summary(timing: dict):
 @app.get("/health")
 async def health_check():
     return {"status": "OK", "timestamp": time.time()}
+
+
+@app.get("/pipeline/status")
+async def pipeline_status():
+    """[WATCHDOG] 파이프라인 전체 상태 진단 API"""
+    try:
+        from engine.pipeline_watchdog import run_watchdog
+        result = run_watchdog(silent=True)
+        return result
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
 
 
 @app.get("/system/diagnostics")
@@ -742,6 +764,41 @@ def _background_whisper_impl(source_id: str, video_path: str, fragments: list):
                 summary = get_timing_summary(job["timing"])
                 print(f"[PIPELINE-TIMING] source={source_id} raw={summary['raw_sec']}s semantic={summary['semantic_sec']}s proposal={summary['proposal_sec']}s total={summary['total_sec']}s")
             
+        # [A-2] subtitles 캐시 저장
+        try:
+            from archive.db_models import SubtitleTable
+            from database import SessionLocal
+            import json as _json
+            with SessionLocal() as _db:
+                _existing = _db.query(SubtitleTable).filter_by(
+                    source_id=source_id).first()
+                if not _existing:
+                    _sub = SubtitleTable(
+                        subtitle_id=f"SUB_{source_id}",
+                        source_id=source_id,
+                        language=provider or "unknown",
+                        segments=_json.dumps(all_segments or []),
+                        status="COMPLETE",
+                    )
+                    _db.add(_sub)
+                    _db.commit()
+                    print(f"[SUBTITLES] {source_id} 저장 완료 "
+                          f"segments={len(all_segments or [])}")
+                else:
+                    print(f"[SUBTITLES] {source_id} 이미 존재 — skip")
+        except Exception as _sub_e:
+            print(f"[SUBTITLES] 저장 실패 (non-blocking): {_sub_e}")
+
+        # [A-3] quick_scan 실행 (non-blocking)
+        try:
+            from engine.hypothesis_engine import HypothesisEngine
+            _he = HypothesisEngine()
+            _qs = _he.generate_quick_scan(source_id)
+            print(f"[QUICK_SCAN] {source_id} 완료: "
+                  f"{list(_qs.keys()) if _qs else 'empty'}")
+        except Exception as _qs_e:
+            print(f"[QUICK_SCAN] 실패 (non-blocking): {_qs_e}")
+
         print(f"[ASR BG] {source_id} 완료 (Semantic/Proposals Ready)")
     except Exception as e:
         print(f"[ASR BG] {source_id} 실행 오류: {e}")
