@@ -225,6 +225,8 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
   }, []);
 
   const [isPlayingA, setIsPlayingA] = useState(false);
+  const [isSrcLoadingA, setIsSrcLoadingA] = useState(false);
+  const [isSrcLoadingB, setIsSrcLoadingB] = useState(false);
   const [isPlayingB, setIsPlayingB] = useState(false);
   const [chatValue, setChatValue] = useState("");
   // [FRAGMENT-SEARCH] 채팅 자연어 조각 검색 결과
@@ -570,6 +572,7 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
         // [STEP 10-K-C1-R11] Unify src control via state instead of ref.current.src
         if (isA) {
           pendingLocalTimeARef.current = startSec + seekOffset;
+          setIsSrcLoadingA(true);
           setPlayerSrcA(fragUrl);
           console.log("[PENDING_SEEK_SET]", {
             player,
@@ -578,6 +581,7 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
           });
         } else {
           pendingLocalTimeBRef.current = startSec + seekOffset;
+          setIsSrcLoadingB(true);
           setPlayerSrcB(fragUrl);
           console.log("[PENDING_SEEK_SET]", {
             player,
@@ -1259,6 +1263,7 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
                 <>
                   <video
                     ref={videoRefA}
+                    style={{ opacity: isSrcLoadingA ? 0 : 1, transition: 'opacity 0.05s' }}
                     src={playerSrcA ?? playerVideoUrlA ?? videoUrl ?? undefined}
                     poster={getProposalPoster("A")}
                     className="w-full h-full object-contain bg-black"
@@ -1357,6 +1362,7 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
                       }
                     }}
                     onLoadedMetadata={(e) => {
+                      setIsSrcLoadingA(false);
                       setDurationA(e.currentTarget.duration);
                       // [DUAL_PLAY_GUARD] inactive player는 seek+play 차단
                       if (activePlayerRef.current !== "A") {
@@ -1541,6 +1547,7 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
                 <>
                   <video
                     ref={videoRefB}
+                    style={{ opacity: isSrcLoadingB ? 0 : 1, transition: 'opacity 0.05s' }}
                     src={playerSrcB ?? playerVideoUrlB ?? videoUrl ?? undefined}
                     poster={getProposalPoster("B")}
                     className="w-full h-full object-contain bg-black"
@@ -1655,6 +1662,7 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
                       }
                     }}
                     onLoadedMetadata={(e) => {
+                      setIsSrcLoadingB(false);
                       setDurationB(e.currentTarget.duration);
                       // [DUAL_PLAY_GUARD] inactive player는 seek+play 차단
                       if (activePlayerRef.current !== "B") {
