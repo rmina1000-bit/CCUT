@@ -819,7 +819,14 @@ class SemanticFragmentGenerator:
     def calculate_edit_value(self, evidence_refs, all_evidences, intent_seed):
         """[STEP 4] Edit Value 계산 (v3.2.1 보완: Dict 기반 가중치 및 전체 종합)"""
         ref_evs = [e for e in all_evidences if e["fragment_id"] in evidence_refs]
-        if not ref_evs: return 0.5
+        if not ref_evs:
+            # [B-2] motion/audio 기반 fallback 계산 (evidence_refs 매칭 실패 시)
+            if all_evidences:
+                _avg_motion = sum(e.get("motion_score", 0.0) or 0.0 for e in all_evidences) / len(all_evidences)
+                _avg_audio = sum(e.get("audio_energy", 0.0) or 0.0 for e in all_evidences) / len(all_evidences)
+                _text_bonus = 0.1 if any(e.get("text") for e in all_evidences) else 0.0
+                return round(max(0.1, min(0.9, 0.3 + _avg_motion * 0.3 + _avg_audio * 0.3 + _text_bonus)), 4)
+            return 0.3
         
         # Intent Seed - priority_axis (Dict)
         priority = intent_seed.get("priority_axis", {})
@@ -847,9 +854,22 @@ class SemanticFragmentGenerator:
 
     def calculate_continuity(self, current, prev):
         """[STEP 4] Continuity 4요소 계산"""
+        # [B-1] sentiment_continuity 실계산 (텍스트 유무 + confidence 기반)
+        _has_text = bool(
+            current.get("text") or
+            current.get("semantic", {}).get("transcript_refs")
+        )
+        _conf = current.get("confidence", 0.5) or 0.5
+        if _has_text and _conf >= 0.8:
+            sentiment_continuity = 1.0
+        elif _has_text:
+            sentiment_continuity = 0.7
+        else:
+            sentiment_continuity = 0.3
+
         continuity = {
             "topic_similarity": 0.5, "time_proximity": 1.0,
-            "sentiment_continuity": 0.5, "narrative_flow": 0.5
+            "sentiment_continuity": sentiment_continuity, "narrative_flow": 0.5
         }
         if prev:
             gap = current["start"] - prev["end"]
