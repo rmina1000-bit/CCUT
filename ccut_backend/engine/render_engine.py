@@ -137,7 +137,13 @@ class RenderEngine:
             
             path = source.file_path
             if not os.path.exists(path):
-                return {"ok": False, "reason": f"Source file not found at {path}"}
+                # [R3-FIX] DB file_path가 원본 경로(Downloads 등) → storage/uploads/에서 동명 파일 탐색
+                uploads_dir = self.backend_dir.parent / "storage" / "uploads"
+                alt = uploads_dir / os.path.basename(path)
+                if alt.exists():
+                    path = str(alt)
+                else:
+                    return {"ok": False, "reason": f"Source file not found at {path}"}
             paths[sid] = path
             
         if not paths:
