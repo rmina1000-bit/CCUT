@@ -1104,6 +1104,40 @@ class SemanticFragmentGenerator:
         return {"priority_axis": "balanced", "tone": "general"}
 
     # ═══════════════════════════════════════════════════════════════════
+    #   [B-3-FIX] Existing Fragment Reanalysis
+    # ═══════════════════════════════════════════════════════════════════
+
+    def reanalyze_existing_fragments(self, source_id: str) -> int:
+        """
+        [B-3-FIX] 기존 SF_ fragment의 continuity/fallback_reason
+        신규 로직으로 일괄 재계산.
+        DB를 직접 업데이트하며 sem_gen.generate() 우회.
+        """
+        fragments = self.bams.get_semantic_fragments(source_id)
+        if not fragments:
+            print(f"[B-3-FIX] {source_id}: semantic_fragments 없음")
+            return 0
+
+        all_evidences = self.bams.get_evidence_board(source_id) or []
+        updated = 0
+        final_fragments = []
+        for frag in fragments:
+            prev_frag = final_fragments[-1] if final_fragments else None
+            frag["continuity"] = self.calculate_continuity(frag, prev_frag)
+            frag["confidence"] = self.calculate_confidence(frag)
+            frag["fallback_reason"] = self.calculate_fallback_reason(frag)
+            evidence_refs = frag.get("semantic", {}).get("evidence_refs", [])
+            frag["structural"]["edit_value"] = self.calculate_edit_value(
+                evidence_refs, all_evidences, {}
+            )
+            final_fragments.append(frag)
+            updated += 1
+
+        self.bams.save_semantic_fragments(source_id, final_fragments)
+        print(f"[B-3-FIX] {source_id}: {updated}개 재계산 완료")
+        return updated
+
+    # ═══════════════════════════════════════════════════════════════════
     #   [STEP 5] User Intent Rescoring (Refinement)
     # ═══════════════════════════════════════════════════════════════════
 

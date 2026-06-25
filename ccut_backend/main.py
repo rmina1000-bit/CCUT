@@ -923,6 +923,7 @@ async def generate_fragments(
     background_tasks: BackgroundTasks,
     source_id: str = "",
     video_path: str = "",
+    force: bool = False,
     db: Session = Depends(get_db),
 ):
     """
@@ -988,7 +989,7 @@ async def generate_fragments(
             src_row = db.query(SourceTable).filter_by(source_id=source_id).first()
             db_dur = float(src_row.duration or 0) if src_row else 0.0
             has_semantic = db.query(_SFT).filter_by(source_id=source_id).count() > 0
-            need_reanalyze = abs(db_dur - total_duration) > 5.0 or not has_semantic
+            need_reanalyze = force or abs(db_dur - total_duration) > 5.0 or not has_semantic
             if need_reanalyze:
                 reason = f"duration_mismatch(db={db_dur:.1f}s actual={total_duration:.1f}s)" if abs(db_dur - total_duration) > 5.0 else "semantic_fragments_missing"
                 print(f"[REANALYZE] source_id={source_id} reason={reason}")
