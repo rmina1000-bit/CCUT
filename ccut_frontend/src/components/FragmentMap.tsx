@@ -31,6 +31,7 @@ interface FragmentMapProps {
     rightFragId: string | null,
     clickSide: "left" | "right" | "center"
   ) => void;
+  sourceVideoUrls?: Record<string, string>;
 }
 
 const FragmentMap: React.FC<FragmentMapProps> = ({
@@ -47,6 +48,7 @@ const FragmentMap: React.FC<FragmentMapProps> = ({
   onTrashRestore,
   onSourceRestore,
   onBoundaryClick,
+  sourceVideoUrls,
 }) => {
   const [draggedId, setDraggedId] = useState<string | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
@@ -319,7 +321,7 @@ const FragmentMap: React.FC<FragmentMapProps> = ({
                       onClick={() => onFragmentClick(f)}
                       onDoubleClick={() => onFragmentDoubleClick(f)}
                       onEditFragment={onEditFragment ? () => onEditFragment(f) : undefined}
-
+                      videoPath={sourceVideoUrls?.[(f as any).source_id] ?? null}
                       widthScale={0.7}
                       variant="edit"
                     />

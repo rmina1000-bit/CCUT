@@ -99,7 +99,7 @@ export function assignShortDisplayIds(fragments: Fragment[]): Fragment[] {
     const groups = new Map<string, Fragment[]>();
     fragments.forEach(f => {
         if (f.status === "removed") return;
-        const src = f.source_video ?? "?";
+        const src = f.source_video || "";
         if (!groups.has(src)) groups.set(src, []);
         groups.get(src)!.push(f);
     });
@@ -132,7 +132,7 @@ export function assignShortDisplayIds(fragments: Fragment[]): Fragment[] {
     return fragments.map(f => {
         if (f.status === "removed") return f;
 
-        const src = f.source_video ?? "?";
+        const src = f.source_video || "";
         const root = f.root_fragment_uid ?? getUid(f);
         const rootToIdx = rootIndexBySource.get(src);
         if (!rootToIdx) return f;

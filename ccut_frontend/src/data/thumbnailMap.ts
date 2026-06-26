@@ -14,7 +14,7 @@ export function getFragmentThumbnail(
   if (realThumbnailUrl) {
     // If it's a relative path from DB like 'thumbnails/L1_...', prepend API host
     if (realThumbnailUrl.startsWith('thumbnails/')) {
-      return `http://localhost:8000/static/${realThumbnailUrl}`;
+      return `/static/${realThumbnailUrl}`;
     }
     return realThumbnailUrl;
   }
