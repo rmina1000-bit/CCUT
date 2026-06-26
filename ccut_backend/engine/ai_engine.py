@@ -7,6 +7,22 @@ try:
 except ImportError:
     whisper = None
 
+
+def resolve_whisper_language():
+    """Whisper 전사 언어를 결정한다.
+
+    [ASR-FIX 2026-06-15] 기존 `language="ko"` 하드코딩 제거.
+    환경변수 WHISPER_LANGUAGE 로 언어를 고정할 수 있으나,
+    미설정/"auto"/"none"/빈값이면 None 을 반환해 Whisper 자동감지에 맡긴다.
+    (비한국어 영상이 한국어로 강제 전사되어 깨지던 버그 수정.)
+    근거: docs/reports/BUG_asr_korean_forced_2026-06-15.md
+    """
+    lang = os.getenv("WHISPER_LANGUAGE", "").strip()
+    if not lang or lang.lower() in ("auto", "none"):
+        return None
+    return lang
+
+
 class AIEngine:
     def __init__(self):
         self.mode = os.getenv("WHISPER_MODE", "mock")
@@ -26,7 +42,7 @@ class AIEngine:
     def transcribe_fragment(self, audio_path):
         if self.mode == "real" and self.model:
             try:
-                result = self.model.transcribe(audio_path, language="ko")
+                result = self.model.transcribe(audio_path, language=resolve_whisper_language())
                 return result['text'].strip()
             except: return "[Mock Transcript]"
         return "[Mock Transcript]"
@@ -63,7 +79,7 @@ def transcribe_full_then_split(model, video_path: str, fragments: list) -> dict:
     fragment_words / words 키로 반환한다.
     """
     try:
-        result = model.transcribe(video_path, language="ko", word_timestamps=True)
+        result = model.transcribe(video_path, language=resolve_whisper_language(), word_timestamps=True)
     except Exception as e:
         print(f"[Whisper] 전체 전사 실패: {e}")
         return {
