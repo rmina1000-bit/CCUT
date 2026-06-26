@@ -1,30 +1,21 @@
 import sqlite3
 import json
 
-db_path = "ccut_backend/ccut_app.db"
-conn = sqlite3.connect(db_path)
+conn = sqlite3.connect('ccut_backend/ccut_app.db')
 cursor = conn.cursor()
 
-# Query all fragments with intelligence
-cursor.execute("SELECT fragment_id, source_id, start_time, end_time, intelligence FROM fragments;")
-rows = cursor.fetchall()
-found = False
-for fid, sid, start, end, intel_str in rows:
-    if not intel_str:
-        continue
-    intel = json.loads(intel_str)
-    transcript = intel.get("transcript", "")
-    words = intel.get("words", [])
-    if transcript or words:
-        print(f"Found fragment with transcript/words in Source: {sid}, Fragment: {fid}")
-        print(f"Transcript: {transcript}")
-        print(f"Words Count: {len(words)}")
-        if words:
-            print(f"Sample words: {words[:10]}")
-        found = True
-        break
+# Find non-mock source_ids
+cursor.execute("SELECT DISTINCT source_id FROM fragments WHERE source_id NOT LIKE '%mock%' AND source_id != 'SRC_12C414A7' LIMIT 10")
+source_ids = [row[0] for row in cursor.fetchall()]
+print("Non-mock source IDs in database:", source_ids)
 
-if not found:
-    print("No fragments with transcript or words found in ccut_app.db.")
-    
-conn.close()
+# Let's inspect fragments for these source_ids
+for sid in source_ids[:3]:
+    cursor.execute("SELECT fragment_id, source_id, intelligence FROM fragments WHERE source_id = ? LIMIT 3", (sid,))
+    rows = cursor.fetchall()
+    print(f"\nFragments for source {sid}:")
+    for r in rows:
+        intel = json.loads(r[2]) if r[2] else {}
+        print(f"  ID: {r[0]}")
+        print(f"    thumb_url: {intel.get('thumb_url')}")
+        print(f"    keys: {list(intel.keys())}")
