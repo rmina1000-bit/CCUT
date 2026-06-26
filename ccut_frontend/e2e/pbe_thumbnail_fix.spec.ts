@@ -59,11 +59,11 @@ test.describe('PBE-D5-THUMBNAIL-FIX: Thumbnail 404 repair verification', () => {
 
     // Targets to inspect
     const targets = [
-      { display_id: 'A1', fragment_id: 'SF_A_1', expected_base: 'SF_A_1' },
-      { display_id: 'A2', fragment_id: 'SF_A_2', expected_base: 'SF_A_2' },
-      { display_id: 'A1_M', fragment_id: 'SF_A_1_M', expected_base: 'SF_A_1' },
-      { display_id: 'A2_M', fragment_id: 'SF_A_2_M', expected_base: 'SF_A_2' },
-      { display_id: 'A3_R', fragment_id: 'SF_A_3_R', expected_base: 'SF_A_2' },
+      { display_id: 'A1_L', fragment_id: 'SF_A_1', expected_base: 'SF_A_1' },
+      { display_id: 'A2_L', fragment_id: 'SF_A_2', expected_base: 'SF_A_2' },
+      { display_id: 'A1_R', fragment_id: 'SF_A_1_M', expected_base: 'SF_A_1' },
+      { display_id: 'A2_R', fragment_id: 'SF_A_2_M', expected_base: 'SF_A_2' },
+      { display_id: 'A2_R', fragment_id: 'SF_A_3_R', expected_base: 'SF_A_2' },
       { display_id: 'G1', fragment_id: 'SF_G_1', expected_base: 'SF_G_1' }
     ];
 
