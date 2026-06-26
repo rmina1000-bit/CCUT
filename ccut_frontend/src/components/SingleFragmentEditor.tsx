@@ -154,7 +154,7 @@ export const SingleFragmentEditor: React.FC<SingleFragmentEditorProps> = ({
       ]
     };
 
-    fetch("http://127.0.0.1:8000/pbe/extract-panoramas", {
+    fetch("/api/pbe/extract-panoramas", {
       method: "POST",
       headers: {
         "Content-Type": "application/json"
@@ -499,7 +499,7 @@ export const SingleFragmentEditor: React.FC<SingleFragmentEditorProps> = ({
         {startSec !== undefined && endSec !== undefined && (
           <div className="relative flex-1 min-h-0 w-full bg-[hsl(228,12%,6%)] border border-border/10 rounded-md overflow-hidden flex items-center justify-center">
             <img
-              src={`http://127.0.0.1:8000/static/thumbnails/P_${fragment.fragment_id}_${currentIndex}.jpg` +
+              src={`/static/thumbnails/P_${fragment.fragment_id}_${currentIndex}.jpg` +
                 (frameCacheBuster[currentIndex] ? `?t=${frameCacheBuster[currentIndex]}` : "")}
               alt="Preview"
               className="w-full h-full object-contain"
@@ -553,7 +553,7 @@ export const SingleFragmentEditor: React.FC<SingleFragmentEditorProps> = ({
                 {Array.from({ length: 12 }).map((_, index) => {
                   const isGrayscale = index < leftCut || index >= rightCut;
                   const isLoaded = loadedFrames[index];
-                  const src = `http://127.0.0.1:8000/static/thumbnails/P_${fragment.fragment_id}_${index}.jpg` +
+                  const src = `/static/thumbnails/P_${fragment.fragment_id}_${index}.jpg` +
                     (frameCacheBuster[index] ? `?t=${frameCacheBuster[index]}` : "");
 
                   return (
