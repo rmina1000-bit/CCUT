@@ -3313,7 +3313,14 @@ async def delete_source(source_id: str, mode: str = "source_only", db: Session =
     file_removed = False
     if s.file_path and os.path.exists(s.file_path):
         try:
-            os.remove(s.file_path)
+            # 영구삭제 대신 trash로 이동 (복원 가능)
+            _trash_dir = STORAGE_DIR / "trash"
+            _trash_dir.mkdir(parents=True, exist_ok=True)
+            _ts = time.strftime("%Y%m%d_%H%M%S")
+            _base = os.path.basename(s.file_path)
+            _dst = _trash_dir / f"{_base}_{_ts}"
+            _shutil.move(s.file_path, str(_dst))
+            print(f"[SOURCE-DELETE] trash로 이동: {_dst.name}")
             file_removed = True
         except Exception as e:
             print(f"[SOURCE-DELETE] 파일 삭제 실패: {e}")
