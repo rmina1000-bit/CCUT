@@ -3272,9 +3272,14 @@ async def purge_project(program_id: str, db: Session = Depends(get_db)):
     pg = db.query(ProgramTable).filter_by(program_id=program_id).first()
     if not pg:
         return {"status": "NOT_FOUND", "program_id": program_id}
-    db.query(ProjectSourceTable).filter_by(program_id=program_id).delete()
-    db.delete(pg)
-    db.commit()
+    try:
+        db.query(ProjectSourceTable).filter_by(program_id=program_id).delete()
+        db.delete(pg)
+        db.commit()
+    except Exception as _e:
+        db.rollback()
+        print(f"[DELETE-GUARD] purge rollback: {_e}")
+        raise
     return {"status": "PURGED", "program_id": program_id}
 
 
@@ -3318,14 +3323,19 @@ async def delete_source(source_id: str, mode: str = "source_only", db: Session =
                                         QuickScanTable, SubtitleTable, UserIntentTable)
         import sqlite3 as _sq
         # 조각/메타 데이터 삭제 (source_id 참조)
-        for T in [FragmentTable, EvidenceTable, SemanticFragmentTable,
-                  QuickScanTable, SubtitleTable, UserIntentTable]:
-            db.query(T).filter_by(source_id=source_id).delete()
-        # fragment_index (raw, FTS 트리거 동반)
-        db.execute(__import__("sqlalchemy").text(
-            "DELETE FROM fragment_index WHERE source_id = :sid"), {"sid": source_id})
-        db.delete(s)
-        db.commit()
+        try:
+            for T in [FragmentTable, EvidenceTable, SemanticFragmentTable,
+                      QuickScanTable, SubtitleTable, UserIntentTable]:
+                db.query(T).filter_by(source_id=source_id).delete()
+            # fragment_index (raw, FTS 트리거 동반)
+            db.execute(__import__("sqlalchemy").text(
+                "DELETE FROM fragment_index WHERE source_id = :sid"), {"sid": source_id})
+            db.delete(s)
+            db.commit()
+        except Exception as _e:
+            db.rollback()
+            print(f"[DELETE-GUARD] delete_source full rollback: {_e}")
+            raise
         return {"status": "DELETED_FULL", "source_id": source_id, "file_removed": file_removed}
     else:
         # source_only: 파일만 제거, 레코드는 원본 부재 표시
