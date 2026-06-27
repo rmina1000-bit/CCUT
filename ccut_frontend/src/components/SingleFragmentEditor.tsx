@@ -92,6 +92,7 @@ export const SingleFragmentEditor: React.FC<SingleFragmentEditorProps> = ({
   const [size, setSize] = useState<{ width: number; height: number } | null>(null);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
+  const [extractReady, setExtractReady] = useState(false);
 
   const containerRef = useRef<HTMLDivElement>(null);
   const dialogRef = useRef<HTMLDivElement>(null);
@@ -132,6 +133,7 @@ export const SingleFragmentEditor: React.FC<SingleFragmentEditorProps> = ({
     setLoadedFrames({});
     setImageErrorAttempts({});
     setFrameCacheBuster({});
+    setExtractReady(false);
     setPosition(null);
     // [PBE-RESIZE] 열 때 확정 높이를 부여 → flex 세로 분배가 안정적으로 동작(레일 항상 노출).
     setSize({
@@ -162,8 +164,11 @@ export const SingleFragmentEditor: React.FC<SingleFragmentEditorProps> = ({
       body: JSON.stringify(payload)
     })
       .then(res => res.json())
-      .then(() => {
-        // Response processed
+      .then((data) => {
+        // 추출 완료(COMPLETED) 응답을 받은 뒤에만 썸네일 렌더 게이트 개방
+        if (data && data.status === "COMPLETED") {
+          setExtractReady(true);
+        }
       })
       .catch(() => {
         // Silent error
@@ -498,12 +503,21 @@ export const SingleFragmentEditor: React.FC<SingleFragmentEditorProps> = ({
         {/* Playback Preview Box */}
         {startSec !== undefined && endSec !== undefined && (
           <div className="relative flex-1 min-h-0 w-full bg-[hsl(228,12%,6%)] border border-border/10 rounded-md overflow-hidden flex items-center justify-center">
-            <img
-              src={`/static/thumbnails/P_${fragment.fragment_id}_${currentIndex}.jpg` +
-                (frameCacheBuster[currentIndex] ? `?t=${frameCacheBuster[currentIndex]}` : "")}
-              alt="Preview"
-              className="w-full h-full object-contain"
-            />
+            {extractReady ? (
+              <img
+                src={`/static/thumbnails/P_${fragment.fragment_id}_${currentIndex}.jpg` +
+                  (frameCacheBuster[currentIndex] ? `?t=${frameCacheBuster[currentIndex]}` : "")}
+                alt="Preview"
+                className="w-full h-full object-contain"
+              />
+            ) : (
+              <div className="absolute inset-0 flex items-center justify-center bg-black/70 z-10">
+                <svg className="animate-spin h-6 w-6 text-primary" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+              </div>
+            )}
             <div className="absolute top-2 right-2 bg-black/75 px-2 py-1 rounded text-white text-[11px] font-mono shadow-md">
               {((currentIndex / 12) * (durationSec || 0)).toFixed(1)}s / {durationSec !== undefined ? `${durationSec.toFixed(1)}s` : "—"}
             </div>
@@ -561,7 +575,7 @@ export const SingleFragmentEditor: React.FC<SingleFragmentEditorProps> = ({
                       key={index}
                       className="relative w-[56px] flex-shrink-0 h-full border-r border-border/10 last:border-r-0 overflow-hidden bg-black/40 flex items-center justify-center pointer-events-none"
                     >
-                      {!isLoaded && (
+                      {(!extractReady || !isLoaded) && (
                         <div className="absolute inset-0 flex items-center justify-center bg-black/70 z-10">
                           <svg className="animate-spin h-5 w-5 text-primary" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                             <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
@@ -569,13 +583,15 @@ export const SingleFragmentEditor: React.FC<SingleFragmentEditorProps> = ({
                           </svg>
                         </div>
                       )}
-                      <img
-                        src={src}
-                        alt={`Frame ${index}`}
-                        className={`w-full h-full object-cover transition-all duration-200 ${isGrayscale ? "grayscale brightness-[0.35]" : ""}`}
-                        onLoad={() => setLoadedFrames(prev => ({ ...prev, [index]: true }))}
-                        onError={() => handleImageError(index)}
-                      />
+                      {extractReady && (
+                        <img
+                          src={src}
+                          alt={`Frame ${index}`}
+                          className={`w-full h-full object-cover transition-all duration-200 ${isGrayscale ? "grayscale brightness-[0.35]" : ""}`}
+                          onLoad={() => setLoadedFrames(prev => ({ ...prev, [index]: true }))}
+                          onError={() => handleImageError(index)}
+                        />
+                      )}
                       <span className="absolute bottom-1 right-1 text-[8px] bg-black/60 px-1 rounded text-white font-mono z-20">
                         {index}
                       </span>
@@ -658,6 +674,7 @@ export const SingleFragmentEditor: React.FC<SingleFragmentEditorProps> = ({
           <Button
             type="button"
             variant="outline"
+          
             onClick={handleReset}
             className="text-xs h-8 text-foreground hover:bg-secondary/40"
           >

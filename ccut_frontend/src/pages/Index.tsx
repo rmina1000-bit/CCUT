@@ -96,6 +96,15 @@ const Index: React.FC = () => {
   const [appState, setAppState] = useState<"empty" | "analyzing" | "complete">("empty");
   const [analyzeProgress, setAnalyzeProgress] = useState(0);
   const [analyzeMessage, setAnalyzeMessage] = useState("");
+
+  // [PBE-PROGRESS] 분석 중 진행바가 멈춰 보이지 않도록 95%까지 천천히 전진(멈춤처럼 보이지 않게)
+  useEffect(() => {
+    if (appState !== "analyzing") return;
+    const _pbeTick = setInterval(() => {
+      setAnalyzeProgress((p) => (p < 95 ? Math.min(95, p + 1) : p));
+    }, 600);
+    return () => clearInterval(_pbeTick);
+  }, [appState]);
   const [intelligenceOn, setIntelligenceOn] = useState(false);
 
 // proposals, directionSnapshot moved to useProposalState
@@ -632,6 +641,7 @@ const Index: React.FC = () => {
               try {
                 // [B-5-FIX] 단일/멀티 모두 프로젝트(program_id) 경로로 일원화 — program_id 저장돼야 복원 가능
                 const orderedSourceIds = uploadedSourceIds.filter(id => completedSourceIds.includes(id));
+                setAnalyzeMessage("편집 제안(A·B)을 생성하는 중입니다... 잠시만 기다려 주세요.");
                 proposalData = await videoService.requestProjectProposals(projectId, orderedSourceIds, 60.0);
                 console.log("[proposal-project] Diagnostics:", {
                   project_id: proposalData.project_id,

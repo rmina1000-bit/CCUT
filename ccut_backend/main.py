@@ -199,11 +199,31 @@ def get_video_range_response(file_path: Path, request: Request):
         media_type=content_type
     )
 
+import re as _re_pano
+_PANO_FRAME_RE = _re_pano.compile(r'thumbnails/P_.+_\d+\.jpg$')
+
+async def _wait_for_panorama_frame(path: str, timeout: float = 6.0, interval: float = 0.15):
+    """P_ 파노라마 프레임이 아직 추출 중이면 잠깐 기다렸다 제공 — 404 레이스 원천 차단(프론트 무관)."""
+    if not _PANO_FRAME_RE.search(path):
+        return None
+    import asyncio
+    waited = 0.0
+    while waited < timeout:
+        await asyncio.sleep(interval)
+        waited += interval
+        fp = _resolve_static_path(path)
+        if fp is not None:
+            return fp
+    return None
+
+
 @app.get("/static/{path:path}")
 async def serve_static_range(path: str, request: Request):
     from fastapi.responses import FileResponse
     from fastapi import HTTPException
     full_path = _resolve_static_path(path)
+    if full_path is None:
+        full_path = await _wait_for_panorama_frame(path)
     if full_path is None:
         raise HTTPException(status_code=404, detail="File not found")
 
@@ -217,6 +237,8 @@ async def serve_api_static_range(path: str, request: Request):
     from fastapi.responses import FileResponse
     from fastapi import HTTPException
     full_path = _resolve_static_path(path)
+    if full_path is None:
+        full_path = await _wait_for_panorama_frame(path)
     if full_path is None:
         raise HTTPException(status_code=404, detail="File not found")
 
@@ -2922,14 +2944,11 @@ async def extract_pbe_panoramas(req: PanoramaExtractRequest, background_tasks: B
     if not enriched_fragments:
         return {"status": "ERROR", "message": "No valid source video found for fragments"}
         
-    # ffmpeg batch panorama 추출을 백그라운드로 예약
-    background_tasks.add_task(
-        video_engine.batch_extract_panoramas,
-        None,
-        enriched_fragments,
-        4
-    )
-    return {"status": "STARTED", "count": len(enriched_fragments)}
+    # ffmpeg batch panorama 추출을 동기 실행(완료까지 대기) 후 응답 — 404 레이스 근원 제거
+    import asyncio
+    loop = asyncio.get_event_loop()
+    await loop.run_in_executor(None, video_engine.batch_extract_panoramas, None, enriched_fragments, 4)
+    return {"status": "COMPLETED", "count": len(enriched_fragments)}
 
 
 @app.post("/pbe/context")
