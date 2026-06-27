@@ -350,6 +350,7 @@ const LeftNav: React.FC<LeftNavProps> = ({
         {[
           { id: "account", icon: <User size={15} strokeWidth={1.5} />, label: "내 계정" },
           { id: "settings", icon: <Settings size={15} strokeWidth={1.5} />, label: "설정" },
+          { id: "trash", icon: <Trash2 size={15} strokeWidth={1.5} />, label: "휴지통" },
         ].map((item) => (
           <button
             key={item.id}

@@ -9,6 +9,7 @@ import { useProposalState } from "@/hooks/useProposalState";
 import { ArchivePanel } from "@/components/ArchivePanel";
 import { SnsUploadPanel } from "@/components/SnsUploadPanel";
 import { AccountPanel } from "@/components/AccountPanel";
+import { TrashPanel } from "@/components/TrashPanel";
 import { SettingsPanel } from "@/components/SettingsPanel";
 import { SingleFragmentEditor } from "@/components/SingleFragmentEditor";
 // [PBE REBUILD 2-1] 기존 PBE 컴포넌트 runtime import 제거. 타입만 임시 유지(새 편집창 신설 시 완전 제거).
@@ -2041,7 +2042,7 @@ const Index: React.FC = () => {
         />
       </div>
 
-      <div style={!(activeNavItem === "archive" || activeNavItem === "upload" || activeNavItem === "account" || activeNavItem === "settings") ? { width: centerWidth, flexShrink: 0 } : { flex: 1, minWidth: 0 }} className="h-full">
+      <div style={!(activeNavItem === "archive" || activeNavItem === "upload" || activeNavItem === "account" || activeNavItem === "settings" || activeNavItem === "trash") ? { width: centerWidth, flexShrink: 0 } : { flex: 1, minWidth: 0 }} className="h-full">
         {activeNavItem === "settings" ? (
           <SettingsPanel />
         ) : activeNavItem === "archive" ? (
@@ -2058,6 +2059,8 @@ const Index: React.FC = () => {
               setProjects((prev) => prev.map((p) => (p.id === id ? { ...p, name: newName } : p)));
             }}
           />
+        ) : activeNavItem === "trash" ? (
+          <TrashPanel />
         ) : activeNavItem === "account" ? (
           <AccountPanel />
         ) : (
@@ -2119,7 +2122,7 @@ const Index: React.FC = () => {
         )}
       </div>
 
-      {!(activeNavItem === "archive" || activeNavItem === "upload" || activeNavItem === "account") && (
+      {!(activeNavItem === "archive" || activeNavItem === "upload" || activeNavItem === "account" || activeNavItem === "trash") && (
         <>
           <div
             className={`flex-shrink-0 flex items-center justify-center cursor-col-resize group transition-colors ${isDragging ? "bg-primary/15" : "hover:bg-primary/8"

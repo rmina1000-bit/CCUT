@@ -212,6 +212,16 @@ export const videoService = {
         return await fetcher(`/projects/${encodeURIComponent(programId)}/restore`, { method: "POST" });
     },
 
+    // [SOFT-DELETE] 휴지통 목록 (deleted_at 있는 프로젝트, 30일 보관)
+    listTrash: async () => {
+        return await fetcher(`/projects/trash`);
+    },
+
+    // [SOFT-DELETE] 즉시 완전삭제(복원 불가)
+    purgeProject: async (programId: string) => {
+        return await fetcher(`/projects/${encodeURIComponent(programId)}/purge`, { method: "DELETE" });
+    },
+
     // [PROPOSAL-PREVIEW] 제안 즉석 렌더(또는 캐시) -> 재생용 mp4 URL
     makeProposalPreview: async (proposalId: string): Promise<{
         status: string;
