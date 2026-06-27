@@ -13,7 +13,13 @@ const MIN_RIGHT = 400;
 export const useWorkspaceLayout = () => {
   const [activeNavItem, setActiveNavItem] = useState(() => {
     if (typeof window !== "undefined") {
-      return localStorage.getItem("ccut_active_project_id") || "projects";
+      const saved = localStorage.getItem("ccut_active_project_id");
+      // 작업 중이던 프로젝트(proj_)만 복원. 메뉴 화면(trash/archive/upload/settings/account)은
+      // 첫 화면이 되면 안 되므로 항상 새 프로젝트 시작 메인("projects")으로.
+      if (saved && saved.startsWith("proj_")) {
+        return saved;
+      }
+      return "projects";
     }
     return "projects";
   });
