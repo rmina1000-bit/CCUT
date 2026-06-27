@@ -3272,6 +3272,7 @@ async def purge_project(program_id: str, db: Session = Depends(get_db)):
     pg = db.query(ProgramTable).filter_by(program_id=program_id).first()
     if not pg:
         return {"status": "NOT_FOUND", "program_id": program_id}
+    _snapshot_db_before_destructive("purge")
     try:
         db.query(ProjectSourceTable).filter_by(program_id=program_id).delete()
         db.delete(pg)
@@ -3326,6 +3327,7 @@ async def delete_source(source_id: str, mode: str = "source_only", db: Session =
             print(f"[SOURCE-DELETE] 파일 삭제 실패: {e}")
 
     if mode == "full":
+        _snapshot_db_before_destructive("delete_source_full")
         from archive.db_models import (EvidenceTable, SemanticFragmentTable,
                                         QuickScanTable, SubtitleTable, UserIntentTable)
         import sqlite3 as _sq
