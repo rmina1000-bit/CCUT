@@ -471,6 +471,9 @@ async def upload_video(background_tasks: BackgroundTasks, file: UploadFile = Fil
 #   Background jobs
 # ═══════════════════════════════════════════════════════════════════
 
+import threading
+_ASR_SEMAPHORE = threading.Semaphore(2)  # ASR 동시 실행 제한 — 68개 동시 경합 폭발 방지
+
 def _background_whisper(source_id: str, video_path: str, fragments: list):
     try:
         _background_whisper_impl(source_id, video_path, fragments)
@@ -556,7 +559,7 @@ def _background_whisper_impl(source_id: str, video_path: str, fragments: list):
         )
         print(f"[PRE_PROFILE] {source_id} -> {_pre}")
 
-        _enforce = _os.getenv("CCUT_PROFILE_ENFORCE", "0") == "1"
+        _enforce = _os.getenv("CCUT_PROFILE_ENFORCE", "1") == "1"
         if _pre.get("profile") == "static" and _enforce:
             print(f"[PRE_PROFILE] {source_id} static 확정 — ASR 스킵 (ENFORCE)")
             _ps(
@@ -574,7 +577,8 @@ def _background_whisper_impl(source_id: str, video_path: str, fragments: list):
         elif _pre.get("profile") == "static":
             print(f"[PRE_PROFILE] {source_id} static 판정 — DRY-RUN: ASR 계속 진행")
 
-        whisper_res    = asr.transcribe_fragments(video_path, fragments)
+        with _ASR_SEMAPHORE:
+            whisper_res    = asr.transcribe_fragments(video_path, fragments)
         
         transcripts  = whisper_res.get("fragment_transcripts", {})
         all_segments = whisper_res.get("all_segments", [])
