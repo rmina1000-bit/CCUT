@@ -58,6 +58,41 @@ BACKEND_STORAGE_DIR = (BACKEND_DIR / "storage").resolve()
 _STATIC_BASES = [STORAGE_DIR, BACKEND_STORAGE_DIR]
 
 
+# ═══════════════════════════════════════════════════════════════════
+#   [1-b-①] 파괴적 DB 작업 전 스냅샷 헬퍼 (정의만 · 호출 연결은 1-b-③)
+# ═══════════════════════════════════════════════════════════════════
+import shutil as _shutil
+import time as _time
+from pathlib import Path as _Path
+_SNAPSHOT_DIR = _Path(__file__).resolve().parent / "db_snapshots"
+_SNAPSHOT_KEEP = 10
+def _snapshot_db_before_destructive(reason: str = "destructive") -> str:
+    """파괴적 DB 작업 직전 스냅샷. WAL checkpoint 후 .db 복사. 실패해도 작업 진행(보조)."""
+    try:
+        from database import engine as _engine
+        from sqlalchemy import text as _text
+        with _engine.connect() as _c:
+            _c.execute(_text("PRAGMA wal_checkpoint(TRUNCATE)"))
+            _c.commit()
+        _src = _Path(__file__).resolve().parent / "ccut_app.db"
+        if not _src.exists():
+            print(f"[SNAPSHOT] SKIP — db not found: {_src}")
+            return ""
+        _SNAPSHOT_DIR.mkdir(exist_ok=True)
+        _ts = _time.strftime("%Y%m%d_%H%M%S")
+        _dst = _SNAPSHOT_DIR / f"ccut_app_{_ts}_{reason}.db"
+        _shutil.copy2(_src, _dst)
+        print(f"[SNAPSHOT] created: {_dst.name} (reason={reason})")
+        _snaps = sorted(_SNAPSHOT_DIR.glob("ccut_app_*.db"), key=lambda p: p.stat().st_mtime)
+        for _old in _snaps[:-_SNAPSHOT_KEEP]:
+            try: _old.unlink(); print(f"[SNAPSHOT] pruned: {_old.name}")
+            except Exception as _pe: print(f"[SNAPSHOT] prune fail: {_pe}")
+        return str(_dst)
+    except Exception as _se:
+        print(f"[SNAPSHOT] FAILED (non-blocking): {_se}")
+        return ""
+
+
 def _resolve_static_path(path: str):
     """STORAGE_DIR과 BACKEND_DIR/storage 양쪽에서 파일을 찾는다. 경로탈출 방지."""
     for base in _STATIC_BASES:

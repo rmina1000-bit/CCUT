@@ -25,3 +25,6 @@ full_diff.txt
 # System & OS
 .DS_Store
 Thumbs.db
+
+# DB 스냅샷 (삭제 전 자동 백업, 커밋 대상 아님)
+ccut_backend/db_snapshots/
