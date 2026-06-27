@@ -474,6 +474,11 @@ const Index: React.FC = () => {
               }
             }
 
+            // [PBE-PROGRESS] 분석 진행 상황 실시간 표시(멈춘 것처럼 보이지 않게)
+            const _settledCount = completedSourceIds.length + failedSourceIds.length;
+            if (_settledCount < uploadedSourceIds.length) {
+              setAnalyzeMessage(`영상 의미 분석 중... (${_settledCount}/${uploadedSourceIds.length} 완료)`);
+            }
             const allSettled = (completedSourceIds.length + failedSourceIds.length) === uploadedSourceIds.length;
             const isTimeout = pollCount >= MAX_POLLS;
 
@@ -493,7 +498,10 @@ const Index: React.FC = () => {
               const semanticResults: Record<string, any[]> = {};
               const sourceLabels = collectedEntries.reduce((acc, e) => ({ ...acc, [e.source_id]: e.label }), {} as Record<string, string>);
 
+              let _semIdx = 0;
               for (const sid of completedSourceIds) {
+                _semIdx++;
+                setAnalyzeMessage(`의미 조각 수집 중... (${_semIdx}/${completedSourceIds.length})`);
                 try {
                   const semanticRes = await fetch(`${videoService.API_BASE_URL}/semantic-fragments/${sid}`, { method: "POST" });
                   if (semanticRes.ok) {

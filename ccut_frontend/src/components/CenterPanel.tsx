@@ -1018,7 +1018,8 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
     // proposals 조건으로 무한 로딩(제안 없는 complete) 방지.
     const showAnalyzingLoader =
       appState === "analyzing" ||
-      (appState === "complete" && !!proposals && !storyPlan);
+      (appState === "complete" && !!proposals && !storyPlan) ||
+      (appState !== "complete" && !!sourceEntries && sourceEntries.length > 0 && !proposals);
 
     if (showAnalyzingLoader) {
       return (
