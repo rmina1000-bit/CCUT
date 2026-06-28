@@ -2250,7 +2250,8 @@ async def post_export_input(proposal_id: str, payload: dict = None):
     # [STEP 14-A] Log user proposal acceptance decision
     try:
         from learning.decision_logger import DecisionLogger
-        with SessionLocal() as db_session:
+        from database import SessionLocal as _SL_log
+        with _SL_log() as db_session:
             prop_row = db_session.query(ProposalTable).filter_by(proposal_id=proposal_id).first()
             if prop_row:
                 src_id = prop_row.source_id
