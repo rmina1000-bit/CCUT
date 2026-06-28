@@ -11,16 +11,11 @@ interface UseAppNavigationParams {
   setActiveNavItem: (v: string) => void;
   setNavCollapsed: (updater: (prev: boolean) => boolean) => void;
   setProjects: (updater: (prev: any[]) => any[]) => void;
-  // live values (uiSnap / 분기용)
+  // 분기용 값
   activeNavItem: string | null;
   appState: string;
-  reservedFragments: any[];
-  holdPositions: Record<string, { x: number; y: number }>;
-  committedProposalId: any;
-  selectedProposalId: any;
-  activeSource: string;
-  deletedFragments: any[];
-  proposals: any;
+  // uiSnap 단일 빌더 (STEP 2 dedup)
+  buildUiSnapshot: () => any;
 }
 
 export function useAppNavigation({
@@ -34,13 +29,7 @@ export function useAppNavigation({
   setProjects,
   activeNavItem,
   appState,
-  reservedFragments,
-  holdPositions,
-  committedProposalId,
-  selectedProposalId,
-  activeSource,
-  deletedFragments,
-  proposals,
+  buildUiSnapshot,
 }: UseAppNavigationParams) {
   const resetAnalysisState = useCallback(() => {
     // [REFACTOR-01] proposal 4개(useProposalState 소유) 먼저, 그 뒤 analysis 13개(useAnalysisFlow). 원본 호출순서·빈 deps 보존.
@@ -61,22 +50,7 @@ export function useAppNavigation({
   const onItemClick = (newId: string) => {
     // [B-5d] 전환 직전: 현재 프로젝트 UI 스냅샷 저장 (백그라운드, non-blocking)
     if (activeNavItem && activeNavItem.startsWith("proj_") && appState === "complete") {
-      const uiSnap = {
-        reservedFragments,
-        holdPositions,
-        committedProposalId,
-        selectedProposalId,
-        activeSource,
-        deletedFragments,
-        proposalsKeyFragments: proposals ? {
-          A: (proposals as any).A?.key_fragments,
-          B: (proposals as any).B?.key_fragments,
-        } : undefined,
-        proposalsCustomFragments: proposals ? {
-          A: (proposals as any).A?.customEditFragments,
-          B: (proposals as any).B?.customEditFragments,
-        } : undefined,
-      };
+      const uiSnap = buildUiSnapshot();
       videoService.saveProjectState(activeNavItem, { ui_state: JSON.stringify(uiSnap) }).catch(() => {});
     }
     // [FIX-LIST-ORDER] 프로젝트를 '여는(클릭) 것'은 조회이므로 목록 순서를 바꾸지 않는다.
@@ -106,22 +80,7 @@ export function useAppNavigation({
   const onNewProject = () => {
     // [B-5d] + 버튼도 전환으로 취급: 현재 프로젝트 스냅샷 저장 후 빈 화면으로
     if (activeNavItem && activeNavItem.startsWith("proj_") && appState === "complete") {
-      const uiSnap = {
-        reservedFragments,
-        holdPositions,
-        committedProposalId,
-        selectedProposalId,
-        activeSource,
-        deletedFragments,
-        proposalsKeyFragments: proposals ? {
-          A: (proposals as any).A?.key_fragments,
-          B: (proposals as any).B?.key_fragments,
-        } : undefined,
-        proposalsCustomFragments: proposals ? {
-          A: (proposals as any).A?.customEditFragments,
-          B: (proposals as any).B?.customEditFragments,
-        } : undefined,
-      };
+      const uiSnap = buildUiSnapshot();
       videoService.saveProjectState(activeNavItem, { ui_state: JSON.stringify(uiSnap) }).catch(() => {});
     }
     // [B-5b-v2] '+' → DB 즉시 생성 없음. 빈 상태 전환만 (업로드 시 createProject 실행)

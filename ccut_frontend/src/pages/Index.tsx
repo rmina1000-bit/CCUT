@@ -269,6 +269,23 @@ const Index: React.FC = () => {
 
 // logProposalPair moved to useProposalState
 
+  const buildUiSnapshot = useCallback(() => ({
+    reservedFragments,
+    holdPositions,
+    committedProposalId,
+    selectedProposalId,
+    activeSource,
+    deletedFragments,
+    proposalsKeyFragments: proposals ? {
+      A: (proposals as any).A?.key_fragments,
+      B: (proposals as any).B?.key_fragments,
+    } : undefined,
+    proposalsCustomFragments: proposals ? {
+      A: (proposals as any).A?.customEditFragments,
+      B: (proposals as any).B?.customEditFragments,
+    } : undefined,
+  }), [reservedFragments, holdPositions, committedProposalId, selectedProposalId, activeSource, deletedFragments, proposals]);
+
   const {
     resetAnalysisState,
     onHome,
@@ -280,8 +297,7 @@ const Index: React.FC = () => {
   } = useAppNavigation({
     setSelectedProposalId, setCommittedProposalId, setProposals, setDirectionSnapshot,
     resetAnalysisFlow, setActiveNavItem, setNavCollapsed, setProjects,
-    activeNavItem, appState, reservedFragments, holdPositions,
-    committedProposalId, selectedProposalId, activeSource, deletedFragments, proposals,
+    activeNavItem, appState, buildUiSnapshot,
   });
 
   // [B-5-FIX] 저장된 백엔드 proposals → UI proposals 형태 매핑 (복원용, 업로드 매핑과 동일 형태)
@@ -2033,22 +2049,7 @@ const Index: React.FC = () => {
             onExportDone={() => {
               // [FIX-EXPORT-UISTATE] 내보내기 완료 시 ui_state 저장
               if (activeNavItem && activeNavItem.startsWith("proj_")) {
-                const uiSnap = {
-                  reservedFragments,
-                  holdPositions,
-                  committedProposalId,
-                  selectedProposalId,
-                  activeSource,
-                  deletedFragments,
-                  proposalsKeyFragments: proposals ? {
-                    A: (proposals as any).A?.key_fragments,
-                    B: (proposals as any).B?.key_fragments,
-                  } : undefined,
-                  proposalsCustomFragments: proposals ? {
-                    A: (proposals as any).A?.customEditFragments,
-                    B: (proposals as any).B?.customEditFragments,
-                  } : undefined,
-                };
+                const uiSnap = buildUiSnapshot();
                 videoService.saveProjectState(
                   activeNavItem,
                   { ui_state: JSON.stringify(uiSnap) }
