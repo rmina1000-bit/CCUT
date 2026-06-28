@@ -59,15 +59,19 @@ export const TrashPanel: React.FC = () => {
 
   const handleEmpty = async () => {
     const targets = items.map((i) => i.program_id);
-    try {
-      for (const id of targets) {
+    let failCount = 0;
+    for (const id of targets) {
+      try {
         await videoService.purgeProject(id);
+      } catch (e) {
+        failCount++;
+        console.error("[TRASH] purge fail:", id, e);
       }
-      await load();
-    } catch (e) {
-      console.error("[TRASH] empty fail", e);
-    } finally {
-      setConfirm(null);
+    }
+    await load();
+    setConfirm(null);
+    if (failCount > 0) {
+      alert(`${targets.length}개 중 ${failCount}개 삭제 실패. 나머지는 삭제되었습니다.`);
     }
   };
 
