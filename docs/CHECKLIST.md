@@ -42,4 +42,5 @@
 - [x] STEP3 CenterPanel passive view 2개 분리(props 3·3) — `cef2e93` (tsc 0, diff 3파일)
 - [x] 전체 회귀: tsc 0 / vite build ✓ built / py_compile PYC_OK / 누적 diff 5파일
 - [x] PRODUCT 실화면: F5 첫화면·프로젝트 클릭/전환·홈버튼·Proposal A/B·Export·휴지통 = PASS
-- [ ] 휴지통 라이브갱신(삭제→휴지통 / 복원→프로젝트메뉴 즉시반영) — 범위 밖, 미구현. 새로고침 시 정상. 별도 작업 예정
+- [x] 휴지통 라이브갱신(삭제→휴지통 / 복원→프로젝트메뉴 즉시반영) — `bf50e12` (reloadProjects 추출 + TrashPanel onChanged/reloadDep), 실화면 PASS
+- [x] STEP6 백엔드 health/debug router 분리 — `b103b30` (routers/health.py, /health·/pipeline/status·/system/diagnostics 실응답, 재기동 정상)
