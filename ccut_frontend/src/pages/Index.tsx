@@ -97,6 +97,7 @@ const Index: React.FC = () => {
   const [appState, setAppState] = useState<"empty" | "analyzing" | "complete">("empty");
   const [analyzeProgress, setAnalyzeProgress] = useState(0);
   const [analyzeMessage, setAnalyzeMessage] = useState("");
+  const [isSwitchingProject, setIsSwitchingProject] = useState(false);
 
   // [PBE-PROGRESS] 분석 중 진행바가 멈춰 보이지 않도록 95%까지 천천히 전진(멈춤처럼 보이지 않게)
   useEffect(() => {
@@ -852,6 +853,7 @@ const Index: React.FC = () => {
     const isJustCreated = justCreatedProjectRef.current === activeNavItem;
     if (isJustCreated) justCreatedProjectRef.current = null;
     previousHydratedProjectRef.current = activeNavItem;
+    if (isRealProjectSwitch && !isJustCreated) setIsSwitchingProject(true);
 
     let isMounted = true;
     let debounceTimer: ReturnType<typeof setTimeout> | null = null;
@@ -875,6 +877,7 @@ const Index: React.FC = () => {
         setSingleEditTarget(null);
         setAppState("empty");
         setStoryPlan(null);
+        setAnalyzeMessage("");
       }
 
       try {
@@ -981,6 +984,8 @@ const Index: React.FC = () => {
         }
       } catch (err) {
         console.error("[Hydration] Failed to hydrate project sources:", err);
+      } finally {
+        if (isMounted) setIsSwitchingProject(false);
       }
     };
 
@@ -2063,6 +2068,10 @@ const Index: React.FC = () => {
           <TrashPanel />
         ) : activeNavItem === "account" ? (
           <AccountPanel />
+        ) : isSwitchingProject ? (
+          <div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100%",flexDirection:"column",gap:"16px"}}>
+            <div style={{fontSize:"14px",color:"#888"}}>프로젝트를 불러오는 중입니다...</div>
+          </div>
         ) : (
           <CenterPanel
             key={activeNavItem ?? "default"}
