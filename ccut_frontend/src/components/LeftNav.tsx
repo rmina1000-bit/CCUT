@@ -113,8 +113,8 @@ const LeftNav: React.FC<LeftNavProps> = ({
         <div
           className="absolute left-3 top-0 bottom-0 flex items-center"
           style={{ cursor: "pointer" }}
-          onClick={collapsed ? onToggleCollapse : onHome}
-          title={collapsed ? "사이드바 열기" : "첫 화면(홈)"}
+          onClick={onHome}
+          title="첫 화면(홈)"
         >
           <span className="text-[15px] font-semibold whitespace-nowrap">
             <span className="bg-gradient-to-r from-blue-400 to-primary bg-clip-text text-transparent">CC</span>
