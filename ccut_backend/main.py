@@ -2273,8 +2273,10 @@ async def post_export_input(proposal_id: str, payload: dict = None):
                     proposals=sibling_dicts
                 )
     except Exception as log_err:
+        import traceback as _tb
         print(f"[DECISION_LOGGER][ERROR] Failed to log user proposal choice: {log_err}")
-        
+        _tb.print_exc()
+
     return export_input
 
 @app.get("/export-input/{source_id}")
