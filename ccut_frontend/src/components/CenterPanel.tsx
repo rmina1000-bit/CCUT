@@ -1,11 +1,13 @@
 // CCUT 1.0.4 - R9.1 Rollback Verified
 import React, { useRef, useEffect, useState, useCallback, useMemo } from "react";
-import { Upload, Play, Loader2, Send, CheckCircle2, Package, BookOpen, List, ChevronDown, AlertCircle, Search, Film, Sparkles } from "lucide-react";
+import { Play, Loader2, Send, CheckCircle2, Package, BookOpen, List, ChevronDown, AlertCircle, Search, Film, Sparkles } from "lucide-react";
 import { Fragment } from "@/data/fragmentData";
 import { videoService } from "@/services/videoService";
 import { Direction, StoryPlanPreview } from "@/proposal/proposalTypes";
 import { PhysicalClip, validateExportClips } from "@/utils/exportClipBuilder";
 import { collectFragmentAliases } from "@/utils/proposalFragmentResolver";
+import { EmptyProjectView } from "@/components/views/EmptyProjectView";
+import { AnalysisLoadingView } from "@/components/views/AnalysisLoadingView";
 
 import type { AppState, SourceEntry } from "@/types";
 
@@ -964,46 +966,7 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
 
   const renderContent = () => {
     if (appState === "empty" && (!sourceEntries || sourceEntries.length === 0)) {
-      return (
-        <div className="flex-1 flex items-center justify-center p-6 text-center">
-          <div
-            className="w-full max-w-[320px] border-2 border-dashed border-primary/20 rounded-3xl p-12 flex flex-col items-center gap-5 hover:border-primary/40 hover:bg-primary/5 transition-all cursor-pointer group shadow-2xl shadow-primary/5"
-            onClick={handleUpload}
-          >
-            <div className="w-16 h-16 rounded-2xl bg-primary/10 flex items-center justify-center group-hover:scale-110 group-hover:rotate-3 transition-all duration-300">
-              <Upload size={24} className="text-primary" />
-            </div>
-
-            <div className="space-y-2">
-              <h2 className="text-[15px] font-bold text-foreground">새 프로젝트 시작</h2>
-              <p className="text-[12px] text-muted-foreground/60 leading-relaxed">
-                원본 영상들을 이곳에 끌어다 놓으세요.
-                <br />
-                AI가 인지 분할하고 편집 제안을 생성합니다.
-              </p>
-            </div>
-
-            <button
-              className="mt-4 px-8 py-2.5 rounded-xl bg-primary text-primary-foreground text-[12px] font-bold hover:opacity-90 hover:translate-y-[-2px] transition-all shadow-xl shadow-primary/20"
-              onClick={(e) => {
-                e.stopPropagation();
-                handleUpload();
-              }}
-            >
-              파일 업로드
-            </button>
-
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="video/*"
-              multiple
-              className="hidden"
-              onChange={handleFileChange}
-            />
-          </div>
-        </div>
-      );
+      return <EmptyProjectView handleUpload={handleUpload} fileInputRef={fileInputRef} handleFileChange={handleFileChange} />;
     }
 
     // [LOADING] 분석 중이거나, 분석은 끝났어도(complete) 제안이 준비됐는데
@@ -1015,52 +978,7 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
       (appState !== "complete" && !!sourceEntries && sourceEntries.length > 0 && !proposals);
 
     if (showAnalyzingLoader) {
-      return (
-        <div className="flex-1 flex items-center justify-center p-6">
-          <div className="flex flex-col items-center gap-6 w-full max-w-[420px]">
-            <div className="relative">
-              <div className="w-16 h-16 rounded-2xl bg-secondary/60 flex items-center justify-center animate-pulse">
-                <Loader2 size={24} className="text-primary animate-spin" />
-              </div>
-              <div className="absolute -top-1 -right-1 w-4 h-4 bg-primary rounded-full animate-ping opacity-20" />
-            </div>
-
-            <div className="text-center space-y-1.5">
-              <p className="text-[14px] font-bold text-foreground/90 tracking-tight">
-                AI 인지 분석 시퀀스 가동
-              </p>
-              <p className="text-[11px] text-muted-foreground/60">
-                {analyzeMessage || "장면의 맥락과 감정 선을 분석하는 중입니다."}
-              </p>
-            </div>
-
-            <div style={{
-              marginTop: "12px",
-              width: "100%",
-              maxHeight: "30%",
-              overflow: "hidden",
-              fontFamily: "monospace",
-              fontSize: "11px",
-              color: "#6b7280",
-              lineHeight: "1.5",
-              display: "flex",
-              flexDirection: "column",
-              justifyContent: "flex-end"
-            }}>
-              {(analysisLogs ?? []).map((line, i) => (
-                <div key={i} style={{whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{line}</div>
-              ))}
-            </div>
-
-            <div className="w-full h-1.5 bg-secondary/40 rounded-full overflow-hidden shadow-inner">
-              <div
-                className="h-full bg-primary rounded-full transition-all duration-500 ease-out shadow-[0_0_10px_rgba(var(--primary),0.5)]"
-                style={{ width: `${Math.min(analyzeProgress, 100)}%` }}
-              />
-            </div>
-          </div>
-        </div>
-      );
+      return <AnalysisLoadingView analyzeMessage={analyzeMessage} analysisLogs={analysisLogs} analyzeProgress={analyzeProgress} />;
     }
 
     return (
