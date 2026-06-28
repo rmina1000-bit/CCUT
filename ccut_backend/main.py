@@ -2226,7 +2226,7 @@ async def get_proposals_api(source_id: str):
 #   [STEP 7] Export Input Generation
 # ═══════════════════════════════════════════════════════════════════
 
-@app.post("/export-input/{proposal_id}")
+@app.post("/export-input/{proposal_id:path}")
 async def post_export_input(proposal_id: str, payload: dict = None):
     """
     [STEP 7] Proposal -> Export Input 변환
@@ -2255,8 +2255,14 @@ async def post_export_input(proposal_id: str, payload: dict = None):
             prop_row = db_session.query(ProposalTable).filter_by(proposal_id=proposal_id).first()
             if prop_row:
                 src_id = prop_row.source_id
-                # Fetch sibling proposals under the same project
-                siblings = bams.get_proposals(src_id)
+                prog_id = prop_row.program_id
+                # Fetch sibling proposals under the same project (source 단건 또는 program 다중)
+                if src_id:
+                    siblings = db_session.query(ProposalTable).filter_by(source_id=src_id).filter(ProposalTable.program_id.is_(None)).all()
+                elif prog_id:
+                    siblings = db_session.query(ProposalTable).filter_by(program_id=prog_id).all()
+                else:
+                    siblings = []
                 sibling_dicts = []
                 for s in siblings:
                     sibling_dicts.append({
@@ -2265,10 +2271,10 @@ async def post_export_input(proposal_id: str, payload: dict = None):
                         "sequence": s.sequence,
                         "duration": s.duration,
                         "original_reason": s.proposal_reason,
-                        "human_reality_score_data": s.proposal_reason.get("human_reality_score") if isinstance(s.proposal_reason, dict) else {}
+                        "human_reality_score_data": (s.proposal_reason if isinstance(s.proposal_reason, dict) else {}).get("human_reality_score", {})
                     })
                 DecisionLogger.log_user_proposal_choice(
-                    project_id=src_id,
+                    project_id=src_id or prog_id,
                     chosen_mode=prop_row.mode,
                     proposals=sibling_dicts
                 )
