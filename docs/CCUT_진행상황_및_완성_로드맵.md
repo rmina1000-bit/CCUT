@@ -36,6 +36,27 @@ branch: ccut-1.0.4-step9
 | SRC_B85D3189 | 6 | 5.0~13.25s | 모션 변곡점 |
 | SRC_B1A26714 | 27 | 5.2~15.4s | 컷+발화, scene 경계 |
 
+### 휴지통 화면 + 앱 시작 화면 정상화 (2026-06-28, ChatGPT PRODUCT PASS)
+
+브랜치 ccut-1.0.4-step9 / HEAD de3de22 (push 완료)
+
+**(A) 윈도우식 전용 휴지통 — 커밋 276774c**
+- videoService.ts: listTrash() / purgeProject() 신규 (기존 백엔드 trash/purge API 연결)
+- TrashPanel.tsx 신규(204줄): 목록·복원·영구삭제·휴지통비우기·빈상태·확인모달
+- LeftNav.tsx: 네비 "휴지통" 항목 / Index.tsx: 분기+레이아웃 2곳
+- 1차 ArchivePanel 재활용안은 아카이브와 동일하여 폐기·원복(cmp IDENTICAL) 후 전용 페이지로 재설계
+- 검증: 삭제 프로젝트 6건 목록, 영구삭제 시 6→3건, 복원·비우기 정상
+
+**(B) 앱 시작 첫 화면 정상화 — 커밋 de3de22**
+- 원인: useWorkspaceLayout.ts가 activeNavItem(메뉴값까지)을 localStorage에 복원
+- 수정: proj_ 접두사(작업중 프로젝트)만 복원, 그 외는 새 프로젝트 메인("projects")
+- 검증: 휴지통/아카이브/SNS/내계정/설정 5개 메뉴 전부 재시작 시 메인 복귀
+
+ChatGPT 판정: PRODUCT PASS (둘 다)
+- 잔여(P1, 다음 안정화): 휴지통 비우기 다건 purge 부분실패 처리 보강
+- 다음 메인(검수 권고): ASR 20분 측정 복귀
+- 교훈 확정: 큰 파일 Edit 금지(in-place), CRLF는 newline="" 보존, 백엔드 변경 후 재시작+StartTime 확인
+
 ---
 
 ## 진행 중 (IN PROGRESS)
@@ -142,3 +163,20 @@ branch: ccut-1.0.4-step9
 | M-0 가설 기각 | t=97/103.5/145 "가짜 피크" → 실제는 샘플 시각 어긋남, D1이 해소 |
 | Claude Code 해석 오류 | 원시 숫자는 정확, 원인 귀속 오류 사례 있음 — 산문 해석 검증 필요 |
 | CWD 의존 경로 | bat 실행 시 storage 경로 깨짐 → __file__ 앵커로 해소 (M-2.2) |
+
+## [완료] 휴지통 화면 + 앱 시작 화면 정상화 (2026-06-28, ChatGPT PRODUCT PASS)
+브랜치 ccut-1.0.4-step9 / HEAD de3de22 (push 완료)
+(A) 윈도우식 전용 휴지통 — 커밋 276774c
+- videoService.ts: listTrash() / purgeProject() 신규 (기존 백엔드 trash/purge API 연결)
+- TrashPanel.tsx 신규(204줄): 목록·복원·영구삭제·휴지통비우기·빈상태·확인모달
+- LeftNav.tsx: 네비 "휴지통" 항목 / Index.tsx: 분기+레이아웃 2곳
+- 1차 ArchivePanel 재활용안은 아카이브와 동일하여 폐기·원복(cmp IDENTICAL) 후 전용 페이지로 재설계
+- 검증: 삭제 프로젝트 6건 목록, 영구삭제 시 6→3건, 복원·비우기 정상
+(B) 앱 시작 첫 화면 정상화 — 커밋 de3de22
+- 원인: useWorkspaceLayout.ts가 activeNavItem(메뉴값까지)을 localStorage에 복원
+- 수정: proj_ 접두사(작업중 프로젝트)만 복원, 그 외는 새 프로젝트 메인("projects")
+- 검증: 휴지통/아카이브/SNS/내계정/설정 5개 메뉴 전부 재시작 시 메인 복귀
+ChatGPT 판정: PRODUCT PASS (둘 다)
+잔여(P1, 다음 안정화): 휴지통 비우기 다건 purge 부분실패 처리 보강
+다음 메인(검수 권고): ASR 20분 측정 복귀
+교훈 확정: 큰 파일 Edit 금지(in-place), CRLF는 newline="" 보존, 백엔드 변경 후 재시작+StartTime 확인
