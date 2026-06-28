@@ -875,6 +875,7 @@ const Index: React.FC = () => {
         setSingleEditTarget(null);
         setAppState("empty");
         setStoryPlan(null);
+        setAnalyzeMessage("");
       }
 
       try {
