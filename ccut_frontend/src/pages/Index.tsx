@@ -24,6 +24,8 @@ import {
   initialEditFragments,
   initialReservedFragments,
 } from "@/data/fragmentData";
+import { useAnalysisFlow } from "@/hooks/useAnalysisFlow";
+import type { SourceEntry } from "@/hooks/useAnalysisFlow";
 
 import { assignShortDisplayIds, getUid, recalcDisplayIds } from "@/lib/fragmentIdentity";
 import { videoService } from "@/services/videoService";
@@ -39,26 +41,7 @@ import { buildExportClipsFromResolvedFragments } from "@/utils/exportClipBuilder
 
 // Layout constants moved to useWorkspaceLayout.ts
 
-type QuickScanData = {
-  source_id?: string;
-  status?: string;
-  summary?: any;
-  hypothesis?: any;
-  questions?: any[];
-  default_intent_seed?: any;
-};
 
-type SemanticFragmentData = {
-  fragment_id: string;
-  source_id?: string;
-  start: number;
-  end: number;
-  semantic?: any;
-  structural?: any;
-  continuity?: any;
-  confidence?: number;
-  fallback_reason?: string | null;
-};
 
 const Index: React.FC = () => {
   const {
@@ -76,14 +59,24 @@ const Index: React.FC = () => {
 
   const [activeSource, setActiveSource] = useState("A");
 
-  const [selectedFragment, setSelectedFragment] = useState<Fragment | null>(null);
-  const [highlightedPanoramaFrag, setHighlightedPanoramaFrag] = useState<string | null>(null);
-  const [expandedFragment, setExpandedFragment] = useState<string | null>(null);
+  const {
+    selectedFragment, setSelectedFragment,
+    highlightedPanoramaFrag, setHighlightedPanoramaFrag,
+    expandedFragment, setExpandedFragment,
+    editFragments, setEditFragments,
+    reservedFragments, setReservedFragments,
+    deletedFragments, setDeletedFragments,
+    appState, setAppState,
+    sourceFragments, setSourceFragments,
+    currentSourceId, setCurrentSourceId,
+    currentVideoUrl, setCurrentVideoUrl,
+    quickScanData, setQuickScanData,
+    semanticFragments, setSemanticFragments,
+    sourceEntries, setSourceEntries,
+    resetAnalysisFlow,
+  } = useAnalysisFlow();
 
-  const [editFragments, setEditFragments] = useState<Fragment[]>(initialEditFragments);
-  const [reservedFragments, setReservedFragments] = useState<Fragment[]>(initialReservedFragments);
   const [holdPositions, setHoldPositions] = useState<Record<string, { x: number; y: number }>>({});
-  const [deletedFragments, setDeletedFragments] = useState<Fragment[]>([]);
   const [boundaryHighlightIds, setBoundaryHighlightIds] = useState<string[]>([]);
   const [editorTarget, setEditorTarget] = useState<BoundaryEditorTarget | null>(null);
   const [pbeWindow, setPbeWindow] = useState<Fragment[]>([]);
@@ -94,7 +87,6 @@ const Index: React.FC = () => {
 
 // selectedProposalId, committedProposalId moved to useProposalState
 
-  const [appState, setAppState] = useState<"empty" | "analyzing" | "complete">("empty");
   const [analyzeProgress, setAnalyzeProgress] = useState(0);
   const [analyzeMessage, setAnalyzeMessage] = useState("");
   const [analysisLogs, setAnalysisLogs] = useState<string[]>([]);
@@ -120,21 +112,7 @@ const Index: React.FC = () => {
 
 // proposals, directionSnapshot moved to useProposalState
 
-  const [sourceFragments, setSourceFragments] = useState<Fragment[]>([]);
-  const [currentSourceId, setCurrentSourceId] = useState<string | null>(null);
-  const [currentVideoUrl, setCurrentVideoUrl] = useState<string | null>(null);
-  const [quickScanData, setQuickScanData] = useState<QuickScanData | null>(null);
-  const [semanticFragments, setSemanticFragments] = useState<SemanticFragmentData[]>([]);
 
-  type SourceEntry = {
-    source_id: string;
-    label: string;
-    video_url: string;
-    fragments: Fragment[];
-    file_size_bytes?: number;
-    duration_sec?: number;
-  };
-  const [sourceEntries, setSourceEntries] = useState<SourceEntry[]>([]);
 
   const {
     selectedProposalId,
@@ -291,26 +269,12 @@ const Index: React.FC = () => {
 // logProposalPair moved to useProposalState
 
   const resetAnalysisState = useCallback(() => {
+    // [REFACTOR-01] proposal 4개(useProposalState 소유) 먼저, 그 뒤 analysis 13개(useAnalysisFlow). 원본 호출순서·빈 deps 보존.
     setSelectedProposalId(null);
     setCommittedProposalId(null);
     setProposals(null);
     setDirectionSnapshot(null);
-
-    setSourceFragments([]);
-    setEditFragments([]);
-    setReservedFragments([]);
-    setDeletedFragments([]);
-
-    setSelectedFragment(null);
-    setHighlightedPanoramaFrag(null);
-    setExpandedFragment(null);
-
-    setCurrentSourceId(null);
-    setCurrentVideoUrl(null);
-    setSourceEntries([]);
-    setQuickScanData(null);
-    setSemanticFragments([]);
-    setAppState("empty");  // [B-5-FIX] 리셋/새 프로젝트 → 빈 업로드 화면 (FAILURE 아님)
+    resetAnalysisFlow();
   }, []);
 
   // [B-5-FIX] 저장된 백엔드 proposals → UI proposals 형태 매핑 (복원용, 업로드 매핑과 동일 형태)
