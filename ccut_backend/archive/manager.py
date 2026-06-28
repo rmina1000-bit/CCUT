@@ -704,8 +704,11 @@ class BAMSManager:
     def save_export_input(self, data: dict):
         """[STEP 7] Export Input 연동 데이터 저장"""
         with SessionLocal() as db:
-            from archive.db_models import ExportInputTable
-            # proposal_id 기준 중복 제거 (Upsert)
+            from archive.db_models import ExportInputTable, ExportResultTable
+            # proposal_id 기준 중복 제거 (Upsert) — FK 자식(export_results) 먼저 삭제
+            existing = db.query(ExportInputTable).filter_by(proposal_id=data["proposal_id"]).first()
+            if existing:
+                db.query(ExportResultTable).filter_by(export_input_id=existing.export_id).delete()
             db.query(ExportInputTable).filter_by(proposal_id=data["proposal_id"]).delete()
             
             db_exp = ExportInputTable(
