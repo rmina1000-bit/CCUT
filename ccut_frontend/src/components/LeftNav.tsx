@@ -18,6 +18,7 @@ interface LeftNavProps {
   onRenameProject?: (id: string, newName: string) => void;
   onDeleteProject?: (id: string) => void;
   onNewProject?: () => void;
+  onHome?: () => void;
 }
 
 const LeftNav: React.FC<LeftNavProps> = ({
@@ -29,6 +30,7 @@ const LeftNav: React.FC<LeftNavProps> = ({
   onRenameProject,
   onDeleteProject,
   onNewProject,
+  onHome,
 }) => {
   const [menuOpenId, setMenuOpenId] = useState<string | null>(null);
   const [renamingId, setRenamingId] = useState<string | null>(null);
@@ -110,9 +112,9 @@ const LeftNav: React.FC<LeftNavProps> = ({
       <div className="flex-shrink-0" style={{ height: 48, position: "relative" }}>
         <div
           className="absolute left-3 top-0 bottom-0 flex items-center"
-          style={{ cursor: collapsed ? "pointer" : "default" }}
-          onClick={collapsed ? onToggleCollapse : undefined}
-          title={collapsed ? "사이드바 열기" : undefined}
+          style={{ cursor: "pointer" }}
+          onClick={collapsed ? onToggleCollapse : onHome}
+          title={collapsed ? "사이드바 열기" : "첫 화면(홈)"}
         >
           <span className="text-[15px] font-semibold whitespace-nowrap">
             <span className="bg-gradient-to-r from-blue-400 to-primary bg-clip-text text-transparent">CC</span>
@@ -130,6 +132,20 @@ const LeftNav: React.FC<LeftNavProps> = ({
         </div>
       </div>
 
+      {/* [C] 접힌 상태 전용 펼침 토글 아이콘 (#2 — 로고와 역할 분리, 독립 아이콘) */}
+      {collapsed && (
+        <div className="px-1 flex-shrink-0">
+          <button
+            onClick={onToggleCollapse}
+            title="사이드바 열기"
+            className="w-full flex items-center justify-center px-3 py-2 rounded-lg text-foreground/40 hover:text-foreground/70 hover:bg-secondary/40 transition-colors"
+            style={{ minHeight: 36 }}
+          >
+            <PanelLeftOpen size={15} strokeWidth={1.5} />
+          </button>
+        </div>
+      )}
+
       {/* 상단 메뉴 */}
       <div className="px-1 mt-2 flex flex-col gap-0.5 flex-shrink-0">
         {[
@@ -140,6 +156,7 @@ const LeftNav: React.FC<LeftNavProps> = ({
             key={item.id}
             onClick={() => onItemClick(item.id)}
             title={item.label}
+            style={{ minHeight: 36 }}
             className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg transition-colors duration-100
               ${activeItem === item.id
                 ? "bg-secondary text-foreground"
@@ -151,6 +168,20 @@ const LeftNav: React.FC<LeftNavProps> = ({
           </button>
         ))}
       </div>
+
+      {/* [C] 접힌 상태 전용 새 프로젝트(+) 아이콘 (#5) */}
+      {collapsed && (
+        <div className="px-1 mt-0.5 flex-shrink-0">
+          <button
+            onClick={onNewProject}
+            title="새 프로젝트"
+            className="w-full flex items-center justify-center px-3 py-2 rounded-lg text-foreground/40 hover:text-foreground/70 hover:bg-secondary/40 transition-colors"
+            style={{ minHeight: 36 }}
+          >
+            <Plus className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      )}
 
       {/* 프로젝트 섹션 헤더 */}
       <div className="px-3 mt-3 flex-shrink-0">
@@ -356,6 +387,7 @@ const LeftNav: React.FC<LeftNavProps> = ({
             key={item.id}
             onClick={() => onItemClick(item.id)}
             title={item.label}
+            style={{ minHeight: 36 }}
             className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg transition-colors duration-100
               ${activeItem === item.id
                 ? "bg-secondary text-foreground"

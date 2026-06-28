@@ -277,6 +277,12 @@ const Index: React.FC = () => {
     resetAnalysisFlow();
   }, []);
 
+  // [HOME] CCUT 로고(펼친 상태) → 첫 화면. 편집상태 리셋 + 네비 projects.
+  const onHome = useCallback(() => {
+    resetAnalysisState();
+    setActiveNavItem("projects");
+  }, [resetAnalysisState, setActiveNavItem]);
+
   // [B-5-FIX] 저장된 백엔드 proposals → UI proposals 형태 매핑 (복원용, 업로드 매핑과 동일 형태)
   const mapBackendProposals = useCallback((proposals: any[]) => {
     const out: Record<"A" | "B", any> = {} as any;
@@ -1984,6 +1990,7 @@ const Index: React.FC = () => {
           }}
           projects={projects}
           collapsed={navCollapsed}
+          onHome={onHome}
           onToggleCollapse={() => setNavCollapsed((prev) => !prev)}
           onRenameProject={(id, newName) => {
             setProjects((prev) => prev.map((p) => (p.id === id ? { ...p, name: newName } : p)));
