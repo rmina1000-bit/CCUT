@@ -406,6 +406,8 @@ async def upload_video(background_tasks: BackgroundTasks, file: UploadFile = Fil
         fingerprint = video_engine.generate_fingerprint(tmp_abs)
 
         existing = bams.get_source_by_hash(fingerprint)
+        if existing and not existing.file_path:
+            existing = None   # file_path=None 레코드 → 신규 저장 경로로 처리
         source_id = None
         if existing:
             # 중복 → 임시 파일 삭제, 기존 source 재사용
