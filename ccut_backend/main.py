@@ -293,6 +293,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+from routers.health import router as health_router  # [REFACTOR] 저위험 health/debug 분리
+app.include_router(health_router)
+
 # ═══════════════════════════════════════════════════════════════════
 #   업로드 / 조각 생성 상태 레지스트리
 # ═══════════════════════════════════════════════════════════════════
@@ -340,27 +343,7 @@ def get_timing_summary(timing: dict):
     }
 
 
-@app.get("/health")
-async def health_check():
-    return {"status": "OK", "timestamp": time.time()}
-
-
-@app.get("/pipeline/status")
-async def pipeline_status():
-    """[WATCHDOG] 파이프라인 전체 상태 진단 API"""
-    try:
-        from engine.pipeline_watchdog import run_watchdog
-        result = run_watchdog(silent=True)
-        return result
-    except Exception as e:
-        return {"ok": False, "error": str(e)}
-
-
-@app.get("/system/diagnostics")
-async def system_diagnostics():
-    # [FIX-RUNTIME-1a] GPU ASR 런타임 환경진단(read 전용). /health(liveness)와 분리.
-    from ai.diagnostics import collect_diagnostics
-    return collect_diagnostics()
+# [REFACTOR] /health · /pipeline/status · /system/diagnostics → routers/health.py
 
 
 @app.get("/static/thumbnails/P_{prefix}_{i}.jpg")
