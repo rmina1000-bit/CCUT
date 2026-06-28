@@ -12,15 +12,7 @@ const MIN_RIGHT = 400;
 
 export const useWorkspaceLayout = () => {
   const [activeNavItem, setActiveNavItem] = useState(() => {
-    if (typeof window !== "undefined") {
-      const saved = localStorage.getItem("ccut_active_project_id");
-      // 작업 중이던 프로젝트(proj_)만 복원. 메뉴 화면(trash/archive/upload/settings/account)은
-      // 첫 화면이 되면 안 되므로 항상 새 프로젝트 시작 메인("projects")으로.
-      if (saved && saved.startsWith("proj_")) {
-        return saved;
-      }
-      return "projects";
-    }
+    // [홈] 재시작은 항상 첫 화면(projects). 마지막 프로젝트 자동복원 제거.
     return "projects";
   });
   const [navCollapsed, setNavCollapsed] = useState(false);
