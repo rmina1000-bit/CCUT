@@ -97,6 +97,10 @@ const Index: React.FC = () => {
   const [appState, setAppState] = useState<"empty" | "analyzing" | "complete">("empty");
   const [analyzeProgress, setAnalyzeProgress] = useState(0);
   const [analyzeMessage, setAnalyzeMessage] = useState("");
+  const [analysisLogs, setAnalysisLogs] = useState<string[]>([]);
+  const pushAnalysisLog = (line: string) => {
+    setAnalysisLogs((prev) => [...prev.slice(-7), line]);
+  };
   const [isSwitchingProject, setIsSwitchingProject] = useState(false);
   useEffect(() => {
     if (!isSwitchingProject) return;
@@ -261,6 +265,7 @@ const Index: React.FC = () => {
 
     if (mapped.length > 0) {
       console.log(`[mapFragments] ${label} (${mapped.length} frags) first thumb:`, mapped[0].thumbnail?.thumbnail_url);
+      pushAnalysisLog(`[mapFragments] ${label} (${mapped.length} frags)`);
       console.log(
         `[THUMB_AUDIT_ALL_JSON] ${label}\n` +
         JSON.stringify(
@@ -396,6 +401,7 @@ const Index: React.FC = () => {
           }
 
           console.log(`[UPLOAD] ${label}: source_id=${sid}`);
+          pushAnalysisLog(`[UPLOAD] ${label}: source_id=${sid}`);
 
           markTiming("generate_fragments_requested");
           const data = await videoService.generateFragments(sid);
@@ -420,6 +426,7 @@ const Index: React.FC = () => {
         const dateStr = String(today.getMonth() + 1) + "/" + String(today.getDate()) + " " + String(today.getHours()).padStart(2, "0") + ":" + String(today.getMinutes()).padStart(2, "0");
         const uploadedSourceIds = collectedEntries.map(e => e.source_id).filter(Boolean);
         console.log("[N-01] 분석 대상 source_ids:", uploadedSourceIds);
+        pushAnalysisLog(`[N-01] 분석 대상 source_ids: ${String(uploadedSourceIds)}`.slice(0, 120));
 
         // [B-5d] 기존 프로젝트(proj_ prefix)면 귀속. 아니면(새 프로젝트 또는 레거시) 지금 DB 생성.
         let projectId: string;
@@ -883,10 +890,12 @@ const Index: React.FC = () => {
         setAppState("empty");
         setStoryPlan(null);
         setAnalyzeMessage("");
+        setAnalysisLogs([]);
       }
 
       try {
         console.log(`[Hydration] Loading sources for project: ${activeNavItem}`);
+        pushAnalysisLog(`[Hydration] Loading sources for project: ${activeNavItem}`.slice(0, 120));
         const data = await videoService.getProjectSources(activeNavItem);
         if (!isMounted) return;
 
@@ -903,6 +912,7 @@ const Index: React.FC = () => {
         if (!data.sources || data.sources.length === 0) {
           if (sourceEntries.length === 0) {
             console.log("[Hydration] Response sources length is 0 and session empty. Showing upload screen.");
+            pushAnalysisLog("[Hydration] sources=0, session empty → upload screen");
             setSourceEntries([]);
             setSourceFragments([]);
             setEditFragments([]);
@@ -915,6 +925,7 @@ const Index: React.FC = () => {
             setAppState("empty");  // [B-5-FIX] 빈 프로젝트 → 업로드 화면 (FAILURE 아님)
           } else {
             console.log("[Hydration] Response sources length is 0 but session has sources. Keeping current session (proposals likely not generated yet).");
+            pushAnalysisLog("[Hydration] sources=0 but session kept (proposals pending)");
           }
           return;
         }
@@ -985,6 +996,7 @@ const Index: React.FC = () => {
             } catch (_) {}
 
             console.log(`[Hydration] Successfully hydrated ${restoredEntries.length} sources, ${(data.proposals || []).length} proposals for project: ${activeNavItem}`);
+            pushAnalysisLog(`[Hydration] hydrated ${restoredEntries.length} sources, ${(data.proposals || []).length} proposals`);
           }
         }
       } catch (err) {
@@ -2086,6 +2098,7 @@ const Index: React.FC = () => {
             onAppStateChange={setAppState}
             analyzeProgress={analyzeProgress}
             analyzeMessage={analyzeMessage}
+            analysisLogs={analysisLogs}
             proposals={proposals}
             sourceFragments={sourceFragments}
             sourceId={currentSourceId}
