@@ -180,3 +180,41 @@ ChatGPT 판정: PRODUCT PASS (둘 다)
 잔여(P1, 다음 안정화): 휴지통 비우기 다건 purge 부분실패 처리 보강
 다음 메인(검수 권고): ASR 20분 측정 복귀
 교훈 확정: 큰 파일 Edit 금지(in-place), CRLF는 newline="" 보존, 백엔드 변경 후 재시작+StartTime 확인
+
+## [완료] Export 복구·학습루프·전환UX·ASR측정·GPU확인 (2026-06-28)
+브랜치 ccut-1.0.4-step9 / 최종 HEAD: c6aa73d (push 완료)
+(A) Export 500 전면 복구 — PRODUCT PASS
+- 44ad890: export-input 라우팅 {proposal_id:path} (슬래시 라우팅 파괴 수정)
+- 64e175a: export_results 자식행 FK 선삭제 (부모 export_input DELETE 전)
+- siblings ORM 인라인 조회로 분기
+- 검증: 실화면 5개 프로젝트 export 200 OK
+(B) 학습 루프 정상화 — preference pair 저장 확인
+- ab4923a: program형 내보내기 pool 빈 배열 문제 수정
+- 원인: get_proposals가 program_id IS NULL 조건 → program형(program_id 채워짐) 미충족
+- 수정: src_id/prog_id 분기 ORM 조회 + project_id 보정 + proposal_reason None-안전
+- 검증: 실로그 [DECISION LOGGER] Logged Chosen=B + preference pair 저장
+(C) 전환 UX — PRODUCT PASS
+- 5974096: 프로젝트 전환 시 stale analyzeMessage 초기화
+- 8bf2258: 전환 로딩 문구 + 3초 안전 타임아웃 (과거 5시간 갇힘 재발방지)
+- 74e425b: 분석 로딩 카드 실시간 로그 8줄 (전역 후킹 없이 의미라인만, 120자 컷)
+- ※ 8a4543a 1차 시도는 thrash 우려로 revert(77fdb20), 5차 AUDIT로 thrash 비실재 확정 후 재구현
+(D) 휴지통 purge 부분실패 보강 — 416f91e
+- TrashPanel.tsx handleEmpty: 항목별 try/catch + failCount + load() 보장 + 부분실패 alert
+- audit→fix→commit 흐름으로 종결 (별도 지시서 없이)
+(E) ASR 동시성 측정 — EVIDENCE PASS
+- 대상 1e2b4d6: 세마포어(2) + static 무음스킵 ENFORCE
+- 측정: 최대 동시 ASR=2 확인(A/B/C 케이스), 무중단, static 영상 ASR 스킵 정상
+- 캐시 HIT로 1차 실패 → DB purge(백업 2종 보존, 국장 승인) 후 2차 성공
+- ※ 임시 print 3줄 삽입 후 원복(미커밋)
+(F) GPU 경로 확인 — RUNTIME PASS
+- ASR이 whisper.cpp Vulkan(GPU)로 정상 작동 확인. CPU fallback 아님.
+- provider=whisper_vulkan(전 소스), ggml-vulkan.dll+ggml-small.bin 로드, 에러 0건
+- config active.asr=whisper_vulkan, 바이너리 D:\CCUT1.0.4\runtime\whisper-vulkan\
+- 며칠전 커밋 018a545/cef173f/c7d5509 정상 반영
+ChatGPT 판정: Export=PRODUCT PASS, 학습루프=EVIDENCE PASS, 전환UX=PRODUCT PASS,
+  분석카드=UX PASS, purge=CODE/PRODUCT PASS, ASR동시성=EVIDENCE PASS, GPU=RUNTIME PASS
+잔여(다음 라운드):
+- RTX 4060 타깃노트북 ASR 실측 (현재 RX 6600M 측정값 + 4060 추정만 존재, 실측 전)
+- 베타 공개 필수 10개 점검
+- (보류) EDITVALUE-R1, 개인화, ASR 캐시 연결
+원칙 확정: 측정 시 라이브 DB purge 대신 "측정용 DB 복사본"을 기본 원칙으로
