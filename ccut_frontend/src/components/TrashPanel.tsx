@@ -10,7 +10,12 @@ interface TrashItem {
   days_left?: number;
 }
 
-export const TrashPanel: React.FC = () => {
+interface TrashPanelProps {
+  onChanged?: () => void;
+  reloadDep?: unknown;
+}
+
+export const TrashPanel: React.FC<TrashPanelProps> = ({ onChanged, reloadDep }) => {
   const [items, setItems] = useState<TrashItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -30,13 +35,14 @@ export const TrashPanel: React.FC = () => {
     }
   }, []);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => { load(); }, [load, reloadDep]);
 
   const handleRestore = async (id: string) => {
     setBusyId(id);
     try {
       await videoService.restoreProject(id);
       await load();
+      onChanged?.();
     } catch (e) {
       console.error("[TRASH] restore fail", e);
     } finally {

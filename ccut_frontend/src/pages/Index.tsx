@@ -802,27 +802,27 @@ const Index: React.FC = () => {
     };
   }, [editFragments]);
 
-  // [B-5c] 마운트 시 백엔드 프로젝트 목록 로드 (재기동/새로고침 후에도 프로젝트 영속)
+  // [B-5c] 백엔드 프로젝트 목록 로드 (재기동/새로고침/휴지통 복원 후에도 영속)
+  const reloadProjects = useCallback(async () => {
+    try {
+      const res = await videoService.listProjects();
+      if (!res || !Array.isArray(res.projects)) return;
+      const mapped = res.projects.map((p: any) => {
+        const raw = p.last_updated_at || p.created_at;
+        const d = raw ? new Date(raw) : null;
+        const dateStr = d ? (String(d.getMonth() + 1) + "/" + String(d.getDate()) + " " + String(d.getHours()).padStart(2, "0") + ":" + String(d.getMinutes()).padStart(2, "0")) : "";
+        return { id: p.program_id, name: p.name, date: dateStr, count: p.source_count ?? 0 };
+      });
+      setProjects(mapped);
+    } catch (e) {
+      console.warn("[B-5c] 프로젝트 목록 로드 실패", e);
+    }
+  }, [setProjects]);
+
   useEffect(() => {
     if (typeof window !== "undefined" && window.location.hash === "#debug-hydrate") return;
-    let alive = true;
-    (async () => {
-      try {
-        const res = await videoService.listProjects();
-        if (!alive || !res || !Array.isArray(res.projects)) return;
-        const mapped = res.projects.map((p: any) => {
-          const raw = p.last_updated_at || p.created_at;
-          const d = raw ? new Date(raw) : null;
-          const dateStr = d ? (String(d.getMonth() + 1) + "/" + String(d.getDate()) + " " + String(d.getHours()).padStart(2, "0") + ":" + String(d.getMinutes()).padStart(2, "0")) : "";
-          return { id: p.program_id, name: p.name, date: dateStr, count: p.source_count ?? 0 };
-        });
-        setProjects(mapped);
-      } catch (e) {
-        console.warn("[B-5c] 프로젝트 목록 로드 실패", e);
-      }
-    })();
-    return () => { alive = false; };
-  }, []);
+    reloadProjects();
+  }, [reloadProjects]);
 
   // [FIX-HYD-A] 마지막으로 하이드레이션한 프로젝트 id. 진짜 '프로젝트 전환'과
   // '신규 업로드로 막 생성된 프로젝트(첫 하이드레이션)'를 구분하기 위한 기준점.
@@ -2009,7 +2009,7 @@ const Index: React.FC = () => {
             }}
           />
         ) : activeNavItem === "trash" ? (
-          <TrashPanel />
+          <TrashPanel onChanged={reloadProjects} reloadDep={projects} />
         ) : activeNavItem === "account" ? (
           <AccountPanel />
         ) : isSwitchingProject ? (
