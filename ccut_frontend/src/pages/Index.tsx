@@ -25,6 +25,7 @@ import {
   initialReservedFragments,
 } from "@/data/fragmentData";
 import { useAnalysisFlow } from "@/hooks/useAnalysisFlow";
+import { useAppNavigation } from "@/hooks/useAppNavigation";
 import type { SourceEntry } from "@/types";
 
 import { assignShortDisplayIds, getUid, recalcDisplayIds } from "@/lib/fragmentIdentity";
@@ -268,20 +269,20 @@ const Index: React.FC = () => {
 
 // logProposalPair moved to useProposalState
 
-  const resetAnalysisState = useCallback(() => {
-    // [REFACTOR-01] proposal 4개(useProposalState 소유) 먼저, 그 뒤 analysis 13개(useAnalysisFlow). 원본 호출순서·빈 deps 보존.
-    setSelectedProposalId(null);
-    setCommittedProposalId(null);
-    setProposals(null);
-    setDirectionSnapshot(null);
-    resetAnalysisFlow();
-  }, []);
-
-  // [HOME] CCUT 로고(펼친 상태) → 첫 화면. 편집상태 리셋 + 네비 projects.
-  const onHome = useCallback(() => {
-    resetAnalysisState();
-    setActiveNavItem("projects");
-  }, [resetAnalysisState, setActiveNavItem]);
+  const {
+    resetAnalysisState,
+    onHome,
+    onItemClick: onNavItemClick,
+    onToggleCollapse: onNavToggleCollapse,
+    onRenameProject: onNavRenameProject,
+    onDeleteProject: onNavDeleteProject,
+    onNewProject: onNavNewProject,
+  } = useAppNavigation({
+    setSelectedProposalId, setCommittedProposalId, setProposals, setDirectionSnapshot,
+    resetAnalysisFlow, setActiveNavItem, setNavCollapsed, setProjects,
+    activeNavItem, appState, reservedFragments, holdPositions,
+    committedProposalId, selectedProposalId, activeSource, deletedFragments, proposals,
+  });
 
   // [B-5-FIX] 저장된 백엔드 proposals → UI proposals 형태 매핑 (복원용, 업로드 매핑과 동일 형태)
   const mapBackendProposals = useCallback((proposals: any[]) => {
@@ -1963,75 +1964,14 @@ const Index: React.FC = () => {
       <div className="relative flex-shrink-0" style={{ width: navCollapsed ? 48 : 320 }}>
         <LeftNav
           activeItem={activeNavItem}
-          onItemClick={(newId) => {
-            // [B-5d] 전환 직전: 현재 프로젝트 UI 스냅샷 저장 (백그라운드, non-blocking)
-            if (activeNavItem && activeNavItem.startsWith("proj_") && appState === "complete") {
-              const uiSnap = {
-                reservedFragments,
-                holdPositions,
-                committedProposalId,
-                selectedProposalId,
-                activeSource,
-                deletedFragments,
-                proposalsKeyFragments: proposals ? {
-                  A: (proposals as any).A?.key_fragments,
-                  B: (proposals as any).B?.key_fragments,
-                } : undefined,
-                proposalsCustomFragments: proposals ? {
-                  A: (proposals as any).A?.customEditFragments,
-                  B: (proposals as any).B?.customEditFragments,
-                } : undefined,
-              };
-              videoService.saveProjectState(activeNavItem, { ui_state: JSON.stringify(uiSnap) }).catch(() => {});
-            }
-            // [FIX-LIST-ORDER] 프로젝트를 '여는(클릭) 것'은 조회이므로 목록 순서를 바꾸지 않는다.
-            // (Claude 채팅 사이드바 방식: 열람으로는 순서 불변, 실제 활동에서만 최상단으로)
-            setActiveNavItem(newId);
-          }}
+          onItemClick={onNavItemClick}
           projects={projects}
           collapsed={navCollapsed}
           onHome={onHome}
-          onToggleCollapse={() => setNavCollapsed((prev) => !prev)}
-          onRenameProject={(id, newName) => {
-            setProjects((prev) => prev.map((p) => (p.id === id ? { ...p, name: newName } : p)));
-            fetch(`${videoService.API_BASE_URL}/programs/${id}/name`, {
-              method: "PATCH",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ name: newName }),
-            }).catch((e) => console.error("[rename]", e));
-          }}
-          onDeleteProject={(id) => {
-            videoService.deleteProject(id).catch(() => {});
-            setProjects((prev) => prev.filter((p) => p.id !== id));
-            if (activeNavItem === id) {
-              setActiveNavItem("__new__");
-            }
-          }}
-          onNewProject={() => {
-            // [B-5d] + 버튼도 전환으로 취급: 현재 프로젝트 스냅샷 저장 후 빈 화면으로
-            if (activeNavItem && activeNavItem.startsWith("proj_") && appState === "complete") {
-              const uiSnap = {
-                reservedFragments,
-                holdPositions,
-                committedProposalId,
-                selectedProposalId,
-                activeSource,
-                deletedFragments,
-                proposalsKeyFragments: proposals ? {
-                  A: (proposals as any).A?.key_fragments,
-                  B: (proposals as any).B?.key_fragments,
-                } : undefined,
-                proposalsCustomFragments: proposals ? {
-                  A: (proposals as any).A?.customEditFragments,
-                  B: (proposals as any).B?.customEditFragments,
-                } : undefined,
-              };
-              videoService.saveProjectState(activeNavItem, { ui_state: JSON.stringify(uiSnap) }).catch(() => {});
-            }
-            // [B-5b-v2] '+' → DB 즉시 생성 없음. 빈 상태 전환만 (업로드 시 createProject 실행)
-            resetAnalysisState();
-            setActiveNavItem("__new__");
-          }}
+          onToggleCollapse={onNavToggleCollapse}
+          onRenameProject={onNavRenameProject}
+          onDeleteProject={onNavDeleteProject}
+          onNewProject={onNavNewProject}
         />
       </div>
 
