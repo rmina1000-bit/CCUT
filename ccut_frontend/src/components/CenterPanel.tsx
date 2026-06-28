@@ -7,16 +7,7 @@ import { Direction, StoryPlanPreview } from "@/proposal/proposalTypes";
 import { PhysicalClip, validateExportClips } from "@/utils/exportClipBuilder";
 import { collectFragmentAliases } from "@/utils/proposalFragmentResolver";
 
-type AppState = "empty" | "analyzing" | "complete";
-
-type SourceEntry = {
-  source_id: string;
-  label: string;
-  video_url: string;
-  fragments: Fragment[];
-  file_size_bytes?: number;
-  duration_sec?: number;
-};
+import type { AppState, SourceEntry } from "@/types";
 
 interface CenterPanelProps {
   selectedFragment: Fragment | null;

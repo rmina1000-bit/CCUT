@@ -25,7 +25,7 @@ import {
   initialReservedFragments,
 } from "@/data/fragmentData";
 import { useAnalysisFlow } from "@/hooks/useAnalysisFlow";
-import type { SourceEntry } from "@/hooks/useAnalysisFlow";
+import type { SourceEntry } from "@/types";
 
 import { assignShortDisplayIds, getUid, recalcDisplayIds } from "@/lib/fragmentIdentity";
 import { videoService } from "@/services/videoService";
