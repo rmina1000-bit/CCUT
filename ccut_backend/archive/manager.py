@@ -638,7 +638,15 @@ class BAMSManager:
         """[B-3b-2] 프로젝트(다중 소스) 제안 저장. program_id 기준 — 단건(source_id) 경로와 격리.
         delete/insert 모두 program_id 기준이라 레거시 단건(program_id IS NULL)을 건드리지 않음."""
         with SessionLocal() as db:
-            from archive.db_models import ProposalTable
+            from archive.db_models import ProposalTable, ExportInputTable
+            # [FK-GUARD] 삭제 대상 proposals를 참조하는 export_input의 FK를 먼저 끊어
+            # FOREIGN KEY 제약 위반(=export 이력이 있는 프로젝트의 재제안 저장 실패)을 방지.
+            # export 기록 자체는 보존하고 proposal 링크만 해제(NULL)한다.
+            _old_ids = [r.proposal_id for r in
+                        db.query(ProposalTable.proposal_id).filter_by(program_id=program_id).all()]
+            if _old_ids:
+                db.query(ExportInputTable).filter(ExportInputTable.proposal_id.in_(_old_ids)).update(
+                    {ExportInputTable.proposal_id: None}, synchronize_session=False)
             # 같은 프로젝트의 기존 제안만 삭제 (program_id 기준 — 단건/레거시 무손상)
             db.query(ProposalTable).filter_by(program_id=program_id).delete(synchronize_session=False)
             for p in proposals:
