@@ -461,6 +461,45 @@ class ProposalEngine:
         elif "쇼츠" in intent_text or "shorts" in intent_text.lower() or "short" in intent_text.lower():
             template_name = "Shorts"
 
+        # [INTENT-ROUTER] 자연어 지시 → 구조화 명령 (qwen 파서가 regex를 대체).
+        # 사용자가 어떻게 말하든 {count, focus, avoid}로 번역 → 결정론적 executor가 실행.
+        # 머리(qwen)는 프롬프트로만 동작(학습 X), 모델 교체는 CCUT_CMD_MODEL 한 줄.
+        FOCUS_WEIGHT = 0.6
+        focus_scores: dict = {}
+        focus_by_source: dict = {}   # [ID-BRIDGE] fragment_index(VF_*) ↔ 제안풀(SF_*)을 source_id로 연결
+        _count_override = None
+        try:
+            from engine import command_parser as _cmdp
+            _cmd = _cmdp.parse(intent_text or "")
+        except Exception as _e:
+            print(f"[INTENT-ROUTER cmd] engine skip ({_e})")
+            _cmd = {"count": None, "focus": None, "avoid": None}
+
+        # 손발1) count → 조각 개수 강제 (결정론적)
+        if isinstance(_cmd.get("count"), int):
+            _count_override = _cmd["count"]
+
+        # 손발2) focus → 내용 테마 의미검색 가산 (cross-lingual via VL 임베딩)
+        try:
+            _focus_q = _cmd.get("focus")
+            if _focus_q:
+                from engine import fragment_search as _fsx
+                _fr = _fsx.search(_focus_q, top_k=300)
+                for r in (_fr.get("results") or []):
+                    _sem = float(r.get("semantic", 0.0))
+                    if _sem <= 0.15:  # 약한 유사도 노이즈 컷
+                        continue
+                    focus_scores[r["fragment_id"]] = _sem
+                    _sid = r.get("source_id")
+                    if _sid:
+                        focus_by_source[_sid] = max(focus_by_source.get(_sid, 0.0), _sem)
+                _bysrc = {k: round(v, 3) for k, v in sorted(focus_by_source.items(), key=lambda x: -x[1])}
+                print(f"[INTENT-ROUTER focus_bonus] focus={_focus_q!r} matched={len(focus_scores)} by_source={_bysrc}")
+        except Exception as _e:
+            print(f"[INTENT-ROUTER focus_bonus] skip ({_e})")
+            focus_scores = {}
+            focus_by_source = {}
+
         def edit_score(f):
             fid = f.get("fragment_id")
             base_val = float(f.get("structural", {}).get("edit_value", 0.5))
@@ -569,11 +608,13 @@ class ProposalEngine:
                 if prev_topic and curr_topic and prev_topic == curr_topic:
                     multiplier *= 1.1
                     
-            cinematic_score = score * multiplier
-            
+            _fs = max(focus_scores.get(fid, 0.0), focus_by_source.get(f.get("source_id"), 0.0))
+            focus_mult = 1.0 + FOCUS_WEIGHT * _fs
+            cinematic_score = score * multiplier * focus_mult
+
             # Log specific scoring transitions for visibility
             print(f"[PROPOSAL_CINEMATIC_SCORE] Fragment: {fid}, "
-                  f"Base: {score:.3f}, Multiplier: {multiplier:.3f}, Final: {cinematic_score:.3f}")
+                  f"Base: {score:.3f}, Multiplier: {multiplier:.3f}, Focus: {focus_mult:.3f}, Final: {cinematic_score:.3f}")
                 
             return cinematic_score
 
@@ -653,7 +694,9 @@ class ProposalEngine:
                 _cap  = 40 if is_fast_path else 60
                 max_frags = min(max(_base, 6), _cap)
 
-            print(f"[PROPOSAL ENGINE][R4] User(Diversity-Balanced) max_frags={max_frags} source_count={source_count} target_len={target_len}")
+            if _count_override:
+                max_frags = max(1, min(_count_override, len(fragments)))
+            print(f"[PROPOSAL ENGINE][R4] User(Diversity-Balanced) max_frags={max_frags} source_count={source_count} target_len={target_len} count_override={_count_override}")
 
             while has_more and current_len < target_len and len(selected) < max_frags:
                 has_more = False
@@ -711,9 +754,11 @@ class ProposalEngine:
                 _cap  = 40 if is_fast_path else 60
                 max_frags = min(max(_base, 6), _cap)
 
+            if _count_override:
+                max_frags = max(1, min(_count_override, len(fragments)))
             print(f"[PROPOSAL ENGINE][R4] User(Diversity) max_frags={max_frags} "
                   f"source_count={source_count} is_fast_path={is_fast_path} "
-                  f"fragment_pool={len(fragments)}")
+                  f"fragment_pool={len(fragments)} count_override={_count_override}")
 
             is_multi = source_ids and len(source_ids) > 1
 
