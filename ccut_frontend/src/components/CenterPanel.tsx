@@ -201,15 +201,53 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
     });
   }, []);
 
+  // [INTENT-ROUTER Phase 0] 모든 채팅의 단일 진입점(향후 인텐트 라우터 삽입 지점).
+  // 검색 의도를 상태 무관 우선 처리 → 컨설팅 중에도 "찾아줘/불러와"가 동작.
+  const dispatchCommand = useCallback(async (rawInput: string) => {
+    const raw = rawInput.trim();
+    if (!raw) return;
+
+    // "start"는 분석 시작 (비컨설팅 한정 — 컨설팅 흐름 보존)
+    if (!storyPlan && raw.toLowerCase() === "start") {
+      if (onAnalyze) await onAnalyze();
+      return;
+    }
+
+    // [FRAGMENT-SEARCH] 검색 의도면 조각 검색 먼저. is_search=false면 기존 흐름 위임.
+    try {
+      setFragSearch({ query: raw, searching: true, results: [], done: false });
+      const sr = await videoService.chatFragmentSearch(raw, { top_k: 12 });
+      if (sr.is_search) {
+        setFragSearch({ query: sr.query, searching: false, results: sr.results, done: true });
+        return;
+      }
+      setFragSearch(null);
+    } catch (e) {
+      console.warn("[CenterPanel] fragment search failed, fallback to chat:", e);
+      setFragSearch(null);
+    }
+
+    // 검색 아님 → 상태별 기존 흐름 보존
+    if (storyPlan) {
+      onConsultation?.(raw);
+      return;
+    }
+    const parsedDirection = parseDirectionFromText(raw);
+    if (parsedDirection) {
+      onReproposal?.(parsedDirection);
+    } else {
+      // [STEP 10-I.5.28-E9-R2] Fallback to raw text for narrative intent
+      onReproposal?.(raw as any);
+    }
+  }, [storyPlan, onAnalyze, onConsultation, onReproposal]);
+
   const handleSubmitConsultation = useCallback(() => {
     const text = consultationInput.trim();
     if (!text) return;
     setConsultationInput("");
     resetConsultationTextarea();
-    if (onConsultation) {
-      onConsultation(text);
-    }
-  }, [consultationInput, onConsultation, resetConsultationTextarea]);
+    dispatchCommand(text);
+  }, [consultationInput, dispatchCommand, resetConsultationTextarea]);
 
   // Auto scroll for consultation chat — always run when messages change
   useEffect(() => {
@@ -826,40 +864,10 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
 
   const handleSendFull = useCallback(async () => {
     if (!chatValue.trim()) return;
-
     const raw = chatValue.trim();
-    const cmd = raw.toLowerCase();
     setChatValue("");
-
-    if (cmd === "start") {
-      if (onAnalyze) await onAnalyze();
-      return;
-    }
-
-    // [FRAGMENT-SEARCH] 검색 의도("...찾아줘/불러와줘")면 조각 검색을 먼저 시도.
-    // 백엔드가 is_search=false를 주면 기존 채팅(제안) 흐름으로 위임.
-    try {
-      setFragSearch({ query: raw, searching: true, results: [], done: false });
-      const sr = await videoService.chatFragmentSearch(raw, { top_k: 12 });
-      if (sr.is_search) {
-        setFragSearch({ query: sr.query, searching: false, results: sr.results, done: true });
-        return;
-      }
-      // 검색 의도 아님 -> 검색 UI 닫고 기존 흐름으로
-      setFragSearch(null);
-    } catch (e) {
-      console.warn("[CenterPanel] fragment search failed, fallback to chat:", e);
-      setFragSearch(null);
-    }
-
-    const parsedDirection = parseDirectionFromText(raw);
-    if (parsedDirection) {
-      onReproposal?.(parsedDirection);
-    } else {
-      // [STEP 10-I.5.28-E9-R2] Fallback to raw text for narrative intent
-      onReproposal?.(raw as any);
-    }
-  }, [chatValue, onAnalyze, onReproposal]);
+    await dispatchCommand(raw);
+  }, [chatValue, dispatchCommand]);
 
   const getProposalPoster = useCallback(
     (key: "A" | "B") => {
