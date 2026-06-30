@@ -27,9 +27,14 @@ OLLAMA_URL = os.getenv("CCUT_OLLAMA_URL", "http://127.0.0.1:11434")
 VL_MODEL = os.getenv("CCUT_VL_MODEL", "qwen3-vl:4b")
 
 _PROMPT = (
-    "Describe this video frame concisely in English in one paragraph. "
-    "Include: scene type, people (count, approximate age, gender), "
-    "location, weather/lighting, notable objects, and the main action."
+    # [P2 센서 raw화 / format:json] VL은 '판단 금지, 보이는 것만'을 구조화 tags로.
+    # qwen3-vl:4b는 묘사를 thinking에 처박아 response가 비거나 추론이 새는 게 프레임마다
+    # 들쭉날쭉(2026-06-30 실측). format:json으로 valid JSON을 강제하면 출력이 100% 깔끔.
+    # response/thinking 어디 있든 tags를 결정론 파싱. 거점(qwen2)이 이 raw로 판단한다.
+    "Return a JSON object with one key tags whose value is a list of short noun phrases "
+    "naming things literally visible in this video frame: setting, water or ground, "
+    "people and their action, key objects. Concrete nouns only. "
+    "Do not guess age or gender. Do not interpret."
 )
 
 # thinking 추론이 response로 새어나올 때 잘라낼 메타 패턴
@@ -38,6 +43,26 @@ _THINK_LEAK_MARKERS = (
     "Left side:", "Right side:", "Let me", "Actually,", "Hmm",
     "I need to", "First, I", "So the count",
 )
+
+
+def _parse_tags(text: str):
+    """format:json 출력에서 {tags:[...]} 추출 → 콤마 raw 문자열. 실패 시 None."""
+    if not text:
+        return None
+    import re
+    m = re.search(r"\{.*\}", text, re.S)
+    if not m:
+        return None
+    try:
+        obj = json.loads(m.group(0))
+    except Exception:
+        return None
+    tags = obj.get("tags") if isinstance(obj, dict) else None
+    if isinstance(tags, list) and tags:
+        flat = [str(t).strip() for t in tags if str(t).strip()]
+        if flat:
+            return ", ".join(flat)
+    return None
 
 
 def _clean_desc(text: str) -> str:
@@ -93,6 +118,7 @@ def describe_keyframe(image_path: str, timeout_sec: int = 60) -> dict:
         "prompt": _PROMPT,
         "images": [img_b64],
         "stream": False,
+        "format": "json",
         "options": {"temperature": 0, "num_predict": 512},
         "keep_alive": "10m",
     }
@@ -105,14 +131,14 @@ def describe_keyframe(image_path: str, timeout_sec: int = 60) -> dict:
         with urllib.request.urlopen(req, timeout=timeout_sec) as resp:
             d = json.loads(resp.read().decode())
         latency = int((time.time() - t0) * 1000)
-        text = (d.get("response") or "").strip()
-        if not text:
-            # response 비면 thinking 마지막 문장 폴백
-            think = (d.get("thinking") or "").strip()
-            text = think[-400:] if think else ""
-        if not text:
+        # format:json → response 또는 thinking 어디든 valid JSON. tags 우선 파싱.
+        raw = (d.get("response") or "").strip() or (d.get("thinking") or "").strip()
+        if not raw:
             return {"desc": None, "status": "EMPTY_RESPONSE", "latency_ms": latency}
-        return {"desc": _clean_desc(text), "status": "OK", "latency_ms": latency}
+        desc = _parse_tags(raw) or _clean_desc(raw)
+        if not desc:
+            return {"desc": None, "status": "EMPTY_RESPONSE", "latency_ms": latency}
+        return {"desc": desc, "status": "OK", "latency_ms": latency}
     except urllib.error.URLError as e:
         latency = int((time.time() - t0) * 1000)
         reason = "TIMEOUT" if "timeout" in str(e).lower() else "OLLAMA_UNREACHABLE"
