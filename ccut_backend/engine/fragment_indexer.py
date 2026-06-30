@@ -86,6 +86,78 @@ def load_fragment_rows(con, source_filter=None):
     return rows
 
 
+def _loadjson(v):
+    if v is None:
+        return None
+    if isinstance(v, (dict, list)):
+        return v
+    try:
+        return json.loads(v)
+    except Exception:
+        return None
+
+
+def load_semantic_fragment_rows(con, source_filter=None):
+    """[R2 재키잉] semantic_fragments(SF) 단위 수집.
+
+    제안엔진(proposal_engine)이 쓰는 바로 그 조각(SF_*)을 인덱싱한다.
+    → fragment_index 의 fragment_id 가 제안풀 id 와 1:1 동일 → focus 를
+      source 다리(by_source)가 아니라 클립별로 직접 매칭할 수 있다.
+    VF(fragments) 경로(load_fragment_rows)는 가역성 위해 남겨둠(unit='vf').
+    """
+    cur = con.cursor()
+    rows = {}
+    q = ('SELECT fragment_id, source_id, start, "end", semantic_json, structural_json '
+         'FROM semantic_fragments')
+    params = ()
+    if source_filter:
+        q += " WHERE source_id = ?"
+        params = (source_filter,)
+    cur.execute(q, params)
+    for fid, sid, s, e, sem_j, str_j in cur.fetchall():
+        sem = _loadjson(sem_j) or {}
+        stru = _loadjson(str_j) or {}
+        dur = stru.get("duration")
+        if dur is None:
+            dur = max(0.0, (e or 0.0) - (s or 0.0))
+        # 텍스트: 요약 + transcript_refs 합성 (시각묘사는 아래 VL 단계가 채움)
+        transcript = sem.get("summary") or None
+        refs = sem.get("transcript_refs")
+        if isinstance(refs, list) and refs:
+            parts = []
+            for x in refs:
+                if isinstance(x, dict):
+                    parts.append(str(x.get("text") or x.get("transcript") or ""))
+                else:
+                    parts.append(str(x))
+            joined = " ".join(p for p in parts if p).strip()
+            if joined:
+                transcript = (str(transcript) + " " + joined).strip() if transcript else joined
+        rows[fid] = {
+            "fragment_id": fid, "source_id": sid,
+            "start": s or 0.0, "end": e or 0.0, "duration": dur or 0.0,
+            "role": stru.get("role"),
+            "hook_score": float(stru.get("edit_value") or 0.0),  # 우선순위 정렬용
+            "transcript": transcript,
+            "motion_score": 0.0, "keyframe": None,
+        }
+    return rows
+
+
+def _reset_index(con, source_filter=None):
+    """[R2] 단위 전환(VF→SF) 시 스테일 행 제거. fragment_id 네임스페이스가
+    바뀌므로 첫 SF 재빌드에서 1회 비워 고아 VF 행을 정리한다."""
+    cur = con.cursor()
+    if source_filter:
+        cur.execute("DELETE FROM fragment_index WHERE source_id = ?", (source_filter,))
+        n = cur.rowcount
+    else:
+        cur.execute("DELETE FROM fragment_index")
+        n = cur.rowcount
+    con.commit()
+    return n
+
+
 # ---------- 키프레임 추출 ----------
 
 def source_video_path(con, source_id) -> str:
@@ -131,18 +203,29 @@ def build_search_text(meta: dict, visual_desc: str) -> str:
 # ---------- 메인 인덱싱 ----------
 
 def index_fragments(source_filter=None, use_vl=True, only_curated=False,
-                    limit=None, vl_timeout=60, verbose=True, dry_run=False):
+                    limit=None, vl_timeout=60, verbose=True, dry_run=False,
+                    unit="sf", reset=False):
     """조각 인덱싱 실행.
 
+    unit: 'sf' = semantic_fragments(제안풀과 1:1, R2 기본) / 'vf' = fragments(레거시)
     use_vl: Qwen VL 시각묘사 사용 (False면 메타만)
     only_curated: 내보낸 조각만
+    reset: 인덱싱 전 fragment_index 비우기(단위 전환 시 스테일 행 정리)
     dry_run: DB 쓰기 없이 결과만 반환
     """
     from engine import embedding_model as em
     from engine import fragment_vl_describer as vl
 
     con = sqlite3.connect(DB_PATH)
-    rows = load_fragment_rows(con, source_filter)
+    if not dry_run and reset:
+        n = _reset_index(con, source_filter)
+        if verbose:
+            print(f"[INDEXER] reset: fragment_index 행 {n}개 삭제 "
+                  f"(scope={'source' if source_filter else 'ALL'})")
+    if unit == "vf":
+        rows = load_fragment_rows(con, source_filter)
+    else:
+        rows = load_semantic_fragment_rows(con, source_filter)
     curated = compute_curated_set(con)
 
     targets = list(rows.values())
@@ -155,7 +238,7 @@ def index_fragments(source_filter=None, use_vl=True, only_curated=False,
 
     vl_up = vl.is_ollama_up() if use_vl else False
     if verbose:
-        print(f"[INDEXER] 대상 {len(targets)}개, curated={len(curated)}, "
+        print(f"[INDEXER] unit={unit} 대상 {len(targets)}개, curated={len(curated)}, "
               f"VL={'on' if vl_up else 'off'}, dry_run={dry_run}")
 
     results = []
@@ -240,10 +323,15 @@ if __name__ == "__main__":
     import argparse
     ap = argparse.ArgumentParser()
     ap.add_argument("--source", default=None)
+    ap.add_argument("--unit", choices=["sf", "vf"], default="sf",
+                    help="sf=semantic_fragments(제안풀과 1:1, 기본) / vf=fragments(레거시)")
+    ap.add_argument("--reset", action="store_true",
+                    help="인덱싱 전 fragment_index 비우기 (단위 전환 1회 권장)")
     ap.add_argument("--no-vl", action="store_true")
     ap.add_argument("--curated", action="store_true")
     ap.add_argument("--limit", type=int, default=None)
     ap.add_argument("--dry-run", action="store_true")
     args = ap.parse_args()
     index_fragments(source_filter=args.source, use_vl=not args.no_vl,
-                    only_curated=args.curated, limit=args.limit, dry_run=args.dry_run)
+                    only_curated=args.curated, limit=args.limit, dry_run=args.dry_run,
+                    unit=args.unit, reset=args.reset)

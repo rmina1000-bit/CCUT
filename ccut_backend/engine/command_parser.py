@@ -18,22 +18,29 @@ _PROMPT = (
     "키:\n"
     '  "count": 사용자가 명시한 조각(클립) 개수(정수), 없으면 null\n'
     '  "focus": 강조할 내용 테마(예 "물놀이","사람","풍경"), 없으면 null\n'
+    '  "focus_en": focus의 짧은 영어 장면 표현(예 "water play at the beach, swimming"), focus 없으면 null\n'
+    '  "focus_mode": focus가 있을 때만. "only"=그 내용만 남김(배타: "~만","오직","~빼고 전부"),\n'
+    '               "boost"=그 내용을 중심/위주로 강조하되 다른 것도 포함. 기본 "boost". focus 없으면 null\n'
     '  "avoid": 빼야 할 내용 테마, 없으면 null\n'
+    '  "avoid_en": avoid의 짧은 영어 장면 표현(예 "indoor room, bedroom, interior"), avoid 없으면 null\n'
+    "(영어 표현은 영상 장면 묘사가 영어라 매칭 정확도를 높이기 위함. 장면이 보일 법한 영어 명사구로.)\n"
     "예시:\n"
-    '  "조각을 4개만 편집해줘" -> {"count":4,"focus":null,"avoid":null}\n'
-    '  "네 개만 써줘" -> {"count":4,"focus":null,"avoid":null}\n'
-    '  "한 다섯개 정도로 짧게" -> {"count":5,"focus":null,"avoid":null}\n'
-    '  "물놀이 중심으로 편집해줘" -> {"count":null,"focus":"물놀이","avoid":null}\n'
-    '  "물놀이 위주로 보여줘" -> {"count":null,"focus":"물놀이","avoid":null}\n'
-    '  "물놀이 장면은 빼줘" -> {"count":null,"focus":null,"avoid":"물놀이"}\n'
-    '  "사람 위주로 다섯개만" -> {"count":5,"focus":"사람","avoid":null}\n'
-    '  "더 빠르게" -> {"count":null,"focus":null,"avoid":null}\n'
+    '  "조각을 4개만 편집해줘" -> {"count":4,"focus":null,"focus_en":null,"focus_mode":null,"avoid":null,"avoid_en":null}\n'
+    '  "한 다섯개 정도로 짧게" -> {"count":5,"focus":null,"focus_en":null,"focus_mode":null,"avoid":null,"avoid_en":null}\n'
+    '  "물놀이 중심으로 편집해줘" -> {"count":null,"focus":"물놀이","focus_en":"water play at the beach, swimming, ocean","focus_mode":"boost","avoid":null,"avoid_en":null}\n'
+    '  "물놀이만 보여줘" -> {"count":null,"focus":"물놀이","focus_en":"water play at the beach, swimming, ocean","focus_mode":"only","avoid":null,"avoid_en":null}\n'
+    '  "오직 물놀이 장면만" -> {"count":null,"focus":"물놀이","focus_en":"water play, beach, swimming","focus_mode":"only","avoid":null,"avoid_en":null}\n'
+    '  "실내는 빼고" -> {"count":null,"focus":null,"focus_en":null,"focus_mode":null,"avoid":"실내","avoid_en":"indoor room, bedroom, interior scene"}\n'
+    '  "실내영상은 빼줘" -> {"count":null,"focus":null,"focus_en":null,"focus_mode":null,"avoid":"실내","avoid_en":"indoor room, bedroom, interior scene"}\n'
+    '  "사람 위주로 다섯개만" -> {"count":5,"focus":"사람","focus_en":"people, person, close-up of a person","focus_mode":"boost","avoid":null,"avoid_en":null}\n'
+    '  "더 빠르게" -> {"count":null,"focus":null,"focus_en":null,"focus_mode":null,"avoid":null,"avoid_en":null}\n'
 )
 
 
 def parse(instruction: str) -> dict:
     """편집 지시 → {count:int|None, focus:str|None, avoid:str|None}."""
-    out = {"count": None, "focus": None, "avoid": None}
+    out = {"count": None, "focus": None, "focus_en": None, "focus_mode": None,
+           "avoid": None, "avoid_en": None}
     if not instruction or not instruction.strip():
         return out
     try:
@@ -57,12 +64,22 @@ def parse(instruction: str) -> dict:
             c = None
         if isinstance(c, (int, float)) and 1 <= int(c) <= 40:
             out["count"] = int(c)
-        f = parsed.get("focus")
-        if isinstance(f, str) and f.strip() and f.strip().lower() not in ("null", "none"):
-            out["focus"] = f.strip()
-        a = parsed.get("avoid")
-        if isinstance(a, str) and a.strip() and a.strip().lower() not in ("null", "none"):
-            out["avoid"] = a.strip()
+        def _clean(v):
+            if isinstance(v, str) and v.strip() and v.strip().lower() not in ("null", "none"):
+                return v.strip()
+            return None
+
+        f = _clean(parsed.get("focus"))
+        if f:
+            out["focus"] = f
+            out["focus_en"] = _clean(parsed.get("focus_en"))
+            # focus가 있을 때만 mode 의미. 기본 boost(비파괴), "only"만 배타 필터.
+            fm = parsed.get("focus_mode")
+            out["focus_mode"] = "only" if (isinstance(fm, str) and fm.strip().lower() == "only") else "boost"
+        a = _clean(parsed.get("avoid"))
+        if a:
+            out["avoid"] = a
+            out["avoid_en"] = _clean(parsed.get("avoid_en"))
         print(f"[INTENT-ROUTER cmd] model={CMD_MODEL} {instruction!r} -> {out}")
     except Exception as e:
         print(f"[INTENT-ROUTER cmd] parse skip ({e})")

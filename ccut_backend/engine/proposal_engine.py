@@ -1,3 +1,4 @@
+import os
 import uuid
 import engine.proposal_guards as guards
 
@@ -464,41 +465,125 @@ class ProposalEngine:
         # [INTENT-ROUTER] 자연어 지시 → 구조화 명령 (qwen 파서가 regex를 대체).
         # 사용자가 어떻게 말하든 {count, focus, avoid}로 번역 → 결정론적 executor가 실행.
         # 머리(qwen)는 프롬프트로만 동작(학습 X), 모델 교체는 CCUT_CMD_MODEL 한 줄.
+        # [R2] focus를 source 다리(by_source)가 아니라 SF id로 클립별 직접 매칭.
+        #  - boost: 점수 가산(비파괴)  - only: 임계 미만 클립을 풀에서 제외(hard filter)
+        #  - avoid: 임계 이상 클립 감점/제외
+        # 임계값은 고정상수가 아니라 project-local 분포의 mean+K*std (테마별 기준선 차이 흡수).
         FOCUS_WEIGHT = 0.6
-        focus_scores: dict = {}
-        focus_by_source: dict = {}   # [ID-BRIDGE] fragment_index(VF_*) ↔ 제안풀(SF_*)을 source_id로 연결
+        AVOID_WEIGHT = float(os.getenv("CCUT_AVOID_WEIGHT", "1.2"))
+        FOCUS_NOISE = 0.15           # 부스트용 약한 유사도 노이즈 컷
+        # focus-only = 정밀도(확실한 것만 남김) → 높은 임계(mean+K*std)
+        FOCUS_HARD_K = float(os.getenv("CCUT_FOCUS_K", "1.2"))
+        FOCUS_HARD_FLOOR = float(os.getenv("CCUT_FOCUS_FLOOR", "0.22"))
+        # avoid = 재현율(조금이라도 해당하면 제거) → 낮은 임계(mean 기준, 더 공격적)
+        AVOID_K = float(os.getenv("CCUT_AVOID_K", "0.0"))
+        AVOID_FLOOR = float(os.getenv("CCUT_AVOID_FLOOR", "0.18"))
+        FOCUS_MIN_KEEP = int(os.getenv("CCUT_FOCUS_MIN_KEEP", "3"))
+        focus_scores: dict = {}      # 부스트용(노이즈 컷)
+        focus_full: dict = {}        # 분포/임계값용(컷 없음)
+        focus_by_source: dict = {}   # 인덱스 누락 클립용 약한 source 다리(부스트 한정)
+        avoid_scores: dict = {}      # 감점용(노이즈 컷)
+        avoid_full: dict = {}        # 분포/필터용(컷 없음)
+        avoid_by_source: dict = {}
         _count_override = None
+        _focus_q = None
+        _focus_mode = None
+        _avoid_q = None
+        focus_fallback_used = False
+
         try:
             from engine import command_parser as _cmdp
             _cmd = _cmdp.parse(intent_text or "")
         except Exception as _e:
             print(f"[INTENT-ROUTER cmd] engine skip ({_e})")
-            _cmd = {"count": None, "focus": None, "avoid": None}
+            _cmd = {"count": None, "focus": None, "focus_mode": None, "avoid": None}
 
         # 손발1) count → 조각 개수 강제 (결정론적)
         if isinstance(_cmd.get("count"), int):
             _count_override = _cmd["count"]
 
-        # 손발2) focus → 내용 테마 의미검색 가산 (cross-lingual via VL 임베딩)
-        try:
-            _focus_q = _cmd.get("focus")
-            if _focus_q:
+        def _theme_maps(_query):
+            """테마 쿼리 → (full{fid:sem 컷없음}, cut{fid:sem>noise}, by_source{sid:sem})."""
+            _full, _cut, _bysrc = {}, {}, {}
+            try:
                 from engine import fragment_search as _fsx
-                _fr = _fsx.search(_focus_q, top_k=300)
+                _fr = _fsx.search(_query, top_k=500)
                 for r in (_fr.get("results") or []):
                     _sem = float(r.get("semantic", 0.0))
-                    if _sem <= 0.15:  # 약한 유사도 노이즈 컷
+                    _fid = r.get("fragment_id")
+                    if _fid is None:
                         continue
-                    focus_scores[r["fragment_id"]] = _sem
-                    _sid = r.get("source_id")
-                    if _sid:
-                        focus_by_source[_sid] = max(focus_by_source.get(_sid, 0.0), _sem)
-                _bysrc = {k: round(v, 3) for k, v in sorted(focus_by_source.items(), key=lambda x: -x[1])}
-                print(f"[INTENT-ROUTER focus_bonus] focus={_focus_q!r} matched={len(focus_scores)} by_source={_bysrc}")
-        except Exception as _e:
-            print(f"[INTENT-ROUTER focus_bonus] skip ({_e})")
-            focus_scores = {}
-            focus_by_source = {}
+                    _full[_fid] = _sem
+                    if _sem > FOCUS_NOISE:
+                        _cut[_fid] = _sem
+                        _sid = r.get("source_id")
+                        if _sid:
+                            _bysrc[_sid] = max(_bysrc.get(_sid, 0.0), _sem)
+            except Exception as _e:
+                print(f"[INTENT-ROUTER theme] search skip ({_e})")
+            return _full, _cut, _bysrc
+
+        def _aug(_ko, _en):
+            # VL 묘사가 영어라 영어 표현을 덧붙여 임베딩 매칭 정확도↑ (cross-lingual 보강).
+            return (str(_ko) + " " + str(_en)).strip() if _en else str(_ko)
+
+        # 손발2) focus → 내용 테마 (clip-level via SF 임베딩, 영어 증강)
+        _focus_q = _cmd.get("focus")
+        _focus_mode = _cmd.get("focus_mode") or ("boost" if _focus_q else None)
+        if _focus_q:
+            _fq = _aug(_focus_q, _cmd.get("focus_en"))
+            focus_full, focus_scores, focus_by_source = _theme_maps(_fq)
+            _bs = {k: round(v, 3) for k, v in sorted(focus_by_source.items(), key=lambda x: -x[1])}
+            print(f"[INTENT-ROUTER focus] focus={_focus_q!r} q={_fq!r} mode={_focus_mode} "
+                  f"matched={len(focus_scores)} by_source={_bs}")
+
+        # 손발3) avoid → 빼야 할 테마 (clip-level 감점/제외, 영어 증강)
+        _avoid_q = _cmd.get("avoid")
+        if _avoid_q:
+            _aq = _aug(_avoid_q, _cmd.get("avoid_en"))
+            avoid_full, avoid_scores, avoid_by_source = _theme_maps(_aq)
+            print(f"[INTENT-ROUTER avoid] avoid={_avoid_q!r} q={_aq!r} matched={len(avoid_scores)}")
+
+        # ── 적응형 임계값 + 풀 필터 (project-local 분포 기반) ──
+        def _clip_focus(_f):
+            return focus_full.get(_f.get("fragment_id"), 0.0)
+
+        def _clip_avoid(_f):
+            return avoid_full.get(_f.get("fragment_id"), 0.0)
+
+        def _adaptive_threshold(_vals, _k, _floor):
+            if not _vals:
+                return _floor
+            import statistics as _st
+            _m = _st.fmean(_vals)
+            _s = _st.pstdev(_vals) if len(_vals) > 1 else 0.0
+            return max(_floor, _m + _k * _s)
+
+        # avoid: 임계 이상(= 빼야 할 테마) 클립 제외. 재현율 우선 → 낮은 임계.
+        # 폴백: 너무 적게 남으면 avoid 점수 가장 '낮은'(=무관한) N개를 유지(필터 무시 X).
+        avoid_fallback_used = False
+        if _avoid_q and fragments:
+            _athr = _adaptive_threshold([_clip_avoid(f) for f in fragments], AVOID_K, AVOID_FLOOR)
+            _kept = [f for f in fragments if _clip_avoid(f) < _athr]
+            _need = max(FOCUS_MIN_KEEP, _count_override or 0)
+            if len(_kept) < _need:
+                _kept = sorted(fragments, key=_clip_avoid)[:_need]  # avoid 낮은 순
+                avoid_fallback_used = True
+            print(f"[INTENT-ROUTER avoid_filter] thr={_athr:.4f} "
+                  f"kept={len(_kept)}/{len(fragments)} fallback={avoid_fallback_used}")
+            fragments = _kept
+
+        # focus only: 임계 미만 클립 제외 (hard filter). 정밀도 우선 → 높은 임계.
+        if _focus_q and _focus_mode == "only" and fragments:
+            _fthr = _adaptive_threshold([_clip_focus(f) for f in fragments], FOCUS_HARD_K, FOCUS_HARD_FLOOR)
+            _kept = [f for f in fragments if _clip_focus(f) >= _fthr]
+            _need = max(FOCUS_MIN_KEEP, _count_override or 0)
+            if len(_kept) < _need:
+                _kept = sorted(fragments, key=_clip_focus, reverse=True)[:_need]
+                focus_fallback_used = True
+            print(f"[INTENT-ROUTER focus_filter] mode=only thr={_fthr:.4f} "
+                  f"kept={len(_kept)}/{len(fragments)} fallback={focus_fallback_used}")
+            fragments = _kept
 
         def edit_score(f):
             fid = f.get("fragment_id")
@@ -608,13 +693,18 @@ class ProposalEngine:
                 if prev_topic and curr_topic and prev_topic == curr_topic:
                     multiplier *= 1.1
                     
-            _fs = max(focus_scores.get(fid, 0.0), focus_by_source.get(f.get("source_id"), 0.0))
+            # focus 부스트: SF id 클립별 직접 매칭 우선, 인덱스 누락 시 약한(0.5) source 다리.
+            _fs = max(focus_scores.get(fid, 0.0), 0.5 * focus_by_source.get(f.get("source_id"), 0.0))
             focus_mult = 1.0 + FOCUS_WEIGHT * _fs
-            cinematic_score = score * multiplier * focus_mult
+            # avoid 감점: 클립별 매칭 우선, 약한 source 다리. 하한 0.1.
+            _av = max(avoid_scores.get(fid, 0.0), 0.5 * avoid_by_source.get(f.get("source_id"), 0.0))
+            avoid_mult = max(0.1, 1.0 - AVOID_WEIGHT * _av)
+            cinematic_score = score * multiplier * focus_mult * avoid_mult
 
             # Log specific scoring transitions for visibility
             print(f"[PROPOSAL_CINEMATIC_SCORE] Fragment: {fid}, "
-                  f"Base: {score:.3f}, Multiplier: {multiplier:.3f}, Focus: {focus_mult:.3f}, Final: {cinematic_score:.3f}")
+                  f"Base: {score:.3f}, Multiplier: {multiplier:.3f}, "
+                  f"Focus: {focus_mult:.3f}, Avoid: {avoid_mult:.3f}, Final: {cinematic_score:.3f}")
                 
             return cinematic_score
 
