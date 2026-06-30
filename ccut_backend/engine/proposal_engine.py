@@ -491,12 +491,38 @@ class ProposalEngine:
         _avoid_q = None
         focus_fallback_used = False
 
-        try:
-            from engine import command_parser as _cmdp
-            _cmd = _cmdp.parse(intent_text or "")
-        except Exception as _e:
-            print(f"[INTENT-ROUTER cmd] engine skip ({_e})")
+        # [P3b] 라이브 채팅 → 거점(hub) 편집계획 우회. env 가역(기본 off=옛 R2 경로).
+        # CCUT_HUB_PLAN=1이면 hub.plan_edit가 명령+조각풀로 keep/count를 직접 산출 →
+        # fragments를 keep으로 좁히고 _count_override 설정. 아래 R2 focus/avoid는 _cmd가
+        # 기본값이라 전부 no-op(파서/테마검색/필터 skip). keep 비거나 실패 시 옛 경로 폴백.
+        _hub_planned = False
+        if os.getenv("CCUT_HUB_PLAN") in ("1", "true", "True") and source_ids and (intent_text or "").strip():
+            try:
+                from engine import hub as _hub
+                _plan = _hub.plan_edit(list(source_ids), intent_text)
+                _keep_ids = {k.get("fid") for k in (_plan.get("keep") or []) if k.get("fid")}
+                if _keep_ids:
+                    _before = len(fragments)
+                    fragments = [f for f in fragments if f.get("fragment_id") in _keep_ids]
+                    if isinstance(_plan.get("count"), int):
+                        _count_override = _plan["count"]
+                    _hub_planned = True
+                    print(f"[P3b HUB-PLAN] intent={_plan.get('intent')} "
+                          f"keep={len(fragments)}/{_before} count={_count_override} ({_plan.get('reason')})")
+                else:
+                    print(f"[P3b HUB-PLAN] keep 비어 폴백(옛 R2 경로) — {_plan.get('reason')}")
+            except Exception as _e:
+                print(f"[P3b HUB-PLAN] 우회 실패, 옛 경로 폴백 ({_e})")
+
+        if _hub_planned:
             _cmd = {"count": None, "focus": None, "focus_mode": None, "avoid": None}
+        else:
+            try:
+                from engine import command_parser as _cmdp
+                _cmd = _cmdp.parse(intent_text or "")
+            except Exception as _e:
+                print(f"[INTENT-ROUTER cmd] engine skip ({_e})")
+                _cmd = {"count": None, "focus": None, "focus_mode": None, "avoid": None}
 
         # 손발1) count → 조각 개수 강제 (결정론적)
         if isinstance(_cmd.get("count"), int):
