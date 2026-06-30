@@ -64,7 +64,8 @@ def _ollama_json(prompt: str, timeout: int = 60) -> dict:
         "prompt": prompt,
         "stream": False,
         "format": "json",
-        "options": {"temperature": 0},
+        "keep_alive": "10m",
+        "options": {"temperature": 0, "num_predict": 1024},
     }).encode("utf-8")
     req = urllib.request.Request(
         OLLAMA_URL + "/api/generate", data=body,
@@ -222,6 +223,43 @@ def extract_intent(instruction):
             "count": final_count}
 
 
+def _build_judge_lean(theme, chunk):
+    """[속도] 판정 전용 lean 프롬프트 — 출력은 {n,t}만(why/recheck 제거 = 생성 토큰↓)."""
+    lines = [f'{i}. {b["scene"] or "(없음)"}' for i, b in enumerate(chunk, 1)]
+    return (
+        f"각 조각이 테마 '{theme}'에 해당하면 t=true, 아니면 t=false. "
+        "장면 태그에 분명한 근거가 없으면 false(추측 금지). "
+        "실내 체육관(indoor gymnasium)은 실내; school·concrete·schoolyard 등 야외는 실내 아님.\n"
+        '오직 JSON: {"items":[{"n":번호,"t":true}]}\n'
+        "조각:\n" + "\n".join(lines)
+    )
+
+
+def _judge_batch(theme_ko, bundles, theme_en=None, batch=8):
+    """[속도] 조각 묶음을 배치 판단. lean 출력({n,t})로 생성 토큰 최소화.
+    출력키는 plan_edit이 쓰는 fid/time/scene/is_theme 유지."""
+    results = []
+    for i in range(0, len(bundles), batch):
+        chunk = bundles[i:i + batch]
+        prompt = _build_judge_lean(theme_ko, chunk)
+        try:
+            out = _ollama_json(prompt)
+            items = out.get("items") or []
+        except Exception as e:
+            print(f"[HUB-JUDGE] batch {i // batch} 실패 ({e})")
+            items = []
+        by_n = {int(it["n"]): it for it in items if isinstance(it, dict) and "n" in it}
+        for j, b in enumerate(chunk, 1):
+            it = by_n.get(j, {})
+            results.append({
+                "fid": b["fid"], "time": f'{b["start"]}~{b["end"]}s',
+                "scene": b["scene"],
+                "is_theme": bool(it.get("t")),
+                "confidence": None, "recheck": False, "reason": None,
+            })
+    return results
+
+
 def plan_edit(source_ids, instruction_text, batch=8, verbose=True):
     """[P3a] 명령+조각풀 → 편집계획. 분해 파이프라인:
       1) extract_intent: 명령 → {keep,exclude,count} (분류만)
@@ -251,10 +289,19 @@ def plan_edit(source_ids, instruction_text, batch=8, verbose=True):
         return {"keep": keep, "count": intent["count"], "intent": intent,
                 "reason": f"no content filter, keep all {len(keep)}"}
 
-    # 내용조건 있음 → judge_theme(검증됨)로 클립별 판단
-    judged = []
+    # 내용조건 있음 → 전체 조각을 '큰 배치'로 한 번에 판단(속도: 소스별 루프 제거)
+    con = sqlite3.connect(DB_PATH)
+    bundles = []
     for sid in source_ids:
-        judged.extend(judge_theme(sid, theme, batch=batch, verbose=False))
+        bundles.extend(load_bundles(con, sid))
+    con.close()
+    import time as _t
+    _jbatch = int(os.getenv("CCUT_HUB_JUDGE_BATCH", "8"))
+    _t0 = _t.time()
+    judged = _judge_batch(theme, bundles, batch=_jbatch)
+    if verbose:
+        print(f"[HUB-PLAN] judged {len(judged)}frags batch={_jbatch} "
+              f"calls={(len(judged) + _jbatch - 1) // _jbatch} time={_t.time() - _t0:.1f}s")
     if is_exclude:
         kept = [j for j in judged if not j["is_theme"]]
         tag = f"exclude '{theme}'"
