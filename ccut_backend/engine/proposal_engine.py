@@ -490,6 +490,7 @@ class ProposalEngine:
         _focus_mode = None
         _avoid_q = None
         focus_fallback_used = False
+        _hub_self_check_context = None
 
         # [P3b] 라이브 채팅 → 거점(hub) 편집계획 우회. env 가역(기본 off=옛 R2 경로).
         # CCUT_HUB_PLAN=1이면 hub.plan_edit가 명령+조각풀로 keep/count를 직접 산출 →
@@ -503,13 +504,28 @@ class ProposalEngine:
                 _keep_ids = {k.get("fid") for k in (_plan.get("keep") or []) if k.get("fid")}
                 if _keep_ids:
                     _before = len(fragments)
+                    _scene_by_fid = {k.get("fid"): k for k in (_plan.get("keep") or []) if k.get("fid")}
                     fragments = [f for f in fragments if f.get("fragment_id") in _keep_ids]
                     if isinstance(_plan.get("count"), int):
                         _count_override = _plan["count"]
+                    _intent = _plan.get("intent") or {}
+                    _hub_self_check_context = {
+                        "theme": _intent.get("keep") or _intent.get("exclude"),
+                        "is_exclude": _intent.get("exclude") is not None and _intent.get("keep") is None,
+                        "plan_self_check": _plan.get("self_check"),
+                        "scene_by_fid": _scene_by_fid,
+                    }
                     _hub_planned = True
                     print(f"[P3b HUB-PLAN] intent={_plan.get('intent')} "
                           f"keep={len(fragments)}/{_before} count={_count_override} ({_plan.get('reason')})")
                 else:
+                    _intent = _plan.get("intent") or {}
+                    _hub_self_check_context = {
+                        "theme": _intent.get("keep") or _intent.get("exclude"),
+                        "is_exclude": _intent.get("exclude") is not None and _intent.get("keep") is None,
+                        "plan_self_check": _plan.get("self_check"),
+                        "scene_by_fid": {},
+                    }
                     print(f"[P3b HUB-PLAN] keep 비어 폴백(옛 R2 경로) — {_plan.get('reason')}")
             except Exception as _e:
                 print(f"[P3b HUB-PLAN] 우회 실패, 옛 경로 폴백 ({_e})")
@@ -1026,6 +1042,62 @@ class ProposalEngine:
                 fallback = "significant_length_mismatch"
                 status = "out_of_range"
 
+        proposal_self_check = None
+        if _hub_self_check_context and _hub_self_check_context.get("theme"):
+            try:
+                from engine import hub as _hub
+                _scene_by_fid = _hub_self_check_context.get("scene_by_fid") or {}
+                _check_items = []
+                for _f in selected:
+                    _fid = _f.get("fragment_id")
+                    _item = dict(_f)
+                    _planned = _scene_by_fid.get(_fid) or {}
+                    if _planned.get("scene"):
+                        _item["scene"] = _planned.get("scene")
+                    if _planned.get("time"):
+                        _item["time"] = _planned.get("time")
+                    _check_items.append(_item)
+                proposal_self_check = _hub.self_check_selection(
+                    _hub_self_check_context.get("theme"),
+                    bool(_hub_self_check_context.get("is_exclude")),
+                    _check_items,
+                    judged=None
+                )
+                _plan_sc = _hub_self_check_context.get("plan_self_check") or {}
+                if _plan_sc.get("omitted_count"):
+                    proposal_self_check["omitted_count"] = _plan_sc.get("omitted_count", 0)
+                    proposal_self_check["omitted"] = _plan_sc.get("omitted", [])
+                if _plan_sc.get("judged_count") is not None:
+                    proposal_self_check["judged_count"] = _plan_sc.get("judged_count")
+                if _plan_sc.get("status") in ("WARN", "FAIL") and proposal_self_check.get("status") == "PASS":
+                    proposal_self_check["status"] = "WARN"
+                    proposal_self_check["message"] = _plan_sc.get("message") or proposal_self_check.get("message")
+                if proposal_self_check.get("status") == "PASS" and proposal_self_check.get("omitted_count", 0) > 0:
+                    proposal_self_check["status"] = "WARN"
+                    proposal_self_check["message"] = (
+                        "실내로 확정 가능한 조각이 부족해서 일부 애매한 컷이 포함됐거나 누락 후보가 있습니다."
+                        if _hub_self_check_context.get("theme") == "실내"
+                        else "요청 조건과 일부 어긋나거나 애매한 컷이 포함됐습니다."
+                    )
+                print(
+                    f"[P6_SELF_CHECK] mode=B status={proposal_self_check.get('status')} "
+                    f"mismatch={proposal_self_check.get('mismatch_count')}/{proposal_self_check.get('total_count')} "
+                    f"ambiguous={proposal_self_check.get('ambiguous_count')} omitted={proposal_self_check.get('omitted_count')}"
+                )
+            except Exception as _sc_err:
+                print(f"[P6_SELF_CHECK][ERROR] failed ({_sc_err})")
+                proposal_self_check = {
+                    "status": "WARN",
+                    "theme": _hub_self_check_context.get("theme"),
+                    "mode": "exclude" if _hub_self_check_context.get("is_exclude") else "keep",
+                    "mismatch_count": 0,
+                    "ambiguous_count": 0,
+                    "omitted_count": 0,
+                    "total_count": len(selected),
+                    "message": "검증 정보를 계산하지 못했습니다.",
+                    "error": str(_sc_err),
+                }
+
         reason_data = {
             "mode_reason": mode_reason,
             "target_length": {
@@ -1034,7 +1106,8 @@ class ProposalEngine:
                 "status": status
             },
             "sequence_reason": "user_intent_alignment",
-            "bridge": bridge_details if bridge_details else None
+            "bridge": bridge_details if bridge_details else None,
+            "self_check": proposal_self_check
         }
 
         story_data = self._generate_story("B", selected)
@@ -1051,6 +1124,7 @@ class ProposalEngine:
             "proposal_story": story_data,
             "confidence": 0.85,
             "fallback_reason": fallback,
+            "self_check": proposal_self_check,
             "source_distribution": source_dist,
             "balance_policy": balance_info if balance_info["applied"] else None
         }

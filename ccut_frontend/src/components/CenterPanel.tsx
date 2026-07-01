@@ -101,6 +101,63 @@ const formatDuration = (seconds?: number) => {
   return `${secs}초`;
 };
 
+const getProposalSelfCheck = (proposal: any) => {
+  return proposal?.self_check || proposal?.proposal_reason?.self_check || null;
+};
+
+const getSelfCheckIssueCount = (selfCheck: any) => {
+  if (!selfCheck) return 0;
+  return Number(selfCheck.mismatch_count || 0) +
+    Number(selfCheck.ambiguous_count || 0) +
+    Number(selfCheck.omitted_count || 0);
+};
+
+const renderSelfCheckPill = (proposal: any) => {
+  const selfCheck = getProposalSelfCheck(proposal);
+  const status = String(selfCheck?.status || "").toUpperCase();
+  if (!selfCheck || status === "PASS") return null;
+
+  const issueCount = getSelfCheckIssueCount(selfCheck);
+  const totalCount = Number(selfCheck.total_count || 0);
+  const isFail = status === "FAIL";
+  const color = isFail ? "text-red-200 bg-red-500/20 border-red-400/30" : "text-amber-100 bg-amber-500/20 border-amber-400/30";
+
+  return (
+    <div className={`mt-1 inline-flex items-center gap-1.5 rounded-md border px-2 py-1 text-[10px] font-bold tracking-normal ${color}`}>
+      <AlertCircle size={11} />
+      <span>검증 {status} · {issueCount}/{totalCount || "?"}</span>
+    </div>
+  );
+};
+
+const renderSelfCheckNotice = (proposals: any) => {
+  const entries = (["A", "B"] as const)
+    .map((key) => ({ key, selfCheck: getProposalSelfCheck(proposals?.[key]) }))
+    .filter(({ selfCheck }) => selfCheck && String(selfCheck.status || "").toUpperCase() !== "PASS");
+
+  if (entries.length === 0) return null;
+
+  const hasFail = entries.some(({ selfCheck }) => String(selfCheck.status || "").toUpperCase() === "FAIL");
+  const primary = entries[0].selfCheck;
+  const color = hasFail ? "border-red-500/20 bg-red-500/8 text-red-100" : "border-amber-500/20 bg-amber-500/8 text-amber-100";
+
+  return (
+    <div className={`w-full rounded-lg border px-4 py-3 ${color}`}>
+      <div className="flex items-start gap-2">
+        <AlertCircle size={15} className="mt-0.5 shrink-0" />
+        <div className="min-w-0">
+          <div className="text-[11px] font-black uppercase tracking-wider">
+            편집 조건 검증 {hasFail ? "FAIL" : "WARN"}
+          </div>
+          <p className="mt-1 text-[12px] leading-relaxed text-current/85">
+            {primary?.message || "요청 조건과 일부 어긋나거나 애매한 컷이 포함됐습니다."}
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 /**
  * [STEP 10-I.5.27-E6-R5] Robust Fragment Source ID Extraction Fallback
  */
@@ -1082,6 +1139,7 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
         {/* [STEP 10-I.5.28-E9-R2] Proposals Grid (Visible only after confirmation or proposals exist) */}
         {(storyPlan?.consultation_status === "confirmed" || !!proposals) && (
           <>
+          {renderSelfCheckNotice(proposals)}
           <div className="grid grid-cols-2 gap-4 w-full">
           <div className="flex flex-col items-center space-y-4">
             <div
@@ -1298,6 +1356,7 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
                 <span className="text-[10px] font-black tracking-widest text-primary/60 uppercase">
                   Draft A
                 </span>
+                {renderSelfCheckPill(proposals?.A)}
               </div>
 
               <div 
@@ -1598,6 +1657,7 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
                 <span className="text-[10px] font-black tracking-widest text-ccut-indigo/60 uppercase">
                   Draft B
                 </span>
+                {renderSelfCheckPill(proposals?.B)}
               </div>
 
               <div 

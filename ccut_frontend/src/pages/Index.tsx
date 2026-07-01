@@ -37,7 +37,7 @@ import {
   createNextSnapshot,
 } from "@/proposal/directionSnapshot";
 import { generateProposals } from "@/proposal/proposalOrchestrator";
-import { resolveProposalFragments } from "@/utils/proposalFragmentResolver";
+import { collectFragmentAliases, resolveProposalFragments } from "@/utils/proposalFragmentResolver";
 import { buildExportClipsFromResolvedFragments } from "@/utils/exportClipBuilder";
 
 // Layout constants moved to useWorkspaceLayout.ts
@@ -138,6 +138,7 @@ const Index: React.FC = () => {
       ? sourceEntries.map(e => e.source_id)
       : currentSourceId ? [currentSourceId] : []
   );
+  const displayProposalId = committedProposalId ?? selectedProposalId;
 
   // [STEP 10-I.5.27-E7] Timing measurement baseline
   const timingRef = useRef<Record<string, number>>({});
@@ -1607,17 +1608,19 @@ const Index: React.FC = () => {
   }, [committedProposalId]);
 
   const resolverResult = useMemo(() => {
-    if (!committedProposalId || !proposals) {
+    if (!displayProposalId || !proposals) {
       if (appState === "complete") {
-        debugFragmentMap("[fragmentmap-debug] No committedProposalId or proposals. committedProposalId:", committedProposalId, "proposals:", !!proposals);
+        debugFragmentMap("[fragmentmap-debug] No displayProposalId or proposals. displayProposalId:", displayProposalId, "proposals:", !!proposals);
       }
       return { resolvedFragments: [], diagnostics: null };
     }
-    const proposal = proposals[committedProposalId as "A" | "B"];
+    const proposal = proposals[displayProposalId as "A" | "B"];
     const result = resolveProposalFragments(proposal, editFragments);
     
     // [STEP 10-I.5.12] Diagnostic Logging
     debugFragmentMap("[fragmentmap-debug] committedProposalId:", committedProposalId);
+    debugFragmentMap("[fragmentmap-debug] selectedProposalId:", selectedProposalId);
+    debugFragmentMap("[fragmentmap-debug] displayProposalId:", displayProposalId);
     debugFragmentMap("[fragmentmap-debug] proposals keys:", proposals ? Object.keys(proposals) : null);
     debugFragmentMap("[fragmentmap-debug] active proposal keys sample:", {
       count: proposal?.key_fragments?.length || 0,
@@ -1633,9 +1636,81 @@ const Index: React.FC = () => {
     });
 
     return result;
-  }, [committedProposalId, editFragments, proposals, appState, debugFragmentMap]);
+  }, [displayProposalId, committedProposalId, selectedProposalId, editFragments, proposals, appState, debugFragmentMap]);
 
-  const resolvedFragments = useMemo(() => resolverResult.resolvedFragments, [resolverResult]);
+  const isPreviewingSelectedProposal = !!displayProposalId && displayProposalId === selectedProposalId && !committedProposalId;
+  const resolvedFragments = useMemo(() => {
+    let nextFragments = resolverResult.resolvedFragments;
+    if (displayProposalId && proposals && resolverResult.diagnostics?.missingIds?.length) {
+      const proposal = proposals[displayProposalId as "A" | "B"] as any;
+      const proposalFragIds = proposal?.key_fragments || proposal?.sequence || [];
+      const aliases = proposal?.resolved_aliases || [];
+      const resolvedByAlias = new Map<string, typeof resolverResult.resolvedFragments[number]>();
+
+      for (const fragment of resolverResult.resolvedFragments) {
+        for (const alias of collectFragmentAliases(fragment)) {
+          resolvedByAlias.set(alias, fragment);
+        }
+      }
+
+      nextFragments = proposalFragIds
+        .map((id: string, index: number) => {
+          const resolved = resolvedByAlias.get(id);
+          if (resolved) return resolved;
+
+          const alias = aliases.find((item: any) =>
+            item.proposal_fragment_id === id || item.source_fragment_id === id
+          );
+          if (!alias) return null;
+
+          const startSec = Number(alias.start_sec ?? 0);
+          const endSec = Number(alias.end_sec ?? (startSec + 5));
+          const startFrame = Math.round(startSec * 30);
+          const endFrame = Math.max(startFrame + 1, Math.round(endSec * 30));
+          const sourceEntry = sourceEntries.find((entry) => entry.source_id === alias.source_id);
+          const sourceFragment = sourceEntry?.fragments?.find((fragment: any) =>
+            collectFragmentAliases(fragment).includes(id)
+          );
+          const sourceLabel = sourceEntry?.label;
+
+          return {
+            fragment_id: id,
+            fragment_uid: id,
+            root_fragment_uid: id,
+            display_id: sourceFragment?.display_id || alias.display_id || id,
+            selection_state: "S" as SelectionState,
+            status: "committed" as FragmentStatus,
+            source_video: sourceLabel || alias.source_id || "",
+            source_id: alias.source_id,
+            start_time: startSec,
+            end_time: endSec,
+            start_frame: startFrame,
+            end_frame: endFrame,
+            duration: endFrame - startFrame,
+            thumbnail_hue: index % 2 === 0 ? 211 : 30,
+            thumbnail: {
+              thumbnail_url: toFullUrl(sourceFragment?.thumbnail?.thumbnail_url || sourceFragment?.thumbnail_url || alias.thumbnail_url),
+            },
+            intelligence: {
+              hook_score: 0.5,
+              role: "Main",
+              description: "",
+            },
+            preview_clip_url: null,
+            stable_key: `${proposal?.proposal_id || displayProposalId}_${index}_${id}`,
+          } as any;
+        })
+        .filter(Boolean);
+    }
+
+    if (!isPreviewingSelectedProposal) return nextFragments;
+    return nextFragments.map((fragment) => ({
+      ...fragment,
+      excluded: false,
+      selection_state: "S" as SelectionState,
+      status: "committed" as FragmentStatus,
+    }));
+  }, [resolverResult, displayProposalId, proposals, sourceEntries, toFullUrl, isPreviewingSelectedProposal]);
 
   const physicalClips = useMemo(() => {
     return buildExportClipsFromResolvedFragments(resolvedFragments);
@@ -1680,9 +1755,9 @@ const Index: React.FC = () => {
   }, [boundaryHighlightIds, editFragments]);
 
   const filteredFragments = useMemo(() => {
-    if (!committedProposalId || !proposals) return [];
+    if (!displayProposalId || !proposals) return [];
 
-    const proposal = proposals[committedProposalId as "A" | "B"];
+    const proposal = proposals[displayProposalId as "A" | "B"];
     const proposalFragIds = proposal?.key_fragments || [];
     if (proposalFragIds.length === 0) return [];
 
@@ -1712,7 +1787,7 @@ const Index: React.FC = () => {
       .filter(Boolean) as Fragment[];
 
     return result;
-  }, [committedProposalId, editFragments, proposals, reservedFragments]);
+  }, [displayProposalId, editFragments, proposals, reservedFragments]);
 
   const handleOpenBoundaryEditor = useCallback(
     async (leftFragId: string | null, rightFragId: string | null, clickSide?: "left" | "right" | "center") => {
@@ -2173,5 +2248,3 @@ const Index: React.FC = () => {
 };
 
 export default Index;
-
-

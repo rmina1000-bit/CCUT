@@ -184,6 +184,188 @@ def _deterministic_intent(t):
             "theme_found": theme is not None}
 
 
+_THEME_ALIASES = {
+    "실내": ("실내", "indoor", "interior", "inside", "room", "bedroom", "hallway", "corridor", "복도", "走廊", "室内", "방", "침실", "체육관"),
+    "실외": ("실외", "야외", "외부", "밖", "outdoor", "outside", "exterior", "schoolyard", "playground", "street", "road", "park"),
+    "야외": ("실외", "야외", "외부", "밖", "outdoor", "outside", "exterior", "schoolyard", "playground", "street", "road", "park"),
+    "운동장": ("운동장", "schoolyard", "playground", "field", "ground"),
+    "물놀이": ("물놀이", "water play", "swimming", "beach", "sea", "ocean", "pool", "바다", "해변", "수영"),
+    "바다": ("바다", "sea", "ocean", "beach", "shore", "해변"),
+    "해변": ("해변", "beach", "shore", "sand", "바다"),
+    "수영": ("수영", "swimming", "pool", "water"),
+    "계곡": ("계곡", "valley", "stream", "creek"),
+    "강": ("강", "river"),
+    "풍경": ("풍경", "landscape", "scenery", "view", "background"),
+    "음식": ("음식", "food", "meal", "dish"),
+    "요리": ("요리", "cooking", "cook", "kitchen"),
+    "사람": ("사람", "인물", "person", "people", "child", "kid", "face"),
+    "인물": ("사람", "인물", "person", "people", "face"),
+    "아이": ("아이", "어린이", "child", "kid"),
+    "어린이": ("아이", "어린이", "child", "kid"),
+    "밤": ("밤", "night", "dark"),
+    "야경": ("야경", "night view", "nightscape", "night"),
+    "거리": ("거리", "street", "road"),
+    "호텔": ("호텔", "hotel"),
+    "침실": ("침실", "bedroom"),
+    "방": ("방", "room"),
+    "체육관": ("체육관", "gym", "gymnasium", "indoor gym"),
+    "공원": ("공원", "park"),
+    "놀이터": ("놀이터", "playground"),
+}
+
+_INDOOR_POSITIVE = _THEME_ALIASES["실내"]
+_INDOOR_NEGATIVE = (
+    "outdoor", "outside", "exterior", "schoolyard", "school yard", "playground",
+    "school building", "building exterior", "concrete ground", "field", "park",
+    "street", "road", "beach", "sea", "ocean", "shore", "water play", "swimming",
+    "야외", "실외", "외부", "운동장", "놀이터", "공원", "거리", "바다", "해변", "물놀이", "수영",
+)
+
+
+def _scene_text(item):
+    scene = item.get("scene")
+    if scene:
+        return str(scene)
+    for key in ("visual_desc", "description", "caption", "summary"):
+        if item.get(key):
+            return str(item.get(key))
+    semantic = item.get("semantic") if isinstance(item.get("semantic"), dict) else {}
+    intelligence = item.get("intelligence") if isinstance(item.get("intelligence"), dict) else {}
+    parts = [
+        semantic.get("topic"),
+        semantic.get("scene"),
+        semantic.get("description"),
+        intelligence.get("visual_desc"),
+        intelligence.get("caption"),
+    ]
+    return " ".join(str(p) for p in parts if p)
+
+
+def _item_fid(item):
+    return item.get("fid") or item.get("fragment_id") or item.get("id")
+
+
+def _item_time(item):
+    if item.get("time"):
+        return item.get("time")
+    start = item.get("start", item.get("start_time", ""))
+    end = item.get("end", item.get("end_time", ""))
+    return f"{start}~{end}s" if start != "" or end != "" else ""
+
+
+def _aliases_for_theme(theme):
+    aliases = list(_THEME_ALIASES.get(theme, (theme,)))
+    if theme and theme not in aliases:
+        aliases.append(theme)
+    return tuple(str(a).lower() for a in aliases if a)
+
+
+def _scene_has_any(scene, aliases):
+    text = (scene or "").lower()
+    return any(a and a in text for a in aliases)
+
+
+def _self_check_item(theme, is_exclude, item):
+    scene = _scene_text(item)
+    text = scene.lower()
+    aliases = _aliases_for_theme(theme)
+    has_theme = _scene_has_any(scene, aliases)
+
+    if theme == "실내":
+        has_indoor = _scene_has_any(scene, _INDOOR_POSITIVE)
+        has_outdoor = any(sig in text for sig in _INDOOR_NEGATIVE)
+        if is_exclude:
+            if has_indoor:
+                return "MISMATCH", "excluded indoor signal present"
+            return "PASS", None
+        if has_outdoor and not has_indoor:
+            return "MISMATCH", "strong outdoor signal in indoor-only result"
+        if has_indoor:
+            return "PASS", None
+        return "AMBIGUOUS", "no explicit indoor signal"
+
+    if is_exclude:
+        if has_theme:
+            return "MISMATCH", f"excluded theme '{theme}' appears in scene"
+        return "PASS", None
+
+    if has_theme:
+        return "PASS", None
+    return "AMBIGUOUS", f"theme '{theme}' not explicit in scene"
+
+
+def self_check_selection(theme, is_exclude, selected, judged=None):
+    """Pure post-check: no model calls, no selection changes."""
+    selected = selected or []
+    judged = judged or []
+    mismatches, ambiguous, omitted = [], [], []
+
+    for item in selected:
+        verdict, reason = _self_check_item(theme, is_exclude, item)
+        if verdict == "MISMATCH":
+            mismatches.append({
+                "fid": _item_fid(item), "time": _item_time(item),
+                "scene": _scene_text(item), "reason": reason
+            })
+        elif verdict == "AMBIGUOUS":
+            ambiguous.append({
+                "fid": _item_fid(item), "time": _item_time(item),
+                "scene": _scene_text(item), "reason": reason
+            })
+
+    selected_ids = {_item_fid(item) for item in selected}
+    if theme and not is_exclude:
+        for item in judged:
+            if _item_fid(item) in selected_ids:
+                continue
+            verdict, _reason = _self_check_item(theme, False, item)
+            if verdict == "PASS" and not bool(item.get("is_theme")):
+                omitted.append({
+                    "fid": _item_fid(item), "time": _item_time(item),
+                    "scene": _scene_text(item), "reason": "judge omitted explicit theme candidate"
+                })
+
+    total = len(selected)
+    mismatch_count = len(mismatches)
+    ambiguous_count = len(ambiguous)
+    omitted_count = len(omitted)
+    ambiguous_ratio = (ambiguous_count / total) if total else 0.0
+    if total == 0:
+        status = "FAIL"
+    elif mismatch_count >= max(2, int(total * 0.4 + 0.999)):
+        status = "FAIL"
+    elif mismatch_count or omitted_count:
+        status = "WARN"
+    elif ambiguous_count and ambiguous_ratio > 0.1:
+        status = "WARN"
+    else:
+        status = "PASS"
+
+    if status == "PASS":
+        message = "요청 조건과 선택 조각이 대체로 일치합니다."
+    elif status == "FAIL":
+        message = "조건을 만족하지 못했습니다. 요청과 다른 컷이 다수 포함됐습니다."
+    elif theme == "실내":
+        message = "실내로 확정 가능한 조각이 부족해서 일부 애매한 컷이 포함됐거나 누락 후보가 있습니다."
+    else:
+        message = "요청 조건과 일부 어긋나거나 애매한 컷이 포함됐습니다."
+
+    return {
+        "status": status,
+        "theme": theme,
+        "mode": "exclude" if is_exclude else "keep",
+        "mismatch_count": mismatch_count,
+        "ambiguous_count": ambiguous_count,
+        "omitted_count": omitted_count,
+        "total_count": total,
+        "judged_count": len(judged),
+        "message": message,
+        "mismatches": mismatches[:8],
+        "ambiguous": ambiguous[:8],
+        "omitted": omitted[:8],
+    }
+
+
 def extract_intent(instruction):
     """[추출] 명령 → {keep, exclude, count}. 결정론(알려진 어휘) 우선, 새 표현만 LLM 폴백."""
     det = _deterministic_intent(instruction or "")
@@ -310,8 +492,10 @@ def plan_edit(source_ids, instruction_text, batch=8, verbose=True):
         tag = f"keep '{theme}'"
     keep = [{"fid": j["fid"], "time": j["time"], "scene": j["scene"],
              "why": j.get("reason")} for j in kept]
+    self_check = self_check_selection(theme, is_exclude, keep, judged=judged)
     return {"keep": keep, "count": intent["count"], "intent": intent,
-            "reason": f"{tag}: {len(keep)}/{len(judged)}"}
+            "reason": f"{tag}: {len(keep)}/{len(judged)}",
+            "self_check": self_check}
 
 
 if __name__ == "__main__":
