@@ -341,7 +341,9 @@ def self_check_selection(theme, is_exclude, selected, judged=None):
     else:
         status = "PASS"
 
-    if status == "PASS":
+    if total == 0:
+        message = "요청 조건에 맞는 조각을 찾지 못했습니다."
+    elif status == "PASS":
         message = "요청 조건과 선택 조각이 대체로 일치합니다."
     elif status == "FAIL":
         message = "조건을 만족하지 못했습니다. 요청과 다른 컷이 다수 포함됐습니다."
@@ -412,9 +414,24 @@ def _build_judge_lean(theme, chunk):
         f"각 조각이 테마 '{theme}'에 해당하면 t=true, 아니면 t=false. "
         "장면 태그에 분명한 근거가 없으면 false(추측 금지). "
         "실내 체육관(indoor gymnasium)은 실내; school·concrete·schoolyard 등 야외는 실내 아님.\n"
+        "실내 판정: indoor/gymnasium/room/bedroom/hallway/corridor/走廊는 true. "
+        "school building/concrete ground/schoolyard/playground/field/park/street/building exterior는 "
+        "명시적 indoor 단서가 없으면 false. school/building 단어만으로 실내 추정 금지.\n"
         '오직 JSON: {"items":[{"n":번호,"t":true}]}\n'
         "조각:\n" + "\n".join(lines)
     )
+
+
+def _normalize_judge_theme_decision(theme, scene, raw_value):
+    """Post-process hub judge output with deterministic scene boundary rules."""
+    decision = bool(raw_value)
+    if theme == "실내":
+        verdict, _reason = _self_check_item(theme, False, {"scene": scene})
+        if verdict in ("MISMATCH", "AMBIGUOUS"):
+            return False
+        if verdict == "PASS":
+            return True
+    return decision
 
 
 def _judge_batch(theme_ko, bundles, theme_en=None, batch=8):
@@ -436,7 +453,7 @@ def _judge_batch(theme_ko, bundles, theme_en=None, batch=8):
             results.append({
                 "fid": b["fid"], "time": f'{b["start"]}~{b["end"]}s',
                 "scene": b["scene"],
-                "is_theme": bool(it.get("t")),
+                "is_theme": _normalize_judge_theme_decision(theme_ko, b["scene"], it.get("t")),
                 "confidence": None, "recheck": False, "reason": None,
             })
     return results
