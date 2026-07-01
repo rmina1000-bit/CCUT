@@ -95,8 +95,8 @@ def ensure_proposal_preview(
         temp_clips = []
 
         # STEP A: 각 clip 개별 re-encode
-        for i, clip in enumerate(valid_clips):
-            temp_out = os.path.join(tmpdir, f"clip_{i:04d}.mp4")
+        def _encode_clip(idx, clip):
+            temp_out = os.path.join(tmpdir, f"clip_{idx:04d}.mp4")
             cmd = [
                 "ffmpeg", "-y", "-loglevel", "error",
                 "-ss", str(clip["start"]),
@@ -108,12 +108,30 @@ def ensure_proposal_preview(
                 "-movflags", "+faststart",
                 temp_out
             ]
-            print(f"[PREVIEW_RENDER] Clip {i+1}/{len(valid_clips)}: {clip['source_path']} [{clip['start']:.1f}~{clip['end']:.1f}s]")
+            print(f"[PREVIEW_RENDER] Clip {idx+1}/{len(valid_clips)}: {clip['source_path']} [{clip['start']:.1f}~{clip['end']:.1f}s]")
             result = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=120)
             if result.returncode != 0 or not os.path.exists(temp_out):
                 print(f"[PREVIEW_RENDER] CLIP FAILED: {result.stderr[:300]}")
-                continue
-            temp_clips.append(temp_out)
+                return None
+            return temp_out
+
+        _parallel = os.getenv("CCUT_PREVIEW_PARALLEL", "0").strip() not in ("", "0", "false", "False")
+        if _parallel:
+            # [P5-1] 클립 인코딩 병렬 (인덱스별 결과 후 순서 복원 — concat 순서 보존)
+            import concurrent.futures
+            _max_workers = int(os.getenv("CCUT_PREVIEW_WORKERS", "4") or "4")
+            _ordered = [None] * len(valid_clips)
+            with concurrent.futures.ThreadPoolExecutor(max_workers=_max_workers) as _ex:
+                _futs = {_ex.submit(_encode_clip, i, c): i for i, c in enumerate(valid_clips)}
+                for _f in concurrent.futures.as_completed(_futs):
+                    _ordered[_futs[_f]] = _f.result()
+            temp_clips = [r for r in _ordered if r]
+        else:
+            # 기존 직렬 경로 (동작 무변)
+            for i, clip in enumerate(valid_clips):
+                r = _encode_clip(i, clip)
+                if r:
+                    temp_clips.append(r)
 
         if not temp_clips:
             return _fail(proposal_id, variant, preview_url, "ALL_CLIPS_FAILED")

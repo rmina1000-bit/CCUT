@@ -1633,7 +1633,7 @@ def inject_proposal_previews(proposals: list) -> list:
 
     from engine.proposal_preview_engine import ensure_proposal_preview
 
-    for p in proposals:
+    def _build_clips(p):
         variant     = (p.get("mode") or "A").upper()
         proposal_id = p.get("proposal_id") or p.get("id") or "UNKNOWN"
         sequence    = p.get("sequence", [])
@@ -1652,16 +1652,49 @@ def inject_proposal_previews(proposals: list) -> list:
                 print(f"[PROPOSAL_PREVIEW_INJECT] source_path missing for {sid}")
                 continue
             clips.append({"source_path": source_path, "start": start, "end": end})
+        return variant, proposal_id, clips
 
+    def _apply_result(p, variant, proposal_id, result):
+        p["preview_url"]      = result.get("preview_url")
+        p["preview_duration"] = result.get("duration", 0.0)
+        print(f"[PROPOSAL_PREVIEW_INJECT] {proposal_id}/{variant} status={result['status']} url={p['preview_url']}")
+
+    _parallel = os.getenv("CCUT_PREVIEW_PARALLEL", "0").strip() not in ("", "0", "false", "False")
+
+    if not _parallel:
+        # ── 기존 직렬 경로 (동작 무변) ──
+        for p in proposals:
+            variant, proposal_id, clips = _build_clips(p)
+            if not clips:
+                p["preview_url"] = None
+                print(f"[PROPOSAL_PREVIEW_INJECT] {proposal_id}/{variant}: clips 없음 -> preview_url=None")
+                continue
+            result = ensure_proposal_preview(proposal_id=proposal_id, variant=variant, clips=clips)
+            _apply_result(p, variant, proposal_id, result)
+        return proposals
+
+    # ── [P5-2] A/B안 병렬 경로 (clips 빌드는 직렬 DB read, 렌더만 병렬) ──
+    import concurrent.futures
+    _jobs = []
+    for p in proposals:
+        variant, proposal_id, clips = _build_clips(p)
         if not clips:
             p["preview_url"] = None
             print(f"[PROPOSAL_PREVIEW_INJECT] {proposal_id}/{variant}: clips 없음 -> preview_url=None")
             continue
+        _jobs.append((p, variant, proposal_id, clips))
 
-        result = ensure_proposal_preview(proposal_id=proposal_id, variant=variant, clips=clips)
-        p["preview_url"]      = result.get("preview_url")
-        p["preview_duration"] = result.get("duration", 0.0)
-        print(f"[PROPOSAL_PREVIEW_INJECT] {proposal_id}/{variant} status={result['status']} url={p['preview_url']}")
+    if not _jobs:
+        return proposals
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=max(1, len(_jobs))) as _ex:
+        _fut = {
+            _ex.submit(ensure_proposal_preview, proposal_id=pid, variant=var, clips=cl): (p, var, pid)
+            for (p, var, pid, cl) in _jobs
+        }
+        for _f in concurrent.futures.as_completed(_fut):
+            _p, _var, _pid = _fut[_f]
+            _apply_result(_p, _var, _pid, _f.result())
 
     return proposals
 
@@ -2047,7 +2080,9 @@ async def post_generate_project_proposals(req: ProjectProposalRequest):
                 source_usage[sid] = source_usage.get(sid, 0) + 1
 
         # [PROPOSAL_PREVIEW_INJECT] preview_url 주입 (동기, 렌더 후 응답)
+        _pv_t0 = time.time()
         proposals = inject_proposal_previews(proposals)
+        print(f"[TIMING] preview_render={time.time() - _pv_t0:.1f}s")
 
         # [STEP 14-D] Proposal Ranker integration
         try:
@@ -2136,7 +2171,9 @@ async def post_generate_proposals(source_id: str):
                 p["sequence"] = inject_semantic_thumbnails(p["sequence"])
         
         # [PROPOSAL_PREVIEW_INJECT] preview_url 주입
+        _pv_t0 = time.time()
         proposals = inject_proposal_previews(proposals)
+        print(f"[TIMING] preview_render={time.time() - _pv_t0:.1f}s")
 
         # [STEP 14-D] Proposal Ranker integration
         try:
