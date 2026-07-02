@@ -494,6 +494,39 @@ async def upload_video(background_tasks: BackgroundTasks, file: UploadFile = Fil
 import threading
 _ASR_SEMAPHORE = threading.Semaphore(2)  # ASR 동시 실행 제한 — 68개 동시 경합 폭발 방지
 
+# ── [AUTO-REINDEX] 재조각화 → fragment_index 자동 재구축 훅 (env 가역) ──
+#  근거: 재조각화가 SF fragment_id를 재발급하면 옛 id로 키잉된 fragment_index가
+#  고아화 → hub judge(P3)에 scene 빈 값 도착 (2026-07-02 EVIDENCE 확정).
+#  - CCUT_AUTO_REINDEX=1 일 때만 동작. 미설정/0 = 완전 무변(G-flag).
+#  - SF (재)생성 완료 직후 백그라운드 스레드 발사 → 응답 블로킹 0(G-bg).
+#  - 동일 source in-flight 가드: 중복 요청은 스킵 로그만 남긴다.
+_auto_reindex_inflight = set()
+_auto_reindex_lock = threading.Lock()
+
+
+def _auto_reindex_fire(source_id: str):
+    """SF (재)생성 완료 지점에서 호출. env off면 no-op."""
+    if os.getenv("CCUT_AUTO_REINDEX", "0") not in ("1", "true", "True"):
+        return
+    with _auto_reindex_lock:
+        if source_id in _auto_reindex_inflight:
+            print(f"[AUTO-REINDEX] skip (in-flight): {source_id}")
+            return
+        _auto_reindex_inflight.add(source_id)
+
+    def _worker():
+        try:
+            from engine.fragment_indexer import reindex_source
+            reindex_source(source_id)
+        except Exception as e:
+            print(f"[AUTO-REINDEX][ERROR] source={source_id}: {e}")
+        finally:
+            with _auto_reindex_lock:
+                _auto_reindex_inflight.discard(source_id)
+
+    threading.Thread(target=_worker, daemon=True,
+                     name=f"auto-reindex-{source_id}").start()
+
 def _background_whisper(source_id: str, video_path: str, fragments: list):
     try:
         _background_whisper_impl(source_id, video_path, fragments)
@@ -783,7 +816,8 @@ def _background_whisper_impl(source_id: str, video_path: str, fragments: list):
         
         sem_gen = SemanticFragmentGenerator(bams)
         sem_gen.generate(source_id)
-        
+        _auto_reindex_fire(source_id)  # [AUTO-REINDEX] SF 재생성 완료 → 인덱스 재구축 (env 가역, 비블로킹)
+
         if source_id in _fragment_job_registry:
             job = _fragment_job_registry[source_id]
             job["stage"] = "proposal_generation"
@@ -1709,6 +1743,7 @@ async def generate_semantic_fragments(source_id: str, refresh_proposals: bool = 
     from engine.semantic_engine import SemanticFragmentGenerator
     gen = SemanticFragmentGenerator(bams)
     fragments = gen.generate(source_id)
+    _auto_reindex_fire(source_id)  # [AUTO-REINDEX] SF 재생성 완료 → 인덱스 재구축 (env 가역, 비블로킹)
 
     print(f"[SEMANTIC] /semantic-fragments/{source_id} called. Result count: {len(fragments)}")
 

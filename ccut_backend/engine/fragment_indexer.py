@@ -287,9 +287,25 @@ def index_fragments(source_filter=None, use_vl=True, only_curated=False,
         con.commit()
     con.close()
     if verbose:
-        print(f"[INDEXER] 완료: {len(results)}개 인덱싱, vl_ok={vl_ok}, vl_fail={vl_fail}")
+        print(f"[INDEXER] 완료: {len(results)}개 인덱싱, vl_ok={vl_ok}, vl_fail={vl_fail}", flush=True)
     return {"indexed": len(results), "vl_ok": vl_ok, "vl_fail": vl_fail,
             "results": results if dry_run else None}
+
+
+def reindex_source(source_id: str, use_vl: bool = True, verbose: bool = True) -> dict:
+    """[AUTO-REINDEX] 소스 단위 purge-then-insert 재인덱싱.
+
+    재조각화(SF 재생성)가 fragment_id를 재발급하면 옛 id 인덱스 행이 고아화되므로,
+    ① 해당 source의 fragment_index 행 전부 삭제(소스 단위 purge — 고아 잔존 차단)
+    ② 현재 semantic_fragments 기준 재인덱싱(VL 포함)
+    ③ 완료 로그 [AUTO-REINDEX] 출력.
+    기존 CLI(index_fragments) 동작은 불변 — 이 함수는 reset=True 래퍼다.
+    """
+    result = index_fragments(source_filter=source_id, use_vl=use_vl,
+                             verbose=verbose, unit="sf", reset=True)
+    print(f"[AUTO-REINDEX] source={source_id} sf={result.get('indexed', 0)} "
+          f"vl_ok={result.get('vl_ok', 0)} vl_fail={result.get('vl_fail', 0)}", flush=True)
+    return result
 
 
 def _upsert(con, rec, em):
