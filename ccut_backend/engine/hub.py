@@ -407,17 +407,43 @@ def extract_intent(instruction):
             "count": final_count}
 
 
+GOLDEN_CASES_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "golden_cases.json")
+
+
+def _load_golden_cases():
+    """확정 골든 케이스 로드({theme, tags, gold}). 파일 없거나 깨지면 빈 리스트(프롬프트는 기본 규칙만)."""
+    try:
+        with open(GOLDEN_CASES_PATH, encoding="utf-8") as f:
+            cases = json.load(f).get("cases", [])
+        return [c for c in cases if isinstance(c, dict) and c.get("tags") and c.get("theme")]
+    except Exception:
+        return []
+
+
+def _golden_fewshot_block(theme, max_examples=6):
+    """현재 테마의 골든 케이스에서 대표 예시 블록 생성(true/false 균형, 최대 6개).
+    해당 테마 골든이 없으면 빈 문자열 — 다른 테마 라벨을 섞어 오도하지 않는다."""
+    cases = [c for c in _load_golden_cases() if c.get("theme") == theme]
+    if not cases:
+        return ""
+    pos = [c for c in cases if c.get("gold")][:max_examples // 2]
+    neg = [c for c in cases if not c.get("gold")][:max_examples - len(pos)]
+    picked = pos + neg
+    if not picked:
+        return ""
+    lines = [f'- "{c["tags"]}" -> t={"true" if c.get("gold") else "false"}' for c in picked]
+    return "확정 예시:\n" + "\n".join(lines) + "\n"
+
+
 def _build_judge_lean(theme, chunk):
-    """[속도] 판정 전용 lean 프롬프트 — 출력은 {n,t}만(why/recheck 제거 = 생성 토큰↓)."""
+    """[속도] 판정 전용 lean 프롬프트 — 출력은 {n,t}만(why/recheck 제거 = 생성 토큰↓).
+    경계 판단은 산문 규칙 대신 골든 케이스 few-shot 예시(golden_cases.json)로 전달."""
     lines = [f'{i}. {b["scene"] or "(없음)"}' for i, b in enumerate(chunk, 1)]
     return (
         f"각 조각이 테마 '{theme}'에 해당하면 t=true, 아니면 t=false. "
-        "장면 태그에 분명한 근거가 없으면 false(추측 금지). "
-        "실내 체육관(indoor gymnasium)은 실내; school·concrete·schoolyard 등 야외는 실내 아님.\n"
-        "실내 판정: indoor/gymnasium/room/bedroom/hallway/corridor/走廊는 true. "
-        "school building/concrete ground/schoolyard/playground/field/park/street/building exterior는 "
-        "명시적 indoor 단서가 없으면 false. school/building 단어만으로 실내 추정 금지.\n"
-        '오직 JSON: {"items":[{"n":번호,"t":true}]}\n'
+        "장면 태그에 분명한 근거가 없으면 false(추측 금지).\n"
+        + _golden_fewshot_block(theme)
+        + '오직 JSON: {"items":[{"n":번호,"t":true}]}\n'
         "조각:\n" + "\n".join(lines)
     )
 

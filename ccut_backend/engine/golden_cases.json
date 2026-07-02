@@ -1,0 +1,98 @@
+{
+  "version": 1,
+  "updated": "2026-07-02",
+  "note": "확정 골든 케이스. 전부 라이브 DB 실측 태그(P2 센서 출력) — 더미 없음. gold 라벨은 국장 확정 기준: 운동장=실외(field/schoolyard), 실내 체육관(gym)≠운동장.",
+  "cases": [
+    {
+      "theme": "실내",
+      "tags": "indoor gymnasium, wooden floor, spectators, children, running, large red ball",
+      "gold": true,
+      "source": "SRC_DAEABC7F",
+      "note": "체육관 16/16 실내 확정"
+    },
+    {
+      "theme": "실내",
+      "tags": "indoor gymnasium, wooden floor, basketball hoop, audience, sitting people, standing people",
+      "gold": true,
+      "source": "SRC_DAEABC7F",
+      "note": "체육관 16/16 실내 확정"
+    },
+    {
+      "theme": "실내",
+      "tags": "room, closet, shirt, bed, pillow, curtain",
+      "gold": true,
+      "source": "SRC_5327870D",
+      "note": "침실 27 확정"
+    },
+    {
+      "theme": "실내",
+      "tags": "room, wardrobe, shirt, jeans, clothing, curtain",
+      "gold": true,
+      "source": "SRC_5327870D",
+      "note": "침실 27 확정"
+    },
+    {
+      "theme": "실내",
+      "tags": "ceiling, hands, beads, bracelet",
+      "gold": false,
+      "source": "SRC_5327870D",
+      "note": "애매 3 — 명시 실내 단서 없음, 추측 금지로 제외"
+    },
+    {
+      "theme": "실내",
+      "tags": "school building, concrete ground, children running, adults standing, white ribbon",
+      "gold": false,
+      "source": "SRC_4BF3EA9A",
+      "note": "학교 실외 4→실내 0 확정"
+    },
+    {
+      "theme": "실내",
+      "tags": "concrete ground, people crouching, shoes",
+      "gold": false,
+      "source": "SRC_4BF3EA9A",
+      "note": "학교 실외 4→실내 0 확정"
+    },
+    {
+      "theme": "운동장",
+      "tags": "indoor gymnasium, wooden floor, basketball hoop, large red ball, children, adults",
+      "gold": false,
+      "source": "SRC_DAEABC7F",
+      "note": "국장 확정: gym≠운동장 (실내 체육관은 운동장 아님)"
+    },
+    {
+      "theme": "운동장",
+      "tags": "school field, dirt ground, people running, white t-shirts, red tents",
+      "gold": true,
+      "source": "SRC_0E4412A2",
+      "note": "국장 확정: 운동장=실외 필드"
+    },
+    {
+      "theme": "운동장",
+      "tags": "schoolyard, dirt ground, children running, adults watching, yellow tent",
+      "gold": true,
+      "source": "SRC_C0A5BD51",
+      "note": "국장 확정: 운동장=실외"
+    },
+    {
+      "theme": "운동장",
+      "tags": "restaurant, table, food, bowl, cup, plate, chair, window",
+      "gold": false,
+      "source": "SRC_25079175",
+      "note": "운동장 아님"
+    },
+    {
+      "theme": "실외",
+      "tags": "school building, concrete ground, children running, adults standing",
+      "gold": true,
+      "source": "SRC_4BF3EA9A",
+      "note": "학교 실외 확정"
+    },
+    {
+      "theme": "실외",
+      "tags": "indoor gymnasium, wooden floor, spectators, children",
+      "gold": false,
+      "source": "SRC_DAEABC7F",
+      "note": "실내 체육관은 실외 아님"
+    }
+  ]
+}
