@@ -491,6 +491,7 @@ class ProposalEngine:
         _avoid_q = None
         focus_fallback_used = False
         _hub_self_check_context = None
+        _hub_empty_keep = False
 
         # [P3b] 라이브 채팅 → 거점(hub) 편집계획 우회. env 가역(기본 off=옛 R2 경로).
         # CCUT_HUB_PLAN=1이면 hub.plan_edit가 명령+조각풀로 keep/count를 직접 산출 →
@@ -520,17 +521,21 @@ class ProposalEngine:
                           f"keep={len(fragments)}/{_before} count={_count_override} ({_plan.get('reason')})")
                 else:
                     _intent = _plan.get("intent") or {}
+                    fragments = []
+                    _hub_empty_keep = True
                     _hub_self_check_context = {
                         "theme": _intent.get("keep") or _intent.get("exclude"),
                         "is_exclude": _intent.get("exclude") is not None and _intent.get("keep") is None,
                         "plan_self_check": _plan.get("self_check"),
                         "scene_by_fid": {},
                     }
-                    print(f"[P3b HUB-PLAN] keep 비어 폴백(옛 R2 경로) — {_plan.get('reason')}")
+                    print("[P3b HUB-PLAN] keep=0 → honest-empty (no fallback)")
             except Exception as _e:
                 print(f"[P3b HUB-PLAN] 우회 실패, 옛 경로 폴백 ({_e})")
 
         if _hub_planned:
+            _cmd = {"count": None, "focus": None, "focus_mode": None, "avoid": None}
+        elif _hub_empty_keep:
             _cmd = {"count": None, "focus": None, "focus_mode": None, "avoid": None}
         else:
             try:
