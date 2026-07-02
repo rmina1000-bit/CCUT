@@ -492,6 +492,7 @@ class ProposalEngine:
         focus_fallback_used = False
         _hub_self_check_context = None
         _hub_empty_keep = False
+        _hub_keep_ids = None
 
         # [P3b] 라이브 채팅 → 거점(hub) 편집계획 우회. env 가역(기본 off=옛 R2 경로).
         # CCUT_HUB_PLAN=1이면 hub.plan_edit가 명령+조각풀로 keep/count를 직접 산출 →
@@ -505,6 +506,7 @@ class ProposalEngine:
                 _keep_ids = {k.get("fid") for k in (_plan.get("keep") or []) if k.get("fid")}
                 if _keep_ids:
                     _before = len(fragments)
+                    _hub_keep_ids = set(_keep_ids)
                     _scene_by_fid = {k.get("fid"): k for k in (_plan.get("keep") or []) if k.get("fid")}
                     fragments = [f for f in fragments if f.get("fragment_id") in _keep_ids]
                     if isinstance(_plan.get("count"), int):
@@ -772,13 +774,14 @@ class ProposalEngine:
         threshold_used = 0.05 if is_balanced_sources else 0.1
 
         # [PROPOSAL_BALANCED_SOURCES_INPUT]
-        eligible_frags = [f for f in fragments if float(f.get("structural", {}).get("edit_value", 0.5)) >= threshold_used]
+        candidate_pool = fragments
+        eligible_frags = [f for f in candidate_pool if float(f.get("structural", {}).get("edit_value", 0.5)) >= threshold_used]
         eligible_source_count = len(set(f.get("source_id") for f in eligible_frags if f.get("source_id")))
         import json
-        print(f"[PROPOSAL_BALANCED_SOURCES_INPUT] requested_source_count={len(source_ids) if source_ids else 1}, candidate_source_count={len(set(f.get('source_id') for f in fragments if f.get('source_id')))}, eligible_after_threshold={eligible_source_count}, threshold_used={threshold_used}, user_intent={json.dumps(intent, ensure_ascii=False)}")
+        print(f"[PROPOSAL_BALANCED_SOURCES_INPUT] requested_source_count={len(source_ids) if source_ids else 1}, candidate_source_count={len(set(f.get('source_id') for f in candidate_pool if f.get('source_id')))}, eligible_after_threshold={eligible_source_count}, threshold_used={threshold_used}, user_intent={json.dumps(intent, ensure_ascii=False)}")
 
         # [PROPOSAL_BALANCED_SOURCES_BEFORE]
-        before_dist = self._calculate_source_distribution(fragments)
+        before_dist = self._calculate_source_distribution(candidate_pool)
         print(f"[PROPOSAL_BALANCED_SOURCES_BEFORE] source_distribution={json.dumps(before_dist, ensure_ascii=False)}")
 
         selected = []
@@ -825,14 +828,14 @@ class ProposalEngine:
             is_fast_path = target_len <= 60.0
             source_count = len(source_ids) if source_ids else 1
             if source_count == 1:
-                max_frags = min(len(fragments), 12)
+                max_frags = min(len(candidate_pool), 12)
             else:
                 _base = source_count * 2 if is_fast_path else source_count * 3
                 _cap  = 40 if is_fast_path else 60
                 max_frags = min(max(_base, 6), _cap)
 
             if _count_override:
-                max_frags = max(1, min(_count_override, len(fragments)))
+                max_frags = max(1, min(_count_override, len(candidate_pool)))
             print(f"[PROPOSAL ENGINE][R4] User(Diversity-Balanced) max_frags={max_frags} source_count={source_count} target_len={target_len} count_override={_count_override}")
 
             while has_more and current_len < target_len and len(selected) < max_frags:
@@ -876,7 +879,7 @@ class ProposalEngine:
                                 break
 
             # _low_edit_excluded 카운팅
-            for f in fragments:
+            for f in candidate_pool:
                 if f.get("structural", {}).get("edit_value", 0.5) < threshold_used:
                     _low_edit_excluded += 1
 
@@ -885,21 +888,21 @@ class ProposalEngine:
             is_fast_path = target_len <= 60.0
             source_count = len(source_ids) if source_ids else 1
             if source_count == 1:
-                max_frags = min(len(fragments), 12)
+                max_frags = min(len(candidate_pool), 12)
             else:
                 _base = source_count * 2 if is_fast_path else source_count * 3
                 _cap  = 40 if is_fast_path else 60
                 max_frags = min(max(_base, 6), _cap)
 
             if _count_override:
-                max_frags = max(1, min(_count_override, len(fragments)))
+                max_frags = max(1, min(_count_override, len(candidate_pool)))
             print(f"[PROPOSAL ENGINE][R4] User(Diversity) max_frags={max_frags} "
                   f"source_count={source_count} is_fast_path={is_fast_path} "
                   f"fragment_pool={len(fragments)} count_override={_count_override}")
 
             is_multi = source_ids and len(source_ids) > 1
 
-            for f in sorted_frags:
+            for f in sorted(candidate_pool, key=lambda x: (edit_score(x), -x.get("start", 0)), reverse=True):
                 f_group_key = self._semantic_group_key(f.get("fragment_id"))
 
                 # 엄격한 필터링: edit_value가 0.1 미만이면 제외
@@ -930,12 +933,12 @@ class ProposalEngine:
         b_group_keys = {self._semantic_group_key(f.get("fragment_id")) for f in selected}
         exclusive_groups = b_group_keys - a_group_keys
 
-        if not exclusive_groups and fragments:
-            print(f"[PROPOSAL ENGINE][R4-R1] No exclusive groups in B. Attempting fallback from pool (size={len(fragments)})")
+        if not exclusive_groups and candidate_pool:
+            print(f"[PROPOSAL ENGINE][R4-R1] No exclusive groups in B. Attempting fallback from pool (size={len(candidate_pool)})")
             
             # A에 없는 그룹 중 edit_value가 가장 높은 후보 찾기 (전체 pool 대상)
             fallback_candidates = []
-            for f in fragments:
+            for f in candidate_pool:
                 g_key = self._semantic_group_key(f.get("fragment_id"))
                 if g_key in a_group_keys:
                     continue
@@ -985,13 +988,13 @@ class ProposalEngine:
             mode_reason = "semantic_order_fallback"
             
             # 최소 3개 또는 전체가 5개 이하이면 전부 사용
-            if len(fragments) <= 5:
-                selected = fragments
+            if len(candidate_pool) <= 5:
+                selected = candidate_pool
             else:
             # 3초 이상 + confidence 높은 순으로 상위 N개 추출
-                candidates = [f for f in fragments if self._safe_duration(f) >= 3.0]
+                candidates = [f for f in candidate_pool if self._safe_duration(f) >= 3.0]
                 if len(candidates) < 3:
-                    candidates = fragments # 3초 미만이 많으면 전체에서 선택
+                    candidates = candidate_pool # 3초 미만이 많으면 전체에서 선택
                 
                 # Confidence 높은 순으로 최대 8개 선택하되, 연속 조각 방지 적용
                 fallback_selected = []
@@ -1030,7 +1033,7 @@ class ProposalEngine:
                 "min_fragments_per_selected_source": hard_constraints.get("min_fragments_per_selected_source", 1),
                 "max_single_source_clip_ratio": hard_constraints.get("max_single_source_clip_ratio", 0.35)
             }
-            selected, b_warnings = self._apply_balanced_source_constraints(selected, fragments, constraints)
+            selected, b_warnings = self._apply_balanced_source_constraints(selected, candidate_pool, constraints)
             balance_info.update({
                 "applied": True,
                 "template_id": template_id,
@@ -1038,6 +1041,14 @@ class ProposalEngine:
             })
             # 보정 후 분포 재계산
             source_dist = self._calculate_source_distribution(selected)
+
+        if _hub_keep_ids:
+            selected = [f for f in selected if f.get("fragment_id") in _hub_keep_ids]
+            source_dist = self._calculate_source_distribution(selected)
+            print(
+                f"[P4 BALANCED] pool=keep({len(_hub_keep_ids)}) "
+                f"selected={len(selected)} sources={source_dist.get('source_count', 0)}"
+            )
 
         current_len = sum(self._safe_duration(f) for f in selected)
         
