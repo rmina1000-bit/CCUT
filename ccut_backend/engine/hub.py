@@ -265,6 +265,11 @@ def _scene_has_any(scene, aliases):
     return any(a and a in text for a in aliases)
 
 
+def _scene_alias_hits(scene, aliases):
+    text = (scene or "").lower()
+    return [a for a in aliases if a and a.lower() in text]
+
+
 def _self_check_item(theme, is_exclude, item):
     scene = _scene_text(item)
     text = scene.lower()
@@ -448,15 +453,40 @@ def _build_judge_lean(theme, chunk):
     )
 
 
-def _normalize_judge_theme_decision(theme, scene, raw_value):
+def _requery_indoor_signal(scene, aliases, fid=None):
+    prompt = (
+        f"센서 데이터: {scene}\n"
+        f"센서가 실내 관련 사물 ({', '.join(aliases)})을 감지했다. "
+        "이 장면은 실내인가?\n"
+        "반드시 한국어로만 답하라.\n"
+        '{"indoor": true/false, "reason": "..."}'
+    )
+    import time as _t
+    _t0 = _t.time()
+    out = _ollama_json(prompt)
+    elapsed = _t.time() - _t0
+    result = bool(out.get("indoor"))
+    print(
+        f"[P3b REQUERY] frag={fid or 'UNKNOWN'} alias={','.join(aliases)} "
+        f"judge=false -> requery={str(result).lower()} time={elapsed:.2f}s"
+    )
+    return result
+
+
+def _normalize_judge_theme_decision(theme, scene, raw_value, fid=None):
     """Post-process hub judge output with deterministic scene boundary rules."""
     decision = bool(raw_value)
     if theme == "실내":
-        verdict, _reason = _self_check_item(theme, False, {"scene": scene})
-        if verdict in ("MISMATCH", "AMBIGUOUS"):
-            return False
-        if verdict == "PASS":
+        if decision:
             return True
+        aliases = _scene_alias_hits(scene, _INDOOR_POSITIVE)
+        if aliases:
+            try:
+                return _requery_indoor_signal(scene, aliases, fid=fid)
+            except Exception as e:
+                print(f"[P3b REQUERY][WARN] frag={fid or 'UNKNOWN'} failed ({e}) -> keep judge=false")
+                return False
+        return False
     return decision
 
 
@@ -479,7 +509,7 @@ def _judge_batch(theme_ko, bundles, theme_en=None, batch=8):
             results.append({
                 "fid": b["fid"], "time": f'{b["start"]}~{b["end"]}s',
                 "scene": b["scene"],
-                "is_theme": _normalize_judge_theme_decision(theme_ko, b["scene"], it.get("t")),
+                "is_theme": _normalize_judge_theme_decision(theme_ko, b["scene"], it.get("t"), fid=b["fid"]),
                 "confidence": None, "recheck": False, "reason": None,
             })
     return results
