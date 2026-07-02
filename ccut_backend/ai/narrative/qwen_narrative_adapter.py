@@ -1,10 +1,22 @@
 import json
+import os
 import requests
 from .narrative_director_contract import NarrativeDirection
 
-OLLAMA_URL = "http://127.0.0.1:11434/api/generate"
-MODEL = "qwen2:latest"
-TIMEOUT = 45.0
+OLLAMA_BASE_URL = os.getenv("CCUT_OLLAMA_URL", "http://127.0.0.1:11434").rstrip("/")
+OLLAMA_URL = f"{OLLAMA_BASE_URL}/api/generate"
+MODEL = os.getenv("CCUT_NARRATIVE_DIRECTOR_MODEL", "qwen2:latest")
+KEEP_ALIVE = os.getenv("CCUT_NARRATIVE_DIRECTOR_KEEP_ALIVE", "10m")
+
+
+def _env_float(name: str, default: float) -> float:
+    try:
+        return float(os.getenv(name, str(default)))
+    except (TypeError, ValueError):
+        return default
+
+
+TIMEOUT = _env_float("CCUT_NARRATIVE_DIRECTOR_TIMEOUT", 45.0)
 
 ALLOWED_PACING = {"fast", "medium", "slow", "slow_to_fast", "fast_to_slow"}
 ALLOWED_EMOTION = {"steady", "dramatic", "peak_at_end", "calm", "dynamic"}
@@ -39,7 +51,7 @@ Return exactly this JSON schema:
 
 class QwenNarrativeAdapter:
     def get_narrative_direction(self, context_metadata: dict) -> NarrativeDirection:
-        print(f"[NARRATIVE_DIRECTOR_REQUEST] Provider: qwen, "
+        print(f"[NARRATIVE_DIRECTOR_REQUEST] Provider: qwen model={MODEL}, "
               f"SourceCount: {context_metadata.get('num_fragments', 0)}")
         try:
             prompt = PROMPT_TEMPLATE.format(
@@ -52,7 +64,10 @@ class QwenNarrativeAdapter:
             payload = {
                 "model": MODEL,
                 "prompt": prompt,
-                "stream": False
+                "stream": False,
+                "format": "json",
+                "keep_alive": KEEP_ALIVE,
+                "options": {"temperature": 0, "num_predict": 256},
             }
             resp = requests.post(OLLAMA_URL, json=payload, timeout=TIMEOUT)
             resp.raise_for_status()
@@ -81,7 +96,7 @@ class QwenNarrativeAdapter:
                 narrative_priority=parsed.get("narrative_priority", "dialogue")
                     if parsed.get("narrative_priority") in ALLOWED_PRIORITY else "dialogue",
             )
-            print(f"[NARRATIVE_DIRECTOR_RESPONSE] Provider: qwen, "
+            print(f"[NARRATIVE_DIRECTOR_RESPONSE] Provider: qwen model={MODEL}, "
                   f"direction: {direction.dict()}")
             return direction
         except Exception as e:
