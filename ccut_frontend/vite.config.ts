@@ -4,6 +4,7 @@ import path from "path";
 import { componentTagger } from "lovable-tagger";
 
 export default defineConfig(({ mode }) => ({
+  envPrefix: ["VITE_", "CCUT_LEGACY_NARRATIVE"],
   server: {
     host: true,
     allowedHosts: true,

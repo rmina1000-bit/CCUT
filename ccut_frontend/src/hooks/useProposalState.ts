@@ -64,6 +64,9 @@ type ConsultationDecision = {
   fallbackKind?: "empty" | "unknown" | "ambiguous" | "repeat";
 };
 
+const LEGACY_NARRATIVE_ENABLED =
+  String(import.meta.env.CCUT_LEGACY_NARRATIVE ?? "0") === "1";
+
 const P6_FALLBACK_UNKNOWN =
   "저는 자유롭게 대화하는 AI는 아니에요. 영상 편집에 관한 지시를 알아듣고 실행하는 편집기예요. '실내만', '5개로 줄여줘' 처럼 편집 조건으로 말씀해주시면 바로 해드릴게요.";
 const P6_FALLBACK_AMBIGUOUS =
@@ -491,40 +494,72 @@ export const useProposalState = (
       return;
     }
 
-    // Background Narrative AI call with 15s timeout
+    // Background Narrative AI call with 30s timeout
     const startTime = Date.now();
-    let result: any = { status: "TIMEOUT", patch: null, latency_ms: 0, error: "Frontend 15s timeout" };
-    try {
-      const timeoutPromise = new Promise((_, reject) => 
-        setTimeout(() => reject(new Error("TIMEOUT")), 30000)
-      );
-      
-      result = await Promise.race([
-        narrativeService.interpretIntent(text),
-        timeoutPromise
-      ]);
-    } catch (err: any) {
-      console.warn("[NarrativeAI] Safe fallback triggered:", err.message);
-    }
+    let result: any = { status: "TIMEOUT", patch: null, latency_ms: 0, error: "Frontend 30s timeout" };
+    if (!LEGACY_NARRATIVE_ENABLED) {
+      console.log("[INTENT-ROUTE]\n" + JSON.stringify({
+        stage: "narrative_skipped",
+        enabled: LEGACY_NARRATIVE_ENABLED,
+        inputText: text
+      }, null, 2));
+    } else {
+      console.log("[INTENT-ROUTE]\n" + JSON.stringify({
+        stage: "narrative_call",
+        enabled: LEGACY_NARRATIVE_ENABLED,
+        inputText: text
+      }, null, 2));
+      try {
+        const timeoutPromise = new Promise((_, reject) =>
+          setTimeout(() => reject(new Error("TIMEOUT")), 30000)
+        );
 
-    const latency = Date.now() - startTime;
-    if (result.status !== "OK") {
-      console.log(`[NarrativeAI] Fallback (Status: ${result.status}, Latency: ${latency}ms)`);
+        result = await Promise.race([
+          narrativeService.interpretIntent(text),
+          timeoutPromise
+        ]);
+      } catch (err: any) {
+        console.warn("[NarrativeAI] Safe fallback triggered:", err.message);
+      }
+
+      const latency = Date.now() - startTime;
+      if (result.status !== "OK") {
+        console.log(`[NarrativeAI] Fallback (Status: ${result.status}, Latency: ${latency}ms)`);
+      }
     }
 
     const nextIntent: any = { ...(storyPlan.story_intent || {}) };
     
-    // AI Success: Apply StoryIntentPatch
-    if (result.status === "OK" && result.patch) {
-      // Merge patch into story_intent
+    const shouldUseDeterministicFallback = !(
+      LEGACY_NARRATIVE_ENABLED &&
+      result.status === "OK" &&
+      result.patch
+    );
+
+    if (result.status === "OK" && result.patch && LEGACY_NARRATIVE_ENABLED) {
       Object.assign(nextIntent, result.patch);
-    } else {
-      // AI Fallback: Rule-based simple intent extraction
+      console.log("[INTENT-ROUTE]\n" + JSON.stringify({
+        stage: "patch_consumed",
+        enabled: LEGACY_NARRATIVE_ENABLED,
+        status: result.status,
+        patch: result.patch
+      }, null, 2));
+    }
+    // NOTE: patch_suppressed 로그는 게이트 off 시 narrative 호출 자체가
+    // 스킵되면서 도달 불가(dead)가 되어 제거됨 — narrative_skipped로 대체.
+
+    if (shouldUseDeterministicFallback) {
       if (/빠르게|템포|속도/.test(lower)) nextIntent.pace = "fast";
       if (/감성|따뜻|여운/.test(lower)) nextIntent.mood = "warm";
       if (/사람|인물|가족/.test(lower)) nextIntent.focus = "people";
       if (/풍경|배경|장소/.test(lower)) nextIntent.focus = "landscape";
       if (/골고루|균형/.test(lower)) nextIntent.coverage = "balanced_sources";
+      console.log("[INTENT-ROUTE]\n" + JSON.stringify({
+        stage: "fallback_used(deterministic)",
+        enabled: LEGACY_NARRATIVE_ENABLED,
+        status: result.status,
+        nextIntent
+      }, null, 2));
     }
 
     const nextStatus = shouldConfirm ? "confirmed" : "user_requested_change";
@@ -570,6 +605,12 @@ export const useProposalState = (
         user_intent: userIntent,
         refresh: true
       };
+
+      console.log("[INTENT-ROUTE]\n" + JSON.stringify({
+        stage: "proposal_submit",
+        enabled: LEGACY_NARRATIVE_ENABLED,
+        user_intent: userIntent
+      }, null, 2));
 
       console.log("[CONSULTATION_PROJECT_REQUEST]\n" + JSON.stringify({
         apiUrl: `${videoService.API_BASE_URL}/proposals/project`,
