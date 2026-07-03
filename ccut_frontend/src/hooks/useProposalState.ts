@@ -580,16 +580,31 @@ export const useProposalState = (
     });
 
     if (!shouldConfirm) {
-      if (!orderedSourceIds || orderedSourceIds.length === 0) {
-        console.warn("[Consultation] orderedSourceIds is empty. Skipping proposal generation.");
+      // [R2-B] orderedSourceIds가 비어도 지시를 버리지 않는다 — 조각 pool에서 source 유도.
+      // (Camellia 재현 결함: 지시가 백엔드에 도달하지 못하고 조용히 소멸)
+      let effectiveSourceIds = orderedSourceIds && orderedSourceIds.length > 0
+        ? orderedSourceIds
+        : Array.from(new Set(
+            (sourceFragments ?? []).map((f: any) => f.source_id).filter(Boolean)
+          )) as string[];
+      if (effectiveSourceIds.length === 0 && storyPlan?.sources?.length) {
+        effectiveSourceIds = storyPlan.sources
+          .map((s: any) => s.source_id ?? s.id)
+          .filter(Boolean);
+      }
+      if (effectiveSourceIds.length === 0) {
+        console.warn("[Consultation] source ids unresolved (orderedSourceIds/fragments/storyPlan 모두 빈 값). Skipping proposal generation.");
         return;
+      }
+      if (!orderedSourceIds || orderedSourceIds.length === 0) {
+        console.warn("[Consultation] orderedSourceIds empty → fallback source ids:", effectiveSourceIds);
       }
 
       const inputText = text;
       console.log("[CONSULTATION_NL_SUBMIT]\n" + JSON.stringify({
         inputText,
         shouldConfirm,
-        sourceCount: orderedSourceIds.length
+        sourceCount: effectiveSourceIds.length
       }, null, 2));
 
       const targetLen = proposals?.A?.preview_duration || 60.0;
@@ -600,7 +615,7 @@ export const useProposalState = (
 
       const payload = {
         project_id: projectId || "default_project",
-        source_ids: orderedSourceIds,
+        source_ids: effectiveSourceIds,
         target_length: targetLen,
         user_intent: userIntent,
         refresh: true
@@ -620,7 +635,7 @@ export const useProposalState = (
       try {
         const proposalData = await videoService.requestProjectProposals(
           projectId || "default_project",
-          orderedSourceIds,
+          effectiveSourceIds,
           targetLen,
           userIntent,
           true
