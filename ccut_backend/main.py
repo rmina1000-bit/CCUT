@@ -3072,6 +3072,8 @@ class ContextRequest(BaseModel):
 
 class PanoramaExtractRequest(BaseModel):
     fragments: list[dict]
+    # [PBE-DENSITY] 파노라마 프레임 수 (기본 12). 12가 아니면 P_{fid}_d{n}_{i}.jpg 로 캐시 분리.
+    num_frames: int = 12
 
 
 @app.post("/pbe/extract-panoramas")
@@ -3110,8 +3112,9 @@ async def extract_pbe_panoramas(req: PanoramaExtractRequest, background_tasks: B
     # ffmpeg batch panorama 추출을 동기 실행(완료까지 대기) 후 응답 — 404 레이스 근원 제거
     import asyncio
     loop = asyncio.get_event_loop()
-    await loop.run_in_executor(None, video_engine.batch_extract_panoramas, None, enriched_fragments, 4)
-    return {"status": "COMPLETED", "count": len(enriched_fragments)}
+    _n = max(4, min(int(req.num_frames or 12), 48))  # [PBE-DENSITY] 폭주 방지 상한
+    await loop.run_in_executor(None, video_engine.batch_extract_panoramas, None, enriched_fragments, 4, _n)
+    return {"status": "COMPLETED", "count": len(enriched_fragments), "num_frames": _n}
 
 
 @app.post("/pbe/context")

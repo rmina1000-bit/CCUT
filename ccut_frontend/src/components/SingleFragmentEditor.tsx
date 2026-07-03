@@ -84,6 +84,9 @@ export const SingleFragmentEditor: React.FC<SingleFragmentEditorProps> = ({
 }) => {
   const [leftCut, setLeftCut] = useState(0);
   const [rightCut, setRightCut] = useState(12);
+  // [PBE-DENSITY] 파노라마 프레임 수 (기본 12). 12가 아니면 백엔드가 P_{fid}_d{n}_{i}.jpg 로 생성.
+  const [frameCount, setFrameCount] = useState(12);
+  const frameSuffix = frameCount === 12 ? "" : `_d${frameCount}`;
   const [loadedFrames, setLoadedFrames] = useState<Record<number, boolean>>({});
   const [imageErrorAttempts, setImageErrorAttempts] = useState<Record<number, number>>({});
   const [frameCacheBuster, setFrameCacheBuster] = useState<Record<number, number>>({});
@@ -134,6 +137,7 @@ export const SingleFragmentEditor: React.FC<SingleFragmentEditorProps> = ({
     setImageErrorAttempts({});
     setFrameCacheBuster({});
     setExtractReady(false);
+    setFrameCount(12); // [PBE-DENSITY] 열 때는 항상 기본 밀도
     setPosition(null);
     // [PBE-RESIZE] 열 때 확정 높이를 부여 → flex 세로 분배가 안정적으로 동작(레일 항상 노출).
     setSize({
@@ -184,12 +188,12 @@ export const SingleFragmentEditor: React.FC<SingleFragmentEditorProps> = ({
       const rect = containerRef.current.getBoundingClientRect();
       const x = e.clientX - rect.left;
       const percentage = Math.max(0, Math.min(1, x / rect.width));
-      const index = Math.round(percentage * 12);
+      const index = Math.round(percentage * frameCount);
 
       if (dragging === 'left') {
         setLeftCut(Math.max(0, Math.min(rightCut - 1, index)));
       } else if (dragging === 'right') {
-        setRightCut(Math.max(leftCut + 1, Math.min(12, index)));
+        setRightCut(Math.max(leftCut + 1, Math.min(frameCount, index)));
       }
     };
 
@@ -203,7 +207,7 @@ export const SingleFragmentEditor: React.FC<SingleFragmentEditorProps> = ({
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('mouseup', handleMouseUp);
     };
-  }, [dragging, leftCut, rightCut]);
+  }, [dragging, leftCut, rightCut, frameCount]);
 
   const durationSec =
     typeof startSec === "number" && typeof endSec === "number"
@@ -213,22 +217,22 @@ export const SingleFragmentEditor: React.FC<SingleFragmentEditorProps> = ({
   useEffect(() => {
     if (!isPlaying) return;
 
-    const frameDuration = durationSec && durationSec > 0 
-      ? (durationSec / 12) * 1000 
+    const frameDuration = durationSec && durationSec > 0
+      ? (durationSec / frameCount) * 1000
       : 200;
 
     const interval = setInterval(() => {
       setCurrentIndex((prev) => {
-        if (prev >= 11) {
+        if (prev >= frameCount - 1) {
           setIsPlaying(false);
-          return 11;
+          return frameCount - 1;
         }
         return prev + 1;
       });
     }, frameDuration);
 
     return () => clearInterval(interval);
-  }, [isPlaying, durationSec]);
+  }, [isPlaying, durationSec, frameCount]);
 
   // [PBE-RESIZE] 브라우저 창 크기가 줄어들면 모달 크기/위치를 뷰포트 안으로 다시 가둔다.
   useEffect(() => {
@@ -277,18 +281,66 @@ export const SingleFragmentEditor: React.FC<SingleFragmentEditorProps> = ({
 
   const handleReset = () => {
     setLeftCut(0);
-    setRightCut(12);
+    setRightCut(frameCount);
     setCurrentIndex(0);
     setIsPlaying(false);
   };
 
-  const activeRatio = (rightCut - leftCut) / 12;
+  // [PBE-DENSITY] 프레임 밀도 변경 — 컷 위치는 비율 보존 환산, 프레임은 백엔드 재추출.
+  const changeDensity = (n: number) => {
+    if (!fragment || n === frameCount) return;
+    const clamped = Math.max(4, Math.min(48, n));
+    const scale = clamped / frameCount;
+    let lc = Math.round(leftCut * scale);
+    let rc = Math.round(rightCut * scale);
+    lc = Math.max(0, Math.min(clamped - 1, lc));
+    rc = Math.max(lc + 1, Math.min(clamped, rc));
+    setLeftCut(lc);
+    setRightCut(rc);
+    setCurrentIndex((ci) => Math.max(0, Math.min(clamped - 1, Math.round(ci * scale))));
+    setIsPlaying(false);
+    setLoadedFrames({});
+    setImageErrorAttempts({});
+    setFrameCacheBuster({});
+    setExtractReady(false);
+    setFrameCount(clamped);
+    fetch("/api/pbe/extract-panoramas", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        num_frames: clamped,
+        fragments: [{
+          source_id: fragment.source_id,
+          fragment_id: fragment.fragment_id,
+          start_time: startSec,
+          end_time: endSec,
+        }],
+      }),
+    })
+      .then((res) => res.json())
+      .then((data) => { if (data && data.status === "COMPLETED") setExtractReady(true); })
+      .catch(() => setExtractReady(true)); // 실패해도 기존 캐시 프레임 시도
+  };
+
+  // 밀도 프리셋: 초 단위 간격 → 프레임 수 (전체 길이 기준)
+  const densityPresets = (() => {
+    const d = durationSec && durationSec > 0 ? durationSec : 12;
+    const byInterval = (sec: number) => Math.max(4, Math.min(48, Math.round(d / sec)));
+    return [
+      { label: "0.5s", n: byInterval(0.5) },
+      { label: "1s", n: byInterval(1) },
+      { label: "기본", n: 12 },
+      { label: "2s", n: byInterval(2) },
+    ];
+  })();
+
+  const activeRatio = (rightCut - leftCut) / frameCount;
   const aliveDuration = baseDuration !== undefined ? baseDuration * activeRatio : 0;
 
   const handlePlayToggle = () => {
     setIsPlaying((prev) => {
       if (!prev) {
-        setCurrentIndex((curr) => (curr >= 11 ? 0 : curr));
+        setCurrentIndex((curr) => (curr >= frameCount - 1 ? 0 : curr));
         return true;
       }
       return false;
@@ -300,8 +352,8 @@ export const SingleFragmentEditor: React.FC<SingleFragmentEditorProps> = ({
     const origStart = baseStartSec ?? 0;
     const origEnd   = baseEndSec ?? 0;
     const duration  = origEnd - origStart;
-    const newStartSec = origStart + (leftCut / 12) * duration;
-    const newEndSec   = origStart + (rightCut / 12) * duration;
+    const newStartSec = origStart + (leftCut / frameCount) * duration;
+    const newEndSec   = origStart + (rightCut / frameCount) * duration;
     onApply?.({
       fragmentUid: getUid(fragment),
       newStartSec,
@@ -317,8 +369,8 @@ export const SingleFragmentEditor: React.FC<SingleFragmentEditorProps> = ({
     const rect = containerRef.current.getBoundingClientRect();
     const x = clientX - rect.left;
     const percentage = Math.max(0, Math.min(1, x / rect.width));
-    const index = Math.floor(percentage * 12);
-    setCurrentIndex(Math.max(0, Math.min(11, index)));
+    const index = Math.floor(percentage * frameCount);
+    setCurrentIndex(Math.max(0, Math.min(frameCount - 1, index)));
   };
 
   const handleRailMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
@@ -505,7 +557,7 @@ export const SingleFragmentEditor: React.FC<SingleFragmentEditorProps> = ({
           <div className="relative flex-1 min-h-0 w-full bg-[hsl(228,12%,6%)] border border-border/10 rounded-md overflow-hidden flex items-center justify-center">
             {extractReady ? (
               <img
-                src={`/static/thumbnails/P_${fragment.fragment_id}_${currentIndex}.jpg` +
+                src={`/static/thumbnails/P_${fragment.fragment_id}${frameSuffix}_${currentIndex}.jpg` +
                   (frameCacheBuster[currentIndex] ? `?t=${frameCacheBuster[currentIndex]}` : "")}
                 alt="Preview"
                 className="w-full h-full object-contain"
@@ -519,7 +571,7 @@ export const SingleFragmentEditor: React.FC<SingleFragmentEditorProps> = ({
               </div>
             )}
             <div className="absolute top-2 right-2 bg-black/75 px-2 py-1 rounded text-white text-[11px] font-mono shadow-md">
-              {((currentIndex / 12) * (durationSec || 0)).toFixed(1)}s / {durationSec !== undefined ? `${durationSec.toFixed(1)}s` : "—"}
+              {((currentIndex / frameCount) * (durationSec || 0)).toFixed(1)}s / {durationSec !== undefined ? `${durationSec.toFixed(1)}s` : "—"}
             </div>
           </div>
         )}
@@ -553,9 +605,45 @@ export const SingleFragmentEditor: React.FC<SingleFragmentEditorProps> = ({
           </div>
         )}
 
-        {/* 12 Frame Panorama Rail */}
+        {/* Panorama Rail (프레임 수 = frameCount, 기본 12) */}
         {startSec !== undefined && endSec !== undefined ? (
           <div className="space-y-1.5 flex-shrink-0">
+            {/* [PBE-DENSITY] 프레임 간격 조그 — 촘촘히/듬성듬성 */}
+            <div className="flex items-center justify-between px-1">
+              <span className="text-[10px] text-muted-foreground/60 font-mono">
+                프레임 간격 {durationSec ? (durationSec / frameCount).toFixed(2) : "—"}s · {frameCount}장
+              </span>
+              <div className="flex items-center gap-1">
+                {densityPresets.map((p) => (
+                  <button
+                    key={p.label}
+                    type="button"
+                    onClick={() => changeDensity(p.n)}
+                    className={`px-2 py-0.5 rounded text-[10px] font-bold transition-all ${
+                      frameCount === p.n
+                        ? "bg-primary text-primary-foreground"
+                        : "bg-secondary/40 text-muted-foreground hover:text-foreground hover:bg-secondary/60"
+                    }`}
+                  >
+                    {p.label}
+                  </button>
+                ))}
+                <button
+                  type="button"
+                  title="더 듬성듬성"
+                  onClick={() => changeDensity(frameCount - 4)}
+                  disabled={frameCount <= 4}
+                  className="px-1.5 py-0.5 rounded text-[11px] font-bold bg-secondary/40 text-muted-foreground hover:text-foreground disabled:opacity-30"
+                >−</button>
+                <button
+                  type="button"
+                  title="더 촘촘히"
+                  onClick={() => changeDensity(frameCount + 4)}
+                  disabled={frameCount >= 48}
+                  className="px-1.5 py-0.5 rounded text-[11px] font-bold bg-secondary/40 text-muted-foreground hover:text-foreground disabled:opacity-30"
+                >+</button>
+              </div>
+            </div>
             <div className="relative pt-3">
               {/* [PBE-RAIL] 프레임 폭 고정 → 좁으면 가로 스크롤바로 이동, 넓으면 더 많이 보임 */}
               <div className="overflow-x-auto pbe-rail-scroll">
@@ -564,10 +652,10 @@ export const SingleFragmentEditor: React.FC<SingleFragmentEditorProps> = ({
                 onMouseDown={handleRailMouseDown}
                 className="relative w-max h-[84px] bg-[hsl(228,12%,6%)] border border-border/10 rounded-md overflow-hidden flex select-none cursor-pointer"
               >
-                {Array.from({ length: 12 }).map((_, index) => {
+                {Array.from({ length: frameCount }).map((_, index) => {
                   const isGrayscale = index < leftCut || index >= rightCut;
                   const isLoaded = loadedFrames[index];
-                  const src = `/static/thumbnails/P_${fragment.fragment_id}_${index}.jpg` +
+                  const src = `/static/thumbnails/P_${fragment.fragment_id}${frameSuffix}_${index}.jpg` +
                     (frameCacheBuster[index] ? `?t=${frameCacheBuster[index]}` : "");
 
                   return (
@@ -603,7 +691,7 @@ export const SingleFragmentEditor: React.FC<SingleFragmentEditorProps> = ({
                 <div
                   className="absolute top-0 bottom-0 w-1 bg-yellow-400 z-20 pointer-events-none"
                   style={{
-                    left: `calc(${(currentIndex + 0.5) * (100 / 12)}%)`,
+                    left: `calc(${(currentIndex + 0.5) * (100 / frameCount)}%)`,
                     transform: "translateX(-50%)",
                   }}
                 >
@@ -615,7 +703,7 @@ export const SingleFragmentEditor: React.FC<SingleFragmentEditorProps> = ({
                   onMouseDown={handleMouseDown("left")}
                   className="absolute top-0 bottom-0 w-4 cursor-ew-resize flex items-center justify-center z-30"
                   style={{
-                    left: `calc(${leftCut * (100 / 12)}% - 8px)`,
+                    left: `calc(${leftCut * (100 / frameCount)}% - 8px)`,
                   }}
                 >
                   <div className="w-1.5 h-full bg-primary flex flex-col justify-center items-center rounded-sm">
@@ -629,7 +717,7 @@ export const SingleFragmentEditor: React.FC<SingleFragmentEditorProps> = ({
                   onMouseDown={handleMouseDown("right")}
                   className="absolute top-0 bottom-0 w-4 cursor-ew-resize flex items-center justify-center z-30"
                   style={{
-                    left: `calc(${rightCut * (100 / 12)}% - 8px)`,
+                    left: `calc(${rightCut * (100 / frameCount)}% - 8px)`,
                   }}
                 >
                   <div className="w-1.5 h-full bg-blue-500 flex flex-col justify-center items-center rounded-sm">
@@ -651,7 +739,7 @@ export const SingleFragmentEditor: React.FC<SingleFragmentEditorProps> = ({
             <div className="flex justify-between items-center text-[10px] text-muted-foreground/80 mt-1 px-1">
               <span className={leftCut > 0 ? "text-red-400 font-medium" : "opacity-30"}>앞 버림</span>
               <span className="text-primary font-bold">살아남는 구간</span>
-              <span className={rightCut < 12 ? "text-blue-400 font-medium" : "opacity-30"}>뒤 버림</span>
+              <span className={rightCut < frameCount ? "text-blue-400 font-medium" : "opacity-30"}>뒤 버림</span>
             </div>
           </div>
         ) : (

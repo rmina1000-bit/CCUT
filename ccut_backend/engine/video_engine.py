@@ -260,24 +260,27 @@ class VideoEngine:
             print(f"[PBE][ERROR] Existence failed for {prefix} after wait.")
             return []
 
-    def batch_extract_panoramas(self, video_path, fragments, max_workers=4):
-        """[N-03] 여러 조각의 파노라마를 병렬로 동시 생성하여 대기 시간 단축"""
+    def batch_extract_panoramas(self, video_path, fragments, max_workers=4, num_frames=12):
+        """[N-03] 여러 조각의 파노라마를 병렬로 동시 생성하여 대기 시간 단축.
+        [PBE-DENSITY] num_frames!=12 이면 프리픽스에 _d{n}을 붙여 기본 12장 캐시와 분리."""
         from concurrent.futures import ThreadPoolExecutor
         t_batch_start = time.time()
-        print(f"[PBE][BATCH] Starting parallel extraction for {len(fragments)} fragments (Workers: {max_workers})")
-        
+        print(f"[PBE][BATCH] Starting parallel extraction for {len(fragments)} fragments "
+              f"(Workers: {max_workers}, frames: {num_frames})")
+
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
             futures = []
             for f in fragments:
                 # 각 fragment의 video_path 속성을 우선 사용하고 없으면 인자로 들어온 video_path를 사용
                 frag_video_path = f.get("video_path") or video_path
+                _prefix = f['fragment_id'] if num_frames == 12 else f"{f['fragment_id']}_d{num_frames}"
                 futures.append(executor.submit(
                     self.extract_panorama_frames,
                     frag_video_path,
                     f['start_time'],
                     f['end_time'],
-                    12,
-                    f['fragment_id']
+                    num_frames,
+                    _prefix
                 ))
             # Wait for all to complete
             for future in futures:
