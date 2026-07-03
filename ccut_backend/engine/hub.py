@@ -189,7 +189,7 @@ def _deterministic_intent(t):
 
 
 _THEME_ALIASES = {
-    "실내": ("실내", "indoor", "interior", "inside", "room", "bedroom", "hallway", "corridor", "closet", "bed", "pillow", "wardrobe", "couch", "sofa", "복도", "走廊", "室内", "방", "침실", "체육관"),
+    "실내": ("실내", "indoor", "interior", "inside", "room", "bedroom", "hallway", "corridor", "closet", "bed", "pillow", "wardrobe", "couch", "sofa", "복도", "走廊", "室内", "방", "침실", "체육관", "subway", "train", "bus", "carriage", "지하철", "기차", "버스"),
     "실외": ("실외", "야외", "외부", "밖", "outdoor", "outside", "exterior", "schoolyard", "playground", "street", "road", "park"),
     "야외": ("실외", "야외", "외부", "밖", "outdoor", "outside", "exterior", "schoolyard", "playground", "street", "road", "park"),
     "운동장": ("운동장", "schoolyard", "playground", "field", "ground"),

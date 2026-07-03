@@ -216,7 +216,10 @@ def index_fragments(source_filter=None, use_vl=True, only_curated=False,
     from engine import embedding_model as em
     from engine import fragment_vl_describer as vl
 
-    con = sqlite3.connect(DB_PATH)
+    # [LOCK-FIX] 제안 저장(SQLAlchemy) 등 다른 writer와 경합 시 즉사하지 않고 대기.
+    # (AUTO-REINDEX "database is locked" 연쇄 실패 → 센서 공백 → judge keep=0 의 뿌리)
+    con = sqlite3.connect(DB_PATH, timeout=30)
+    con.execute("PRAGMA busy_timeout=30000")
     if not dry_run and reset:
         n = _reset_index(con, source_filter)
         if verbose:
