@@ -19,6 +19,7 @@ CLI:
 """
 import os
 import json
+import hashlib
 import sqlite3
 import urllib.request
 
@@ -27,6 +28,8 @@ DB_PATH = os.path.join(BACKEND_DIR, "ccut_app.db")
 
 OLLAMA_URL = os.getenv("CCUT_OLLAMA_URL", "http://127.0.0.1:11434")
 HUB_MODEL = os.getenv("CCUT_HUB_MODEL", os.getenv("CCUT_CMD_MODEL", "qwen2.5:7b-instruct"))
+_SINGLE_CONFIRM_PROMPT_VERSION = "judge_lean_v1"
+_SINGLE_CONFIRM_CACHE = {}
 
 
 # ---------- 센서 데이터 수집 (read-only) ----------
@@ -542,12 +545,34 @@ def _judge_single_confirm(theme_ko, bundle):
         return False, _t.time() - _t0, e
 
 
+def _single_cache_enabled():
+    return os.getenv("CCUT_SINGLE_CACHE") in ("1", "true", "True")
+
+
+def _scene_sensor_hash(scene):
+    normalized = " ".join(str(scene or "").split()).lower()
+    return hashlib.sha256(normalized.encode("utf-8")).hexdigest()[:16]
+
+
+def _single_cache_key(theme_ko, bundle):
+    return (
+        bundle.get("fid"),
+        theme_ko,
+        _scene_sensor_hash(bundle.get("scene")),
+        HUB_MODEL,
+        _SINGLE_CONFIRM_PROMPT_VERSION,
+    )
+
+
 def _confirm_keep_candidates_single(theme_ko, judged, bundles):
     bundle_by_fid = {b.get("fid"): b for b in bundles}
     batch_keep = 0
     confirmed = 0
     single_calls = 0
+    cache_hits = 0
+    cache_misses = 0
     total_time = 0.0
+    use_cache = _single_cache_enabled()
 
     for item in judged:
         batch_t = bool(item.get("is_theme"))
@@ -574,6 +599,28 @@ def _confirm_keep_candidates_single(theme_ko, judged, bundles):
             "start": 0,
             "end": 0,
         }
+        cache_key = _single_cache_key(theme_ko, bundle)
+        if use_cache and cache_key in _SINGLE_CONFIRM_CACHE:
+            cached = _SINGLE_CONFIRM_CACHE[cache_key]
+            single_t = bool(cached.get("is_theme"))
+            cache_hits += 1
+            item["single_is_theme"] = single_t
+            item["single_time_sec"] = 0.0
+            item["judge_mode"] = "batch+single"
+            item["is_theme"] = single_t
+            if single_t:
+                confirmed += 1
+            print(f"[P3b SINGLE-CACHE] frag={item.get('fid')} hit")
+            print(
+                f"[P3b SINGLE-CONFIRM] frag={item.get('fid')} "
+                f"batch=true -> single={'t' if single_t else 'f'} cached"
+            )
+            continue
+
+        if use_cache:
+            cache_misses += 1
+            print(f"[P3b SINGLE-CACHE] frag={item.get('fid')} miss")
+
         single_t, elapsed, error = _judge_single_confirm(theme_ko, bundle)
         single_calls += 1
         total_time += elapsed
@@ -589,24 +636,39 @@ def _confirm_keep_candidates_single(theme_ko, judged, bundles):
                 f"[P3b SINGLE-CONFIRM][WARN] frag={item.get('fid')} "
                 f"batch=true -> single=f failed ({error}) time={elapsed:.2f}s"
             )
+        elif use_cache:
+            _SINGLE_CONFIRM_CACHE[cache_key] = {"is_theme": bool(single_t)}
         print(
             f"[P3b SINGLE-CONFIRM] frag={item.get('fid')} "
             f"batch=true -> single={'t' if single_t else 'f'} time={elapsed:.2f}s"
         )
 
     avg = (total_time / single_calls) if single_calls else 0.0
-    print(
-        f"[P3b JUDGE] mode=batch+single batch_keep={batch_keep} "
-        f"confirmed={confirmed} single_calls={single_calls} "
-        f"single_time_total={total_time:.2f}s "
-        f"single_time_avg={avg:.2f}s"
-    )
-    return {
+    if use_cache:
+        print(
+            f"[P3b JUDGE] mode=batch+single batch_keep={batch_keep} "
+            f"confirmed={confirmed} single_calls={single_calls} "
+            f"cache_hits={cache_hits} cache_misses={cache_misses} "
+            f"single_time_total={total_time:.2f}s "
+            f"single_time_avg={avg:.2f}s"
+        )
+    else:
+        print(
+            f"[P3b JUDGE] mode=batch+single batch_keep={batch_keep} "
+            f"confirmed={confirmed} single_calls={single_calls} "
+            f"single_time_total={total_time:.2f}s "
+            f"single_time_avg={avg:.2f}s"
+        )
+    result = {
         "batch_keep": batch_keep,
         "confirmed": confirmed,
         "single_calls": single_calls,
         "single_time_total": total_time,
     }
+    if use_cache:
+        result["cache_hits"] = cache_hits
+        result["cache_misses"] = cache_misses
+    return result
 
 
 def plan_edit(source_ids, instruction_text, batch=8, verbose=True):
