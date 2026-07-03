@@ -130,7 +130,10 @@ const Index: React.FC = () => {
     handleProposalCommit,
     handleReproposal,
     handleConsultation,
-    logProposalPair
+    logProposalPair,
+    proposalHistory,
+    activeProposalEntryId,
+    restoreProposalEntry
   } = useProposalState(
     sourceFragments,
     activeNavItem || "default_project",
@@ -138,7 +141,8 @@ const Index: React.FC = () => {
       ? sourceEntries.map(e => e.source_id)
       : currentSourceId ? [currentSourceId] : []
   );
-  const displayProposalId = committedProposalId ?? selectedProposalId;
+  // [FLOW] 확정/선택 전에도 조각맵이 비지 않게 — 무대에 선 제안(기본 A)을 따라간다.
+  const displayProposalId = committedProposalId ?? selectedProposalId ?? (proposals ? "A" : null);
 
   // [STEP 10-I.5.27-E7] Timing measurement baseline
   const timingRef = useRef<Record<string, number>>({});
@@ -971,7 +975,14 @@ const Index: React.FC = () => {
                     for (const mode of ["A", "B"] as const) {
                       if (!next[mode]) continue;
                       if (snap.proposalsKeyFragments?.[mode] !== undefined) {
-                        next[mode] = { ...next[mode], key_fragments: snap.proposalsKeyFragments[mode] };
+                        const snapKF = snap.proposalsKeyFragments[mode];
+                        // [HONEST-EMPTY GUARD] 빈 스냅샷은 사용자 편집이 아니라 빈 제안의 잔상.
+                        // DB에 실제 조각이 있는 제안을 빈 배열로 덮지 않는다 (Hollyhock 사례).
+                        if (Array.isArray(snapKF) && snapKF.length === 0 && (next[mode].key_fragments?.length ?? 0) > 0) {
+                          console.warn("[Hydration] skip empty key_fragments snapshot for", mode);
+                        } else {
+                          next[mode] = { ...next[mode], key_fragments: snapKF };
+                        }
                       }
                       if (snap.proposalsCustomFragments?.[mode] !== undefined) {
                         next[mode] = { ...next[mode], customEditFragments: snap.proposalsCustomFragments[mode] };
@@ -1059,10 +1070,13 @@ const Index: React.FC = () => {
         confirmation_status: "pending",
         consultation_status: "draft_ready",
         narrative_draft: draft,
+        // [FLOW] 재생성 시 기존 대화를 지우지 않는다 — 개략은 새 메시지로 흐름에 추가.
+        // (프로젝트 전환은 setStoryPlan(null)로 이미 초기화되므로 여기 병합은 같은 프로젝트 한정)
         messages: [
-            { id: "ai_init", sender: "ai", text: draft, timestamp: Date.now() }
+            ...(((storyPlan as any)?.messages) ?? []),
+            { id: `ai_init_${Date.now()}`, sender: "ai", text: draft, timestamp: Date.now() }
         ],
-        story_intent: {}
+        story_intent: (storyPlan as any)?.story_intent ?? {}
     };
 
     setStoryPlan(newPlan);
@@ -2132,6 +2146,9 @@ const Index: React.FC = () => {
               }
               setActiveNavItem("upload");
             }}
+            proposalHistory={proposalHistory}
+            activeProposalEntryId={activeProposalEntryId}
+            onRestoreProposalEntry={restoreProposalEntry}
           />
         )}
       </div>

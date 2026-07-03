@@ -48,6 +48,10 @@ interface CenterPanelProps {
   programId?: string | null;
   programTitle?: string | null;
   onExportDone?: () => void;
+  // [FLOW] 제안 세대 기록 — 타임라인에 흘려보내고 옛 제안을 무대로 복원
+  proposalHistory?: Array<{ id: string; ts: number; pair: any }>;
+  activeProposalEntryId?: string | null;
+  onRestoreProposalEntry?: (id: string) => void;
 }
 
 function parseDirectionFromText(text: string): Direction | null {
@@ -233,6 +237,9 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
   programId,
   programTitle,
   onExportDone,
+  proposalHistory = [],
+  activeProposalEntryId = null,
+  onRestoreProposalEntry,
 }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const videoRefA = useRef<HTMLVideoElement>(null);
@@ -306,10 +313,10 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
     dispatchCommand(text);
   }, [consultationInput, dispatchCommand, resetConsultationTextarea]);
 
-  // Auto scroll for consultation chat — always run when messages change
+  // Auto scroll for consultation chat — 메시지·제안 세대·무대 전환 모두에서 최신으로 흐름
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
-  }, [storyPlan?.messages?.length]);
+  }, [storyPlan?.messages?.length, proposalHistory.length, activeProposalEntryId]);
 
   const setActivePlayerSafe = useCallback((player: "A" | "B" | null) => {
     activePlayerRef.current = player;
@@ -1054,38 +1061,69 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
         {/* [FRAGMENT-SEARCH] 채팅 자연어 조각 검색 결과 */}
         <FragSearchPanel fragSearch={fragSearch} onClose={() => setFragSearch(null)} />
 
-        {/* [STEP 10-I.5.28-E9-R2-R3-R2] ChatGPT Form Narrative Consultation — always visible */}
-        {storyPlan && (storyPlan.messages || []).length > 0 && (
+        {/* [FLOW] 중앙 타임라인 — 개략·채팅·지난 제안이 하나의 흐름으로 위로 흘러간다.
+            현재(활성) 제안 pair만 아래 '무대'(플레이어 그리드)에 서고,
+            지난 제안은 고스트 카드로 흐름 속에 남아 '다시 열기'로 무대 복원. */}
+        {storyPlan && ((storyPlan.messages || []).length > 0 || proposalHistory.length > 0) && (
           <div className="w-full max-w-[800px] flex flex-col gap-6 py-8 animate-in fade-in duration-700">
 
-            {/* Message History — persists even after confirmed */}
             <div className="flex flex-col gap-8">
-              {(storyPlan.messages || []).map((msg) => (
-                <div key={msg.id} className={`flex ${msg.sender === "user" ? "justify-end" : "justify-start"} animate-in fade-in slide-in-from-bottom-2 duration-500`}>
-                  <div className={`flex gap-4 max-w-[85%] ${msg.sender === "user" ? "flex-row-reverse" : "flex-row"}`}>
-                    <div className={`w-8 h-8 rounded-lg flex-shrink-0 flex items-center justify-center mt-1 ${msg.sender === "ai" ? "bg-primary/10 text-primary" : "bg-secondary/40 text-muted-foreground"}`}>
-                      {msg.sender === "ai" ? <BookOpen size={16} /> : <List size={16} />}
+              {[
+                ...(storyPlan.messages || []).map((msg: any) => ({ kind: "msg" as const, ts: msg.timestamp ?? 0, msg })),
+                ...proposalHistory
+                  .filter((h) => h.id !== activeProposalEntryId)
+                  .map((h) => ({ kind: "pair" as const, ts: h.ts, entry: h })),
+              ]
+                .sort((a, b) => a.ts - b.ts)
+                .map((item) => item.kind === "msg" ? (
+                <div key={item.msg.id} className={`flex ${item.msg.sender === "user" ? "justify-end" : "justify-start"} animate-in fade-in slide-in-from-bottom-2 duration-500`}>
+                  <div className={`flex gap-4 max-w-[85%] ${item.msg.sender === "user" ? "flex-row-reverse" : "flex-row"}`}>
+                    <div className={`w-8 h-8 rounded-lg flex-shrink-0 flex items-center justify-center mt-1 ${item.msg.sender === "ai" ? "bg-primary/10 text-primary" : "bg-secondary/40 text-muted-foreground"}`}>
+                      {item.msg.sender === "ai" ? <BookOpen size={16} /> : <List size={16} />}
                     </div>
-                    <div className={`flex flex-col gap-1.5 ${msg.sender === "user" ? "items-end" : "items-start"}`}>
+                    <div className={`flex flex-col gap-1.5 ${item.msg.sender === "user" ? "items-end" : "items-start"}`}>
                       <div className={`px-5 py-3.5 rounded-2xl leading-relaxed text-[14px] whitespace-pre-wrap break-words ${
-                        msg.sender === "user"
+                        item.msg.sender === "user"
                           ? "bg-[#161618] border border-white/5 text-foreground/90 rounded-tr-none"
                           : "bg-secondary/10 border border-border/5 text-foreground/90 rounded-tl-none"
                       }`}>
-                        {msg.isInterpreting && (
+                        {item.msg.isInterpreting && (
                           <div className="flex items-center gap-2 mb-2 text-primary/60">
                             <Loader2 size={14} className="animate-spin" />
                             <span className="text-[11px] font-medium animate-pulse">AI 해석 중...</span>
                           </div>
                         )}
-                        {msg.text}
+                        {item.msg.text}
                       </div>
-                      <span className="text-[10px] text-muted-foreground/40 px-1">{new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                      <span className="text-[10px] text-muted-foreground/40 px-1">{new Date(item.msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
                     </div>
                   </div>
                 </div>
-              ))}
-              <div ref={chatEndRef} />
+                ) : (
+                <div key={`pair_${item.entry.id}`} className="flex justify-start animate-in fade-in duration-500">
+                  <div className="flex gap-4 max-w-[85%]">
+                    <div className="w-8 h-8 rounded-lg flex-shrink-0 flex items-center justify-center mt-1 bg-primary/10 text-primary">
+                      <Play size={14} />
+                    </div>
+                    <div className="flex flex-col gap-1.5 items-start">
+                      <div className="px-5 py-3.5 rounded-2xl rounded-tl-none bg-secondary/10 border border-border/5 flex flex-col gap-2 min-w-[260px]">
+                        <span className="text-[10px] font-black tracking-widest uppercase text-muted-foreground/60">지난 제안</span>
+                        <div className="flex flex-col gap-0.5 text-[12px] text-foreground/80">
+                          <span>A · {item.entry.pair?.A?.title ?? "시장형 편집"}</span>
+                          <span>B · {item.entry.pair?.B?.title ?? "사용자친화형 편집"}</span>
+                        </div>
+                        <button
+                          onClick={() => onRestoreProposalEntry?.(item.entry.id)}
+                          className="self-start mt-1 px-3 py-1.5 rounded-full text-[11px] font-bold bg-primary/15 text-primary hover:bg-primary hover:text-primary-foreground transition-all"
+                        >
+                          이 제안 다시 열기
+                        </button>
+                      </div>
+                      <span className="text-[10px] text-muted-foreground/40 px-1">{new Date(item.entry.ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                    </div>
+                  </div>
+                </div>
+                ))}
             </div>
 
           </div>
@@ -1889,6 +1927,9 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
           exportError={exportError}
           onExport={handleExportClick}
         />
+
+        {/* [FLOW] 자동 스크롤 목적지 — 흐름의 최신 지점(무대 아래) */}
+        <div ref={chatEndRef} />
 
       </div>
     );

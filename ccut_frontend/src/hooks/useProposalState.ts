@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { Proposal, Direction, DirectionSnapshot } from "@/proposal/proposalTypes";
 import { createNextSnapshot } from "@/proposal/directionSnapshot";
 import { generateProposals } from "@/proposal/proposalOrchestrator";
@@ -101,6 +101,49 @@ export const useProposalState = (
   const [proposals, setProposals] = useState<Record<"A" | "B", Proposal> | null>(null);
   const [directionSnapshot, setDirectionSnapshot] = useState<DirectionSnapshot | null>(null);
   const [storyPlan, setStoryPlan] = useState<any | null>(null); // StoryPlanPreview
+
+  // [FLOW] 제안 세대 기록 — 중앙창 타임라인에 흘려보내고, 옛 제안을 다시 무대로 복원.
+  // pair 전체를 스냅샷으로 보관하므로 setProposals(entry.pair)만으로 조각맵까지 동기화된다.
+  const [proposalHistory, setProposalHistory] = useState<Array<{
+    id: string; ts: number; pair: Record<"A" | "B", Proposal>;
+  }>>([]);
+  const [activeProposalEntryId, setActiveProposalEntryId] = useState<string | null>(null);
+
+  // 프로젝트 전환 시 세대 기록 초기화 (storyPlan과 동일 수명)
+  useEffect(() => {
+    setProposalHistory([]);
+    setActiveProposalEntryId(null);
+  }, [projectId]);
+
+  // proposals가 바뀔 때마다 세대 기록 갱신 — 새 pair면 append, 같은 pair면 스냅샷만 갱신
+  useEffect(() => {
+    if (!proposals?.A || !proposals?.B) return;
+    const sig = `${(proposals.A as any).proposal_id ?? "A"}|${(proposals.B as any).proposal_id ?? "B"}`;
+    setActiveProposalEntryId(sig);
+    setProposalHistory((prev) => {
+      const i = prev.findIndex((h) => h.id === sig);
+      if (i >= 0) {
+        const next = [...prev];
+        next[i] = { ...next[i], pair: proposals };
+        return next;
+      }
+      console.log("[FLOW] proposal generation appended:", sig);
+      return [...prev, { id: sig, ts: Date.now(), pair: proposals }];
+    });
+  }, [proposals]);
+
+  const restoreProposalEntry = useCallback((id: string) => {
+    setProposalHistory((prev) => {
+      const entry = prev.find((h) => h.id === id);
+      if (entry) {
+        console.log("[FLOW] restore proposal entry:", id);
+        setProposals(entry.pair);
+        setActiveProposalEntryId(id);
+        setSelectedProposalId(null);
+      }
+      return prev;
+    });
+  }, []);
 
   const logProposalPair = useCallback(
     (pair: Record<"A" | "B", Proposal>, label: string) => {
@@ -703,6 +746,24 @@ export const useProposalState = (
           setCommittedProposalId(null);
           setProposals(generatedProposals);
           setSelectedProposalId(generatedProposals.B ? "B" : "A");
+
+          // [FLOW/HONEST-EMPTY] 조건에 맞는 조각이 0개면 침묵하지 않고 흐름에 설명을 남긴다.
+          // (Hollyhock "실내만" 사례: keep=0 → 조각맵/무대가 비어 고장처럼 보였던 문제)
+          const emptyA = (generatedProposals.A?.key_fragments?.length || 0) === 0;
+          const emptyB = (generatedProposals.B?.key_fragments?.length || 0) === 0;
+          if (emptyA && emptyB) {
+            const sc = generatedProposals.B?.self_check || generatedProposals.A?.self_check;
+            const theme = sc?.theme ? `'${sc.theme}' ` : "";
+            setStoryPlan((prev: any) => prev ? {
+              ...prev,
+              messages: [...(prev.messages ?? []), {
+                id: `ai_empty_${Date.now()}`,
+                sender: "ai",
+                text: `말씀하신 ${theme}조건에 맞는 조각을 찾지 못했습니다. 조작된 결과를 보여드리지 않기 위해 빈 제안을 드립니다. 다른 조건으로 말씀해 주시거나, 이전 제안을 타임라인에서 '다시 열기'로 불러오실 수 있어요.`,
+                timestamp: Date.now(),
+              }],
+            } : prev);
+          }
         }
       } catch (apiErr: any) {
         console.error("[Consultation] requestProjectProposals Error:", apiErr);
@@ -734,6 +795,9 @@ export const useProposalState = (
     handleProposalCommit,
     handleReproposal,
     handleConsultation,
-    logProposalPair
+    logProposalPair,
+    proposalHistory,
+    activeProposalEntryId,
+    restoreProposalEntry
   };
 };
