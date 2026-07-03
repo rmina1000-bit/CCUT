@@ -558,32 +558,56 @@ def _normalize_judge_theme_decision(theme, scene, raw_value, fid=None):
     return decision
 
 
+def _judge_one_chunk(theme_ko, chunk, chunk_no):
+    """청크 1개 판단 → 결과 리스트. 병렬/순차 공용 (내용·프롬프트 동일 = 편향 중립)."""
+    prompt = _build_judge_lean(theme_ko, chunk)
+    try:
+        out = _ollama_json(prompt)
+        items = out.get("items") or []
+    except Exception as e:
+        print(f"[HUB-JUDGE] batch {chunk_no} 실패 ({e})")
+        items = []
+    by_n = {int(it["n"]): it for it in items if isinstance(it, dict) and "n" in it}
+    results = []
+    for j, b in enumerate(chunk, 1):
+        it = by_n.get(j, {})
+        raw_t = bool(it.get("t"))
+        normalized_t = _normalize_judge_theme_decision(theme_ko, b["scene"], raw_t, fid=b["fid"])
+        results.append({
+            "fid": b["fid"], "time": f'{b["start"]}~{b["end"]}s',
+            "scene": b["scene"],
+            "is_theme": normalized_t,
+            "batch_raw_is_theme": raw_t,
+            "requery_applied": bool(normalized_t and not raw_t),
+            "confidence": None, "recheck": False, "reason": None,
+        })
+    return results
+
+
 def _judge_batch(theme_ko, bundles, theme_en=None, batch=8):
     """[속도] 조각 묶음을 배치 판단. lean 출력({n,t})로 생성 토큰 최소화.
-    출력키는 plan_edit이 쓰는 fid/time/scene/is_theme 유지."""
+    출력키는 plan_edit이 쓰는 fid/time/scene/is_theme 유지.
+
+    [JUDGE-PAR] CCUT_JUDGE_PARALLEL=N (기본 1=기존 순차 무변): 청크를 N개 동시 요청.
+    서버가 OLLAMA_NUM_PARALLEL 슬롯을 열어야 실효 (기본 auto 1|4).
+    청크 구성·프롬프트는 순차와 동일 — 위치편향 구조 불변, 결과는 원래 순서로 병합."""
+    chunks = [bundles[i:i + batch] for i in range(0, len(bundles), batch)]
+    try:
+        workers = max(1, min(int(os.getenv("CCUT_JUDGE_PARALLEL", "1")), 8))
+    except Exception:
+        workers = 1
+    if workers <= 1 or len(chunks) <= 1:
+        results = []
+        for no, chunk in enumerate(chunks):
+            results.extend(_judge_one_chunk(theme_ko, chunk, no))
+        return results
+    from concurrent.futures import ThreadPoolExecutor
+    with ThreadPoolExecutor(max_workers=workers) as ex:
+        chunk_results = list(ex.map(
+            lambda t: _judge_one_chunk(theme_ko, t[1], t[0]), enumerate(chunks)))
     results = []
-    for i in range(0, len(bundles), batch):
-        chunk = bundles[i:i + batch]
-        prompt = _build_judge_lean(theme_ko, chunk)
-        try:
-            out = _ollama_json(prompt)
-            items = out.get("items") or []
-        except Exception as e:
-            print(f"[HUB-JUDGE] batch {i // batch} 실패 ({e})")
-            items = []
-        by_n = {int(it["n"]): it for it in items if isinstance(it, dict) and "n" in it}
-        for j, b in enumerate(chunk, 1):
-            it = by_n.get(j, {})
-            raw_t = bool(it.get("t"))
-            normalized_t = _normalize_judge_theme_decision(theme_ko, b["scene"], raw_t, fid=b["fid"])
-            results.append({
-                "fid": b["fid"], "time": f'{b["start"]}~{b["end"]}s',
-                "scene": b["scene"],
-                "is_theme": normalized_t,
-                "batch_raw_is_theme": raw_t,
-                "requery_applied": bool(normalized_t and not raw_t),
-                "confidence": None, "recheck": False, "reason": None,
-            })
+    for r in chunk_results:
+        results.extend(r)
     return results
 
 
@@ -611,6 +635,16 @@ def _scene_sensor_hash(scene):
     return hashlib.sha256(normalized.encode("utf-8")).hexdigest()[:16]
 
 
+def _golden_state_sig():
+    """[AUDIT-⑽] golden_cases.json 변경 시 캐시 무효화용 서명 (mtime+size).
+    골든 추가/수정이 재시작 없이도 판정 캐시에 반영되게 한다."""
+    try:
+        st = os.stat(GOLDEN_CASES_PATH)
+        return f"{st.st_mtime_ns}:{st.st_size}"
+    except Exception:
+        return "no-golden"
+
+
 def _single_cache_key(theme_ko, bundle):
     return (
         bundle.get("fid"),
@@ -618,6 +652,7 @@ def _single_cache_key(theme_ko, bundle):
         _scene_sensor_hash(bundle.get("scene")),
         HUB_MODEL,
         _SINGLE_CONFIRM_PROMPT_VERSION,
+        _golden_state_sig(),
     )
 
 
@@ -770,7 +805,7 @@ def plan_edit(source_ids, instruction_text, batch=8, verbose=True):
             "|".join(sorted(f'{b["fid"]}:{_scene_sensor_hash(b.get("scene"))}' for b in bundles)).encode("utf-8")
         ).hexdigest()[:16]
         _plan_key = (tuple(source_ids), theme, is_exclude, intent.get("count"),
-                     _pool_sig, HUB_MODEL)
+                     _pool_sig, HUB_MODEL, _golden_state_sig())
         _hit = _PLAN_CACHE.get(_plan_key)
         if _hit is not None:
             if verbose:
@@ -804,6 +839,8 @@ def plan_edit(source_ids, instruction_text, batch=8, verbose=True):
              "self_check": self_check}
     if _plan_cache_on and _plan_key is not None:
         import copy as _copy
+        if len(_PLAN_CACHE) >= 32:  # [AUDIT-⑽] 무제한 증식 방지 (FIFO)
+            _PLAN_CACHE.pop(next(iter(_PLAN_CACHE)))
         _PLAN_CACHE[_plan_key] = _copy.deepcopy(_plan)
     return _plan
 
