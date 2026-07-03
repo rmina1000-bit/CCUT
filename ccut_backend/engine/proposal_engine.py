@@ -66,17 +66,32 @@ class ProposalEngine:
         target_len = self._safe_target_len(target_len, fragments)
         print(f"[PROPOSAL ENGINE] target_len normalized: {target_len}")
 
+        # [STEP 10-K-B2] Replaced hardcoded intent with story_context
+        intent = story_context.get("user_intent", {"target_length": target_len}) if story_context else {"target_length": target_len}
+
+        # [R2-A] 사용자 명령(instruction_text)이 있으면 A안도 hub keep 집합 내부에서 선정.
+        # 게이트 조건은 B안 hub plan_edit 실행 조건(CCUT_HUB_PLAN + source_ids + intent_text)과 동일.
+        # 명령이 없는 일반 생성은 keep 전달 자체가 없어 기존 전체 pool 경로 그대로(무변).
+        _market_keep_ids = None
+        _a_intent_text = ((intent.get("instruction_text") or "") if intent else "").strip()
+        if os.getenv("CCUT_HUB_PLAN") in ("1", "true", "True") and source_ids and _a_intent_text:
+            try:
+                from engine import hub as _hub
+                _plan_a = _hub.plan_edit(list(source_ids), _a_intent_text)
+                # keep=0(honest-empty)도 그대로 전달 — 명령이 있는데 keep 밖 조각이
+                # A안에 혼입되면 안 되므로 빈 집합이면 A안도 빈 시퀀스가 된다.
+                _market_keep_ids = {k.get("fid") for k in (_plan_a.get("keep") or []) if k.get("fid")}
+            except Exception as _e:
+                print(f"[P4 MARKET] hub keep 조회 실패, 전체 pool 유지 ({_e})")
+
         # 1. Mode A (Market) 생성
         print("[PROPOSAL ENGINE] Creating Market Proposal (A)...")
-        p_a = self._create_market_proposal(project_id, fragments, target_len, source_ids)
+        p_a = self._create_market_proposal(project_id, fragments, target_len, source_ids, hub_keep_ids=_market_keep_ids)
         
         # 2. Mode B (User) 생성
         print("[PROPOSAL ENGINE] Creating User Proposal (B)...")
         # [STEP 10-I.5.28-E8-R1] A안 선택 ID 추출하여 중복 페널티용으로 전달
         market_selected_ids = {f["fragment_id"] for f in p_a["sequence"]}
-        
-        # [STEP 10-K-B2] Replaced hardcoded intent with story_context
-        intent = story_context.get("user_intent", {"target_length": target_len}) if story_context else {"target_length": target_len}
         p_b = self._create_user_proposal(project_id, fragments, target_len, intent, source_ids, market_selected_ids, story_context=story_context)
         
         # 3. A/B 차별성 보완
@@ -248,8 +263,14 @@ class ProposalEngine:
         others = sorted([b for b in block_list if b is not last], key=lambda b: -b["mean_m"])
         return [c for b in (others + [last]) for c in b["clips"]]
 
-    def _create_market_proposal(self, source_id, fragments, target_len, source_ids=None, overlap_ids=None):
+    def _create_market_proposal(self, source_id, fragments, target_len, source_ids=None, overlap_ids=None, hub_keep_ids=None):
         """A: Market Mode (대중적 호속력)"""
+        # [R2-A] 사용자 명령이 있을 때만 hub keep 집합으로 pool을 좁힌 뒤 market_score 정렬.
+        # hub_keep_ids=None(명령 없음/hub off)이면 기존 전체 pool 경로 그대로.
+        if hub_keep_ids is not None:
+            _pool_before = len(fragments)
+            fragments = [f for f in fragments if f.get("fragment_id") in hub_keep_ids]
+            print(f"[P4 MARKET] hub_filtered={len(fragments)}/{_pool_before} total={len(hub_keep_ids)}")
         target_len = self._safe_target_len(target_len, fragments)
         def market_score(f):
             score = f["structural"].get("market_value", 0.5)
