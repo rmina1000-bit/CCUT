@@ -66,6 +66,13 @@ class ProposalEngine:
         target_len = self._safe_target_len(target_len, fragments)
         print(f"[PROPOSAL ENGINE] target_len normalized: {target_len}")
 
+        # [QUALITY] edit_value_v2 후보 신호 로그 (CCUT_QUALITY_LOG=1, 판단 비관여)
+        try:
+            from engine.quality_metrics import log_pool_quality
+            log_pool_quality(fragments, tag=f"proj={project_id}")
+        except Exception as _q_err:
+            print(f"[QUALITY_V2][WARN] hook skip ({_q_err})")
+
         # [STEP 10-K-B2] Replaced hardcoded intent with story_context
         intent = story_context.get("user_intent", {"target_length": target_len}) if story_context else {"target_length": target_len}
 

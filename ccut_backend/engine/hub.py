@@ -153,7 +153,7 @@ import re
 # 알려진 핵심 어휘 = 결정론(손발). 새 표현만 LLM(머리) 폴백.
 _THEME_VOCAB = [
     "실내", "실외", "야외", "운동장", "물놀이", "바다", "해변", "수영", "계곡", "강",
-    "풍경", "음식", "요리", "사람", "인물", "아이", "어린이", "밤", "야경", "거리",
+    "풍경", "음식", "요리", "사람", "인물", "아이", "어린이", "가족", "밤", "야경", "거리",
     "호텔", "침실", "방", "체육관", "공원", "놀이터",
 ]
 _NUM_KO = {"한": 1, "두": 2, "세": 3, "네": 4, "다섯": 5, "여섯": 6,
@@ -202,10 +202,12 @@ _THEME_ALIASES = {
     "풍경": ("풍경", "landscape", "scenery", "view", "background"),
     "음식": ("음식", "food", "meal", "dish"),
     "요리": ("요리", "cooking", "cook", "kitchen"),
-    "사람": ("사람", "인물", "person", "people", "child", "kid", "face"),
-    "인물": ("사람", "인물", "person", "people", "face"),
-    "아이": ("아이", "어린이", "child", "kid"),
-    "어린이": ("아이", "어린이", "child", "kid"),
+    "사람": ("사람", "인물", "person", "people", "child", "kid", "face", "man", "woman", "boy", "girl", "adult", "family", "가족"),
+    "인물": ("사람", "인물", "person", "people", "face", "man", "woman", "portrait"),
+    "아이": ("아이", "아이들", "어린이", "child", "children", "kid", "kids", "boy", "girl", "toddler", "baby"),
+    "어린이": ("아이", "아이들", "어린이", "child", "children", "kid", "kids", "boy", "girl"),
+    "아이들": ("아이", "아이들", "어린이", "child", "children", "kid", "kids", "boy", "girl", "toddler", "baby"),
+    "가족": ("가족", "family", "사람", "인물", "person", "people", "parent", "mother", "father", "child"),
     "밤": ("밤", "night", "dark"),
     "야경": ("야경", "night view", "nightscape", "night"),
     "거리": ("거리", "street", "road"),
@@ -485,6 +487,32 @@ def _requery_indoor_signal(scene, aliases, fid=None):
     return result
 
 
+def _requery_theme_signal(theme, scene, aliases, fid=None):
+    """[PERSON-PALETTE] 실내 재질의 패턴의 일반화: 센서 alias가 있는데 judge=false인
+    조각을 테마 문구로 허브에 재질의. 판단 주체는 여전히 hub 1곳."""
+    prompt = (
+        f"센서 데이터: {scene}\n"
+        f"센서가 '{theme}' 관련 단서 ({', '.join(aliases)})를 감지했다. "
+        f"이 장면은 '{theme}'에 해당하는가?\n"
+        "반드시 한국어로만 답하라.\n"
+        '{"match": true/false, "reason": "..."}'
+    )
+    import time as _t
+    _t0 = _t.time()
+    out = _ollama_json(prompt)
+    elapsed = _t.time() - _t0
+    result = bool(out.get("match"))
+    print(
+        f"[P3b REQUERY] frag={fid or 'UNKNOWN'} theme={theme} alias={','.join(aliases)} "
+        f"judge=false -> requery={str(result).lower()} time={elapsed:.2f}s"
+    )
+    return result
+
+
+# [PERSON-PALETTE] 인물 계열 테마 — CCUT_PERSON_REQUERY=1일 때만 재질의 승격 (기본 OFF)
+_PERSON_THEMES = ("사람", "인물", "아이", "어린이")
+
+
 def _normalize_judge_theme_decision(theme, scene, raw_value, fid=None):
     """Post-process hub judge output with deterministic scene boundary rules."""
     decision = bool(raw_value)
@@ -495,6 +523,17 @@ def _normalize_judge_theme_decision(theme, scene, raw_value, fid=None):
         if aliases:
             try:
                 return _requery_indoor_signal(scene, aliases, fid=fid)
+            except Exception as e:
+                print(f"[P3b REQUERY][WARN] frag={fid or 'UNKNOWN'} failed ({e}) -> keep judge=false")
+                return False
+        return False
+    if theme in _PERSON_THEMES and os.getenv("CCUT_PERSON_REQUERY") in ("1", "true", "True"):
+        if decision:
+            return True
+        aliases = _scene_alias_hits(scene, _aliases_for_theme(theme))
+        if aliases:
+            try:
+                return _requery_theme_signal(theme, scene, aliases, fid=fid)
             except Exception as e:
                 print(f"[P3b REQUERY][WARN] frag={fid or 'UNKNOWN'} failed ({e}) -> keep judge=false")
                 return False

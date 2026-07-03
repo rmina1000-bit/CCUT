@@ -1,0 +1,34 @@
+{
+  "project_id": "proj_9f786d1c4a34",
+  "instruction": "해변장면 조각만으로 편집해줘.",
+  "expect": {
+    "a_subset_keep": true,
+    "b_subset_keep": true,
+    "honest_empty": false,
+    "min_keep": 3,
+    "max_keep": 5
+  },
+  "recorded": {
+    "keep_n": 4,
+    "a_fids": [
+      "SF_F55703_SRC_21223C07_P001",
+      "SF_B96EBA_SRC_21223C07"
+    ],
+    "b_fids": [
+      "SF_F55703_SRC_21223C07_P002",
+      "SF_E47316_SRC_21223C07"
+    ],
+    "keep_fids": [
+      "SF_B96EBA_SRC_21223C07",
+      "SF_E47316_SRC_21223C07",
+      "SF_F55703_SRC_21223C07_P001",
+      "SF_F55703_SRC_21223C07_P002"
+    ],
+    "intent": {
+      "keep": "해변",
+      "exclude": null,
+      "count": null
+    }
+  },
+  "ts": "2026-07-04 00:35:27"
+}

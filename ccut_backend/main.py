@@ -2278,6 +2278,64 @@ async def get_proposals_api(source_id: str):
     }
 
 # ═══════════════════════════════════════════════════════════════════
+#   [P3-REV] Revision — 기존 제안에 대한 수정 명령 (CCUT_REVISION 게이트)
+#   주의: /proposals/{source_id} 동적 라우트와의 충돌을 피해 별도 prefix 사용.
+# ═══════════════════════════════════════════════════════════════════
+
+@app.post("/revision/proposals")
+async def post_proposal_revision(payload: dict):
+    """확정/선택된 proposal에 '두 번째 문장'(수정 명령) 적용.
+    감지·적용은 engine.revision (판단은 hub 재사용). 기본 OFF: CCUT_REVISION=1 필요.
+    반환 시퀀스는 새 proposal_id(REV_*)로 저장 — 원본은 불변(비파괴)."""
+    from engine import revision as _rev
+    if not _rev.revision_enabled():
+        return {"status": "DISABLED", "message": "CCUT_REVISION=1 필요 (기본 OFF)"}
+    proposal_id = payload.get("proposal_id")
+    instruction = (payload.get("instruction") or "").strip()
+    if not proposal_id or not instruction:
+        return {"status": "ERROR", "message": "proposal_id / instruction 필요"}
+
+    from database import SessionLocal
+    from archive.db_models import ProposalTable
+    db = SessionLocal()
+    try:
+        p = db.query(ProposalTable).filter(ProposalTable.proposal_id == proposal_id).first()
+        if not p:
+            return {"status": "ERROR", "message": f"proposal not found: {proposal_id}"}
+        rev = _rev.detect_revision(instruction, has_committed_proposal=True)
+        if not rev:
+            return {"status": "NOT_REVISION",
+                    "message": "수정 명령으로 인식되지 않음 — 신규 제안 경로를 사용하세요"}
+        new_seq, reason = _rev.apply_revision(rev, p.sequence or [],
+                                              source_ids=payload.get("source_ids"))
+
+        def _fdur(f):
+            try:
+                d = f.get("duration")
+                if d:
+                    return float(d)
+                return float(f.get("end", f.get("end_time", 0)) or 0) - float(f.get("start", f.get("start_time", 0)) or 0)
+            except Exception:
+                return 0.0
+
+        import uuid as _uuid
+        new_id = f"REV_{_uuid.uuid4().hex[:6].upper()}_{p.proposal_id}"
+        db.add(ProposalTable(
+            proposal_id=new_id, source_id=p.source_id, mode=p.mode,
+            sequence=new_seq,
+            duration=round(sum(_fdur(f) for f in new_seq), 2),
+            proposal_reason={"mode_reason": "revision", "revision": reason,
+                             "parent": p.proposal_id, "instruction": instruction},
+            confidence=p.confidence, program_id=p.program_id,
+        ))
+        db.commit()
+        print(f"[P4-REV] saved {new_id} parent={proposal_id} seq={len(new_seq)}")
+        return {"status": "OK", "proposal_id": new_id, "parent": proposal_id,
+                "reason": reason, "count": len(new_seq), "sequence": new_seq}
+    finally:
+        db.close()
+
+# ═══════════════════════════════════════════════════════════════════
 #   [STEP 7] Export Input Generation
 # ═══════════════════════════════════════════════════════════════════
 
