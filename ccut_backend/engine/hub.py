@@ -299,10 +299,12 @@ def _self_check_item(theme, is_exclude, item):
     return "AMBIGUOUS", f"theme '{theme}' not explicit in scene"
 
 
-def self_check_selection(theme, is_exclude, selected, judged=None):
+def self_check_selection(theme, is_exclude, selected, judged=None, judge_mode=None):
     """Pure post-check: no model calls, no selection changes."""
     selected = selected or []
     judged = judged or []
+    if judge_mode is None and theme and not is_exclude and not judged:
+        judge_mode = "batch+single"
     mismatches, ambiguous, omitted = [], [], []
 
     for item in selected:
@@ -357,10 +359,15 @@ def self_check_selection(theme, is_exclude, selected, judged=None):
     else:
         message = "요청 조건과 일부 어긋나거나 애매한 컷이 포함됐습니다."
 
-    return {
+    if judge_mode == "batch":
+        status = "WARN"
+        message = "batch-only judge result used as final selection"
+
+    result = {
         "status": status,
         "theme": theme,
         "mode": "exclude" if is_exclude else "keep",
+        "judge_mode": judge_mode,
         "mismatch_count": mismatch_count,
         "ambiguous_count": ambiguous_count,
         "omitted_count": omitted_count,
@@ -371,6 +378,7 @@ def self_check_selection(theme, is_exclude, selected, judged=None):
         "ambiguous": ambiguous[:8],
         "omitted": omitted[:8],
     }
+    return result
 
 
 def extract_intent(instruction):
@@ -506,13 +514,99 @@ def _judge_batch(theme_ko, bundles, theme_en=None, batch=8):
         by_n = {int(it["n"]): it for it in items if isinstance(it, dict) and "n" in it}
         for j, b in enumerate(chunk, 1):
             it = by_n.get(j, {})
+            raw_t = bool(it.get("t"))
+            normalized_t = _normalize_judge_theme_decision(theme_ko, b["scene"], raw_t, fid=b["fid"])
             results.append({
                 "fid": b["fid"], "time": f'{b["start"]}~{b["end"]}s',
                 "scene": b["scene"],
-                "is_theme": _normalize_judge_theme_decision(theme_ko, b["scene"], it.get("t"), fid=b["fid"]),
+                "is_theme": normalized_t,
+                "batch_raw_is_theme": raw_t,
+                "requery_applied": bool(normalized_t and not raw_t),
                 "confidence": None, "recheck": False, "reason": None,
             })
     return results
+
+
+def _judge_single_confirm(theme_ko, bundle):
+    import time as _t
+    _t0 = _t.time()
+    try:
+        out = _ollama_json(_build_judge_lean(theme_ko, [bundle]))
+        items = out.get("items") or []
+        item = next((it for it in items if isinstance(it, dict) and int(it.get("n", 0) or 0) == 1), None)
+        if item is None:
+            raise ValueError("missing single judge item")
+        result = _normalize_judge_theme_decision(theme_ko, bundle.get("scene"), item.get("t"), fid=bundle.get("fid"))
+        return bool(result), _t.time() - _t0, None
+    except Exception as e:
+        return False, _t.time() - _t0, e
+
+
+def _confirm_keep_candidates_single(theme_ko, judged, bundles):
+    bundle_by_fid = {b.get("fid"): b for b in bundles}
+    batch_keep = 0
+    confirmed = 0
+    single_calls = 0
+    total_time = 0.0
+
+    for item in judged:
+        batch_t = bool(item.get("is_theme"))
+        item["batch_is_theme"] = batch_t
+        item["judge_mode"] = "batch"
+        if not batch_t:
+            continue
+
+        batch_keep += 1
+        if item.get("requery_applied"):
+            confirmed += 1
+            item["single_is_theme"] = bool(item.get("is_theme"))
+            item["single_time_sec"] = 0.0
+            item["judge_mode"] = "batch+requery"
+            print(
+                f"[P3b SINGLE-CONFIRM] frag={item.get('fid')} "
+                "batch=true -> single=t skipped=requery"
+            )
+            continue
+
+        bundle = bundle_by_fid.get(item.get("fid")) or {
+            "fid": item.get("fid"),
+            "scene": item.get("scene") or "",
+            "start": 0,
+            "end": 0,
+        }
+        single_t, elapsed, error = _judge_single_confirm(theme_ko, bundle)
+        single_calls += 1
+        total_time += elapsed
+        item["single_is_theme"] = bool(single_t)
+        item["single_time_sec"] = round(elapsed, 3)
+        item["judge_mode"] = "batch+single"
+        item["is_theme"] = bool(single_t)
+        if single_t:
+            confirmed += 1
+        if error is not None:
+            item["single_error"] = str(error)
+            print(
+                f"[P3b SINGLE-CONFIRM][WARN] frag={item.get('fid')} "
+                f"batch=true -> single=f failed ({error}) time={elapsed:.2f}s"
+            )
+        print(
+            f"[P3b SINGLE-CONFIRM] frag={item.get('fid')} "
+            f"batch=true -> single={'t' if single_t else 'f'} time={elapsed:.2f}s"
+        )
+
+    avg = (total_time / single_calls) if single_calls else 0.0
+    print(
+        f"[P3b JUDGE] mode=batch+single batch_keep={batch_keep} "
+        f"confirmed={confirmed} single_calls={single_calls} "
+        f"single_time_total={total_time:.2f}s "
+        f"single_time_avg={avg:.2f}s"
+    )
+    return {
+        "batch_keep": batch_keep,
+        "confirmed": confirmed,
+        "single_calls": single_calls,
+        "single_time_total": total_time,
+    }
 
 
 def plan_edit(source_ids, instruction_text, batch=8, verbose=True):
@@ -561,11 +655,15 @@ def plan_edit(source_ids, instruction_text, batch=8, verbose=True):
         kept = [j for j in judged if not j["is_theme"]]
         tag = f"exclude '{theme}'"
     else:
+        _confirm_keep_candidates_single(theme, judged, bundles)
         kept = [j for j in judged if j["is_theme"]]
         tag = f"keep '{theme}'"
     keep = [{"fid": j["fid"], "time": j["time"], "scene": j["scene"],
              "why": j.get("reason")} for j in kept]
-    self_check = self_check_selection(theme, is_exclude, keep, judged=judged)
+    self_check = self_check_selection(
+        theme, is_exclude, keep, judged=judged,
+        judge_mode="batch+single" if not is_exclude else None,
+    )
     return {"keep": keep, "count": intent["count"], "intent": intent,
             "reason": f"{tag}: {len(keep)}/{len(judged)}",
             "self_check": self_check}
