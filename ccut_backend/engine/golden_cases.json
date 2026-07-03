@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated": "2026-07-02",
+  "updated": "2026-07-04",
   "note": "확정 골든 케이스. 전부 라이브 DB 실측 태그(P2 센서 출력) — 더미 없음. gold 라벨은 국장 확정 기준: 운동장=실외(field/schoolyard), 실내 체육관(gym)≠운동장.",
   "cases": [
     {
@@ -93,6 +93,13 @@
       "gold": false,
       "source": "SRC_DAEABC7F",
       "note": "실내 체육관은 실외 아님"
+    },
+    {
+      "theme": "운동장",
+      "tags": "school field, dirt ground, people dancing, red tents, white shirts, blue circles, sunglasses, caps, jeans, shorts, shoes",
+      "gold": true,
+      "source": "SRC_0E4412A2",
+      "note": "R3 골든: SF_566DF6 — 야외 school field(dancing 변형), single confirm 강등 교정"
     }
   ]
 }

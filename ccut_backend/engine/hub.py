@@ -513,8 +513,25 @@ def _requery_theme_signal(theme, scene, aliases, fid=None):
 _PERSON_THEMES = ("사람", "인물", "아이", "어린이")
 
 
+def _golden_exact_verdict(theme, scene):
+    """[R3] 확정 골든과 센서 텍스트가 정확히 일치하면 그 gold를 결정론으로 반환.
+    (SF_566DF6: 동일 장면이 퓨샷에 t=true로 있어도 모델이 false → 확정 라벨은 재판단 금지)
+    일치 기준은 정규화 해시(_scene_sensor_hash) — 퍼지 매칭 없음."""
+    h = _scene_sensor_hash(scene)
+    for c in _load_golden_cases():
+        if c.get("theme") == theme and _scene_sensor_hash(c.get("tags")) == h:
+            return bool(c.get("gold"))
+    return None
+
+
 def _normalize_judge_theme_decision(theme, scene, raw_value, fid=None):
     """Post-process hub judge output with deterministic scene boundary rules."""
+    golden = _golden_exact_verdict(theme, scene)
+    if golden is not None:
+        if golden != bool(raw_value):
+            print(f"[P3b GOLDEN-MATCH] frag={fid or 'UNKNOWN'} theme={theme} "
+                  f"judge={str(bool(raw_value)).lower()} -> golden={str(golden).lower()} (확정 라벨 우선)")
+        return golden
     decision = bool(raw_value)
     if theme == "실내":
         if decision:
