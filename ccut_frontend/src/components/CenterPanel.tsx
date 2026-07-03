@@ -1,5 +1,6 @@
 // CCUT 1.0.4 - R9.1 Rollback Verified
 import React, { useRef, useEffect, useState, useCallback, useMemo } from "react";
+import { createPortal } from "react-dom";
 import { Play, Loader2, Send, CheckCircle2, Package, BookOpen, List, ChevronDown, AlertCircle } from "lucide-react";
 import { Fragment } from "@/data/fragmentData";
 import { videoService } from "@/services/videoService";
@@ -250,6 +251,8 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
   const [activePlayer, setActivePlayer] = useState<"A" | "B" | null>(null);
   const activePlayerRef = useRef<"A" | "B" | null>(null);
   const [consultationInput, setConsultationInput] = useState("");
+  // [FLOW-STAGE] 무대가 이식될 타임라인 내 슬롯 (활성 제안 카드 위치)
+  const [stageSlot, setStageSlot] = useState<HTMLDivElement | null>(null);
 
   const resizeConsultationTextarea = useCallback((textarea?: HTMLTextAreaElement | null) => {
     if (!textarea) return;
@@ -1071,7 +1074,6 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
               {[
                 ...(storyPlan.messages || []).map((msg: any) => ({ kind: "msg" as const, ts: msg.timestamp ?? 0, msg })),
                 ...proposalHistory
-                  .filter((h) => h.id !== activeProposalEntryId)
                   .map((h) => ({ kind: "pair" as const, ts: h.ts, entry: h })),
               ]
                 .sort((a, b) => a.ts - b.ts)
@@ -1099,6 +1101,9 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
                     </div>
                   </div>
                 </div>
+                ) : item.entry.id === activeProposalEntryId ? (
+                // [FLOW-STAGE] 활성 제안 = 무대 슬롯. 무대(플레이어+내보내기)가 portal로 이 자리에 선다.
+                <div key={`stage_${item.entry.id}`} ref={setStageSlot} className="w-full flex flex-col items-center space-y-4" />
                 ) : (
                 <div key={`pair_${item.entry.id}`} className="flex justify-start animate-in fade-in duration-500">
                   <div className="flex gap-4 max-w-[85%]">
@@ -1129,6 +1134,10 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
           </div>
         )}
         
+        {/* [FLOW-STAGE] 무대(방향바+A/B 플레이어+상세+내보내기)를 하나의 콘텐츠로 묶어,
+            타임라인의 활성 제안 위치(slot)로 portal 이동. slot이 없으면 기존 위치에 그대로. */}
+        {(() => { const stageContent = (
+          <>
         {/* [STEP 10-I.5.28-E9-R1-R1] Story Direction Adjustment Bar (Only after confirmed) */}
         {storyPlan && storyPlan.consultation_status === "confirmed" && (
           <div className="w-full max-w-[800px] bg-secondary/10 border border-border/10 rounded-xl px-4 py-2.5 shadow-sm">
@@ -1927,8 +1936,11 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
           exportError={exportError}
           onExport={handleExportClick}
         />
+          </>
+        );
+        return stageSlot ? createPortal(stageContent, stageSlot) : stageContent; })()}
 
-        {/* [FLOW] 자동 스크롤 목적지 — 흐름의 최신 지점(무대 아래) */}
+        {/* [FLOW] 자동 스크롤 목적지 — 흐름의 최신 지점 */}
         <div ref={chatEndRef} />
 
       </div>

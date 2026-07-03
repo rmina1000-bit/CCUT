@@ -82,7 +82,7 @@ function hasRecentP6Fallback(messages: any[] = [], fallbackTexts = [P6_FALLBACK_
 }
 
 function isExecutableEditCommand(input: string): boolean {
-  const hasSceneOrSubject = /실내|실외|야외|운동장|물놀이|바다|해변|수영|계곡|강|풍경|음식|요리|사람|인물|아이|어린이|밤|야경|거리|호텔|침실|방|체육관|공원|놀이터|외부|밖|표정|가족|배경|장소|공간/.test(input);
+  const hasSceneOrSubject = /실내|실외|야외|운동장|물놀이|바다|해변|해안|바닷가|갯벌|수영|계곡|강|풍경|음식|요리|사람|인물|아이|어린이|밤|야경|거리|호텔|침실|방|체육관|공원|놀이터|외부|밖|표정|가족|배경|장소|공간/.test(input);
   const hasOnlyOperator = /(?:^|\s)\S+만(?:\s|$)/.test(input);
   const hasEditOperator = hasOnlyOperator || /빼|빼줘|제외|말고|없이|위주|중심|골라|선택|편집|줄여|늘려|살려|넣어|제거/.test(input);
   const hasCountOrPace = /(\d+\s*개|(한|두|세|네|다섯|여섯|일곱|여덟|아홉|열)\s*개|빠르게|느리게|짧게|길게|템포|속도|페이스)/.test(input);
@@ -764,9 +764,32 @@ export const useProposalState = (
               }],
             } : prev);
           }
+        } else {
+          // [FLOW/NO-SILENCE] 200이어도 proposals가 없으면(백엔드 ERROR payload 등)
+          // 조용히 삼키지 않는다 — 흐름에 실패 사유를 남긴다 (locked 사건 재발 방지)
+          const errMsg = (proposalData as any)?.message || (proposalData as any)?.status || "알 수 없는 오류";
+          console.warn("[Consultation] proposals missing in response:", proposalData);
+          setStoryPlan((prev: any) => prev ? {
+            ...prev,
+            messages: [...(prev.messages ?? []), {
+              id: `ai_fail_${Date.now()}`,
+              sender: "ai",
+              text: `제안 생성이 실패했습니다 (${String(errMsg).slice(0, 80)}). 잠시 후 같은 지시를 다시 보내주시면 재시도할게요.`,
+              timestamp: Date.now(),
+            }],
+          } : prev);
         }
       } catch (apiErr: any) {
         console.error("[Consultation] requestProjectProposals Error:", apiErr);
+        setStoryPlan((prev: any) => prev ? {
+          ...prev,
+          messages: [...(prev.messages ?? []), {
+            id: `ai_fail_${Date.now()}`,
+            sender: "ai",
+            text: "서버와의 통신이 실패했습니다. 잠시 후 같은 지시를 다시 보내주시면 재시도할게요.",
+            timestamp: Date.now(),
+          }],
+        } : prev);
       }
     }
   }, [

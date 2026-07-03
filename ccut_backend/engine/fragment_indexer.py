@@ -222,6 +222,9 @@ def index_fragments(source_filter=None, use_vl=True, only_curated=False,
     con.execute("PRAGMA busy_timeout=30000")
     if not dry_run and reset:
         n = _reset_index(con, source_filter)
+        # [LOCK-FIX2] purge 직후 즉시 commit — VL 수 분 동안 write lock을 쥐고
+        # 제안 저장(SQLAlchemy)을 굶기던 장기 트랜잭션 제거 (PROJECT PROPOSAL ERROR: locked)
+        con.commit()
         if verbose:
             print(f"[INDEXER] reset: fragment_index 행 {n}개 삭제 "
                   f"(scope={'source' if source_filter else 'ALL'})")
@@ -282,6 +285,8 @@ def index_fragments(source_filter=None, use_vl=True, only_curated=False,
 
         if not dry_run:
             _upsert(con, rec, em)
+            # [LOCK-FIX2] 조각 단위 commit — write lock 보유 시간을 ms 단위로 유지
+            con.commit()
 
         if verbose and (i + 1) % 20 == 0:
             print(f"  [{i+1}/{len(targets)}] vl_ok={vl_ok} vl_fail={vl_fail}")

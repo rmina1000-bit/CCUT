@@ -20,7 +20,7 @@ def _set_sqlite_pragma(dbapi_conn, _conn_record):
     cur = dbapi_conn.cursor()
     cur.execute("PRAGMA journal_mode=WAL")
     cur.execute("PRAGMA synchronous=NORMAL")   # WAL에서 안전+성능 균형
-    cur.execute("PRAGMA busy_timeout=5000")    # 락 경합 시 5초 대기(즉시 실패 방지)
+    cur.execute("PRAGMA busy_timeout=30000")   # 락 경합 대기 30s (인덱서 write와 공존)
     cur.execute("PRAGMA foreign_keys=ON")
     cur.close()
 
