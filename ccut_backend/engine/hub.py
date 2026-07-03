@@ -30,6 +30,7 @@ OLLAMA_URL = os.getenv("CCUT_OLLAMA_URL", "http://127.0.0.1:11434")
 HUB_MODEL = os.getenv("CCUT_HUB_MODEL", os.getenv("CCUT_CMD_MODEL", "qwen2.5:7b-instruct"))
 _SINGLE_CONFIRM_PROMPT_VERSION = "judge_lean_v1"
 _SINGLE_CONFIRM_CACHE = {}
+_PLAN_CACHE = {}  # [R2-A 후속] plan_edit 결과 캐시 (A/B 이중 호출 중복 제거, CCUT_SINGLE_CACHE 가역)
 
 
 # ---------- 센서 데이터 수집 (read-only) ----------
@@ -683,29 +684,45 @@ def plan_edit(source_ids, instruction_text, batch=8, verbose=True):
         source_ids = [source_ids]
     intent = extract_intent(instruction_text)
     if verbose:
+        print(f"[QWEN_ROUTE] route=hub_plan model={HUB_MODEL}")
         print(f"[HUB-PLAN] intent={intent}")
 
     theme = intent["keep"] or intent["exclude"]
     is_exclude = intent["exclude"] is not None and intent["keep"] is None
 
-    # 내용조건 없음 → 판단 생략, 전체 유지 (count만 결정론)
-    if not theme:
-        con = sqlite3.connect(DB_PATH)
-        bundles = []
-        for sid in source_ids:
-            bundles.extend(load_bundles(con, sid))
-        con.close()
-        keep = [{"fid": b["fid"], "time": f'{b["start"]}~{b["end"]}s',
-                 "scene": b["scene"], "why": "내용조건 없음(전체)"} for b in bundles]
-        return {"keep": keep, "count": intent["count"], "intent": intent,
-                "reason": f"no content filter, keep all {len(keep)}"}
-
-    # 내용조건 있음 → 전체 조각을 '큰 배치'로 한 번에 판단(속도: 소스별 루프 제거)
+    # 조각풀은 두 분기 모두 필요 → 먼저 적재 (plan 캐시 키의 pool hash에도 사용)
     con = sqlite3.connect(DB_PATH)
     bundles = []
     for sid in source_ids:
         bundles.extend(load_bundles(con, sid))
     con.close()
+
+    # 내용조건 없음 → 판단 생략, 전체 유지 (count만 결정론)
+    if not theme:
+        keep = [{"fid": b["fid"], "time": f'{b["start"]}~{b["end"]}s',
+                 "scene": b["scene"], "why": "내용조건 없음(전체)"} for b in bundles]
+        return {"keep": keep, "count": intent["count"], "intent": intent,
+                "reason": f"no content filter, keep all {len(keep)}"}
+
+    # [R2-A 후속] 같은 요청 안에서 A안·B안이 plan_edit를 각각 호출 → batch judge 2배.
+    # 판(plan) 수준 인메모리 캐시: 명령+소스+조각풀(sensor)+모델이 같으면 재계산 금지.
+    # 단일판정 캐시와 동일하게 CCUT_SINGLE_CACHE로 가역, 실패/예외 결과는 저장하지 않음.
+    _plan_cache_on = os.getenv("CCUT_SINGLE_CACHE") in ("1", "true", "True")
+    _plan_key = None
+    if _plan_cache_on:
+        _pool_sig = hashlib.sha256(
+            "|".join(sorted(f'{b["fid"]}:{_scene_sensor_hash(b.get("scene"))}' for b in bundles)).encode("utf-8")
+        ).hexdigest()[:16]
+        _plan_key = (tuple(source_ids), theme, is_exclude, intent.get("count"),
+                     _pool_sig, HUB_MODEL)
+        _hit = _PLAN_CACHE.get(_plan_key)
+        if _hit is not None:
+            if verbose:
+                print(f"[P3b PLAN-CACHE] hit keep={len(_hit.get('keep') or [])} ({_hit.get('reason')})")
+            import copy as _copy
+            return _copy.deepcopy(_hit)
+
+    # 내용조건 있음 → 전체 조각을 '큰 배치'로 한 번에 판단(속도: 소스별 루프 제거)
     import time as _t
     _jbatch = int(os.getenv("CCUT_HUB_JUDGE_BATCH", "8"))
     _t0 = _t.time()
@@ -726,9 +743,13 @@ def plan_edit(source_ids, instruction_text, batch=8, verbose=True):
         theme, is_exclude, keep, judged=judged,
         judge_mode="batch+single" if not is_exclude else None,
     )
-    return {"keep": keep, "count": intent["count"], "intent": intent,
-            "reason": f"{tag}: {len(keep)}/{len(judged)}",
-            "self_check": self_check}
+    _plan = {"keep": keep, "count": intent["count"], "intent": intent,
+             "reason": f"{tag}: {len(keep)}/{len(judged)}",
+             "self_check": self_check}
+    if _plan_cache_on and _plan_key is not None:
+        import copy as _copy
+        _PLAN_CACHE[_plan_key] = _copy.deepcopy(_plan)
+    return _plan
 
 
 if __name__ == "__main__":

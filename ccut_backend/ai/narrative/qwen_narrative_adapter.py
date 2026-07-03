@@ -51,6 +51,7 @@ Return exactly this JSON schema:
 
 class QwenNarrativeAdapter:
     def get_narrative_direction(self, context_metadata: dict) -> NarrativeDirection:
+        print(f"[QWEN_ROUTE] route=legacy_narrative_director model={MODEL}")
         print(f"[NARRATIVE_DIRECTOR_REQUEST] Provider: qwen model={MODEL}, "
               f"SourceCount: {context_metadata.get('num_fragments', 0)}")
         try:

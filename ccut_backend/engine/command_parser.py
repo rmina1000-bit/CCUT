@@ -80,6 +80,7 @@ def parse(instruction: str) -> dict:
         if a:
             out["avoid"] = a
             out["avoid_en"] = _clean(parsed.get("avoid_en"))
+        print(f"[QWEN_ROUTE] route=command_parser model={CMD_MODEL}")
         print(f"[INTENT-ROUTER cmd] model={CMD_MODEL} {instruction!r} -> {out}")
     except Exception as e:
         print(f"[INTENT-ROUTER cmd] parse skip ({e})")
