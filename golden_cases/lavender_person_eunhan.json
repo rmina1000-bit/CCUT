@@ -1,0 +1,35 @@
+{
+  "project_id": "proj_a8974417db29",
+  "instruction": "정은한 나오는 장면만 편집해줘",
+  "expect": {
+    "a_subset_keep": true,
+    "b_subset_keep": true,
+    "honest_empty": false,
+    "min_keep": 3,
+    "max_keep": 5
+  },
+  "recorded": {
+    "keep_n": 4,
+    "a_fids": [
+      "SF_16FF0B_SRC_FE83FEAF",
+      "SF_73DA0E_SRC_FE83FEAF",
+      "SF_9A8CB0_SRC_F6A1092E"
+    ],
+    "b_fids": [
+      "SF_6C8532_SRC_FE83FEAF",
+      "SF_9A8CB0_SRC_F6A1092E"
+    ],
+    "keep_fids": [
+      "SF_16FF0B_SRC_FE83FEAF",
+      "SF_6C8532_SRC_FE83FEAF",
+      "SF_73DA0E_SRC_FE83FEAF",
+      "SF_9A8CB0_SRC_F6A1092E"
+    ],
+    "intent": {
+      "keep": "정은한",
+      "exclude": null,
+      "count": null
+    }
+  },
+  "ts": "2026-07-04 20:13:25"
+}

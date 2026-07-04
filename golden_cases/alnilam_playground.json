@@ -5,11 +5,11 @@
     "a_subset_keep": true,
     "b_subset_keep": true,
     "honest_empty": false,
-    "min_keep": 4,
-    "max_keep": 8
+    "min_keep": 8,
+    "max_keep": 22
   },
   "recorded": {
-    "keep_n": 6,
+    "keep_n": 14,
     "a_fids": [
       "SF_499CEC_SRC_4BF3EA9A_P001",
       "SF_10969B_SRC_6E9DFC8C",
