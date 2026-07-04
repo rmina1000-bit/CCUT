@@ -187,7 +187,7 @@ def _named_persons():
     try:
         con = sqlite3.connect(DB_PATH)
         vocab = []
-        for name, aliases in _person_name_alias_rows(con):
+        for _pid, name, aliases in _person_name_alias_rows(con):
             if name:
                 vocab.append(name)
             vocab.extend(a for a in (aliases or "").split(",") if a.strip())
@@ -199,39 +199,51 @@ def _named_persons():
 
 
 def _person_name_alias_rows(con):
-    """(name, aliases) 행. aliases 컬럼이 아직 없는 DB도 안전 폴백."""
+    """(person_id, name, aliases) 행. aliases 컬럼이 아직 없는 DB도 안전 폴백."""
     try:
         return list(con.execute(
-            "SELECT name, COALESCE(aliases,'') FROM persons "
+            "SELECT person_id, name, COALESCE(aliases,'') FROM persons "
             "WHERE status='named' AND name IS NOT NULL AND length(name) >= 2"))
     except sqlite3.OperationalError:
-        return [(r[0], "") for r in con.execute(
-            "SELECT name FROM persons WHERE status='named' AND name IS NOT NULL AND length(name) >= 2")]
+        return [(r[0], r[1], "") for r in con.execute(
+            "SELECT person_id, name FROM persons WHERE status='named' AND name IS NOT NULL AND length(name) >= 2")]
+
+
+def resolve_person_name(text, vocab=None):
+    """[PERSON-ALIAS] 명령문에서 인물 이름/애칭을 찾아
+    {matched, canonical, person_id, confidence}를 반환. 없으면 None.
+    저장은 풀네임, 검색은 애칭 — 애칭('은한이')으로 찾아도 조각 태그(풀네임 '정은한')와
+    맞도록 정규화 근거를 제공한다. 긴 표기부터 매칭(부분매칭 오탐 완화).
+    vocab: [(person_id, name, [aliases..])] 주입 시 DB 미접근(테스트/재현용)."""
+    rows = vocab
+    if rows is None:
+        try:
+            con = sqlite3.connect(DB_PATH)
+            rows = [(pid, nm, [a.strip() for a in (al or "").split(",") if a.strip()])
+                    for pid, nm, al in _person_name_alias_rows(con)]
+            con.close()
+        except Exception:
+            return None
+    cands = []  # (표기, 풀네임, person_id)
+    for pid, name, aliases in rows:
+        if name and len(name) >= 2:
+            cands.append((name, name, pid))
+        for a in (aliases or []):
+            a = a.strip()
+            if len(a) >= 2:
+                cands.append((a, name, pid))
+    cands.sort(key=lambda x: len(x[0]), reverse=True)
+    for token, full, pid in cands:
+        if token in text:
+            return {"matched": token, "canonical": full, "person_id": pid,
+                    "confidence": 1.0 if token == full else 0.95}
+    return None
 
 
 def _person_theme(t):
-    """[PERSON-ALIAS] 명령에 인물 이름/애칭이 있으면 그 인물의 '풀네임'을 반환.
-    저장은 풀네임, 검색은 애칭 — 애칭('은한이')으로 찾아도 조각 태그(풀네임 '정은한')와
-    맞도록 애칭을 풀네임으로 정규화한다. 긴 표기부터 매칭(부분매칭 오탐 완화)."""
-    try:
-        con = sqlite3.connect(DB_PATH)
-        rows = _person_name_alias_rows(con)
-        con.close()
-    except Exception:
-        return None
-    cands = []  # (표기, 풀네임)
-    for name, aliases in rows:
-        if name and len(name) >= 2:
-            cands.append((name, name))
-        for a in (aliases or "").split(","):
-            a = a.strip()
-            if len(a) >= 2:
-                cands.append((a, name))
-    cands.sort(key=lambda x: len(x[0]), reverse=True)
-    for token, full in cands:
-        if token in t:
-            return full
-    return None
+    """명령의 인물 이름/애칭 → 풀네임 (resolve_person_name 래퍼)."""
+    hit = resolve_person_name(t)
+    return hit["canonical"] if hit else None
 
 
 def _deterministic_intent(t):

@@ -85,6 +85,26 @@ def run_l0():
     check("L0", "alias 무관장면 미매칭",
           not hub._scene_alias_hits("office desk computer", hub._aliases_for_theme("해변")))
 
+    # [INTENT-ROUTER] 종업원 결정론 사다리 — 지시 케이스 6종 (LLM off, vocab 주입 = DB 무관)
+    from engine import intent_router as ir
+    _pv = [("PER_TEST", "정은한", ["은한이"])]
+    r = ir.route_edit_intent(input_text="은한이만 편집해줘", allow_llm=False, person_vocab=_pv)
+    check("L0", "router 애칭→정규화 실행", r["action"] == "run_proposal" and "정은한" in (r["normalized_instruction"] or ""),
+          f'{r["action"]}/{r["normalized_instruction"]}')
+    r = ir.route_edit_intent(input_text="은한이 나오는 장면만 골라줘", allow_llm=False, person_vocab=_pv)
+    check("L0", "router 애칭+나오는", r["action"] == "run_proposal" and "정은한" in (r["normalized_instruction"] or ""))
+    r = ir.route_edit_intent(input_text="정은한만 편집해줘", allow_llm=False, person_vocab=_pv)
+    check("L0", "router 풀네임", r["action"] == "run_proposal")
+    r = ir.route_edit_intent(input_text="이 사람 나오는 것만", allow_llm=False, person_vocab=_pv)
+    check("L0", "router 장면어휘(사람)", r["action"] == "run_proposal", r["action"])
+    r = ir.route_edit_intent(input_text="B안에서 은한이 아닌 장면 빼줘", allow_llm=False, person_vocab=_pv)
+    check("L0", "router 제외+애칭 정규화", r["action"] == "run_proposal" and "정은한" in (r["normalized_instruction"] or ""),
+          f'{r["action"]}/{r["normalized_instruction"]}')
+    r = ir.route_edit_intent(input_text="좀 더 감성적으로 해줘", allow_llm=False, person_vocab=_pv)
+    check("L0", "router 모호→되묻기(llm off)", r["action"] == "ask_clarification", r["action"])
+    r = ir.route_edit_intent(input_text="", allow_llm=False, person_vocab=_pv)
+    check("L0", "router 빈입력→되묻기", r["action"] == "ask_clarification")
+
     # 골든 단락: 대소문/공백 정규화 포함 exact
     cases = hub._load_golden_cases()
     if cases:

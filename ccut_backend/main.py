@@ -3567,6 +3567,31 @@ async def persons_reject(person_id: str):
     return face_palette.reject(person_id)
 
 
+class EditIntentRouteRequest(BaseModel):
+    project_id: str = None
+    source_ids: list = []
+    input_text: str
+    recent_messages: list = []
+    selected_proposal_id: str = None
+
+
+@app.post("/intent/route-edit")
+async def route_edit_intent_api(req: EditIntentRouteRequest):
+    """[INTENT-ROUTER] 종업원 — 프론트 메뉴판 정규식을 대체. 프론트는 말을 거의
+    그대로 보내고, 실행/되묻기/안내 판단은 여기서 한다 (결정론 사다리 → Qwen 폴백).
+    read-only — proposal 실행은 프론트가 응답의 action을 보고 별도 호출."""
+    import asyncio
+    from engine.intent_router import route_edit_intent
+
+    def _run():
+        return route_edit_intent(
+            source_ids=req.source_ids, input_text=req.input_text,
+            recent_messages=req.recent_messages,
+            selected_proposal_id=req.selected_proposal_id)
+
+    return await asyncio.get_event_loop().run_in_executor(None, _run)
+
+
 class HubKeepRequest(BaseModel):
     source_ids: list
     instruction: str
