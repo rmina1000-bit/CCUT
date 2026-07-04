@@ -563,6 +563,29 @@ def set_name(person_id: str, name: str) -> dict:
     return {"status": "OK", "person_id": person_id, "name": name, "tagged_fragments": tagged}
 
 
+def reinject_names_for_source(source_id: str) -> int:
+    """[PERSON-RELINK C2] 재인덱싱(reindex_source)이 visual_desc를 전체 교체하며
+    지운 named 이름 태그를 재주입. 살아있는 person_faces 링크 × 해당 source의
+    fragment_index 행 조인 → _inject_name_tag (append-only 멱등).
+    cv2 미사용(순수 sqlite) — _MODEL_LOCK 불필요. 재주입 수 반환."""
+    con = _connect()
+    ensure_schema(con)
+    rows = list(con.execute(
+        "SELECT p.name, pf.fragment_id FROM person_faces pf "
+        "JOIN persons p ON p.person_id = pf.person_id "
+        "JOIN fragment_index fi ON fi.fragment_id = pf.fragment_id "
+        "WHERE p.status='named' AND p.name IS NOT NULL AND fi.source_id = ?",
+        (source_id,)))
+    n = 0
+    for name, fid in rows:
+        n += _inject_name_tag(con, name, fid)
+    con.commit()
+    con.close()
+    if n:
+        print(f"[PERSON-RELINK] reinject source={source_id} tagged={n}")
+    return n
+
+
 def reject(person_id: str) -> dict:
     con = _connect()
     ensure_schema(con)

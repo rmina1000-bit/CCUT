@@ -518,6 +518,12 @@ def _auto_reindex_fire(source_id: str):
         try:
             from engine.fragment_indexer import reindex_source
             reindex_source(source_id)
+            # [PERSON-RELINK C2] 재인덱싱이 visual_desc를 전체 교체하며 지운
+            # named 이름 태그를 재주입 (env 가역, 기본 OFF = 완전 무변).
+            # 근거: reindex 1회가 태그 4→1 소거 → 검색 3→1 재붕괴 (SIM 실측).
+            if os.getenv("CCUT_PERSON_RELINK", "0") in ("1", "true", "True"):
+                from engine.face_palette import reinject_names_for_source
+                reinject_names_for_source(source_id)
         except Exception as e:
             print(f"[AUTO-REINDEX][ERROR] source={source_id}: {e}")
         finally:
