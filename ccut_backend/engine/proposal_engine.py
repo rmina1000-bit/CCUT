@@ -136,6 +136,13 @@ class ProposalEngine:
         _debug_seq("AFTER_A", p_a["sequence"])
         _debug_seq("AFTER_B", p_b["sequence"])
 
+        # [SELF-CONTAINED-SEQ 2026-07-05] 시퀀스 조각마다 소스 영상/썸네일 URL 동봉.
+        # 제안이 프론트 pool 상태와 무관하게 자체완결 — "로드 안 된 조각" 계열
+        # (세션 중 아카이브 포함, 재조각화 고아 제안 복원, 신규 소스)의
+        # 오재생(1번영상 대체)·썸네일 공백을 원천 차단한다. DB 저장분도 함께 완결됨.
+        self._enrich_sequence_urls(p_a["sequence"])
+        self._enrich_sequence_urls(p_b["sequence"])
+
         # 가드 적용 후 최종 duration 재계산
         p_a["duration"] = round(sum(self._safe_duration(f) for f in p_a["sequence"]), 2)
         p_b["duration"] = round(sum(self._safe_duration(f) for f in p_b["sequence"]), 2)
@@ -271,6 +278,44 @@ class ProposalEngine:
         last = min(block_list, key=lambda b: b["tail_m"])            # Quiet-End: 가장 잔잔한 블록을 끝에
         others = sorted([b for b in block_list if b is not last], key=lambda b: -b["mean_m"])
         return [c for b in (others + [last]) for c in b["clips"]]
+
+    def _enrich_sequence_urls(self, seq):
+        """[SELF-CONTAINED-SEQ] 시퀀스 조각에 video_url/thumbnail_url 동봉.
+        - video: sources.file_path 기준(+HEVC play_ 사이드카 우선, main.py 하이드레이션과 동일 규칙)
+        - thumbnail: SF 썸네일 실측 규칙 {fid}.jpg — 단, 파일이 실존할 때만 기입
+          (없는 경로 조립 금지, 없으면 프론트가 '이미지 없음'으로 정직 표시)"""
+        import os as _os
+        import re as _re
+        import sqlite3 as _sq
+        from urllib.parse import quote as _q
+        backend = _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__)))
+        root = _os.path.dirname(backend)
+        thumbs_dir = _os.path.join(root, "storage", "thumbnails")
+        proxies_dir = _os.path.join(backend, "storage", "proxies")
+        try:
+            _con = _sq.connect(_os.path.join(backend, "ccut_app.db"))
+            paths = dict(_con.execute("SELECT source_id, file_path FROM sources"))
+            _con.close()
+        except Exception:
+            paths = {}
+        for f in (seq or []):
+            if not isinstance(f, dict):
+                continue
+            fid = f.get("fragment_id") or ""
+            sid = f.get("source_id")
+            if not sid:
+                m = _re.search(r"SRC_[0-9A-Za-z]+", fid)
+                sid = m.group(0) if m else None
+            if sid and not f.get("video_url"):
+                name = _os.path.basename(paths.get(sid) or "") or f"{sid}.mp4"
+                play = f"play_{_os.path.splitext(name)[0]}.mp4"
+                if _os.path.exists(_os.path.join(proxies_dir, play)):
+                    f["video_url"] = f"/static/proxies/{_q(play, safe='')}"
+                else:
+                    f["video_url"] = f"/static/uploads/{_q(name, safe='')}"
+            if fid and not f.get("thumbnail_url"):
+                if _os.path.exists(_os.path.join(thumbs_dir, f"{fid}.jpg")):
+                    f["thumbnail_url"] = f"/static/thumbnails/{fid}.jpg"
 
     def _create_market_proposal(self, source_id, fragments, target_len, source_ids=None, overlap_ids=None, hub_keep_ids=None):
         """A: Market Mode (대중적 호속력)"""

@@ -574,6 +574,15 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
         }
       }
 
+      // [PLAYBACK-ORPHAN-B 2026-07-05] sourceEntries에도 없는 소스 = 하이드레이션 이후
+      // 합류한 소스(세션 중 아카이브 포함 등). fid의 SRC 토큰으로 업로드 경로 직접 구성
+      // (업로드 파일명 = {source_id}.mp4 실측 규칙). 잘못된 영상 대체보다 언제나 낫다.
+      if (sidMatch) {
+        const directUrl = `/static/uploads/${sidMatch[0]}.mp4`;
+        import.meta.env.DEV && console.log(`[VIDEO_URL_RESOLVE] fragId=${fragId} matchedAlias=null resolvedBy=fid-direct resolvedVideoUrl=${directUrl} fallbackUsed=2.5`);
+        return directUrl;
+      }
+
       // source_id 로도 못 찾음 → 전역 1번영상 반복 금지(클립별 오재생 방지). null 반환, 상위에서 처리.
       import.meta.env.DEV && console.log(`[VIDEO_URL_RESOLVE] fragId=${fragId} matchedAlias=null source_id 해석 실패 -> null fallbackUsed=3`);
       return null;
@@ -667,7 +676,13 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
       // mySession: 향후 stale event 검증에 사용 예정
       void (isA ? playSessionARef.current : playSessionBRef.current);
 
-      const fragUrl = getVideoUrlForFrag(frag.fragment_id) ?? videoUrl ?? undefined;
+      // [SELF-CONTAINED-SEQ 2026-07-05] 시퀀스 조각이 동봉한 video_url 우선 → 해석기.
+      // 전역 1번영상(videoUrl) 대체 금지 — "다른 영상이 조용히 재생"되던 오염의 직접 원인.
+      const fragUrl = (frag as any).video_url ?? getVideoUrlForFrag(frag.fragment_id) ?? undefined;
+      if (!fragUrl) {
+        console.error(`[PLAYFRAG][BLOCKED] ${frag.fragment_id}: 영상 경로 해석 실패 — 오재생 방지를 위해 재생하지 않음`);
+        return;
+      }
       const startSec = (frag as any).start_sec
         ?? (frag as any).start
         ?? (frag.start_frame ?? 0) / 30;
@@ -936,8 +951,9 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
 
     // Fragment change might require src change
     const targetFrag = frags[resolved.index];
-    const targetUrl = getVideoUrlForFrag(targetFrag.fragment_id) ?? videoUrl ?? undefined;
-    
+    // [SELF-CONTAINED-SEQ 2026-07-05] 동봉 video_url 우선, 전역 1번영상 대체 금지
+    const targetUrl = (targetFrag as any).video_url ?? getVideoUrlForFrag(targetFrag.fragment_id) ?? undefined;
+
     if (targetUrl && !sameVideoSource(video.current.currentSrc || video.current.src, targetUrl)) {
       playFrag(player, targetFrag, isA ? seqEndARef : seqEndBRef, resolved.offset);
     } else {
