@@ -516,28 +516,47 @@ def _auto_reindex_fire(source_id: str):
 
     def _worker():
         try:
-            from engine.fragment_indexer import reindex_source
-            reindex_source(source_id)
-            if os.getenv("CCUT_PERSON_RELINK", "0") in ("1", "true", "True"):
+            try:
+                from engine.fragment_indexer import reindex_source
+                reindex_source(source_id)
+            except Exception as e:
+                print(f"[AUTO-REINDEX][ERROR] source={source_id}: {e}")
+                return
+            # [PERSON-RELINK] 게이트 값 raw 출력 — 미발화가 침묵으로 묻히지 않게.
+            _relink = os.getenv("CCUT_PERSON_RELINK", "0")
+            print(f"[PERSON-RELINK] gate CCUT_PERSON_RELINK={_relink!r} source={source_id}", flush=True)
+            if _relink in ("1", "true", "True"):
                 from engine import face_palette as _fp
-                # [PERSON-RELINK C3] 재조각화 직후~다음 프로젝트 열기 사이의 링크
-                # 공백 제거 — 소스가 속한 프로젝트를 즉시 재스캔. scan은 seen-skip
-                # 멱등 + _MODEL_LOCK 직렬화라 UI 발사 scan과 경합해도 안전.
-                # named 링크의 태그는 C1이 스캔 안에서 함께 주입한다.
-                import sqlite3 as _sq3
-                _con = _sq3.connect(_fp.DB_PATH)
-                _pids = [r[0] for r in _con.execute(
-                    "SELECT program_id FROM project_sources WHERE source_id=?",
-                    (source_id,))]
-                _con.close()
-                for _pid in _pids:
-                    _fp.scan_project(_pid)
-                # [PERSON-RELINK C2] 재인덱싱이 visual_desc를 전체 교체하며 지운
-                # named 이름 태그를 재주입 — 스캔이 놓친 기존 링크 보강.
-                # 근거: reindex 1회가 태그 4→1 소거 → 검색 3→1 재붕괴 (SIM 실측).
-                _fp.reinject_names_for_source(source_id)
-        except Exception as e:
-            print(f"[AUTO-REINDEX][ERROR] source={source_id}: {e}")
+                # [C2 선행 재배선 2026-07-04] 재인덱싱이 지운 태그를 scan보다 먼저 복원.
+                # 근거: worker 내 scan이 데드락으로 정지해 뒤에 있던 reinject까지 묻힌
+                # RUNTIME 실증(:8011/:8012). scan 실패·정지·스킵이 태그 복원을 못 막게
+                # 단계를 분리하고 각 단계에 start/done 로그를 남긴다.
+                try:
+                    print(f"[PERSON-RELINK] stage=reinject start source={source_id}", flush=True)
+                    _n = _fp.reinject_names_for_source(source_id)
+                    print(f"[PERSON-RELINK] stage=reinject done source={source_id} tagged={_n}", flush=True)
+                except Exception as e:
+                    print(f"[PERSON-RELINK][ERROR] stage=reinject source={source_id}: {e}", flush=True)
+                # [C3 보조] 재조각화로 링크 자체가 끊긴 새 조각의 재링크(+C1 태그).
+                # 정지·실패해도 위 reinject 결과는 이미 확보됨.
+                try:
+                    print(f"[PERSON-RELINK] stage=scan start source={source_id}", flush=True)
+                    import sqlite3 as _sq3
+                    _con = _sq3.connect(_fp.DB_PATH)
+                    _pids = [r[0] for r in _con.execute(
+                        "SELECT program_id FROM project_sources WHERE source_id=?",
+                        (source_id,))]
+                    _con.close()
+                    for _pid in _pids:
+                        print(f"[PERSON-RELINK] stage=scan project={_pid} start", flush=True)
+                        _fp.scan_project(_pid)
+                        print(f"[PERSON-RELINK] stage=scan project={_pid} done", flush=True)
+                    # scan이 만든 신규 링크의 태그 보강 재주입 (append-only 멱등)
+                    print(f"[PERSON-RELINK] stage=reinject2 start source={source_id}", flush=True)
+                    _n2 = _fp.reinject_names_for_source(source_id)
+                    print(f"[PERSON-RELINK] stage=reinject2 done source={source_id} tagged={_n2}", flush=True)
+                except Exception as e:
+                    print(f"[PERSON-RELINK][ERROR] stage=scan source={source_id}: {e}", flush=True)
         finally:
             with _auto_reindex_lock:
                 _auto_reindex_inflight.discard(source_id)
