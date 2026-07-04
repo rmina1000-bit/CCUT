@@ -670,6 +670,19 @@ export const useProposalState = (
         user_intent: userIntent
       }, null, 2));
 
+      // [UI-④] 재편집 착수 보고 — 무엇을 얼마나 보는지, 시간은 얼마나 걸릴지
+      const _poolSize = (sourceFragments ?? []).length;
+      const _estMin = Math.max(1, Math.ceil(((_poolSize / 8) * 7 + 45) / 60));
+      setStoryPlan((prev: any) => prev ? {
+        ...prev,
+        messages: [...(prev.messages ?? []), {
+          id: `ai_working_${Date.now()}`,
+          sender: "ai",
+          text: `조각 ${_poolSize}개를 "${inputText}" 기준으로 다시 고르고 있어요. 판단과 미리보기 렌더까지 약 ${_estMin}분 예상 — 끝나면 알려드릴게요.`,
+          timestamp: Date.now(),
+        }],
+      } : prev);
+
       console.log("[CONSULTATION_PROJECT_REQUEST]\n" + JSON.stringify({
         apiUrl: `${videoService.API_BASE_URL}/proposals/project`,
         payloadSummary: payload
@@ -751,6 +764,21 @@ export const useProposalState = (
           // (Hollyhock "실내만" 사례: keep=0 → 조각맵/무대가 비어 고장처럼 보였던 문제)
           const emptyA = (generatedProposals.A?.key_fragments?.length || 0) === 0;
           const emptyB = (generatedProposals.B?.key_fragments?.length || 0) === 0;
+
+          // [UI-⑤] 편집 완료 보고 — 과하지 않게, 결과 요약 한 줄
+          if (!emptyA || !emptyB) {
+            const _fmt = (p: any) => `${p?.key_fragments?.length ?? 0}조각 ${Math.round(p?.preview_duration ?? 0)}초`;
+            setStoryPlan((prev: any) => prev ? {
+              ...prev,
+              messages: [...(prev.messages ?? []), {
+                id: `ai_done_${Date.now()}`,
+                sender: "ai",
+                text: `다 골랐습니다 — A안 ${_fmt(generatedProposals.A)} · B안 ${_fmt(generatedProposals.B)}. 아래 무대에서 재생해 보시고, 방향이 다르면 조건을 바꿔 말씀해 주세요.`,
+                timestamp: Date.now(),
+              }],
+            } : prev);
+          }
+
           if (emptyA && emptyB) {
             const sc = generatedProposals.B?.self_check || generatedProposals.A?.self_check;
             const theme = sc?.theme ? `'${sc.theme}' ` : "";

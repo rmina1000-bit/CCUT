@@ -577,9 +577,10 @@ export const SingleFragmentEditor: React.FC<SingleFragmentEditorProps> = ({
           <div className="flex items-center justify-between">
             <DialogTitle className="text-base font-bold text-foreground">조각 정밀 편집 (1단계 파노라마)</DialogTitle>
             {/* [UI-⑧] 조각맵 표기(A1, B7...)와 일치 — 내부 id는 title 툴팁으로만 */}
+            {/* [UI-⑨] 우상단 닫기 ✕와 겹치지 않게 오른쪽 여백 확보 */}
             <span
               title={fragment.fragment_id}
-              className="text-[11px] text-muted-foreground/70 font-mono bg-secondary/30 px-2 py-0.5 rounded font-bold"
+              className="mr-8 text-[11px] text-muted-foreground/70 font-mono bg-secondary/30 px-2 py-0.5 rounded font-bold"
             >
               {(fragment as any).display_id ?? fragment.fragment_id}
             </span>

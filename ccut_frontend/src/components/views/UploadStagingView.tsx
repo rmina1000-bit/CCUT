@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { Upload, X, Plus, Clock, Film } from "lucide-react";
+import { Upload, X, Plus, Clock } from "lucide-react";
 
 /* [UI-①③④⑤] 업로드 스테이징 + 문진(問診)
    - 파일을 넣고/빼고/더 넣고 자유롭게 정리 (분석은 사용자가 시작 버튼을 눌러야)
@@ -58,67 +58,60 @@ export function UploadStagingView({ staged, onAddFiles, onRemove, onNoteChange, 
     <div className="flex-1 w-full overflow-y-auto no-scrollbar px-4 py-6 flex flex-col items-center">
       <div className="w-full max-w-[760px] space-y-5">
 
-        <div className="flex items-center justify-between">
-          <div>
-            <h2 className="text-[15px] font-bold text-foreground">영상 정리 & 문진</h2>
-            <p className="text-[11px] text-muted-foreground/60 mt-0.5">
-              넣고, 빼고, 더 넣으세요. 준비되면 아래에서 분석을 시작합니다.
-            </p>
-          </div>
-          <button
-            onClick={onAddFiles}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary/15 text-primary text-[12px] font-bold hover:bg-primary hover:text-primary-foreground transition-all"
-          >
-            <Plus size={14} /> 영상 추가
-          </button>
+        {/* [문진 도입부] — 의사 문진처럼, 대화 말투로 */}
+        <div className="space-y-1">
+          <h2 className="text-[14px] font-bold text-foreground">영상을 받았습니다. 편집 전에 몇 가지만 여쭤볼게요.</h2>
+          <p className="text-[11px] text-muted-foreground/60 leading-relaxed">
+            아래에서 영상을 더 넣거나 뺄 수 있고, 각 영상이 무엇인지 한 줄씩 알려주시면 편집 판단에 그대로 반영합니다.
+          </p>
         </div>
 
-        {/* 파일 목록 + 영상별 문진 */}
-        <div className="space-y-2">
+        {/* 파일 목록 — 박스 없이 글자 행으로 */}
+        <div className="divide-y divide-white/5">
           {staged.map((s, i) => (
-            <div key={`${s.file.name}_${s.file.size}`} className="flex items-start gap-3 bg-[#161618] border border-white/8 rounded-lg px-4 py-3">
-              <div className="w-8 h-8 rounded-md bg-primary/10 flex items-center justify-center flex-shrink-0 mt-0.5">
-                <Film size={14} className="text-primary" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2">
-                  <span className="text-[12px] font-bold text-foreground truncate">{s.file.name}</span>
-                  <span className="text-[10px] text-muted-foreground/60 font-mono flex-shrink-0">
-                    {fmtDur(s.duration)} · {s.width && s.height ? `${s.width}×${s.height}` : "훑는 중..."} · {s.orientation ?? ""}
-                  </span>
-                </div>
-                <input
-                  value={s.note}
-                  onChange={(e) => onNoteChange(i, e.target.value)}
-                  placeholder="이 영상은 무엇을 찍은 건가요? (예: 아이들 갯벌 체험, 운동회 계주)"
-                  className="mt-1.5 w-full bg-black/30 border border-white/5 rounded-md px-2.5 py-1.5 text-[12px] text-foreground placeholder:text-muted-foreground/30 outline-none focus:border-white/15"
-                />
-              </div>
+            <div key={`${s.file.name}_${s.file.size}`} className="flex items-center gap-3 py-2.5 group/row">
+              <span className="text-[12px] font-bold text-foreground truncate max-w-[220px]">{s.file.name}</span>
+              <span className="text-[10px] text-muted-foreground/50 font-mono flex-shrink-0">
+                {fmtDur(s.duration)}{s.orientation ? ` · ${s.orientation}` : ""}
+              </span>
+              <input
+                value={s.note}
+                onChange={(e) => onNoteChange(i, e.target.value)}
+                placeholder="무엇을 찍은 영상인가요? (예: 운동회 계주)"
+                className="flex-1 min-w-0 bg-transparent border-b border-white/10 focus:border-primary/50 px-1 py-1 text-[12px] text-foreground placeholder:text-muted-foreground/30 outline-none transition-colors"
+              />
               <button
                 onClick={() => onRemove(i)}
                 title="이 영상 빼기"
-                className="p-1.5 rounded-md text-muted-foreground/50 hover:text-red-400 hover:bg-red-500/10 transition-all flex-shrink-0"
+                className="p-1 text-muted-foreground/40 hover:text-red-400 transition-colors flex-shrink-0"
               >
-                <X size={14} />
+                <X size={13} />
               </button>
             </div>
           ))}
-          {staged.length === 0 && (
-            <div className="text-center py-10 text-[12px] text-muted-foreground/50 border border-dashed border-white/10 rounded-lg">
-              영상이 없습니다. [영상 추가]로 넣어주세요.
-            </div>
-          )}
+          <div className="py-2.5">
+            <button
+              onClick={onAddFiles}
+              className="flex items-center gap-1.5 text-[12px] text-muted-foreground/60 hover:text-primary transition-colors"
+            >
+              <Plus size={13} /> 영상 더 넣기
+            </button>
+          </div>
         </div>
 
-        {/* 전역 문진: 화면/사운드 기준 (⑤) */}
+        {/* 전역 문진: 완성본 기준 — 무엇을 정하는 질문인지 명확하게 */}
         {staged.length > 0 && (
-          <div className="grid grid-cols-2 gap-3">
-            <div className="bg-[#161618] border border-white/8 rounded-lg px-4 py-3 space-y-2">
-              <p className="text-[11px] font-bold text-foreground">
-                화면 기준 {mixedOrientation && <span className="text-amber-400 font-medium">— 가로/세로가 섞여 있어요</span>}
+          <div className="space-y-3 pt-1">
+            <div className="space-y-1.5">
+              <p className="text-[12px] text-foreground">
+                완성본 화면을 어느 방향으로 만들까요?
+                <span className="text-[10px] text-muted-foreground/50 ml-2">
+                  지금 {staged.filter((s) => s.orientation === "가로").length}개 가로 · {staged.filter((s) => s.orientation === "세로").length}개 세로
+                  {mixedOrientation && " — 섞여 있어서 기준이 필요해요"}
+                </span>
               </p>
               <div className="flex gap-1.5">
-                {([["auto", "자동(다수 기준)"], ["landscape", "가로"], ["portrait", "세로"]] as const).map(([v, l]) => (
+                {([["auto", "자동 (다수를 따름)"], ["landscape", "가로로"], ["portrait", "세로로"]] as const).map(([v, l]) => (
                   <button key={v} onClick={() => setAspect(v)}
                     className={`px-2.5 py-1 rounded text-[11px] font-bold transition-all ${aspect === v ? "bg-primary text-primary-foreground" : "bg-secondary/40 text-muted-foreground hover:text-foreground"}`}>
                     {l}
@@ -126,10 +119,13 @@ export function UploadStagingView({ staged, onAddFiles, onRemove, onNoteChange, 
                 ))}
               </div>
             </div>
-            <div className="bg-[#161618] border border-white/8 rounded-lg px-4 py-3 space-y-2">
-              <p className="text-[11px] font-bold text-foreground">사운드 기준</p>
+            <div className="space-y-1.5">
+              <p className="text-[12px] text-foreground">
+                완성본 소리는 어떻게 할까요?
+                <span className="text-[10px] text-muted-foreground/50 ml-2">영상마다 녹음 크기가 다르면 고르게 맞출 수 있어요</span>
+              </p>
               <div className="flex gap-1.5">
-                {([["original", "원본 그대로"], ["normalize", "볼륨 고르게"]] as const).map(([v, l]) => (
+                {([["original", "원본 소리 그대로"], ["normalize", "영상 간 볼륨 고르게"]] as const).map(([v, l]) => (
                   <button key={v} onClick={() => setSound(v)}
                     className={`px-2.5 py-1 rounded text-[11px] font-bold transition-all ${sound === v ? "bg-primary text-primary-foreground" : "bg-secondary/40 text-muted-foreground hover:text-foreground"}`}>
                     {l}

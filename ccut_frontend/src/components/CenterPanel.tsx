@@ -2,7 +2,7 @@
 import React, { useRef, useEffect, useState, useCallback, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { UploadStagingView, probeFileMeta, type StagedMeta, type IntakeAnswers } from "@/components/views/UploadStagingView";
-import { Play, Loader2, Send, ArrowUp, CheckCircle2, Package, BookOpen, List, ChevronDown, AlertCircle } from "lucide-react";
+import { Play, Loader2, Send, ArrowUp, Plus, CheckCircle2, Package, BookOpen, List, ChevronDown, AlertCircle } from "lucide-react";
 import { Fragment } from "@/data/fragmentData";
 import { videoService } from "@/services/videoService";
 import { Direction, StoryPlanPreview } from "@/proposal/proposalTypes";
@@ -56,6 +56,9 @@ interface CenterPanelProps {
   onRestoreProposalEntry?: (id: string) => void;
   // [UI-③⑤] 문진 답변 (영상 설명, 화면/사운드 기준) → story_intent에 주입
   onIntake?: (answers: IntakeAnswers) => void;
+  // [UI-⑧] 컴포저 + 버튼 → 영상 추가 파일창 열기 / 드래그된 파일 직접 추가
+  onRequestAddVideos?: () => void;
+  onAddVideoFiles?: (files: File[]) => void;
 }
 
 function parseDirectionFromText(text: string): Direction | null {
@@ -245,6 +248,8 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
   activeProposalEntryId = null,
   onRestoreProposalEntry,
   onIntake,
+  onRequestAddVideos,
+  onAddVideoFiles,
 }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const videoRefA = useRef<HTMLVideoElement>(null);
@@ -2001,8 +2006,26 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
       {/* [STEP 10-I.5.28-E9-R2-R3-R2] ChatGPT-style auto-grow Composer */}
       {/* [UI-⑩⑪] 중앙창과 같은 배경색으로 통일, 과한 라운드 축소 */}
       {storyPlan && (
-        <div className="sticky bottom-0 z-20 w-full bg-[#0a0a0b] px-5 py-4">
-          <div className="mx-auto flex w-full max-w-3xl items-end gap-3 rounded-lg border border-white/10 bg-[#161618] px-5 py-3 shadow-sm">
+        <div
+          className="sticky bottom-0 z-20 w-full bg-[#0a0a0b] px-5 py-4"
+          onDragOver={(e) => { e.preventDefault(); }}
+          onDrop={(e) => {
+            // [UI-⑧] 채팅창에 영상 드래그 → 프로젝트에 추가
+            e.preventDefault();
+            const files = Array.from(e.dataTransfer?.files ?? []).filter((f) => f.type.startsWith("video/"));
+            if (files.length > 0) onAddVideoFiles?.(files);
+          }}
+        >
+          <div className="mx-auto flex w-full max-w-3xl items-end gap-3 rounded-lg border border-white/10 bg-[#161618] px-4 py-3 shadow-sm">
+            {/* [UI-⑧] 영상 추가 — 컴포저 맨 앞 + */}
+            <button
+              type="button"
+              title="영상 추가"
+              onClick={() => (onRequestAddVideos ? onRequestAddVideos() : handleUpload())}
+              className="flex h-9 w-9 shrink-0 items-center justify-center text-zinc-400 hover:text-white transition-colors"
+            >
+              <Plus size={18} />
+            </button>
             <textarea
               ref={consultationTextareaRef}
               value={consultationInput}
@@ -2036,10 +2059,19 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
         </div>
       )}
 
-      {/* Legacy global chat bar (non-consultation states) */}
+      {/* [UI-이전디자인 삭제] 비컨설팅 상태 채팅바 — 새 컴포저와 동일 디자인으로 통일 */}
       {!storyPlan && (
-        <div className="absolute bottom-10 w-full max-w-3xl px-8 pointer-events-none z-50">
-          <div className="relative flex items-center pointer-events-auto">
+        <div className="sticky bottom-0 z-20 w-full bg-[#0a0a0b] px-5 py-4">
+          <div className="mx-auto flex w-full max-w-3xl items-center gap-3 rounded-lg border border-white/10 bg-[#161618] px-4 py-3 shadow-sm">
+            {/* [UI-⑧] 영상 추가 — 컴포저 맨 앞 + */}
+            <button
+              type="button"
+              title="영상 추가"
+              onClick={() => (onRequestAddVideos ? onRequestAddVideos() : handleUpload())}
+              className="flex h-9 w-9 shrink-0 items-center justify-center text-zinc-400 hover:text-white transition-colors"
+            >
+              <Plus size={18} />
+            </button>
             <input
               type="text"
               value={chatValue}
@@ -2053,14 +2085,15 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
                   ? "분석 중에는 잠시만 기다려 주세요..."
                   : "편하게 말씀해 주세요. 예: 사람 중심으로 / 더 빠르게 / 풍경 줄여"
               }
-              className={`w-full bg-[#161618] border border-white/5 rounded-full px-10 py-5 text-[14px] focus:outline-none focus:border-white/10 shadow-2xl transition-all ${appState === "analyzing" ? "opacity-40" : "placeholder:text-muted-foreground/30"
-                }`}
+              className={`flex-1 bg-transparent py-2 text-sm leading-relaxed text-zinc-100 outline-none placeholder:text-zinc-500 ${appState === "analyzing" ? "opacity-40" : ""}`}
             />
             <button
               onClick={handleSendFull}
-              className="absolute right-3 p-2.5 rounded-full bg-primary/20 text-primary hover:bg-primary hover:text-primary-foreground transition-all"
+              disabled={!chatValue.trim() || appState === "analyzing"}
+              className="flex h-9 w-9 shrink-0 items-center justify-center text-zinc-100 hover:text-white disabled:opacity-30 transition-opacity"
+              aria-label="보내기"
             >
-              <Send size={20} />
+              <ArrowUp size={18} />
             </button>
           </div>
         </div>

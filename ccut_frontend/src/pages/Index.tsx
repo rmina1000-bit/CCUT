@@ -2260,6 +2260,15 @@ const Index: React.FC = () => {
             activeProposalEntryId={activeProposalEntryId}
             onRestoreProposalEntry={restoreProposalEntry}
             onIntake={(a) => { intakeRef.current = a; }}
+            onRequestAddVideos={
+              activeNavItem && activeNavItem.startsWith("proj_")
+                ? () => appendInputRef.current?.click()
+                : undefined /* 새 프로젝트 상태는 CenterPanel 스테이징 input 사용 */
+            }
+            onAddVideoFiles={(files) => {
+              if (files.length === 0) return;
+              handleAnalyzeRef.current?.(files[0], files.slice(1));
+            }}
           />
         )}
       </div>
