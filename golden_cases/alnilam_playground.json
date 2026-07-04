@@ -9,28 +9,28 @@
     "max_keep": 22
   },
   "recorded": {
-    "keep_n": 14,
+    "keep_n": 8,
     "a_fids": [
-      "SF_499CEC_SRC_4BF3EA9A_P001",
-      "SF_10969B_SRC_6E9DFC8C",
-      "SF_5A13DC_SRC_3CAA38A7_P002",
-      "SF_8CEE89_SRC_0E4412A2_P001",
-      "SF_C05B01_SRC_0E4412A2"
+      "SF_08F865_SRC_B66E6092_P001",
+      "SF_FDC986_SRC_B66E6092_P001",
+      "SF_852C03_SRC_B66E6092_P001",
+      "SF_499CEC_SRC_4BF3EA9A_P001"
     ],
     "b_fids": [
-      "SF_8CEE89_SRC_0E4412A2_P001",
-      "SF_C05B01_SRC_0E4412A2",
-      "SF_10969B_SRC_6E9DFC8C",
+      "SF_08F865_SRC_B66E6092_P001",
+      "SF_FDC986_SRC_B66E6092_P001",
       "SF_5A13DC_SRC_3CAA38A7_P002",
       "SF_499CEC_SRC_4BF3EA9A_P001"
     ],
     "keep_fids": [
-      "SF_10969B_SRC_6E9DFC8C",
+      "SF_08F865_SRC_B66E6092_P001",
+      "SF_08F865_SRC_B66E6092_P002",
       "SF_499CEC_SRC_4BF3EA9A_P001",
       "SF_5A13DC_SRC_3CAA38A7_P002",
-      "SF_8CEE89_SRC_0E4412A2_P001",
-      "SF_8CEE89_SRC_0E4412A2_P002",
-      "SF_C05B01_SRC_0E4412A2"
+      "SF_852C03_SRC_B66E6092_P001",
+      "SF_852C03_SRC_B66E6092_P002",
+      "SF_FDC986_SRC_B66E6092_P001",
+      "SF_FDC986_SRC_B66E6092_P002"
     ],
     "intent": {
       "keep": "운동장",
@@ -38,5 +38,5 @@
       "count": null
     }
   },
-  "ts": "2026-07-04 00:58:28"
+  "ts": "2026-07-04 22:58:35"
 }
