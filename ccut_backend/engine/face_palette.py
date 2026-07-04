@@ -306,6 +306,117 @@ def scan_project(project_id: str, max_frames: int = 400) -> dict:
 
 
 @_serialized
+def merge_duplicates(dry_run: bool = True) -> int:
+    """같은 사람이 쪼개진 pending 군집 병합 (기본 dry-run: 후보만 출력).
+    증거: 각 얼굴의 소속(argmax) 군집 외에 다른 군집 중심과도 cos>=임계면 교차표(cross)에
+    기록하고, 양방향 존재 + 서로 다른 keyframe 합계 3회 이상인 쌍만 병합.
+    — 단일 얼굴 1건 일치 + 전이 연쇄로 병합했다가 남아·성인여성까지 한 군집(59)으로
+      휩쓸린 사고(2026-07-04)의 재발 방지. 중심끼리 cos는 드리프트로 신뢰 불가(실측:
+      동일인 쌍 0.313 < 타인 쌍 0.308과 역전)."""
+    import cv2
+    det, rec = _lazy_models()
+    con = _connect()
+    ensure_schema(con)
+    _ensure_frontal_column(con)
+    rows = list(con.execute(
+        "SELECT person_id, embedding, face_count FROM persons "
+        "WHERE status='pending' AND embedding IS NOT NULL"))
+    if len(rows) < 2:
+        con.close()
+        return 0
+    clusters = {pid: {"emb": np.frombuffer(e, dtype=np.float32), "count": c}
+                for pid, e, c in rows}
+    fids = {fid for (fid,) in con.execute(
+        "SELECT DISTINCT pf.fragment_id FROM person_faces pf "
+        "JOIN persons p ON p.person_id = pf.person_id WHERE p.status='pending'")}
+
+    cross = {}  # (owner, other) -> set of fids
+    for fid in fids:
+        kf = os.path.join(KEYFRAME_DIR, f"{fid}.jpg")
+        img = cv2.imread(kf) if os.path.exists(kf) else None
+        if img is None:
+            continue
+        h, w = img.shape[:2]
+        det.setInputSize((w, h))
+        _, dets = det.detect(img)
+        if dets is None:
+            continue
+        for d in dets:
+            if int(d[2]) < MIN_FACE or int(d[3]) < MIN_FACE:
+                continue
+            feat = rec.feature(rec.alignCrop(img, d)).flatten().astype(np.float32)
+            sims = {pid: _cos(feat, c["emb"]) for pid, c in clusters.items()}
+            hit = [pid for pid, s in sims.items() if s >= SAME_PERSON_COS]
+            if len(hit) < 2:
+                continue
+            owner = max(hit, key=lambda p: sims[p])
+            for other in hit:
+                if other != owner:
+                    cross.setdefault((owner, other), set()).add(fid)
+
+    def evidence(a, b):
+        ab = cross.get((a, b), set())
+        ba = cross.get((b, a), set())
+        return len(ab), len(ba), len(ab | ba)
+
+    pairs = []
+    pids = list(clusters)
+    for i in range(len(pids)):
+        for j in range(i + 1, len(pids)):
+            n_ab, n_ba, n_all = evidence(pids[i], pids[j])
+            if n_all > 0:
+                strong = n_ab >= 1 and n_ba >= 1 and n_all >= 3
+                pairs.append((pids[i], pids[j], n_ab, n_ba, n_all, strong))
+                print(f"[PERSON-PALETTE] dup-evidence {pids[i]}~{pids[j]} "
+                      f"a->b={n_ab} b->a={n_ba} frames={n_all} {'MERGE' if strong else 'weak'}")
+    if dry_run:
+        con.close()
+        return 0
+
+    parent = {pid: pid for pid in clusters}
+
+    def find(x):
+        while parent[x] != x:
+            parent[x] = parent[parent[x]]
+            x = parent[x]
+        return x
+
+    for a, b, _, _, _, strong in pairs:
+        if strong and find(a) != find(b):
+            parent[find(b)] = find(a)
+    groups = {}
+    for pid in clusters:
+        groups.setdefault(find(pid), []).append(pid)
+    merged = 0
+    now = datetime.datetime.now().isoformat()
+    for members in groups.values():
+        if len(members) < 2:
+            continue
+        members.sort(key=lambda p: clusters[p]["count"], reverse=True)
+        win, losers = members[0], members[1:]
+        total = sum(clusters[p]["count"] for p in members)
+        emb = np.sum([clusters[p]["emb"] * clusters[p]["count"] for p in members],
+                     axis=0) / max(total, 1)
+        for lo in losers:
+            con.execute("INSERT OR IGNORE INTO person_faces (person_id, fragment_id, score) "
+                        "SELECT ?, fragment_id, score FROM person_faces WHERE person_id=?",
+                        (win, lo))
+            con.execute("DELETE FROM person_faces WHERE person_id=?", (lo,))
+            con.execute("DELETE FROM persons WHERE person_id=?", (lo,))
+            try:
+                os.remove(os.path.join(FACES_DIR, f"{lo}.jpg"))
+            except OSError:
+                pass
+            merged += 1
+            print(f"[PERSON-PALETTE] merged {lo} -> {win}")
+        con.execute("UPDATE persons SET embedding=?, face_count=?, updated_at=? WHERE person_id=?",
+                    (emb.astype(np.float32).tobytes(), total, now, win))
+    con.commit()
+    con.close()
+    return merged
+
+
+@_serialized
 def refresh_representatives(min_gain: float = 0.03, force: bool = False) -> int:
     """pending 군집의 대표 사진을 '가장 정면인 얼굴'로 소급 교체.
     각 군집에 연결된 조각 키프레임을 재검출 → 임베딩이 그 군집과 일치(cos≥임계)하는
