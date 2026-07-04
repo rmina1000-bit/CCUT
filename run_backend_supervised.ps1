@@ -23,6 +23,9 @@ $env:CCUT_HUB_PLAN         = "1"
 $env:CCUT_AUTO_REINDEX     = "1"
 $env:CCUT_SINGLE_CACHE     = "1"
 $env:CCUT_LEGACY_NARRATIVE = "0"
+# [2026-07-04] person-relink 체인 ON — RUNTIME r2 PASS(커밋 ef21bf6e, evalrun 격리
+# 검증: 체인 3줄 완주 + 라이브 불변) 후 국장 지시로 운영 편입.
+$env:CCUT_PERSON_RELINK    = "1"
 # 신규 기능 게이트는 검증 전까지 기본 OFF: CCUT_REVISION / CCUT_QUALITY_LOG /
 # CCUT_PERSON_REQUERY / CCUT_JUDGE_PARALLEL (병렬화는 실측 FAIL로 비활성 유지)
 
@@ -44,6 +47,8 @@ if ($existing) {
 }
 
 Write-Sup "=== supervisor start ==="
+# 기동 게이트 raw 기록 — 자식(backend)이 이 env를 그대로 상속한다
+Write-Sup "gates: HUB_PLAN=$env:CCUT_HUB_PLAN AUTO_REINDEX=$env:CCUT_AUTO_REINDEX SINGLE_CACHE=$env:CCUT_SINGLE_CACHE LEGACY_NARRATIVE=$env:CCUT_LEGACY_NARRATIVE PERSON_RELINK=$env:CCUT_PERSON_RELINK"
 $fails = 0
 while ($true) {
     $stamp = Get-Date -Format "yyyyMMdd_HHmmss"
