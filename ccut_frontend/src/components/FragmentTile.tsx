@@ -126,6 +126,17 @@ const FragmentTile: React.FC<FragmentTileProps> = ({
       }
     }
 
+
+    // [THUMB-ORPHAN 2026-07-05] 동봉 URL도, 전역 캐시 상속도 실패한 조각
+    // (옛 저장 제안·아카이브 포함·재조각화 고아 등 "로드 안 된 조각" 계열).
+    // SF 시대 썸네일은 {fid}.jpg 실측 규칙 — 위의 "ID 조립 금지" 주석은 파일명이
+    // ID와 달랐던 VF 시대 유산이다. 최후 수단으로 조립을 시도하되,
+    // 파일이 없으면 <img> onError가 "이미지 없음"으로 정직 강등한다(남의 이미지 금지).
+    const orphanBase = getBaseFragmentId(frag) || frag.fragment_id;
+    if (orphanBase && /^SF_/.test(orphanBase)) {
+      return `/api/static/thumbnails/${orphanBase}.jpg`;
+    }
+
     return null;
   };
 
