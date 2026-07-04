@@ -64,6 +64,8 @@ type ConsultationDecision = {
   fallbackKind?: "empty" | "unknown" | "ambiguous" | "repeat";
   // [INTENT-ROUTER] 백엔드 종업원이 애칭→풀네임 등으로 정규화한 실행 지시문
   normalizedInstruction?: string;
+  // [ARCHIVE P1] archive_query가 추린 후보 조각 (인물+장소 교집합) — hub가 이만 판정
+  candidateFragmentIds?: string[];
 };
 
 const LEGACY_NARRATIVE_ENABLED =
@@ -559,10 +561,13 @@ export const useProposalState = (
       consultationDecision = {
         text: route.reply || "네, 확인했습니다.",
         // revise_current는 현 단계에선 재제안 경로로 수렴 (백엔드 REVISION 게이트가 하류 처리)
+        // ask_include_archive는 승인 대화 — 제안 실행 없이 되묻기만 표시 (P1)
         shouldRunProposal: route.action === "run_proposal" || route.action === "revise_current",
         fallbackKind: route.action === "ask_clarification" ? "ambiguous"
-          : route.action === "answer_only" ? "unknown" : undefined,
+          : route.action === "answer_only" ? "unknown"
+          : route.action === "ask_include_archive" ? "ambiguous" : undefined,
         normalizedInstruction: route.normalized_instruction || text,
+        candidateFragmentIds: route.candidate_fragment_ids || undefined,
       };
     } catch (e: any) {
       console.warn("[INTENT-ROUTER] 서버 라우팅 실패 → 구 메뉴판 폴백:", e?.message);
@@ -708,7 +713,11 @@ export const useProposalState = (
       const targetLen = proposals?.A?.preview_duration || 60.0;
       const userIntent = {
         ...nextIntent,
-        instruction_text: inputText
+        instruction_text: inputText,
+        // [ARCHIVE P1] 종업원이 추린 교집합 후보 — 백엔드 hub가 이 조각들만 판정
+        ...(consultationDecision.candidateFragmentIds?.length
+          ? { candidate_fragment_ids: consultationDecision.candidateFragmentIds }
+          : {})
       };
 
       const payload = {
