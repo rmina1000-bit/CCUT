@@ -105,6 +105,48 @@ def run_l0():
     r = ir.route_edit_intent(input_text="", allow_llm=False, person_vocab=_pv)
     check("L0", "router 빈입력→되묻기", r["action"] == "ask_clarification")
 
+    # [ARCHIVE P1] 인물+장소 복합 filters — archive_lookup 주입으로 DB 무관
+    def _fake_proj(filters, project_source_ids=None):
+        return {"scope": "project", "fids": ["SF_X1", "SF_X2", "SF_X3"],
+                "by_program": {}, "coverage": {"place_labeled": 90, "total": 100},
+                "filter_counts": {}}
+
+    def _fake_arch(filters, project_source_ids=None):
+        return {"scope": "archive", "fids": ["SF_A1"], "by_program": {"Alnilam": 3},
+                "coverage": {"place_labeled": 90, "total": 100}, "filter_counts": {}}
+
+    r = ir.route_edit_intent(input_text="병원 장면만", allow_llm=False, person_vocab=_pv)
+    check("L0", "router 장소단독(병원)→det 어휘", r["action"] == "run_proposal", r["action"])
+    r = ir.route_edit_intent(input_text="은한이가 병원에 있는 장면만", allow_llm=False,
+                             person_vocab=_pv, archive_lookup=_fake_proj)
+    check("L0", "router 인물+장소 교집합(project)",
+          r["action"] == "run_proposal" and len(r.get("candidate_fragment_ids") or []) == 3
+          and {f["type"] for f in r.get("filters") or []} == {"person", "place"},
+          f'{r["action"]}/cand={len(r.get("candidate_fragment_ids") or [])}')
+    r = ir.route_edit_intent(input_text="바다에서 정은한 나온 장면", allow_llm=False,
+                             person_vocab=_pv, archive_lookup=_fake_proj)
+    check("L0", "router 장소+인물 순서 무관", r["action"] == "run_proposal"
+          and {f["type"] for f in r.get("filters") or []} == {"person", "place"})
+    r = ir.route_edit_intent(input_text="은한이가 병원에 있는 장면만", allow_llm=False,
+                             person_vocab=_pv, archive_lookup=_fake_arch)
+    check("L0", "router 아카이브 히트→ask_include_archive",
+          r["action"] == "ask_include_archive" and "Alnilam" in (r.get("reply") or ""),
+          r["action"])
+    # [조사 교정] 단순 replace의 '정은한가' 문법 붕괴 수리 검증
+    r = ir.route_edit_intent(input_text="은한이가 병원에 있는 장면만", allow_llm=False,
+                             person_vocab=_pv, archive_lookup=_fake_proj)
+    check("L0", "router 조사교정 가→이", (r.get("normalized_instruction") or "").startswith("정은한이 "),
+          r.get("normalized_instruction"))
+    check("L0", "router 조사교정 는→은",
+          ir.replace_name("은한이는 어디 있어", "은한이", "정은한") == "정은한은 어디 있어",
+          ir.replace_name("은한이는 어디 있어", "은한이", "정은한"))
+    check("L0", "router 조사교정 를→을",
+          ir.replace_name("은한이를 보여줘", "은한이", "정은한") == "정은한을 보여줘",
+          ir.replace_name("은한이를 보여줘", "은한이", "정은한"))
+    check("L0", "router 조사교정 무조사 무변",
+          ir.replace_name("은한이 나오는 장면만", "은한이", "정은한") == "정은한 나오는 장면만",
+          ir.replace_name("은한이 나오는 장면만", "은한이", "정은한"))
+
     # 골든 단락: 대소문/공백 정규화 포함 exact
     cases = hub._load_golden_cases()
     if cases:

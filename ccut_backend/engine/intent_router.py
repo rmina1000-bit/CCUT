@@ -23,6 +23,51 @@ from engine import hub
 
 _ACTIONS = ("run_proposal", "revise_current", "ask_clarification", "answer_only")
 
+# 받침 유무에 따라 형태가 갈리는 조사 (받침없음형, 받침있음형)
+_PARTICLE_PAIRS = [("가", "이"), ("는", "은"), ("를", "을"), ("와", "과"),
+                   ("야", "아"), ("랑", "이랑"), ("로", "으로")]
+
+
+def _has_batchim(word):
+    ch = (word or "")[-1:]
+    if not ch or not ("가" <= ch <= "힣"):
+        return False
+    return (ord(ch) - 0xAC00) % 28 != 0
+
+
+def replace_name(text, matched, canonical):
+    """이름 치환 + 바로 뒤 조사 교정 — '은한이가'→'정은한이' (단순 replace의
+    '정은한가' 문법 붕괴 수리). 치환 지점마다 다음 조사를 canonical 받침에 맞춘다."""
+    if matched == canonical or matched not in text:
+        return text
+    out = []
+    i = 0
+    L = len(matched)
+    batchim = _has_batchim(canonical)
+    while True:
+        j = text.find(matched, i)
+        if j < 0:
+            out.append(text[i:])
+            break
+        out.append(text[i:j])
+        out.append(canonical)
+        k = j + L
+        # 뒤따르는 조사 교정 (긴 형태 우선: '이랑' > '랑')
+        rest = text[k:]
+        fixed = None
+        for plain, tail in sorted(_PARTICLE_PAIRS, key=lambda x: -max(len(x[0]), len(x[1]))):
+            for form in {plain, tail}:
+                if rest.startswith(form):
+                    fixed = (tail if batchim else plain)
+                    k += len(form)
+                    break
+            if fixed:
+                break
+        if fixed:
+            out.append(fixed)
+        i = k
+    return "".join(out)
+
 _QUESTION_RE = None
 _VAGUE_RE = None
 
@@ -86,29 +131,87 @@ def _llm_route(input_text, recent_messages=None):
 
 
 def route_edit_intent(source_ids=None, input_text="", recent_messages=None,
-                      selected_proposal_id=None, allow_llm=True, person_vocab=None):
+                      selected_proposal_id=None, allow_llm=True, person_vocab=None,
+                      archive_lookup=None):
     t = (input_text or "").strip()
     if not t:
         return _resp("ask_clarification", "말씀을 조금만 더 입력해 주세요.", confidence=1.0)
 
-    # ── 1. 인물 이름/애칭 (저장은 풀네임, 부를 땐 애칭 — 애칭이면 풀네임으로 정규화) ──
+    # ── 1. 인물/장소 filters 수집 (사람을 만나도 즉시 return 금지 — 복합 조건 유지) ──
+    from engine import place_taxonomy as pt
     person = hub.resolve_person_name(t, vocab=person_vocab)
+    place = pt.resolve_place_query(t)
+    is_excl = any(k in t for k in hub._EXCLUDE_MARK) or "아닌" in t
+
     if person:
         canonical, matched = person["canonical"], person["matched"]
-        normalized = t.replace(matched, canonical) if matched != canonical else t
-        is_excl = any(k in t for k in hub._EXCLUDE_MARK) or "아닌" in t
+        normalized = replace_name(t, matched, canonical)
+        filters = [{"type": "person", "value": canonical,
+                    "source": "alias" if matched != canonical else "name",
+                    "matched": matched}]
+        alias_prefix = (f"아, {matched} — {canonical} 말씀이시죠. "
+                        if matched != canonical else "")
+
+        # ── 1a. 인물+장소 복합 → 아카이브 교집합 검색 (현재 프로젝트 우선) ──
+        # 장소-단독은 여기로 오지 않는다: 라벨 커버리지(파생 캐시)로 사전필터하면
+        # 기존 전체풀 judge 대비 리콜이 후퇴하므로, 교집합이 목적일 때만 쓴다.
+        if place and not is_excl:
+            filters.append({"type": "place", "value": place["code"],
+                            "label": place["label"], "matched": place["matched"]})
+            lookup = archive_lookup
+            if lookup is None:
+                from engine.archive_query import query as lookup
+            found = lookup(filters, project_source_ids=source_ids)
+            base = {"normalized": normalized, "matched": filters[0],
+                    "confidence": person.get("confidence", 0.95)}
+            extra = {"filters": filters, "scope": found.get("scope"),
+                     "candidate_fragment_ids": found.get("fids") or [],
+                     "by_program": found.get("by_program") or {},
+                     "coverage": found.get("coverage")}
+            if found.get("scope") == "project":
+                r = _resp("run_proposal",
+                          f"{alias_prefix}{canonical} + {place['label']} 조건으로 "
+                          f"{len(found['fids'])}개 찾았어요. 그 조각들로 다시 골라볼게요.",
+                          via="deterministic", **base)
+                r.update(extra)
+                return r
+            if found.get("scope") == "archive":
+                progs = ", ".join(f"{k} {v}개" for k, v in
+                                  sorted(found["by_program"].items(), key=lambda x: -x[1])[:3])
+                r = _resp("ask_include_archive",
+                          f"{alias_prefix}지금 프로젝트에는 {canonical}+{place['label']} 조각이 없고, "
+                          f"아카이브에 있어요 ({progs}). 아카이브까지 포함할까요?",
+                          via="deterministic", **base)
+                r.update(extra)
+                return r
+            # scope none — C/D 분기 (정직 안내, 조용한 성공 처리 금지)
+            cov = found.get("coverage") or {}
+            if (cov.get("place_labeled") or 0) * 3 < (cov.get("total") or 1):
+                msg = (f"{alias_prefix}아직 장소 라벨이 부족해요"
+                       f"(라벨 {cov.get('place_labeled', 0)}/{cov.get('total', 0)}조각). "
+                       f"대표 프레임 장소 분석을 먼저 돌릴까요?")
+            else:
+                msg = (f"{alias_prefix}{canonical} 조각은 있지만 "
+                       f"'{place['label']}' 장소 라벨이 붙은 조각이 없습니다.")
+            r = _resp("ask_clarification", msg, via="deterministic", **base)
+            r.update(extra)
+            return r
+
+        # ── 1b. 인물 단독 ──
         if matched != canonical:
-            reply = (f"아, {matched} — {canonical} 말씀이시죠. "
+            reply = (alias_prefix
                      + (f"{canonical} 나오는 장면은 빼고 다시 골라볼게요." if is_excl
                         else f"그 사람이 나오는 장면만 다시 골라볼게요."))
         else:
             reply = (f"네, {canonical} 나오는 장면은 빼고 다시 골라볼게요." if is_excl
                      else f"네, {canonical} 나오는 장면만 다시 골라볼게요.")
-        return _resp("run_proposal", reply, normalized=normalized,
-                     confidence=person.get("confidence", 0.95),
-                     matched={"kind": "person_alias" if matched != canonical else "person",
-                              "input": matched, "canonical": canonical,
-                              "person_id": person.get("person_id")})
+        r = _resp("run_proposal", reply, normalized=normalized,
+                  confidence=person.get("confidence", 0.95),
+                  matched={"kind": "person_alias" if matched != canonical else "person",
+                           "input": matched, "canonical": canonical,
+                           "person_id": person.get("person_id")})
+        r["filters"] = filters
+        return r
 
     # ── 2. 장면/개수/제외 어휘 (기존 결정론 그대로 신뢰) ──
     det = hub._deterministic_intent(t)

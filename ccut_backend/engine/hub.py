@@ -163,6 +163,7 @@ _THEME_VOCAB = [
     "실내", "실외", "야외", "운동장", "물놀이", "바다", "해변", "해안", "바닷가", "갯벌", "수영", "계곡", "강",
     "풍경", "음식", "요리", "사람", "인물", "아이", "어린이", "가족", "밤", "야경", "거리",
     "호텔", "침실", "방", "체육관", "공원", "놀이터",
+    "병원", "지하철",  # [PLACE P1] 장소-단독 명령은 이 어휘(전체풀 judge) 경로
 ]
 _NUM_KO = {"한": 1, "두": 2, "세": 3, "네": 4, "다섯": 5, "여섯": 6,
            "일곱": 7, "여덟": 8, "아홉": 9, "열": 10}
@@ -297,6 +298,10 @@ _THEME_ALIASES = {
     "체육관": ("체육관", "gym", "gymnasium", "indoor gym"),
     "공원": ("공원", "park"),
     "놀이터": ("놀이터", "playground"),
+    # [PLACE P1] 장소-단독 명령은 이 결정론 어휘 경로(전체풀 judge)를 탄다 —
+    # 파생 라벨로 사전필터하면 리콜이 후퇴하므로. 교집합 경로는 인물+장소 복합 전용.
+    "병원": ("병원", "병실", "hospital", "clinic", "ward", "patient", "medical", "nurse"),
+    "지하철": ("지하철", "전철", "열차", "subway", "train", "platform", "carriage"),
 }
 
 _INDOOR_POSITIVE = _THEME_ALIASES["실내"]
@@ -890,12 +895,15 @@ def _confirm_keep_candidates_single(theme_ko, judged, bundles):
     return result
 
 
-def plan_edit(source_ids, instruction_text, batch=8, verbose=True):
+def plan_edit(source_ids, instruction_text, batch=8, verbose=True,
+              candidate_fragment_ids=None):
     """[P3a] 명령+조각풀 → 편집계획. 분해 파이프라인:
       1) extract_intent: 명령 → {keep,exclude,count} (분류만)
       2) judge_theme(테마): 클립별 keep/exclude (검증된 P1 판단)
       3) count: 모델이 아니라 결정론으로 그대로 전달(하류 P3b가 적용)
     내용조건 없으면 판단 0, 전체 유지.
+    candidate_fragment_ids: [ARCHIVE P1] archive_query가 추린 후보 — 있으면 그
+      조각들만 판정(비용 절감 + 교집합 조건 준수). 캐시 키는 pool_sig가 자연 분리.
     반환: {keep:[{fid,time,scene,why}], count:int|None, intent, reason}
     """
     if isinstance(source_ids, str):
@@ -914,6 +922,12 @@ def plan_edit(source_ids, instruction_text, batch=8, verbose=True):
     for sid in source_ids:
         bundles.extend(load_bundles(con, sid))
     con.close()
+    if candidate_fragment_ids:
+        _cand = set(candidate_fragment_ids)
+        _before_n = len(bundles)
+        bundles = [b for b in bundles if b["fid"] in _cand]
+        if verbose:
+            print(f"[HUB-PLAN] candidates={len(bundles)}/{_before_n} (archive filter)")
 
     # 내용조건 없음 → 판단 생략, 전체 유지 (count만 결정론)
     if not theme:

@@ -84,7 +84,9 @@ class ProposalEngine:
         if os.getenv("CCUT_HUB_PLAN") in ("1", "true", "True") and source_ids and _a_intent_text:
             try:
                 from engine import hub as _hub
-                _plan_a = _hub.plan_edit(list(source_ids), _a_intent_text)
+                _plan_a = _hub.plan_edit(
+                    list(source_ids), _a_intent_text,
+                    candidate_fragment_ids=(intent or {}).get("candidate_fragment_ids"))
                 # keep=0(honest-empty)도 그대로 전달 — 명령이 있는데 keep 밖 조각이
                 # A안에 혼입되면 안 되므로 빈 집합이면 A안도 빈 시퀀스가 된다.
                 _market_keep_ids = {k.get("fid") for k in (_plan_a.get("keep") or []) if k.get("fid")}
@@ -530,7 +532,9 @@ class ProposalEngine:
         if os.getenv("CCUT_HUB_PLAN") in ("1", "true", "True") and source_ids and (intent_text or "").strip():
             try:
                 from engine import hub as _hub
-                _plan = _hub.plan_edit(list(source_ids), intent_text)
+                _plan = _hub.plan_edit(
+                    list(source_ids), intent_text,
+                    candidate_fragment_ids=(intent or {}).get("candidate_fragment_ids"))
                 _keep_ids = {k.get("fid") for k in (_plan.get("keep") or []) if k.get("fid")}
                 if _keep_ids:
                     _before = len(fragments)
