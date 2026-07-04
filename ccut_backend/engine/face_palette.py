@@ -226,11 +226,11 @@ def scan_project(project_id: str, max_frames: int = 400) -> dict:
 
     # 기존 군집 로드 (프로젝트 무관 전역 — 아카이브 재사용의 핵심)
     persons = []
-    for pid, emb, status, frontal in con.execute(
-            "SELECT person_id, embedding, status, COALESCE(frontal, 0) FROM persons"):
+    for pid, emb, status, frontal, pname in con.execute(
+            "SELECT person_id, embedding, status, COALESCE(frontal, 0), name FROM persons"):
         if emb:
             persons.append({"pid": pid, "emb": np.frombuffer(emb, dtype=np.float32),
-                            "status": status, "frontal": float(frontal)})
+                            "status": status, "frontal": float(frontal), "name": pname})
 
     now = datetime.datetime.now().isoformat()
     faces_found = 0
@@ -278,6 +278,12 @@ def scan_project(project_id: str, max_frames: int = 400) -> dict:
                     cv2.imwrite(os.path.join(FACES_DIR, f"{pid}.jpg"), aligned)
                     con.execute("UPDATE persons SET frontal=? WHERE person_id=?", (fs, pid))
                     best["frontal"] = fs
+                # [PERSON-RELINK C1] named 군집에 새 조각이 귀속되면 이름 태그도 즉시 주입.
+                # 재조각화 후 scan이 링크는 복구하는데 검색 어휘(visual_desc 태그)는
+                # 안 살아나던 공백(Hollyhock/lavender keep=0 실증)의 직접 원인 봉합.
+                if (os.getenv("CCUT_PERSON_RELINK", "0") in ("1", "true", "True")
+                        and best.get("status") == "named" and best.get("name")):
+                    _inject_name_tag(con, best["name"], fid, now)
             else:
                 pid = f"PER_{uuid.uuid4().hex[:8].upper()}"
                 face_path = os.path.join(FACES_DIR, f"{pid}.jpg")
@@ -511,6 +517,31 @@ def list_pending(project_id: str = None, min_faces: int = 2) -> list:
     return out
 
 
+def _inject_name_tag(con, name: str, fragment_id: str, now: str = None) -> int:
+    """fragment_index 행에 이름 태그 주입 (visual_desc/main_subjects/search_text).
+    set_name·scan 링크(C1)·재인덱싱 재주입(C2)의 공용 경로.
+    행 없으면 0. append-only 멱등 — 이미 태그돼 있어도 안전."""
+    row = con.execute(
+        "SELECT visual_desc, main_subjects, search_text FROM fragment_index WHERE fragment_id=?",
+        (fragment_id,)).fetchone()
+    if not row:
+        return 0
+    vd, ms, st = row
+    tag = f"인물:{name}"
+    if tag not in (vd or ""):
+        vd = f"{(vd or '').rstrip()} ({tag})".strip()
+    subjects = [s for s in (ms or "").split(",") if s.strip()]
+    if name not in subjects:
+        subjects.append(name)
+    st2 = st or ""
+    if name not in st2:
+        st2 = f"{st2} {name}".strip()
+    con.execute(
+        "UPDATE fragment_index SET visual_desc=?, main_subjects=?, search_text=?, updated_at=? WHERE fragment_id=?",
+        (vd, ",".join(subjects), st2, now or datetime.datetime.now().isoformat(), fragment_id))
+    return 1
+
+
 def set_name(person_id: str, name: str) -> dict:
     """이름 저장 → 연결 조각들의 visual_desc/main_subjects에 이름 주입 (judge·검색이 보게)."""
     name = (name or "").strip()
@@ -525,25 +556,7 @@ def set_name(person_id: str, name: str) -> dict:
         "SELECT fragment_id FROM person_faces WHERE person_id=?", (person_id,))]
     tagged = 0
     for fid in fids:
-        row = con.execute(
-            "SELECT visual_desc, main_subjects, search_text FROM fragment_index WHERE fragment_id=?",
-            (fid,)).fetchone()
-        if not row:
-            continue
-        vd, ms, st = row
-        tag = f"인물:{name}"
-        if tag not in (vd or ""):
-            vd = f"{(vd or '').rstrip()} ({tag})".strip()
-        subjects = [s for s in (ms or "").split(",") if s.strip()]
-        if name not in subjects:
-            subjects.append(name)
-        st2 = st or ""
-        if name not in st2:
-            st2 = f"{st2} {name}".strip()
-        con.execute(
-            "UPDATE fragment_index SET visual_desc=?, main_subjects=?, search_text=?, updated_at=? WHERE fragment_id=?",
-            (vd, ",".join(subjects), st2, now, fid))
-        tagged += 1
+        tagged += _inject_name_tag(con, name, fid, now)
     con.commit()
     con.close()
     print(f"[PERSON-PALETTE] named {person_id}='{name}' tagged_fragments={tagged}")
