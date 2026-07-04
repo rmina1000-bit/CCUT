@@ -19,6 +19,9 @@ interface OriginalPanoramaProps {
   onToggleIntelligence: () => void;
   fragmentOverrides?: Map<string, Fragment>;
   boundaryHighlightIds?: string[];
+  // [UI-②] 분석 후에도 영상 추가/빼기
+  onAddSource?: () => void;
+  onRemoveSource?: (source: any) => void;
   onBoundaryClick?: (leftFragId: string | null, rightFragId: string | null) => void;
   sourceFragments?: Fragment[];
   sources?: { source_id: string; label?: string; file_path?: string; video_url?: string }[];
@@ -37,6 +40,8 @@ const OriginalPanorama: React.FC<OriginalPanoramaProps> = ({
   onBoundaryClick,
   sourceFragments = [],
   sources = [],
+  onAddSource,
+  onRemoveSource,
 }) => {
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -82,18 +87,35 @@ const OriginalPanorama: React.FC<OriginalPanoramaProps> = ({
             <h3 className="text-[11px] font-semibold text-foreground/80 uppercase tracking-widest whitespace-nowrap">원본맵</h3>
             <div className="flex gap-1 overflow-x-auto no-scrollbar flex-1 min-w-0 py-1">
               {sources && Array.isArray(sources) && sources.map((s) => (
-                <button
-                  key={s.source_id}
-                  onClick={() => onSourceChange(s.label || s.source_id)}
-                  className={`px-2 py-0.5 rounded-[3px] text-[9px] font-medium transition-all flex-shrink-0
-                    ${(s.label || s.source_id) === activeSource
-                      ? "bg-primary/20 text-primary"
-                      : "text-muted-foreground/60 hover:text-foreground/70 hover:bg-secondary/40"
-                    }`}
-                >
-                  {(s as any).label || (s.source_id.split('_').pop() || s.source_id)}
-                </button>
+                <span key={s.source_id} className="relative group/srctab flex-shrink-0">
+                  <button
+                    onClick={() => onSourceChange(s.label || s.source_id)}
+                    className={`px-2 py-0.5 rounded-[3px] text-[9px] font-medium transition-all
+                      ${(s.label || s.source_id) === activeSource
+                        ? "bg-primary/20 text-primary"
+                        : "text-muted-foreground/60 hover:text-foreground/70 hover:bg-secondary/40"
+                      }`}
+                  >
+                    {(s as any).label || (s.source_id.split('_').pop() || s.source_id)}
+                  </button>
+                  {/* [UI-②] 호버 시 이 영상을 프로젝트에서 빼기 */}
+                  {onRemoveSource && (
+                    <button
+                      title="이 영상 빼기"
+                      onClick={(e) => { e.stopPropagation(); onRemoveSource(s); }}
+                      className="absolute -top-1 -right-1 hidden group-hover/srctab:flex w-3 h-3 items-center justify-center rounded-full bg-red-600 text-white text-[8px] leading-none"
+                    >×</button>
+                  )}
+                </span>
               ))}
+              {/* [UI-②] 영상 추가 */}
+              {onAddSource && (
+                <button
+                  title="영상 추가"
+                  onClick={onAddSource}
+                  className="px-1.5 py-0.5 rounded-[3px] text-[10px] font-bold text-muted-foreground/50 hover:text-primary hover:bg-primary/10 transition-all flex-shrink-0"
+                >＋</button>
+              )}
             </div>
           </div>
           <button

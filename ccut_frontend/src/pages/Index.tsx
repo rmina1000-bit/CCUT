@@ -144,6 +144,13 @@ const Index: React.FC = () => {
   // [FLOW] 확정/선택 전에도 조각맵이 비지 않게 — 무대에 선 제안(기본 A)을 따라간다.
   const displayProposalId = committedProposalId ?? selectedProposalId ?? (proposals ? "A" : null);
 
+  // [UI-③⑤] 업로드 문진 답변 — storyPlan 생성 시 story_intent/메시지에 주입
+  const intakeRef = useRef<{
+    videoNotes: Array<{ name: string; note: string; duration?: number; orientation?: string }>;
+    aspectPreference: string;
+    soundPreference: string;
+  } | null>(null);
+
   // [STEP 10-I.5.27-E7] Timing measurement baseline
   const timingRef = useRef<Record<string, number>>({});
   const isTimingReportedRef = useRef(false);
@@ -369,13 +376,24 @@ const Index: React.FC = () => {
           throw new Error("선택된 파일이 없습니다.");
         }
 
-        const labelFromIndex = (idx: number) => String.fromCharCode(65 + idx);
+        // [UI-②] 열려 있는 프로젝트에 기존 소스가 있으면 '추가' 모드 — 라벨 이어붙임, 기존 보존
+        const priorEntries: SourceEntry[] =
+          activeNavItem && activeNavItem.startsWith("proj_") ? [...sourceEntries] : [];
+        const labelOffset = priorEntries.length;
+        if (labelOffset > 0) console.log(`[UI-②] append mode: 기존 ${labelOffset}개 + 신규 ${allFiles.length}개`);
+
+        // [UI-⑨] 엑셀식 라벨: A..Z, AA, AB... (26 초과 시 기호로 새던 문제 수리)
+        const labelFromIndex = (idx: number) => {
+          let n = idx, s = "";
+          do { s = String.fromCharCode(65 + (n % 26)) + s; n = Math.floor(n / 26) - 1; } while (n >= 0);
+          return s;
+        };
 
         const collectedEntries: SourceEntry[] = [];
         let firstSourceId: string | null = null;
 
         for (let i = 0; i < allFiles.length; i++) {
-          const label = labelFromIndex(i);
+          const label = labelFromIndex(i + labelOffset);
           setAnalyzeMessage(
             allFiles.length === 1
               ? "영상 파일을 서버에 전송하는 중입니다..."
@@ -424,7 +442,17 @@ const Index: React.FC = () => {
         let projectId: string;
         if (activeNavItem && activeNavItem.startsWith("proj_")) {
           projectId = activeNavItem;
-          setProjects((prev) => prev.map((p) => (p.id === projectId ? { ...p, count: fileCount } : p)));
+          setProjects((prev) => prev.map((p) => (p.id === projectId ? { ...p, count: labelOffset + fileCount } : p)));
+          // [UI-②] 기존 프로젝트에 신규 소스 연결 (project_sources) — 복원 시 유실 방지
+          try {
+            await fetch(`${videoService.API_BASE_URL}/projects/${projectId}/sources`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ source_ids: uploadedSourceIds }),
+            });
+          } catch (e) {
+            console.warn("[UI-②] project_sources link failed:", e);
+          }
         } else {
           const newRes = await fetch(`${videoService.API_BASE_URL}/projects`, {
             method: "POST",
@@ -442,8 +470,8 @@ const Index: React.FC = () => {
         }
 
 
-        setSourceEntries(collectedEntries);
-        setActiveSource("A");
+        setSourceEntries([...priorEntries, ...collectedEntries]);
+        setActiveSource(priorEntries.length > 0 ? collectedEntries[0]?.label ?? "A" : "A");
 
         const firstEntry = collectedEntries[0];
         if (!firstEntry) throw new Error("첫 번째 원본 처리 실패");
@@ -645,7 +673,7 @@ const Index: React.FC = () => {
                 return entry;
               });
 
-              setSourceEntries(updatedEntries);
+              setSourceEntries([...priorEntries, ...updatedEntries]); // [UI-②] 기존 소스 보존
 
               // 3. 제안 생성 요청
               let generatedProposals: Record<"A" | "B", any> = {} as any;
@@ -654,7 +682,10 @@ const Index: React.FC = () => {
 
               try {
                 // [B-5-FIX] 단일/멀티 모두 프로젝트(program_id) 경로로 일원화 — program_id 저장돼야 복원 가능
-                const orderedSourceIds = uploadedSourceIds.filter(id => completedSourceIds.includes(id));
+                const orderedSourceIds = [
+                  ...priorEntries.map((e) => e.source_id), // [UI-②] 기존 소스 포함해 전체 재제안
+                  ...uploadedSourceIds.filter(id => completedSourceIds.includes(id)),
+                ];
                 setAnalyzeMessage("편집 제안(A·B)을 생성하는 중입니다... 잠시만 기다려 주세요.");
                 proposalData = await videoService.requestProjectProposals(projectId, orderedSourceIds, 60.0);
                 console.log("[proposal-project] Diagnostics:", {
@@ -752,7 +783,7 @@ const Index: React.FC = () => {
         return false;
       }
     },
-    [logProposalPair, resetAnalysisState, toFullUrl, activeNavItem]
+    [logProposalPair, resetAnalysisState, toFullUrl, activeNavItem, sourceEntries]
   );
 
   // Hash-based debug hydration for Playwright verification
@@ -1074,10 +1105,31 @@ const Index: React.FC = () => {
         // (프로젝트 전환은 setStoryPlan(null)로 이미 초기화되므로 여기 병합은 같은 프로젝트 한정)
         messages: [
             ...(((storyPlan as any)?.messages) ?? []),
-            { id: `ai_init_${Date.now()}`, sender: "ai", text: draft, timestamp: Date.now() }
+            { id: `ai_init_${Date.now()}`, sender: "ai", text: draft, timestamp: Date.now() },
+            // [UI-③⑤] 문진 요약 — 사용자가 말해준 정보를 흐름에 새겨 둔다
+            ...(intakeRef.current ? [{
+                id: `ai_intake_${Date.now()}`,
+                sender: "ai" as const,
+                text: "문진 정리 — " + [
+                    ...intakeRef.current.videoNotes
+                        .filter((v) => v.note)
+                        .map((v) => `${v.name}: ${v.note}`),
+                    `화면 기준: ${intakeRef.current.aspectPreference === "portrait" ? "세로" : intakeRef.current.aspectPreference === "landscape" ? "가로" : "자동"}`,
+                    `사운드: ${intakeRef.current.soundPreference === "normalize" ? "볼륨 고르게" : "원본 그대로"}`,
+                ].join(" · ") + "\n이 정보를 편집 판단에 반영합니다.",
+                timestamp: Date.now() + 1,
+            }] : []),
         ],
-        story_intent: (storyPlan as any)?.story_intent ?? {}
+        story_intent: {
+            ...((storyPlan as any)?.story_intent ?? {}),
+            ...(intakeRef.current ? {
+                aspect_preference: intakeRef.current.aspectPreference,
+                sound_preference: intakeRef.current.soundPreference,
+                video_notes: intakeRef.current.videoNotes.filter((v) => v.note),
+            } : {}),
+        }
     };
+    intakeRef.current = null; // 1회 주입 후 소진
 
     setStoryPlan(newPlan);
   }, [appState, proposals, sourceEntries, storyPlan, setStoryPlan]);
@@ -1126,6 +1178,39 @@ const Index: React.FC = () => {
     []
   );
 
+  // [UI-②] 분석 후 영상 추가/제거 (모든 상태 선언 이후에 위치해야 TDZ 안전)
+  const appendInputRef = useRef<HTMLInputElement>(null);
+  const handleAnalyzeRef = useRef<((f?: File, ex?: File[]) => Promise<boolean>) | null>(null);
+  useEffect(() => { handleAnalyzeRef.current = handleStartAnalysis; }); // 항상 최신 인스턴스
+  const handleAppendFiles = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files ? Array.from(e.target.files) : [];
+    e.target.value = "";
+    if (files.length === 0) return;
+    await handleAnalyzeRef.current?.(files[0], files.slice(1)); // append 모드는 handleAnalyze가 자동 감지
+  }, []);
+
+  const handleRemoveSource = useCallback(async (source: any) => {
+    const label = source.label || source.source_id;
+    if (!window.confirm(`영상 ${label}을(를) 이 프로젝트에서 빼시겠어요?\n(원본 파일과 조각은 보존됩니다)`)) return;
+    try {
+      if (activeNavItem && activeNavItem.startsWith("proj_")) {
+        await fetch(`${videoService.API_BASE_URL}/projects/${activeNavItem}/sources/${source.source_id}`, { method: "DELETE" });
+      }
+      setSourceEntries((prev) => {
+        const next = prev.filter((s) => s.source_id !== source.source_id);
+        if (activeSource === label && next.length > 0) {
+          setActiveSource(next[0].label);
+          setSourceFragments(next[0].fragments);
+          setEditFragments(next[0].fragments);
+        }
+        return next;
+      });
+      console.log(`[UI-②] source removed from project: ${source.source_id}`);
+    } catch (err) {
+      console.error("[UI-②] remove source failed:", err);
+    }
+  }, [activeNavItem, activeSource]);
+
   const handleSingleFragmentApply = useCallback(
     (payload: {
       fragmentUid: string;
@@ -1133,34 +1218,59 @@ const Index: React.FC = () => {
       newEndSec: number;
       origStart: number;
       origEnd: number;
+      segments?: Array<{ startSec: number; endSec: number }>;
     }) => {
-      const { fragmentUid, newStartSec, newEndSec, origStart, origEnd } = payload;
-      const next = editFragments.map((fr) => {
-        if (getUid(fr) !== fragmentUid) return fr;
-        return {
+      const { fragmentUid, newStartSec, newEndSec, origStart, origEnd, segments } = payload;
+      // [PBE-⑦] 중간 프레임 삭제 → 살아남는 구간이 2개 이상이면 조각을 분할한다.
+      const isSplit = Array.isArray(segments) && segments.length > 1;
+      const next = editFragments.flatMap((fr) => {
+        if (getUid(fr) !== fragmentUid) return [fr];
+        if (!isSplit) {
+          return [{
+            ...fr,
+            start_sec: newStartSec,
+            end_sec: newEndSec,
+            start_time: newStartSec,
+            end_time: newEndSec,
+            orig_start_sec: (fr as any).orig_start_sec ?? origStart,
+            orig_end_sec:   (fr as any).orig_end_sec   ?? origEnd,
+            trim_applied: true,
+          }];
+        }
+        const rootId = (fr as any).root_fragment_uid ?? (fr as any).fragment_id ?? fragmentUid;
+        return segments!.map((seg, k) => ({
           ...fr,
-          start_sec: newStartSec,
-          end_sec: newEndSec,
-          start_time: newStartSec,
-          end_time: newEndSec,
+          fragment_id: `${(fr as any).fragment_id}_c${k + 1}`,
+          fragment_uid: `${getUid(fr)}_c${k + 1}`,
+          display_id: `${(fr as any).display_id ?? ""}${(fr as any).display_id ? `-${k + 1}` : ""}` || (fr as any).display_id,
+          start_sec: seg.startSec,
+          end_sec: seg.endSec,
+          start_time: seg.startSec,
+          end_time: seg.endSec,
+          start_frame: Math.round(seg.startSec * 30),
+          end_frame: Math.round(seg.endSec * 30),
           orig_start_sec: (fr as any).orig_start_sec ?? origStart,
           orig_end_sec:   (fr as any).orig_end_sec   ?? origEnd,
+          root_fragment_uid: rootId,
           trim_applied: true,
-        };
+        }));
       });
       setEditFragments(next);
 
-      // [F-2a-FIX] 편집 영속: 적용된 조각을 edit_overlay에 저장 (단건)
+      // [F-2a-FIX] 편집 영속: 적용된 조각을 edit_overlay에 저장 (분할이면 세그먼트별)
       try {
-        const edited = next.find((fr) => getUid(fr) === fragmentUid) as any;
-        if (edited?.source_id) {
+        const editedList = next.filter((fr: any) =>
+          getUid(fr) === fragmentUid || (isSplit && String(getUid(fr)).startsWith(`${fragmentUid}_c`))
+        ) as any[];
+        for (const edited of editedList) {
+          if (!edited?.source_id) continue;
           videoService.upsertEditOverlay({
             source_id: edited.source_id,
             fragment_id: edited.fragment_id ?? fragmentUid,
-            effective_start_sec: newStartSec,
-            effective_end_sec: newEndSec,
+            effective_start_sec: edited.start_sec ?? newStartSec,
+            effective_end_sec: edited.end_sec ?? newEndSec,
             excluded: edited.excluded === true || edited.status === "removed",
-            edit_type: "TRIM",
+            edit_type: isSplit ? "SPLIT" : "TRIM",
             root_fragment_id: edited.root_fragment_uid ?? edited.fragment_id ?? fragmentUid,
           }).catch((err) => console.error("edit-overlay save error:", err));
         }
@@ -2149,6 +2259,7 @@ const Index: React.FC = () => {
             proposalHistory={proposalHistory}
             activeProposalEntryId={activeProposalEntryId}
             onRestoreProposalEntry={restoreProposalEntry}
+            onIntake={(a) => { intakeRef.current = a; }}
           />
         )}
       </div>
@@ -2173,6 +2284,7 @@ const Index: React.FC = () => {
           </div>
 
           <div className="flex-1 flex flex-col gap-2 p-2 overflow-hidden min-w-0">
+            <input ref={appendInputRef} type="file" accept="video/*" multiple className="hidden" onChange={handleAppendFiles} />
             <OriginalPanorama
               activeSource={activeSource}
               onSourceChange={setActiveSource}
@@ -2186,6 +2298,8 @@ const Index: React.FC = () => {
 
               boundaryHighlightIds={boundaryHighlightIds}
               onBoundaryClick={(leftFragId, rightFragId) => handleOpenBoundaryEditor(leftFragId, rightFragId, "center")}
+              onAddSource={() => appendInputRef.current?.click()}
+              onRemoveSource={handleRemoveSource}
               sourceFragments={
                 sourceEntries.length > 0
                   ? sourceEntries.find((e) => e.label === activeSource)?.fragments ?? []

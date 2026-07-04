@@ -1992,8 +1992,15 @@ async def get_project_sources(project_id: str):
             else:
                 vurl = f"/static/uploads/{_url_quote(video_name, safe='')}"
 
-            # Label 순서대로 부여 (A, B, C, D...)
-            label = chr(65 + idx)
+            # [UI-⑨] Label 순서대로 부여 — 엑셀식 (A..Z, AA, AB...) 26 초과 안전
+            def _xl_label(n):
+                s = ""
+                while True:
+                    s = chr(65 + (n % 26)) + s
+                    n = n // 26 - 1
+                    if n < 0:
+                        return s
+            label = _xl_label(idx)
 
             collected_sources.append({
                 "source_id": sid,
@@ -3272,6 +3279,46 @@ async def create_project(req: ProjectCreateRequest, db: Session = Depends(get_db
             ))
     db.commit()
     return {"status": "SUCCESS", "program_id": program_id, "name": name}
+
+
+class ProjectSourcesEditRequest(BaseModel):
+    source_ids: list[str]
+
+
+@app.post("/projects/{program_id}/sources")
+async def add_project_sources(program_id: str, req: ProjectSourcesEditRequest, db: Session = Depends(get_db)):
+    """[UI-②] 기존 프로젝트에 소스 추가 연결 (멱등). display_order는 기존 뒤로 이어붙임."""
+    import datetime
+    from sqlalchemy import func as _f
+    now = datetime.datetime.now()
+    base = db.query(_f.max(ProjectSourceTable.display_order)).filter_by(program_id=program_id).scalar()
+    order = (base + 1) if base is not None else 0
+    added = []
+    for sid in (req.source_ids or []):
+        if not sid:
+            continue
+        if db.query(ProjectSourceTable).filter_by(program_id=program_id, source_id=sid).first():
+            continue
+        db.add(ProjectSourceTable(program_id=program_id, source_id=sid,
+                                  display_order=order, added_at=now.isoformat()))
+        order += 1
+        added.append(sid)
+    db.commit()
+    print(f"[UI-②] project {program_id} sources added: {added}")
+    return {"status": "OK", "added": added}
+
+
+@app.delete("/projects/{program_id}/sources/{source_id}")
+async def remove_project_source(program_id: str, source_id: str, db: Session = Depends(get_db)):
+    """[UI-②] 프로젝트에서 소스 연결 해제 (소스 원본/조각은 보존 — 다른 프로젝트 공유 안전)."""
+    row = db.query(ProjectSourceTable).filter_by(program_id=program_id, source_id=source_id).first()
+    if not row:
+        return {"status": "NOT_FOUND"}
+    db.delete(row)
+    db.commit()
+    print(f"[UI-②] project {program_id} source unlinked: {source_id}")
+    return {"status": "REMOVED", "source_id": source_id}
+
 
 @app.get("/projects")
 async def list_projects(db: Session = Depends(get_db)):

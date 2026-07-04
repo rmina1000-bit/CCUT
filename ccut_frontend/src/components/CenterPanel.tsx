@@ -1,7 +1,8 @@
 // CCUT 1.0.4 - R9.1 Rollback Verified
 import React, { useRef, useEffect, useState, useCallback, useMemo } from "react";
 import { createPortal } from "react-dom";
-import { Play, Loader2, Send, CheckCircle2, Package, BookOpen, List, ChevronDown, AlertCircle } from "lucide-react";
+import { UploadStagingView, probeFileMeta, type StagedMeta, type IntakeAnswers } from "@/components/views/UploadStagingView";
+import { Play, Loader2, Send, ArrowUp, CheckCircle2, Package, BookOpen, List, ChevronDown, AlertCircle } from "lucide-react";
 import { Fragment } from "@/data/fragmentData";
 import { videoService } from "@/services/videoService";
 import { Direction, StoryPlanPreview } from "@/proposal/proposalTypes";
@@ -53,6 +54,8 @@ interface CenterPanelProps {
   proposalHistory?: Array<{ id: string; ts: number; pair: any }>;
   activeProposalEntryId?: string | null;
   onRestoreProposalEntry?: (id: string) => void;
+  // [UI-③⑤] 문진 답변 (영상 설명, 화면/사운드 기준) → story_intent에 주입
+  onIntake?: (answers: IntakeAnswers) => void;
 }
 
 function parseDirectionFromText(text: string): Direction | null {
@@ -241,6 +244,7 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
   proposalHistory = [],
   activeProposalEntryId = null,
   onRestoreProposalEntry,
+  onIntake,
 }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const videoRefA = useRef<HTMLVideoElement>(null);
@@ -253,6 +257,8 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
   const [consultationInput, setConsultationInput] = useState("");
   // [FLOW-STAGE] 무대가 이식될 타임라인 내 슬롯 (활성 제안 카드 위치)
   const [stageSlot, setStageSlot] = useState<HTMLDivElement | null>(null);
+  // [UI-①] 업로드 스테이징 (null=비활성)
+  const [stagedFiles, setStagedFiles] = useState<StagedMeta[] | null>(null);
 
   const resizeConsultationTextarea = useCallback((textarea?: HTMLTextAreaElement | null) => {
     if (!textarea) return;
@@ -911,21 +917,45 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
     fileInputRef.current?.click();
   };
 
+  // [UI-①] 파일 선택 → 즉시 분석하지 않고 스테이징에 쌓는다 (넣고/빼고/더 넣기 자유)
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
       const files = Array.from(e.target.files);
-      console.log(`[CenterPanel] Files selected:`, files.map(f => f.name));
-      
+      e.target.value = ""; // 같은 파일 재선택 허용
+      console.log(`[CenterPanel] Files staged:`, files.map(f => f.name));
+
       setExportUrl(null);
       setExportError(null);
 
-      if (onFileSelect) onFileSelect(files[0]);
-      if (onAnalyze) {
-        const success = await onAnalyze(files[0], files.slice(1));
-        if (!success) {
-          console.warn("[CenterPanel] Analysis failed or was cancelled.");
-        }
+      setStagedFiles((prev) => {
+        const cur = prev ?? [];
+        const fresh = files
+          .filter((f) => !cur.some((s) => s.file.name === f.name && s.file.size === f.size))
+          .map((f) => ({ file: f, note: "" } as StagedMeta));
+        return [...cur, ...fresh];
+      });
+      // 개략 훑기(브라우저 메타데이터) — 비동기로 채움
+      for (const f of files) {
+        probeFileMeta(f).then((meta) => {
+          setStagedFiles((prev) => prev
+            ? prev.map((s) => (s.file.name === f.name && s.file.size === f.size ? { ...s, ...meta } : s))
+            : prev);
+        });
       }
+    }
+  };
+
+  // [UI-①③④] 문진 완료 → 분석 시작
+  const handleStagingStart = async (answers: IntakeAnswers) => {
+    const staged = stagedFiles ?? [];
+    if (staged.length === 0) return;
+    onIntake?.(answers);
+    const files = staged.map((s) => s.file);
+    setStagedFiles(null);
+    if (onFileSelect) onFileSelect(files[0]);
+    if (onAnalyze) {
+      const success = await onAnalyze(files[0], files.slice(1));
+      if (!success) console.warn("[CenterPanel] Analysis failed or was cancelled.");
     }
   };
 
@@ -1042,6 +1072,23 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
   };
 
   const renderContent = () => {
+    // [UI-①③④] 스테이징 활성 시 — 문진 화면이 최우선
+    if (stagedFiles !== null && appState !== "analyzing") {
+      return (
+        <>
+          <UploadStagingView
+            staged={stagedFiles}
+            onAddFiles={handleUpload}
+            onRemove={(i) => setStagedFiles((prev) => prev ? prev.filter((_, k) => k !== i) : prev)}
+            onNoteChange={(i, note) => setStagedFiles((prev) => prev ? prev.map((s, k) => (k === i ? { ...s, note } : s)) : prev)}
+            onStart={handleStagingStart}
+            onCancel={() => setStagedFiles(null)}
+          />
+          <input ref={fileInputRef} type="file" accept="video/*" multiple className="hidden" onChange={handleFileChange} />
+        </>
+      );
+    }
+
     if (appState === "empty" && (!sourceEntries || sourceEntries.length === 0)) {
       return <EmptyProjectView handleUpload={handleUpload} fileInputRef={fileInputRef} handleFileChange={handleFileChange} />;
     }
@@ -1952,9 +1999,10 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
       {renderContent()}
 
       {/* [STEP 10-I.5.28-E9-R2-R3-R2] ChatGPT-style auto-grow Composer */}
+      {/* [UI-⑩⑪] 중앙창과 같은 배경색으로 통일, 과한 라운드 축소 */}
       {storyPlan && (
-        <div className="sticky bottom-0 z-20 w-full border-t border-zinc-800/70 bg-black/90 px-5 py-4">
-          <div className="mx-auto flex w-full max-w-3xl items-end gap-3 rounded-[28px] border border-zinc-700/70 bg-zinc-900/80 px-5 py-3 shadow-sm">
+        <div className="sticky bottom-0 z-20 w-full bg-[#0a0a0b] px-5 py-4">
+          <div className="mx-auto flex w-full max-w-3xl items-end gap-3 rounded-lg border border-white/10 bg-[#161618] px-5 py-3 shadow-sm">
             <textarea
               ref={consultationTextareaRef}
               value={consultationInput}
@@ -1974,14 +2022,15 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
               }}
               className="min-h-[44px] max-h-[160px] flex-1 resize-none overflow-y-auto bg-transparent py-2 text-sm leading-relaxed text-zinc-100 outline-none placeholder:text-zinc-500 whitespace-pre-wrap break-words disabled:opacity-40"
             />
+            {/* [UI-⑫] 원형 배경 제거, 위로 향한 화살표만 글자색으로 */}
             <button
               type="button"
               onClick={handleSubmitConsultation}
               disabled={!consultationInput.trim() || appState === "analyzing"}
-              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-zinc-100 text-zinc-950 disabled:opacity-30 transition-opacity"
+              className="flex h-9 w-9 shrink-0 items-center justify-center text-zinc-100 hover:text-white disabled:opacity-30 transition-opacity"
               aria-label="의견 보내기"
             >
-              <Send size={16} />
+              <ArrowUp size={18} />
             </button>
           </div>
         </div>

@@ -73,6 +73,8 @@ interface SingleFragmentEditorProps {
     newEndSec: number;
     origStart: number;
     origEnd: number;
+    // [PBE-⑦] 중간 삭제 시 살아남는 구간들 (1개면 기존 trim과 동일)
+    segments?: Array<{ startSec: number; endSec: number }>;
   }) => void;
 }
 
@@ -87,6 +89,9 @@ export const SingleFragmentEditor: React.FC<SingleFragmentEditorProps> = ({
   // [PBE-DENSITY] 파노라마 프레임 수 (기본 12). 12가 아니면 백엔드가 P_{fid}_d{n}_{i}.jpg 로 생성.
   const [frameCount, setFrameCount] = useState(12);
   const frameSuffix = frameCount === 12 ? "" : `_d${frameCount}`;
+  // [PBE-⑦] 중간 프레임 삭제 — 우클릭 메뉴로 토글, 적용 시 살아남는 연속 구간으로 분할
+  const [deletedFrames, setDeletedFrames] = useState<Set<number>>(new Set());
+  const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number; index: number } | null>(null);
   const [loadedFrames, setLoadedFrames] = useState<Record<number, boolean>>({});
   const [imageErrorAttempts, setImageErrorAttempts] = useState<Record<number, number>>({});
   const [frameCacheBuster, setFrameCacheBuster] = useState<Record<number, number>>({});
@@ -138,6 +143,8 @@ export const SingleFragmentEditor: React.FC<SingleFragmentEditorProps> = ({
     setFrameCacheBuster({});
     setExtractReady(false);
     setFrameCount(12); // [PBE-DENSITY] 열 때는 항상 기본 밀도
+    setDeletedFrames(new Set());
+    setCtxMenu(null);
     setPosition(null);
     // [PBE-RESIZE] 열 때 확정 높이를 부여 → flex 세로 분배가 안정적으로 동작(레일 항상 노출).
     setSize({
@@ -223,16 +230,18 @@ export const SingleFragmentEditor: React.FC<SingleFragmentEditorProps> = ({
 
     const interval = setInterval(() => {
       setCurrentIndex((prev) => {
-        if (prev >= frameCount - 1) {
+        let next = prev + 1;
+        while (next < frameCount && deletedFrames.has(next)) next++; // [PBE-⑦] 삭제 프레임 건너뜀
+        if (next >= frameCount) {
           setIsPlaying(false);
-          return frameCount - 1;
+          return prev;
         }
-        return prev + 1;
+        return next;
       });
     }, frameDuration);
 
     return () => clearInterval(interval);
-  }, [isPlaying, durationSec, frameCount]);
+  }, [isPlaying, durationSec, frameCount, deletedFrames]);
 
   // [PBE-RESIZE] 브라우저 창 크기가 줄어들면 모달 크기/위치를 뷰포트 안으로 다시 가둔다.
   useEffect(() => {
@@ -284,6 +293,8 @@ export const SingleFragmentEditor: React.FC<SingleFragmentEditorProps> = ({
     setRightCut(frameCount);
     setCurrentIndex(0);
     setIsPlaying(false);
+    setDeletedFrames(new Set());
+    setCtxMenu(null);
   };
 
   // [PBE-DENSITY] 프레임 밀도 변경 — 컷 위치는 비율 보존 환산, 프레임은 백엔드 재추출.
@@ -303,6 +314,8 @@ export const SingleFragmentEditor: React.FC<SingleFragmentEditorProps> = ({
     setImageErrorAttempts({});
     setFrameCacheBuster({});
     setExtractReady(false);
+    setDeletedFrames(new Set()); // 밀도가 바뀌면 프레임 인덱스 의미가 바뀌므로 삭제 표시는 초기화
+    setCtxMenu(null);
     setFrameCount(clamped);
     fetch("/api/pbe/extract-panoramas", {
       method: "POST",
@@ -334,8 +347,29 @@ export const SingleFragmentEditor: React.FC<SingleFragmentEditorProps> = ({
     ];
   })();
 
-  const activeRatio = (rightCut - leftCut) / frameCount;
+  // [PBE-⑦] 살아남는 프레임 = [leftCut, rightCut) 중 삭제되지 않은 것
+  const aliveFrameCount = (() => {
+    let n = 0;
+    for (let i = leftCut; i < rightCut; i++) if (!deletedFrames.has(i)) n++;
+    return n;
+  })();
+  const activeRatio = aliveFrameCount / frameCount;
   const aliveDuration = baseDuration !== undefined ? baseDuration * activeRatio : 0;
+
+  // 살아남는 연속 구간(세그먼트) — 적용 시 분할의 원천
+  const keptSegments = (() => {
+    const segs: Array<{ from: number; to: number }> = []; // [from, to) 프레임 인덱스
+    let runStart: number | null = null;
+    for (let i = leftCut; i <= rightCut; i++) {
+      const kept = i < rightCut && !deletedFrames.has(i);
+      if (kept && runStart === null) runStart = i;
+      if (!kept && runStart !== null) {
+        segs.push({ from: runStart, to: i });
+        runStart = null;
+      }
+    }
+    return segs;
+  })();
 
   const handlePlayToggle = () => {
     setIsPlaying((prev) => {
@@ -354,12 +388,18 @@ export const SingleFragmentEditor: React.FC<SingleFragmentEditorProps> = ({
     const duration  = origEnd - origStart;
     const newStartSec = origStart + (leftCut / frameCount) * duration;
     const newEndSec   = origStart + (rightCut / frameCount) * duration;
+    // [PBE-⑦] 중간 삭제가 있으면 살아남는 구간들을 초 단위 세그먼트로 전달 (분할)
+    const segments = keptSegments.map((s) => ({
+      startSec: origStart + (s.from / frameCount) * duration,
+      endSec:   origStart + (s.to / frameCount) * duration,
+    }));
     onApply?.({
       fragmentUid: getUid(fragment),
       newStartSec,
       newEndSec,
       origStart,
-      origEnd
+      origEnd,
+      segments,
     });
     onOpenChange(false);
   };
@@ -536,8 +576,12 @@ export const SingleFragmentEditor: React.FC<SingleFragmentEditorProps> = ({
         <DialogHeader className="mb-1 select-none cursor-move flex-shrink-0" onMouseDown={handleTitleMouseDown}>
           <div className="flex items-center justify-between">
             <DialogTitle className="text-base font-bold text-foreground">조각 정밀 편집 (1단계 파노라마)</DialogTitle>
-            <span className="text-[10px] text-muted-foreground/50 font-mono bg-secondary/30 px-2 py-0.5 rounded">
-              ID: {fragment.fragment_id}
+            {/* [UI-⑧] 조각맵 표기(A1, B7...)와 일치 — 내부 id는 title 툴팁으로만 */}
+            <span
+              title={fragment.fragment_id}
+              className="text-[11px] text-muted-foreground/70 font-mono bg-secondary/30 px-2 py-0.5 rounded font-bold"
+            >
+              {(fragment as any).display_id ?? fragment.fragment_id}
             </span>
           </div>
           <DialogDescription className="text-xs text-muted-foreground">
@@ -650,10 +694,20 @@ export const SingleFragmentEditor: React.FC<SingleFragmentEditorProps> = ({
               <div
                 ref={containerRef}
                 onMouseDown={handleRailMouseDown}
+                onContextMenu={(e) => {
+                  // [PBE-⑦] 프레임 우클릭 → 삭제/복원 메뉴
+                  e.preventDefault();
+                  if (!containerRef.current) return;
+                  const rect = containerRef.current.getBoundingClientRect();
+                  const pct = Math.max(0, Math.min(0.999, (e.clientX - rect.left) / rect.width));
+                  const idx = Math.floor(pct * frameCount);
+                  setCtxMenu({ x: e.clientX, y: e.clientY, index: idx });
+                }}
                 className="relative w-max h-[84px] bg-[hsl(228,12%,6%)] border border-border/10 rounded-md overflow-hidden flex select-none cursor-pointer"
               >
                 {Array.from({ length: frameCount }).map((_, index) => {
-                  const isGrayscale = index < leftCut || index >= rightCut;
+                  const isDeleted = deletedFrames.has(index);
+                  const isGrayscale = index < leftCut || index >= rightCut || isDeleted;
                   const isLoaded = loadedFrames[index];
                   const src = `/static/thumbnails/P_${fragment.fragment_id}${frameSuffix}_${index}.jpg` +
                     (frameCacheBuster[index] ? `?t=${frameCacheBuster[index]}` : "");
@@ -683,6 +737,9 @@ export const SingleFragmentEditor: React.FC<SingleFragmentEditorProps> = ({
                       <span className="absolute bottom-1 right-1 text-[8px] bg-black/60 px-1 rounded text-white font-mono z-20">
                         {index}
                       </span>
+                      {isDeleted && (
+                        <span className="absolute top-1 left-1 text-[9px] bg-red-600/80 px-1 rounded text-white font-bold z-20">✕</span>
+                      )}
                     </div>
                   );
                 })}
@@ -776,6 +833,34 @@ export const SingleFragmentEditor: React.FC<SingleFragmentEditorProps> = ({
             적용
           </Button>
         </DialogFooter>
+
+        {/* [PBE-⑦] 프레임 우클릭 컨텍스트 메뉴 */}
+        {ctxMenu && (
+          <>
+            <div className="fixed inset-0 z-[90]" onClick={() => setCtxMenu(null)} onContextMenu={(e) => { e.preventDefault(); setCtxMenu(null); }} />
+            <div
+              className="fixed z-[100] bg-[hsl(228,12%,12%)] border border-border/30 rounded-md shadow-xl py-1 min-w-[120px]"
+              style={{ left: Math.min(ctxMenu.x, window.innerWidth - 140), top: Math.min(ctxMenu.y, window.innerHeight - 80) }}
+            >
+              <div className="px-3 py-1 text-[10px] text-muted-foreground/60 font-mono border-b border-border/20">프레임 {ctxMenu.index}</div>
+              <button
+                type="button"
+                className="w-full text-left px-3 py-1.5 text-xs text-foreground hover:bg-secondary/50"
+                onClick={() => {
+                  setDeletedFrames((prev) => {
+                    const next = new Set(prev);
+                    if (next.has(ctxMenu.index)) next.delete(ctxMenu.index);
+                    else next.add(ctxMenu.index);
+                    return next;
+                  });
+                  setCtxMenu(null);
+                }}
+              >
+                {deletedFrames.has(ctxMenu.index) ? "복원" : "삭제"}
+              </button>
+            </div>
+          </>
+        )}
 
         {/* [PBE-RESIZE] 우하단 리사이즈 핸들 */}
         <div
