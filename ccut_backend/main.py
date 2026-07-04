@@ -3320,6 +3320,41 @@ async def remove_project_source(program_id: str, source_id: str, db: Session = D
     return {"status": "REMOVED", "source_id": source_id}
 
 
+# ═══════════════════════════════════════════════════════════════════
+#   [PERSON-PALETTE] 사람 팔레트 — 얼굴 군집 스캔 / 이름 저장 / 거부
+# ═══════════════════════════════════════════════════════════════════
+
+@app.post("/persons/scan/{project_id}")
+async def persons_scan(project_id: str):
+    """프로젝트 키프레임에서 얼굴 검출·군집 (YuNet+SFace, CPU). 멱등."""
+    import asyncio
+    from engine import face_palette
+    loop = asyncio.get_event_loop()
+    return await loop.run_in_executor(None, face_palette.scan_project, project_id)
+
+
+@app.get("/persons/pending")
+async def persons_pending(project_id: str = None):
+    from engine import face_palette
+    return {"status": "OK", "persons": face_palette.list_pending(project_id)}
+
+
+class PersonNameRequest(BaseModel):
+    name: str
+
+
+@app.post("/persons/{person_id}/name")
+async def persons_name(person_id: str, req: PersonNameRequest):
+    from engine import face_palette
+    return face_palette.set_name(person_id, req.name)
+
+
+@app.delete("/persons/{person_id}")
+async def persons_reject(person_id: str):
+    from engine import face_palette
+    return face_palette.reject(person_id)
+
+
 @app.get("/projects")
 async def list_projects(db: Session = Depends(get_db)):
     """[B-4] 신규 구조(schema_version=2) 프로젝트 목록. project_sources 있는 것만 반환 (빈 프로젝트 숨김)."""
