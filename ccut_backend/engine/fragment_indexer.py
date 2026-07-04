@@ -144,6 +144,25 @@ def load_semantic_fragment_rows(con, source_filter=None):
     return rows
 
 
+def ensure_places_schema(con):
+    """[PLACE P1] 장소 라벨 저장 — '재생성 가능한 파생 캐시'.
+    person_faces(사용자 축복, 무단삭제 불가침)와 달리 이 테이블은 인덱스 시점에
+    keyframe 묘사에서 기계 파생되며, 재인덱스 때마다 지우고 다시 만든다."""
+    con.execute("""CREATE TABLE IF NOT EXISTS fragment_places (
+        fragment_id TEXT NOT NULL,
+        source_id TEXT NOT NULL,
+        place_code TEXT NOT NULL,
+        place_label TEXT NOT NULL,
+        confidence REAL NOT NULL,
+        evidence_json TEXT,
+        analyzer TEXT NOT NULL,
+        status TEXT DEFAULT 'active',
+        created_at TEXT,
+        updated_at TEXT,
+        PRIMARY KEY(fragment_id, place_code))""")
+    con.commit()
+
+
 def _reset_index(con, source_filter=None):
     """[R2] 단위 전환(VF→SF) 시 스테일 행 제거. fragment_id 네임스페이스가
     바뀌므로 첫 SF 재빌드에서 1회 비워 고아 VF 행을 정리한다."""
@@ -270,6 +289,18 @@ def index_fragments(source_filter=None, use_vl=True, only_curated=False,
         if not visual_desc and meta.get("transcript"):
             desc_source = "transcript"
 
+        # [PLACE P1] 장소 파생 — 인덱스 시점에 묘사에서 생성 (재인덱스에도 스테일 없음).
+        # 구체 장소(병원/바다/...)만 "(장소:라벨)"로 desc·검색어에 주입, indoor/outdoor는
+        # scene_type까지만. 묘사가 없으면 places=[] = unknown (조용한 성공 처리 금지).
+        from engine import place_taxonomy as pt
+        places = pt.derive_places(visual_desc)
+        scene_type = places[0][0] if places else None
+        if visual_desc:
+            for code, label, _ev in places:
+                _tag = f"(장소:{label})"
+                if code not in ("indoor", "outdoor") and _tag not in visual_desc:
+                    visual_desc = f"{visual_desc.rstrip()} {_tag}"
+
         search_text = build_search_text(meta, visual_desc)
         emb = em.encode_one(search_text) if search_text else np.zeros(em.DIM, dtype=np.float32)
 
@@ -280,6 +311,8 @@ def index_fragments(source_filter=None, use_vl=True, only_curated=False,
             "desc_source": desc_source,
             "is_curated": fid in curated,
             "embedding": em.to_bytes(emb),
+            "scene_type": scene_type,
+            "places": places,
         }
         results.append(rec)
 
@@ -328,6 +361,7 @@ def _upsert(con, rec, em):
         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
         ON CONFLICT(fragment_id) DO UPDATE SET
            visual_desc=excluded.visual_desc, transcript=excluded.transcript,
+           scene_type=excluded.scene_type,
            search_text=excluded.search_text, embedding=excluded.embedding,
            desc_source=excluded.desc_source, is_curated=excluded.is_curated,
            keyframe=excluded.keyframe, role=excluded.role,
@@ -336,11 +370,23 @@ def _upsert(con, rec, em):
     """, (
         rec["fragment_id"], rec["source_id"], rec["start"], rec["end"], rec["duration"],
         rec["role"], 0.0, rec["hook_score"], rec["motion_score"],
-        rec["visual_desc"], rec.get("transcript"), None,
+        rec["visual_desc"], rec.get("transcript"), rec.get("scene_type"),
         json.dumps([]), rec["search_text"], rec["embedding"],
         em.MODEL_NAME, em.DIM, 1 if rec["is_curated"] else 0, 0,
         rec.get("keyframe"), rec["desc_source"], now, now,
     ))
+    # [PLACE P1] 파생 캐시 재생성 — 이 fragment의 기존 장소 행을 지우고 새로 쓴다
+    # (person_faces 불가침과 구별: 여기는 기계 파생물이라 삭제-재생성이 정합의 수단)
+    ensure_places_schema(con)
+    cur.execute("DELETE FROM fragment_places WHERE fragment_id = ?", (rec["fragment_id"],))
+    for _code, _label, _ev in rec.get("places") or []:
+        cur.execute(
+            "INSERT OR REPLACE INTO fragment_places (fragment_id, source_id, place_code, "
+            "place_label, confidence, evidence_json, analyzer, status, created_at, updated_at) "
+            "VALUES (?,?,?,?,?,?,?,?,?,?)",
+            (rec["fragment_id"], rec["source_id"], _code, _label, 0.6,
+             json.dumps({"keywords": _ev}, ensure_ascii=False), "rule_place_v1",
+             "active", now, now))
 
 
 if __name__ == "__main__":
