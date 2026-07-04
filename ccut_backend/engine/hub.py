@@ -182,15 +182,56 @@ def _det_count(t):
 
 
 def _named_persons():
-    """[PERSON-PALETTE] 사용자가 이름을 저장한 인물 목록 — 동적 편집 어휘."""
+    """[PERSON-PALETTE] 사용자가 이름을 저장한 인물 목록 — 동적 편집 어휘.
+    풀네임 + 애칭을 모두 반환(입구 문지기·어휘 노출용). 정규화는 _person_theme가 한다."""
     try:
         con = sqlite3.connect(DB_PATH)
-        rows = [r[0] for r in con.execute(
-            "SELECT name FROM persons WHERE status='named' AND name IS NOT NULL AND length(name) >= 2")]
+        vocab = []
+        for name, aliases in _person_name_alias_rows(con):
+            if name:
+                vocab.append(name)
+            vocab.extend(a for a in (aliases or "").split(",") if a.strip())
         con.close()
-        return rows
+        # 긴 어휘 우선(부분매칭 오탐 완화) + 2자 이상
+        return [v for v in sorted(set(vocab), key=len, reverse=True) if len(v) >= 2]
     except Exception:
         return []
+
+
+def _person_name_alias_rows(con):
+    """(name, aliases) 행. aliases 컬럼이 아직 없는 DB도 안전 폴백."""
+    try:
+        return list(con.execute(
+            "SELECT name, COALESCE(aliases,'') FROM persons "
+            "WHERE status='named' AND name IS NOT NULL AND length(name) >= 2"))
+    except sqlite3.OperationalError:
+        return [(r[0], "") for r in con.execute(
+            "SELECT name FROM persons WHERE status='named' AND name IS NOT NULL AND length(name) >= 2")]
+
+
+def _person_theme(t):
+    """[PERSON-ALIAS] 명령에 인물 이름/애칭이 있으면 그 인물의 '풀네임'을 반환.
+    저장은 풀네임, 검색은 애칭 — 애칭('은한이')으로 찾아도 조각 태그(풀네임 '정은한')와
+    맞도록 애칭을 풀네임으로 정규화한다. 긴 표기부터 매칭(부분매칭 오탐 완화)."""
+    try:
+        con = sqlite3.connect(DB_PATH)
+        rows = _person_name_alias_rows(con)
+        con.close()
+    except Exception:
+        return None
+    cands = []  # (표기, 풀네임)
+    for name, aliases in rows:
+        if name and len(name) >= 2:
+            cands.append((name, name))
+        for a in (aliases or "").split(","):
+            a = a.strip()
+            if len(a) >= 2:
+                cands.append((a, name))
+    cands.sort(key=lambda x: len(x[0]), reverse=True)
+    for token, full in cands:
+        if token in t:
+            return full
+    return None
 
 
 def _deterministic_intent(t):
@@ -199,9 +240,9 @@ def _deterministic_intent(t):
     is_excl = any(k in t for k in _EXCLUDE_MARK)
     theme = next((kw for kw in _THEME_VOCAB if kw in t), None)
     if theme is None:
-        # [PERSON-PALETTE] 저장된 사람 이름이 명령에 있으면 그 이름이 테마
-        # (이름은 visual_desc에 '인물:이름'으로 태그돼 있어 judge가 그대로 매칭)
-        theme = next((nm for nm in _named_persons() if nm in t), None)
+        # [PERSON-ALIAS] 저장된 사람 이름/애칭이 명령에 있으면 그 인물의 풀네임이 테마
+        # (조각 태그는 '인물:풀네임'이므로 애칭을 풀네임으로 정규화해야 judge가 매칭)
+        theme = _person_theme(t)
     keep = exclude = None
     if theme:
         if is_excl:

@@ -203,6 +203,20 @@ def _ensure_frontal_column(con):
         pass  # 이미 있음
 
 
+def _ensure_aliases_column(con):
+    # [PERSON-ALIAS] 애칭 저장 — 저장은 풀네임(name), 검색은 애칭으로.
+    # 콤마 구분 문자열. 조각 태그는 계속 풀네임만 쓴다(정규화는 hub가).
+    try:
+        con.execute("ALTER TABLE persons ADD COLUMN aliases TEXT DEFAULT ''")
+        con.commit()
+    except sqlite3.OperationalError:
+        pass  # 이미 있음
+
+
+def _parse_aliases(raw):
+    return [a.strip() for a in (raw or "").split(",") if a.strip()]
+
+
 @_serialized
 def scan_project(project_id: str, max_frames: int = 400) -> dict:
     """프로젝트 소스들의 키프레임에서 얼굴 검출·군집. 멱등(이미 본 fragment는 skip)."""
@@ -542,16 +556,34 @@ def _inject_name_tag(con, name: str, fragment_id: str, now: str = None) -> int:
     return 1
 
 
-def set_name(person_id: str, name: str) -> dict:
-    """이름 저장 → 연결 조각들의 visual_desc/main_subjects에 이름 주입 (judge·검색이 보게)."""
+def set_name(person_id: str, name: str, aliases=None) -> dict:
+    """이름 저장 → 연결 조각들의 visual_desc/main_subjects에 이름 주입 (judge·검색이 보게).
+
+    [PERSON-ALIAS] 저장은 풀네임(name), 검색은 애칭(aliases)으로 — 사람의 기본 습관.
+    이름을 바꾸면(rename) 옛 이름을 애칭으로 자동 보존한다("정은한"으로 바꿔도 "은한이"로
+    계속 찾을 수 있게). 조각 태그는 풀네임만 쓰고, 애칭→풀네임 정규화는 hub가 한다.
+    aliases: 추가 애칭 리스트(옵션). 기존 애칭·자동보존분과 합집합.
+    """
     name = (name or "").strip()
     if not name:
         return {"status": "ERROR", "message": "이름이 비었습니다"}
     con = _connect()
     ensure_schema(con)
+    _ensure_aliases_column(con)
     now = datetime.datetime.now().isoformat()
-    con.execute("UPDATE persons SET name=?, status='named', updated_at=? WHERE person_id=?",
-                (name, now, person_id))
+    row = con.execute("SELECT name, aliases FROM persons WHERE person_id=?", (person_id,)).fetchone()
+    old_name = (row[0] or "").strip() if row else ""
+    alias_set = set(_parse_aliases(row[1] if row else ""))
+    # 이름 변경 시 옛 이름을 애칭으로 자동 보존 (새 이름과 다를 때만)
+    if old_name and old_name != name:
+        alias_set.add(old_name)
+    for a in (aliases or []):
+        a = (a or "").strip()
+        if a and a != name:
+            alias_set.add(a)
+    aliases_str = ",".join(sorted(alias_set))
+    con.execute("UPDATE persons SET name=?, aliases=?, status='named', updated_at=? WHERE person_id=?",
+                (name, aliases_str, now, person_id))
     fids = [r[0] for r in con.execute(
         "SELECT fragment_id FROM person_faces WHERE person_id=?", (person_id,))]
     tagged = 0
@@ -559,8 +591,9 @@ def set_name(person_id: str, name: str) -> dict:
         tagged += _inject_name_tag(con, name, fid, now)
     con.commit()
     con.close()
-    print(f"[PERSON-PALETTE] named {person_id}='{name}' tagged_fragments={tagged}")
-    return {"status": "OK", "person_id": person_id, "name": name, "tagged_fragments": tagged}
+    print(f"[PERSON-PALETTE] named {person_id}='{name}' aliases={aliases_str!r} tagged_fragments={tagged}")
+    return {"status": "OK", "person_id": person_id, "name": name,
+            "aliases": sorted(alias_set), "tagged_fragments": tagged}
 
 
 def reinject_names_for_source(source_id: str) -> int:

@@ -3552,12 +3552,13 @@ async def persons_names():
 
 class PersonNameRequest(BaseModel):
     name: str
+    aliases: list = None  # [PERSON-ALIAS] 애칭(옵션). rename 시 옛 이름은 자동 보존.
 
 
 @app.post("/persons/{person_id}/name")
 async def persons_name(person_id: str, req: PersonNameRequest):
     from engine import face_palette
-    return face_palette.set_name(person_id, req.name)
+    return face_palette.set_name(person_id, req.name, aliases=req.aliases)
 
 
 @app.delete("/persons/{person_id}")
