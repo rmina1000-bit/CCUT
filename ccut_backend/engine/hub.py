@@ -173,11 +173,27 @@ def _det_count(t):
     return None
 
 
+def _named_persons():
+    """[PERSON-PALETTE] 사용자가 이름을 저장한 인물 목록 — 동적 편집 어휘."""
+    try:
+        con = sqlite3.connect(DB_PATH)
+        rows = [r[0] for r in con.execute(
+            "SELECT name FROM persons WHERE status='named' AND name IS NOT NULL AND length(name) >= 2")]
+        con.close()
+        return rows
+    except Exception:
+        return []
+
+
 def _deterministic_intent(t):
     """알려진 어휘에 한해 {keep,exclude,count} 확정. 못 잡으면 theme_found=False."""
     count = _det_count(t)
     is_excl = any(k in t for k in _EXCLUDE_MARK)
     theme = next((kw for kw in _THEME_VOCAB if kw in t), None)
+    if theme is None:
+        # [PERSON-PALETTE] 저장된 사람 이름이 명령에 있으면 그 이름이 테마
+        # (이름은 visual_desc에 '인물:이름'으로 태그돼 있어 judge가 그대로 매칭)
+        theme = next((nm for nm in _named_persons() if nm in t), None)
     keep = exclude = None
     if theme:
         if is_excl:

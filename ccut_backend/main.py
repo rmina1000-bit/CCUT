@@ -3339,6 +3339,13 @@ async def persons_pending(project_id: str = None):
     return {"status": "OK", "persons": face_palette.list_pending(project_id)}
 
 
+@app.get("/persons/names")
+async def persons_names():
+    """저장된 인물 이름 목록 — 프론트 편집 명령 문지기의 동적 어휘."""
+    from engine.hub import _named_persons
+    return {"status": "OK", "names": _named_persons()}
+
+
 class PersonNameRequest(BaseModel):
     name: str
 

@@ -2,6 +2,7 @@
 import React, { useRef, useEffect, useState, useCallback, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { UploadStagingView, probeFileMeta, type StagedMeta, type IntakeAnswers } from "@/components/views/UploadStagingView";
+import { setKnownPersonNames } from "@/hooks/useProposalState";
 import { Play, Loader2, Send, ArrowUp, Plus, CheckCircle2, Package, BookOpen, List, ChevronDown, AlertCircle } from "lucide-react";
 import { Fragment } from "@/data/fragmentData";
 import { videoService } from "@/services/videoService";
@@ -282,6 +283,10 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
         const res = await fetch(`/api/persons/pending?project_id=${programId}`);
         const data = await res.json();
         if (alive && data?.persons) setPendingPersons(data.persons);
+        // 저장된 이름들을 편집 명령 문지기에 주입 ("은한이 나오는 장면만"이 명령으로 인식되게)
+        const nres = await fetch(`/api/persons/names`);
+        const ndata = await nres.json();
+        if (alive && ndata?.names) setKnownPersonNames(ndata.names);
       } catch (e) {
         console.warn("[PERSON-PALETTE] scan/pending failed:", e);
       }

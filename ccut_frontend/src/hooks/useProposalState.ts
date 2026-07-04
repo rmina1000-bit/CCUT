@@ -81,8 +81,19 @@ function hasRecentP6Fallback(messages: any[] = [], fallbackTexts = [P6_FALLBACK_
   );
 }
 
+// [PERSON-PALETTE] 저장된 사람 이름 — 동적 편집 어휘 (CenterPanel이 주입)
+const KNOWN_PERSON_NAMES: string[] = [];
+export function setKnownPersonNames(names: string[]) {
+  KNOWN_PERSON_NAMES.splice(0, KNOWN_PERSON_NAMES.length, ...names.filter(Boolean));
+}
+
 function isExecutableEditCommand(input: string): boolean {
-  const hasSceneOrSubject = /실내|실외|야외|운동장|물놀이|바다|해변|해안|바닷가|갯벌|수영|계곡|강|풍경|음식|요리|사람|인물|아이|어린이|밤|야경|거리|호텔|침실|방|체육관|공원|놀이터|외부|밖|표정|가족|배경|장소|공간/.test(input);
+  const hasSceneOrSubject =
+    /실내|실외|야외|운동장|물놀이|바다|해변|해안|바닷가|갯벌|수영|계곡|강|풍경|음식|요리|사람|인물|아이|어린이|밤|야경|거리|호텔|침실|방|체육관|공원|놀이터|외부|밖|표정|가족|배경|장소|공간/.test(input) ||
+    // [PERSON-PALETTE] "X 나오는 장면/조각/컷" 은 대상이 무엇이든 편집 명령
+    /나오는\s*(장면|조각|컷|부분)/.test(input) ||
+    // 저장된 사람 이름이 들어 있으면 편집 대상 인정 ("은한이만 남겨줘")
+    KNOWN_PERSON_NAMES.some((n) => n.length >= 2 && input.includes(n));
   const hasOnlyOperator = /(?:^|\s)\S+만(?:\s|$)/.test(input);
   const hasEditOperator = hasOnlyOperator || /빼|빼줘|제외|말고|없이|위주|중심|골라|선택|편집|줄여|늘려|살려|넣어|제거/.test(input);
   const hasCountOrPace = /(\d+\s*개|(한|두|세|네|다섯|여섯|일곱|여덟|아홉|열)\s*개|빠르게|느리게|짧게|길게|템포|속도|페이스)/.test(input);
