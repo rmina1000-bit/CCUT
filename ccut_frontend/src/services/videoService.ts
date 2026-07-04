@@ -129,6 +129,23 @@ export const videoService = {
         });
     },
 
+    // [INTENT-ROUTER] 백엔드 종업원 — 프론트는 말을 거의 그대로 보내고 해석은 서버가.
+    routeEditIntent: async (payload: {
+        project_id?: string;
+        source_ids: string[];
+        input_text: string;
+        recent_messages?: any[];
+        selected_proposal_id?: string | null;
+    }) => {
+        const response = await fetch(`${API_BASE_URL}/intent/route-edit`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload)
+        });
+        if (!response.ok) throw new Error(await response.text());
+        return await response.json();
+    },
+
     requestProjectProposals: async (
         projectId: string, 
         sourceIds: string[], 

@@ -62,6 +62,8 @@ type ConsultationDecision = {
   text: string;
   shouldRunProposal: boolean;
   fallbackKind?: "empty" | "unknown" | "ambiguous" | "repeat";
+  // [INTENT-ROUTER] 백엔드 종업원이 애칭→풀네임 등으로 정규화한 실행 지시문
+  normalizedInstruction?: string;
 };
 
 const LEGACY_NARRATIVE_ENABLED =
@@ -534,7 +536,38 @@ export const useProposalState = (
       };
     });
 
-    const consultationDecision = buildConsultationReply(text, storyPlan.messages ?? []);
+    // [INTENT-ROUTER] 메뉴판 철거 — 해석은 백엔드 종업원(/intent/route-edit)이 한다.
+    // 프론트는 빈 입력만 막고 말을 거의 그대로 보낸다. 서버 불가 시에만 구 메뉴판 폴백(가역성).
+    let consultationDecision: ConsultationDecision;
+    try {
+      const route = await videoService.routeEditIntent({
+        project_id: projectId,
+        source_ids: orderedSourceIds ?? [],
+        input_text: text,
+        recent_messages: (storyPlan.messages ?? [])
+          .slice(-6)
+          .map((m: any) => ({ sender: m.sender, text: m.text })),
+        selected_proposal_id: selectedProposalId,
+      });
+      console.log("[INTENT-ROUTER route]\n" + JSON.stringify({
+        action: route.action,
+        via: route.via,
+        confidence: route.confidence,
+        normalized: route.normalized_instruction,
+        matched: route.matched
+      }, null, 2));
+      consultationDecision = {
+        text: route.reply || "네, 확인했습니다.",
+        // revise_current는 현 단계에선 재제안 경로로 수렴 (백엔드 REVISION 게이트가 하류 처리)
+        shouldRunProposal: route.action === "run_proposal" || route.action === "revise_current",
+        fallbackKind: route.action === "ask_clarification" ? "ambiguous"
+          : route.action === "answer_only" ? "unknown" : undefined,
+        normalizedInstruction: route.normalized_instruction || text,
+      };
+    } catch (e: any) {
+      console.warn("[INTENT-ROUTER] 서버 라우팅 실패 → 구 메뉴판 폴백:", e?.message);
+      consultationDecision = buildConsultationReply(text, storyPlan.messages ?? []);
+    }
 
     if (!consultationDecision.shouldRunProposal) {
       console.log("[P6_INTENT_FALLBACK]\n" + JSON.stringify({
@@ -663,9 +696,11 @@ export const useProposalState = (
         console.warn("[Consultation] orderedSourceIds empty → fallback source ids:", effectiveSourceIds);
       }
 
-      const inputText = text;
+      // [INTENT-ROUTER] 종업원이 정규화한 지시문으로 실행 ("은한이만" → "정은한만")
+      const inputText = consultationDecision.normalizedInstruction || text;
       console.log("[CONSULTATION_NL_SUBMIT]\n" + JSON.stringify({
         inputText,
+        rawInput: text,
         shouldConfirm,
         sourceCount: effectiveSourceIds.length
       }, null, 2));
