@@ -25,7 +25,7 @@ from sqlalchemy.orm import Session
 
 from archive.manager import bams
 from archive.models import SourceVideo
-from archive.db_models import PublishedTable, ProgramTable, FragmentTable, SourceTable, ProposalTable, ProjectSourceTable, ExportInputTable
+from archive.db_models import PublishedTable, ProgramTable, FragmentTable, SourceTable, ProposalTable, ProjectSourceTable, ExportInputTable, ExportResultTable
 from database import get_db
 
 from engine.boundary_editor import pbe_engine
@@ -2095,14 +2095,18 @@ async def post_generate_project_proposals(req: ProjectProposalRequest):
         }
 
     try:
+        # [SPEED-①] 무거운 생성/렌더를 executor로 — 생성 중에도 서버가 다른 요청에 응답
+        # (기존: 이벤트 루프 점유 → 프로젝트 목록/썸네일까지 전부 마비)
+        import asyncio as _aio
+        _loop = _aio.get_event_loop()
         engine = ProposalEngine(bams)
-        proposals = engine.generate_proposals_from_fragments(
+        proposals = await _loop.run_in_executor(None, lambda: engine.generate_proposals_from_fragments(
             project_id=project_id,
             source_ids=source_ids,
             fragments=all_fragments,
             target_len=target_len,
             story_context=resolved_story_template # [STEP 10-K-B2]
-        )
+        ))
 
         # Source Usage 진단 (제안 A/B 통합)
         source_usage = {}
@@ -2121,9 +2125,9 @@ async def post_generate_project_proposals(req: ProjectProposalRequest):
                 sid = frag.get("source_id", "UNKNOWN")
                 source_usage[sid] = source_usage.get(sid, 0) + 1
 
-        # [PROPOSAL_PREVIEW_INJECT] preview_url 주입 (동기, 렌더 후 응답)
+        # [PROPOSAL_PREVIEW_INJECT] preview_url 주입 (렌더도 executor — 루프 비점유)
         _pv_t0 = time.time()
-        proposals = inject_proposal_previews(proposals)
+        proposals = await _loop.run_in_executor(None, inject_proposal_previews, proposals)
         print(f"[TIMING] preview_render={time.time() - _pv_t0:.1f}s")
 
         # [STEP 14-D] Proposal Ranker integration
@@ -3318,6 +3322,169 @@ async def remove_project_source(program_id: str, source_id: str, db: Session = D
     db.commit()
     print(f"[UI-②] project {program_id} source unlinked: {source_id}")
     return {"status": "REMOVED", "source_id": source_id}
+
+
+# ═══════════════════════════════════════════════════════════════════
+#   [SNS-YT] YouTube 실업로드 / [SETTINGS] 저장공간 / [ACCOUNT] 통계
+# ═══════════════════════════════════════════════════════════════════
+
+@app.get("/sns/youtube/status")
+async def sns_yt_status():
+    from engine import sns_youtube
+    return sns_youtube.status()
+
+
+@app.post("/sns/youtube/connect")
+async def sns_yt_connect():
+    """브라우저 OAuth (이 PC 화면에 구글 로그인 창이 열림)."""
+    import asyncio
+    from engine import sns_youtube
+    loop = asyncio.get_event_loop()
+    return await loop.run_in_executor(None, sns_youtube.connect)
+
+
+@app.delete("/sns/youtube/connect")
+async def sns_yt_disconnect():
+    from engine import sns_youtube
+    return sns_youtube.disconnect()
+
+
+class YtUploadRequest(BaseModel):
+    export_id: str
+    title: str
+    description: str = ""
+    privacy: str = "private"
+
+
+@app.post("/sns/youtube/upload")
+async def sns_yt_upload(req: YtUploadRequest, db: Session = Depends(get_db)):
+    import asyncio
+    from engine import sns_youtube
+    row = db.query(ExportResultTable).filter(ExportResultTable.id == req.export_id).first()
+    if not row:
+        return {"status": "ERROR", "message": f"export 없음: {req.export_id}"}
+    fpath = row.output_path_internal
+    if not fpath or not os.path.exists(fpath):
+        # output_url(/static/...)로 폴백 해석
+        rel = (row.output_url or "").replace("/static/", "")
+        fpath = str(STORAGE_DIR / rel)
+    loop = asyncio.get_event_loop()
+    result = await loop.run_in_executor(
+        None, lambda: sns_youtube.upload(fpath, req.title, req.description, req.privacy))
+    if result.get("status") == "OK":
+        db.add(PublishedTable(
+            publish_id=f"PUB_{uuid.uuid4().hex[:8].upper()}",
+            program_id=row.program_id, platform="youtube",
+            final_video_path=result.get("url"), title=req.title,
+            published_at=datetime.datetime.now()))
+        db.commit()
+    return result
+
+
+@app.get("/settings/storage")
+async def settings_storage():
+    """실측 저장공간 사용량 (폴더별)."""
+    def dir_size(p):
+        total = 0
+        try:
+            for root, _, files in os.walk(p):
+                for f in files:
+                    try:
+                        total += os.path.getsize(os.path.join(root, f))
+                    except OSError:
+                        pass
+        except Exception:
+            pass
+        return total
+    targets = {
+        "원본 영상": STORAGE_DIR / "uploads",
+        "제안 미리보기": STORAGE_DIR / "proposal_previews",
+        "미리보기 클립": STORAGE_DIR / "preview_clips",
+        "썸네일/파노라마": STORAGE_DIR / "thumbnails",
+        "내보낸 영상": STORAGE_DIR / "exports",
+        "재생 프록시": STORAGE_DIR / "proxies",
+        "얼굴 팔레트": STORAGE_DIR / "faces",
+        "검색 키프레임": BACKEND_STORAGE_DIR / "search_keyframes",
+    }
+    items = [{"label": k, "bytes": dir_size(v)} for k, v in targets.items()]
+    import shutil as _sh
+    free = None
+    try:
+        free = _sh.disk_usage(str(STORAGE_DIR)).free
+    except Exception:
+        pass
+    return {"status": "OK", "items": items, "disk_free_bytes": free}
+
+
+class CleanupRequest(BaseModel):
+    target: str  # previews | panorama
+
+
+@app.post("/settings/cleanup")
+async def settings_cleanup(req: CleanupRequest):
+    """재생성 가능한 캐시만 안전 삭제. previews=제안/클립 미리보기, panorama=P_* 프레임."""
+    removed = 0
+    freed = 0
+    if req.target == "previews":
+        for d in (STORAGE_DIR / "proposal_previews", STORAGE_DIR / "preview_clips"):
+            if d.is_dir():
+                for f in d.iterdir():
+                    try:
+                        freed += f.stat().st_size
+                        f.unlink()
+                        removed += 1
+                    except OSError:
+                        pass
+    elif req.target == "panorama":
+        d = STORAGE_DIR / "thumbnails"
+        if d.is_dir():
+            for f in d.glob("P_*.jpg"):
+                try:
+                    freed += f.stat().st_size
+                    f.unlink()
+                    removed += 1
+                except OSError:
+                    pass
+    else:
+        return {"status": "ERROR", "message": "unknown target"}
+    print(f"[SETTINGS] cleanup {req.target}: {removed} files, {freed//1024//1024}MB freed")
+    return {"status": "OK", "removed": removed, "freed_bytes": freed}
+
+
+@app.get("/settings/gates")
+async def settings_gates():
+    """검증 게이트 현재 상태 (읽기 전용)."""
+    keys = ["CCUT_HUB_PLAN", "CCUT_AUTO_REINDEX", "CCUT_SINGLE_CACHE",
+            "CCUT_LEGACY_NARRATIVE", "CCUT_REVISION", "CCUT_QUALITY_LOG",
+            "CCUT_PERSON_REQUERY"]
+    return {"status": "OK", "gates": {k: os.getenv(k) or "" for k in keys}}
+
+
+@app.get("/account/stats")
+async def account_stats(db: Session = Depends(get_db)):
+    """실데이터 사용 통계."""
+    from sqlalchemy import func as _f
+    projects = db.query(_f.count(ProgramTable.program_id)).filter(
+        ProgramTable.schema_version == 2, ProgramTable.deleted_at.is_(None)).scalar() or 0
+    sources = db.query(_f.count(SourceTable.source_id)).scalar() or 0
+    total_dur = db.query(_f.sum(SourceTable.duration)).scalar() or 0
+    exports = db.query(_f.count(ExportResultTable.id)).scalar() or 0
+    published = db.query(_f.count(PublishedTable.publish_id)).scalar() or 0
+    import sqlite3 as _sq
+    con = _sq.connect(str(BACKEND_DIR / "ccut_app.db"))
+    frags = con.execute("SELECT COUNT(*) FROM semantic_fragments").fetchone()[0]
+    try:
+        persons = con.execute("SELECT COUNT(*) FROM persons WHERE status='named'").fetchone()[0]
+        person_names = [r[0] for r in con.execute("SELECT name FROM persons WHERE status='named'")]
+    except Exception:
+        persons, person_names = 0, []
+    con.close()
+    return {"status": "OK", "stats": {
+        "projects": projects, "sources": sources,
+        "total_video_sec": round(total_dur or 0),
+        "fragments": frags, "exports": exports, "published": published,
+        "named_persons": persons, "person_names": person_names,
+    }}
 
 
 # ═══════════════════════════════════════════════════════════════════

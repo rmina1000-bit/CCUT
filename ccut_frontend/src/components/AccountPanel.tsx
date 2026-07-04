@@ -1,281 +1,134 @@
-import React, { useState } from "react";
-import { User, LogIn, LogOut, CheckCircle, CreditCard, Chrome, ShieldAlert, Sparkles, Check } from "lucide-react";
-import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
+import React, { useEffect, useState } from "react";
+import { User, Film, Clock, Scissors, Upload, Users, Youtube, RefreshCw, Pencil } from "lucide-react";
 
-interface UserProfile {
-  name: string;
-  email: string;
-  avatar: string;
-  plan: "Free" | "AI Pro" | "AI Ultra";
-  creditsUsed: number;
-  creditsMax: number;
+/* [ACCOUNT] 다른 편집 프로그램(CapCut/Descript 등) 계정 화면 골격 분석 반영:
+   프로필 / 사용 통계 / 연결된 채널. 전부 실데이터 — 가짜 로그인·결제 시뮬레이션 제거. */
+
+interface Stats {
+  projects: number;
+  sources: number;
+  total_video_sec: number;
+  fragments: number;
+  exports: number;
+  published: number;
+  named_persons: number;
+  person_names: string[];
 }
 
+const fmtDur = (s: number) => {
+  const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60);
+  if (h > 0) return `${h}시간 ${m}분`;
+  return `${m}분 ${Math.round(s % 60)}초`;
+};
+
 export const AccountPanel: React.FC = () => {
-  const [user, setUser] = useState<UserProfile | null>(null);
-  const [loggingIn, setLoggingIn] = useState(false);
-  const [payingPlan, setPayingPlan] = useState<string | null>(null);
-  const [payProgress, setPayProgress] = useState(0);
+  const [stats, setStats] = useState<Stats | null>(null);
+  const [yt, setYt] = useState<{ configured: boolean; connected: boolean; channel_title: string | null } | null>(null);
+  const [name, setName] = useState<string>(() => localStorage.getItem("ccut_profile_name") || "국장님");
+  const [editingName, setEditingName] = useState(false);
+  const [loading, setLoading] = useState(true);
 
-  const handleGoogleLogin = () => {
-    setLoggingIn(true);
-    // Simulate Google Sign-in OAuth popup
-    setTimeout(() => {
-      setUser({
-        name: "국장님",
-        email: "director@ccut.ai",
-        avatar: "https://lh3.googleusercontent.com/a/default-user=s96-c",
-        plan: "Free",
-        creditsUsed: 14,
-        creditsMax: 100
-      });
-      setLoggingIn(false);
-    }, 1200);
+  const load = async () => {
+    setLoading(true);
+    try {
+      const s = await fetch("/api/account/stats").then((r) => r.json());
+      if (s?.status === "OK") setStats(s.stats);
+      const y = await fetch("/api/sns/youtube/status").then((r) => r.json());
+      setYt(y);
+    } catch { /* 백엔드 꺼짐 */ }
+    setLoading(false);
   };
 
-  const handleGooglePay = (planName: "AI Pro" | "AI Ultra") => {
-    if (!user) {
-      alert("먼저 구글 계정으로 로그인해 주세요!");
-      return;
-    }
-    setPayingPlan(planName);
-    setPayProgress(15);
+  useEffect(() => { load(); }, []);
 
-    // Google Pay Billing simulation
-    const interval = setInterval(() => {
-      setPayProgress((p) => {
-        if (p >= 90) {
-          clearInterval(interval);
-          return 90;
-        }
-        return p + 25;
-      });
-    }, 300);
-
-    setTimeout(() => {
-      clearInterval(interval);
-      setPayProgress(100);
-      setUser((prev) => prev ? {
-        ...prev,
-        plan: planName,
-        creditsMax: planName === "AI Pro" ? 500 : 9999
-      } : null);
-      
-      setTimeout(() => {
-        setPayingPlan(null);
-      }, 800);
-    }, 1500);
+  const saveName = (v: string) => {
+    const n = v.trim() || "국장님";
+    setName(n);
+    localStorage.setItem("ccut_profile_name", n);
+    setEditingName(false);
   };
 
-  const handleLogout = () => {
-    setUser(null);
-  };
+  const statCards = stats ? [
+    { icon: Film, label: "프로젝트", value: `${stats.projects}개` },
+    { icon: Upload, label: "원본 영상", value: `${stats.sources}개 · ${fmtDur(stats.total_video_sec)}` },
+    { icon: Scissors, label: "의미 조각", value: `${stats.fragments.toLocaleString()}개` },
+    { icon: Clock, label: "내보낸 영상", value: `${stats.exports}개` },
+    { icon: Youtube, label: "SNS 발행", value: `${stats.published}회` },
+    { icon: Users, label: "기억하는 사람", value: stats.named_persons > 0 ? `${stats.named_persons}명 (${stats.person_names.join(", ")})` : "아직 없음" },
+  ] : [];
 
   return (
-    <div className="flex flex-col h-full bg-[hsl(228_10%_9%)] p-6 space-y-6 overflow-y-auto">
-      {/* Header */}
-      <div>
-        <h1 className="text-2xl font-bold bg-gradient-to-r from-blue-400 to-primary bg-clip-text text-transparent">
-          내 계정 및 구독 관리
-        </h1>
-        <p className="text-[12px] text-muted-foreground/60 mt-1">
-          CCUT 계정을 관리하고 요금제(구독)를 변경하여 AI 자원을 확보합니다.
-        </p>
-      </div>
+    <div className="h-full w-full overflow-y-auto bg-[hsl(228,14%,8%)] text-foreground">
+      <div className="max-w-[720px] mx-auto px-8 py-8">
+        <div className="flex items-center justify-between mb-6">
+          <h1 className="text-[18px] font-bold flex items-center gap-2">
+            <User size={18} className="text-primary" /> 내 계정
+          </h1>
+          <button
+            onClick={load}
+            className="inline-flex items-center gap-1.5 text-[12px] px-3 py-1.5 rounded-lg border border-border/30 text-foreground/70 hover:text-foreground hover:bg-secondary/40 transition-colors"
+          >
+            <RefreshCw size={13} className={loading ? "animate-spin" : ""} /> 새로고침
+          </button>
+        </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* User Card */}
-        <div className="lg:col-span-1">
-          {user ? (
-            <Card className="bg-card/30 border-border/15">
-              <CardContent className="p-6 flex flex-col items-center text-center space-y-4">
-                <img
-                  src={user.avatar}
-                  alt={user.name}
-                  className="w-16 h-16 rounded-full border border-primary/20 bg-secondary"
-                />
-                <div>
-                  <h3 className="text-sm font-bold text-foreground/90">{user.name}</h3>
-                  <p className="text-[10px] text-muted-foreground/50 mt-0.5">{user.email}</p>
-                </div>
+        {/* 프로필 */}
+        <div className="flex items-center gap-4 rounded-xl border border-border/15 bg-[hsl(228,12%,10%)] px-5 py-4 mb-6">
+          <div className="w-14 h-14 rounded-full bg-primary/15 flex items-center justify-center text-primary text-xl font-black">
+            {name.slice(0, 1)}
+          </div>
+          <div className="flex-1">
+            {editingName ? (
+              <input
+                autoFocus
+                defaultValue={name}
+                onBlur={(e) => saveName(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter") saveName((e.target as HTMLInputElement).value); }}
+                className="text-[16px] font-bold bg-transparent border-b border-primary/50 outline-none"
+              />
+            ) : (
+              <button onClick={() => setEditingName(true)} className="flex items-center gap-1.5 text-[16px] font-bold hover:text-primary transition-colors">
+                {name} <Pencil size={12} className="opacity-40" />
+              </button>
+            )}
+            <p className="text-[12px] text-muted-foreground/60 mt-0.5">이 PC의 CCUT 작업실 (모든 데이터는 내 컴퓨터에만 저장)</p>
+          </div>
+        </div>
 
-                <div className="flex items-center gap-1 bg-primary/10 border border-primary/20 px-2.5 py-0.5 rounded-full">
-                  <Sparkles size={11} className="text-primary" />
-                  <span className="text-[10px] font-bold text-primary">{user.plan} 요금제 이용 중</span>
-                </div>
-
-                {/* Credit usage limit */}
-                <div className="w-full space-y-2 pt-2 border-t border-border/10">
-                  <div className="flex items-center justify-between text-[11px]">
-                    <span className="text-muted-foreground/60">이번 달 사용 토큰/용량</span>
-                    <span className="font-mono text-foreground/80 font-bold">{user.creditsUsed} / {user.creditsMax === 9999 ? "무제한" : `${user.creditsMax} credits`}</span>
-                  </div>
-                  <div className="w-full bg-secondary/80 h-1.5 rounded-full overflow-hidden">
-                    <div 
-                      className="bg-primary h-full transition-all duration-500" 
-                      style={{ width: `${Math.min(100, (user.creditsUsed / user.creditsMax) * 100)}%` }} 
-                    />
-                  </div>
-                </div>
-
-                <Button
-                  onClick={handleLogout}
-                  className="w-full flex items-center justify-center gap-1.5 h-9 text-xs bg-secondary/80 hover:bg-secondary text-foreground/80 rounded-lg"
-                >
-                  <LogOut size={12} />
-                  로그아웃
-                </Button>
-              </CardContent>
-            </Card>
-          ) : (
-            <Card className="bg-card/30 border-border/15">
-              <CardContent className="p-8 flex flex-col items-center text-center space-y-6">
-                <div className="w-12 h-12 rounded-full bg-secondary/80 flex items-center justify-center">
-                  <User size={20} className="text-muted-foreground/50" />
-                </div>
-                <div>
-                  <h3 className="text-sm font-bold text-foreground/90">로그인이 필요합니다</h3>
-                  <p className="text-[11px] text-muted-foreground/60 mt-1 max-w-[200px] mx-auto leading-relaxed">
-                    구글 연동을 통해 1초 만에 가입 및 로그인이 가능합니다.
-                  </p>
-                </div>
-
-                {loggingIn ? (
-                  <div className="w-full bg-secondary/50 rounded-lg h-10 flex items-center justify-center text-xs text-muted-foreground/50 gap-2">
-                    <div className="w-3.5 h-3.5 border-2 border-muted-foreground/30 border-t-muted-foreground rounded-full animate-spin" />
-                    구글 간편 로그인 로딩 중...
-                  </div>
-                ) : (
-                  <Button
-                    onClick={handleGoogleLogin}
-                    className="w-full flex items-center justify-center gap-2 h-10 text-xs bg-white text-black hover:bg-white/90 rounded-lg font-bold"
-                  >
-                    <Chrome size={14} className="text-blue-500" />
-                    Google 계정으로 로그인
-                  </Button>
-                )}
-              </CardContent>
-            </Card>
-          )}
-
-          {payingPlan && (
-            <div className="fixed inset-0 z-[500] bg-black/75 flex items-center justify-center p-4">
-              <div className="bg-[hsl(228,12%,12%)] border border-border/20 max-w-sm w-full rounded-2xl p-6 space-y-4">
-                <div className="flex items-center gap-2.5">
-                  <CreditCard className="text-primary" size={18} />
-                  <h4 className="text-sm font-bold text-foreground/90">Google Pay 결제 처리 중</h4>
-                </div>
-                <p className="text-xs text-muted-foreground/75 leading-relaxed">
-                  {payingPlan} 플랜 결제가 구글 인앱/구독 API를 통해 샌드박스에서 연동 승인 처리되고 있습니다.
-                </p>
-                <div className="space-y-1">
-                  <div className="flex items-center justify-between text-[10px] font-mono">
-                    <span className="text-muted-foreground/50">Google Billing Gateway</span>
-                    <span className="text-primary font-bold">{payProgress}%</span>
-                  </div>
-                  <div className="w-full bg-secondary/80 h-1.5 rounded-full overflow-hidden">
-                    <div className="bg-primary h-full transition-all duration-300" style={{ width: `${payProgress}%` }} />
-                  </div>
-                </div>
+        {/* 사용 통계 (실데이터) */}
+        <h2 className="text-[14px] font-bold mb-3">작업 기록</h2>
+        <div className="grid grid-cols-2 gap-3 mb-8">
+          {statCards.map(({ icon: Icon, label, value }) => (
+            <div key={label} className="rounded-xl border border-border/15 bg-[hsl(228,12%,10%)] px-4 py-3.5 flex items-center gap-3">
+              <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0">
+                <Icon size={15} className="text-primary" />
+              </div>
+              <div className="min-w-0">
+                <p className="text-[11px] text-muted-foreground/60">{label}</p>
+                <p className="text-[13px] font-bold text-foreground truncate">{value}</p>
               </div>
             </div>
+          ))}
+          {!stats && !loading && (
+            <p className="col-span-2 text-[12px] text-muted-foreground/50">통계를 불러오지 못했습니다 — 백엔드 상태를 확인하세요.</p>
           )}
         </div>
 
-        {/* Pricing Table */}
-        <div className="lg:col-span-2 space-y-4">
-          <h3 className="text-xs font-semibold text-muted-foreground/60 uppercase tracking-widest px-1">
-            CCUT 구독 요금제
-          </h3>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {/* Pro Plan */}
-            <Card className={`bg-card/25 border-border/10 flex flex-col justify-between h-full relative ${
-              user?.plan === "AI Pro" ? "ring-2 ring-primary/40 border-primary" : ""
-            }`}>
-              <CardContent className="p-6 space-y-5">
-                <div className="flex items-start justify-between">
-                  <div>
-                    <span className="text-[10px] uppercase font-bold tracking-widest text-primary bg-primary/10 px-2 py-0.5 rounded">가성비 추천</span>
-                    <h4 className="text-base font-bold text-foreground/90 mt-2">AI Pro 요금제</h4>
-                    <p className="text-[11px] text-muted-foreground/50 mt-0.5">합리적인 4배속 오버나이트 분석</p>
-                  </div>
-                </div>
-
-                <div className="flex items-baseline gap-1">
-                  <span className="text-2xl font-black text-foreground/90">₩19,000</span>
-                  <span className="text-xs text-muted-foreground/50">/ 월</span>
-                </div>
-
-                <ul className="space-y-2 text-xs text-muted-foreground/75">
-                  <li className="flex items-center gap-1.5"><Check size={12} className="text-primary flex-shrink-0" /> 대용량 분석 한도 500 크레딧</li>
-                  <li className="flex items-center gap-1.5"><Check size={12} className="text-primary flex-shrink-0" /> Local LLM 오버나이트 백그라운드 구동</li>
-                  <li className="flex items-center gap-1.5"><Check size={12} className="text-primary flex-shrink-0" /> 외부 Runway/Kling 어댑터 가드 지원</li>
-                  <li className="flex items-center gap-1.5"><Check size={12} className="text-primary flex-shrink-0" /> Full HD 렌더링 내보내기 제한 해제</li>
-                </ul>
-              </CardContent>
-
-              <div className="p-6 pt-0 border-t border-border/5 mt-4">
-                <Button
-                  onClick={() => handleGooglePay("AI Pro")}
-                  disabled={user?.plan === "AI Pro"}
-                  className={`w-full flex items-center justify-center gap-2 h-10 text-xs rounded-lg font-bold mt-4 ${
-                    user?.plan === "AI Pro"
-                      ? "bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/10"
-                      : "bg-primary hover:bg-primary-hover text-white"
-                  }`}
-                >
-                  <CreditCard size={13} />
-                  {user?.plan === "AI Pro" ? "구독 이용 중" : "Google Pay로 구독"}
-                </Button>
-              </div>
-            </Card>
-
-            {/* Ultra Plan */}
-            <Card className={`bg-card/25 border-border/10 flex flex-col justify-between h-full relative ${
-              user?.plan === "AI Ultra" ? "ring-2 ring-primary/40 border-primary" : ""
-            }`}>
-              <CardContent className="p-6 space-y-5">
-                <div className="flex items-start justify-between">
-                  <div>
-                    <span className="text-[10px] uppercase font-bold tracking-widest text-primary bg-primary/10 px-2 py-0.5 rounded">최고 사양</span>
-                    <h4 className="text-base font-bold text-foreground/90 mt-2">AI Ultra 요금제</h4>
-                    <p className="text-[11px] text-muted-foreground/50 mt-0.5">서버 병렬 연산 및 20배속 파이프라인</p>
-                  </div>
-                </div>
-
-                <div className="flex items-baseline gap-1">
-                  <span className="text-2xl font-black text-foreground/90">₩39,000</span>
-                  <span className="text-xs text-muted-foreground/50">/ 월</span>
-                </div>
-
-                <ul className="space-y-2 text-xs text-muted-foreground/75">
-                  <li className="flex items-center gap-1.5"><Check size={12} className="text-primary flex-shrink-0" /> 용량/개수 완전 무제한</li>
-                  <li className="flex items-center gap-1.5"><Check size={12} className="text-primary flex-shrink-0" /> 최상위 AI 모델(Qwen 7B) 다중 병렬 처리</li>
-                  <li className="flex items-center gap-1.5"><Check size={12} className="text-primary flex-shrink-0" /> 외부 비디오 생성 API 결합 한도 상향</li>
-                  <li className="flex items-center gap-1.5"><Check size={12} className="text-primary flex-shrink-0" /> 4K Ultra HD 고품질 내보내기 지원</li>
-                </ul>
-              </CardContent>
-
-              <div className="p-6 pt-0 border-t border-border/5 mt-4">
-                <Button
-                  onClick={() => handleGooglePay("AI Ultra")}
-                  disabled={user?.plan === "AI Ultra"}
-                  className={`w-full flex items-center justify-center gap-2 h-10 text-xs rounded-lg font-bold mt-4 ${
-                    user?.plan === "AI Ultra"
-                      ? "bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/10"
-                      : "bg-primary hover:bg-primary-hover text-white"
-                  }`}
-                >
-                  <CreditCard size={13} />
-                  {user?.plan === "AI Ultra" ? "구독 이용 중" : "Google Pay로 구독"}
-                </Button>
-              </div>
-            </Card>
-          </div>
+        {/* 연결된 채널 */}
+        <h2 className="text-[14px] font-bold mb-3">연결된 채널</h2>
+        <div className="rounded-xl border border-border/15 bg-[hsl(228,12%,10%)] px-5 py-4 flex items-center gap-3">
+          <Youtube size={18} className="text-red-500" />
+          {yt?.connected ? (
+            <span className="text-[13px] text-foreground">YouTube — <b>{yt.channel_title}</b> 연결됨</span>
+          ) : yt?.configured ? (
+            <span className="text-[13px] text-muted-foreground/70">YouTube — 설정됨, 미연결 (SNS 업로드 탭에서 연결)</span>
+          ) : (
+            <span className="text-[13px] text-muted-foreground/50">YouTube — 미설정 (SNS 업로드 탭에 준비 안내)</span>
+          )}
         </div>
       </div>
     </div>
   );
 };
+
+export default AccountPanel;

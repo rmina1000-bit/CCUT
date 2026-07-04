@@ -123,7 +123,15 @@ def judge_theme(source_id, theme_ko, theme_en=None, batch=8, verbose=True):
         except Exception as e:
             print(f"[HUB] batch {i // batch} 호출 실패 ({e})")
             items = []
-        by_n = {int(it["n"]): it for it in items if isinstance(it, dict) and "n" in it}
+        # [ROBUST] 모델이 간혹 {"n":"t"} 같은 비정형을 내놓아도 판 전체가 죽지 않게
+    by_n = {}
+    for it in items:
+        if not isinstance(it, dict):
+            continue
+        try:
+            by_n[int(it.get("n"))] = it
+        except (TypeError, ValueError):
+            print(f"[HUB-JUDGE][WARN] malformed item skipped: {str(it)[:60]}")
         for j, b in enumerate(chunk, 1):
             it = by_n.get(j, {})
             results.append({
@@ -586,7 +594,15 @@ def _judge_one_chunk(theme_ko, chunk, chunk_no):
     except Exception as e:
         print(f"[HUB-JUDGE] batch {chunk_no} 실패 ({e})")
         items = []
-    by_n = {int(it["n"]): it for it in items if isinstance(it, dict) and "n" in it}
+    # [ROBUST] 모델이 간혹 {"n":"t"} 같은 비정형을 내놓아도 판 전체가 죽지 않게
+    by_n = {}
+    for it in items:
+        if not isinstance(it, dict):
+            continue
+        try:
+            by_n[int(it.get("n"))] = it
+        except (TypeError, ValueError):
+            print(f"[HUB-JUDGE][WARN] malformed item skipped: {str(it)[:60]}")
     results = []
     for j, b in enumerate(chunk, 1):
         it = by_n.get(j, {})
@@ -603,30 +619,69 @@ def _judge_one_chunk(theme_ko, chunk, chunk_no):
     return results
 
 
+_BATCH_JUDGE_CACHE = {}  # [SPEED-②] 조각 단위 배치판단 캐시 — 영상 추가 시 새 조각만 판단
+
+
+def _batch_cache_key(theme_ko, b):
+    return (b.get("fid"), theme_ko, _scene_sensor_hash(b.get("scene")),
+            HUB_MODEL, _SINGLE_CONFIRM_PROMPT_VERSION, _golden_state_sig())
+
+
 def _judge_batch(theme_ko, bundles, theme_en=None, batch=8):
     """[속도] 조각 묶음을 배치 판단. lean 출력({n,t})로 생성 토큰 최소화.
     출력키는 plan_edit이 쓰는 fid/time/scene/is_theme 유지.
 
+    [SPEED-②] CCUT_SINGLE_CACHE=1이면 조각 단위 캐시 — 같은 테마·같은 장면은 재판단 없음.
+    (영상을 추가해도 새 조각만 LLM에 감. pool 서명 기반 plan 캐시의 증분 보완)
     [JUDGE-PAR] CCUT_JUDGE_PARALLEL=N (기본 1=기존 순차 무변): 청크를 N개 동시 요청.
     서버가 OLLAMA_NUM_PARALLEL 슬롯을 열어야 실효 (기본 auto 1|4).
     청크 구성·프롬프트는 순차와 동일 — 위치편향 구조 불변, 결과는 원래 순서로 병합."""
-    chunks = [bundles[i:i + batch] for i in range(0, len(bundles), batch)]
+    use_cache = os.getenv("CCUT_SINGLE_CACHE") in ("1", "true", "True")
+    cached_by_fid = {}
+    todo = []
+    if use_cache:
+        for b in bundles:
+            hit = _BATCH_JUDGE_CACHE.get(_batch_cache_key(theme_ko, b))
+            if hit is not None:
+                cached_by_fid[b["fid"]] = dict(hit)
+            else:
+                todo.append(b)
+        if cached_by_fid:
+            print(f"[P3b BATCH-CACHE] hit={len(cached_by_fid)}/{len(bundles)} judge_todo={len(todo)}")
+    else:
+        todo = list(bundles)
+
+    chunks = [todo[i:i + batch] for i in range(0, len(todo), batch)]
     try:
         workers = max(1, min(int(os.getenv("CCUT_JUDGE_PARALLEL", "1")), 8))
     except Exception:
         workers = 1
     if workers <= 1 or len(chunks) <= 1:
-        results = []
+        fresh = []
         for no, chunk in enumerate(chunks):
-            results.extend(_judge_one_chunk(theme_ko, chunk, no))
-        return results
-    from concurrent.futures import ThreadPoolExecutor
-    with ThreadPoolExecutor(max_workers=workers) as ex:
-        chunk_results = list(ex.map(
-            lambda t: _judge_one_chunk(theme_ko, t[1], t[0]), enumerate(chunks)))
+            fresh.extend(_judge_one_chunk(theme_ko, chunk, no))
+    else:
+        from concurrent.futures import ThreadPoolExecutor
+        with ThreadPoolExecutor(max_workers=workers) as ex:
+            chunk_results = list(ex.map(
+                lambda t: _judge_one_chunk(theme_ko, t[1], t[0]), enumerate(chunks)))
+        fresh = []
+        for r in chunk_results:
+            fresh.extend(r)
+
+    # [SPEED-②] 새 판단 캐시 저장 + 원래 bundles 순서로 병합
+    fresh_by_fid = {}
+    for item in fresh:
+        fresh_by_fid[item["fid"]] = item
+        if use_cache:
+            b = next((x for x in todo if x["fid"] == item["fid"]), None)
+            if b is not None:
+                _BATCH_JUDGE_CACHE[_batch_cache_key(theme_ko, b)] = dict(item)
     results = []
-    for r in chunk_results:
-        results.extend(r)
+    for b in bundles:
+        item = fresh_by_fid.get(b["fid"]) or cached_by_fid.get(b["fid"])
+        if item is not None:
+            results.append(item)
     return results
 
 

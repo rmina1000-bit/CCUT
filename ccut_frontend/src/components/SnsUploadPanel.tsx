@@ -25,6 +25,12 @@ const PLATFORMS = [
   { key: "instagram", label: "Instagram",    icon: Instagram, color: "text-purple-400 bg-purple-500/10 hover:bg-purple-500/20 border-purple-500/20" },
 ];
 
+// [SNS 현실 조사 2026-07] 개인 PC에서 지금 실제로 열리는 통로와 조건
+const PLATFORM_INFO: Record<string, string> = {
+  tiktok: "TikTok은 developers.tiktok.com에서 개발자 앱 등록과 심사를 통과해야 하고, 심사 전에는 업로드해도 '나만 보기'로 강제됩니다. 심사를 통과하면 이 버튼이 살아납니다.",
+  instagram: "Instagram은 ①비즈니스 계정 전환 ②Meta 개발자 앱 심사(2~4주) ③영상이 공개 인터넷 주소에 있어야 함(내 PC 파일 불가) — 세 조건이 필요해 개인 PC 단독으로는 아직 불가능합니다.",
+};
+
 export const SnsUploadPanel: React.FC<{
   onNavigateToProject?: (id: string) => void;
   onRenameProject?: (id: string, newName: string) => void;
@@ -34,6 +40,50 @@ export const SnsUploadPanel: React.FC<{
   const [playingId, setPlayingId] = useState<string | null>(null);
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState("");
+  // [SNS-YT] 실업로드 상태
+  const [yt, setYt] = useState<{ configured: boolean; connected: boolean; channel_title: string | null; client_secret_path?: string } | null>(null);
+  const [connecting, setConnecting] = useState(false);
+  const [uploadTarget, setUploadTarget] = useState<ExportRecord | null>(null);
+  const [upTitle, setUpTitle] = useState("");
+  const [upPrivacy, setUpPrivacy] = useState<"private" | "unlisted" | "public">("private");
+  const [uploading, setUploading] = useState(false);
+  const [uploadDone, setUploadDone] = useState<Record<string, string>>({});
+  const [infoKey, setInfoKey] = useState<string | null>(null);
+
+  const fetchYt = async () => {
+    try { setYt(await fetch("/api/sns/youtube/status").then((r) => r.json())); } catch { setYt(null); }
+  };
+  useEffect(() => { fetchYt(); }, []);
+
+  const connectYt = async () => {
+    setConnecting(true);
+    try {
+      const r = await fetch("/api/sns/youtube/connect", { method: "POST" }).then((x) => x.json());
+      if (r?.status === "OK") setYt((prev) => ({ ...(prev ?? { configured: true }), ...r } as any));
+      else alert(r?.message || "연결 실패");
+    } catch { alert("연결 중 오류 — 브라우저 로그인 창을 닫으셨나요?"); }
+    setConnecting(false);
+    fetchYt();
+  };
+
+  const doUpload = async () => {
+    if (!uploadTarget) return;
+    setUploading(true);
+    try {
+      const r = await fetch("/api/sns/youtube/upload", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ export_id: uploadTarget.id, title: upTitle.trim() || "CCUT 편집 영상", privacy: upPrivacy }),
+      }).then((x) => x.json());
+      if (r?.status === "OK") {
+        setUploadDone((prev) => ({ ...prev, [uploadTarget.id]: r.url }));
+        setUploadTarget(null);
+      } else {
+        alert(r?.message || "업로드 실패");
+      }
+    } catch (e) { alert("업로드 중 오류가 났습니다."); }
+    setUploading(false);
+  };
 
   const fetchExports = async () => {
     setLoading(true);
@@ -86,6 +136,37 @@ export const SnsUploadPanel: React.FC<{
           <RotateCcw size={12} />
           새로고침
         </button>
+      </div>
+
+      {/* [SNS-YT] 채널 연결 카드 */}
+      <div className="px-8 pb-4 flex-shrink-0">
+        <div className="rounded-xl border border-border/15 bg-card/20 px-5 py-4">
+          <div className="flex items-center gap-3">
+            <Youtube size={20} className="text-red-500 flex-shrink-0" />
+            {yt?.connected ? (
+              <>
+                <span className="text-[13px] text-foreground flex-1"><b>{yt.channel_title}</b> 채널이 연결되어 있습니다. 아래 영상의 YouTube 버튼으로 바로 올릴 수 있어요.</span>
+                <button onClick={async () => { await fetch("/api/sns/youtube/connect", { method: "DELETE" }); fetchYt(); }}
+                  className="text-[11px] text-muted-foreground/60 hover:text-foreground px-2 py-1">연결 해제</button>
+              </>
+            ) : yt?.configured ? (
+              <>
+                <span className="text-[13px] text-foreground/80 flex-1">준비 완료 — 채널을 연결하면 업로드가 열립니다. (구글 로그인 창이 뜹니다)</span>
+                <button onClick={connectYt} disabled={connecting}
+                  className="px-3 py-1.5 rounded-lg bg-red-500/15 text-red-400 hover:bg-red-500 hover:text-white text-[12px] font-bold transition-all disabled:opacity-50">
+                  {connecting ? "브라우저에서 로그인하세요…" : "YouTube 채널 연결"}
+                </button>
+              </>
+            ) : (
+              <div className="flex-1 text-[12px] text-muted-foreground/70 leading-relaxed">
+                <b className="text-foreground/90">YouTube 업로드 준비 (1회, 약 10분):</b>
+                <span> ① console.cloud.google.com에서 프로젝트 생성 → YouTube Data API v3 사용 설정 ② OAuth 동의화면(외부·테스트)에 본인 이메일 추가 ③ 사용자 인증 정보 → OAuth 클라이언트 ID(<b>데스크톱 앱</b>) 만들고 JSON 다운로드 ④ 그 파일을 </span>
+                <code className="text-primary/90 bg-black/30 px-1 rounded text-[11px]">{yt?.client_secret_path ?? "runtime\\sns\\client_secret.json"}</code>
+                <span> 에 저장 → 새로고침. 무료로 하루 최대 100개까지 올릴 수 있습니다.</span>
+              </div>
+            )}
+          </div>
+        </div>
       </div>
 
       {/* 내보낸 영상 목록 */}
@@ -201,17 +282,72 @@ export const SnsUploadPanel: React.FC<{
                     <Check size={9} />
                     아카이브 저장됨
                   </span>
-                  {PLATFORMS.map(({ key, label, icon: Icon, color }) => (
-                    <button
-                      key={key}
-                      title="연동 준비 중"
-                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border opacity-50 cursor-not-allowed transition-colors ${color}`}
-                    >
-                      <Icon size={12} />
-                      {label}
-                    </button>
-                  ))}
+                  {uploadDone[ex.id] && (
+                    <a href={uploadDone[ex.id]} target="_blank" rel="noreferrer"
+                       className="flex items-center gap-1 px-2 py-1 rounded-md bg-red-500/10 text-red-400 text-[10px] font-semibold border border-red-500/20 hover:bg-red-500/20">
+                      <Youtube size={10} /> 업로드됨 — 열기
+                    </a>
+                  )}
+                  {PLATFORMS.map(({ key, label, icon: Icon, color }) => {
+                    const isYt = key === "youtube";
+                    const enabled = isYt && !!yt?.connected;
+                    return (
+                      <div key={key} className="relative">
+                        <button
+                          title={enabled ? "YouTube에 업로드" : isYt ? "먼저 위에서 채널을 연결하세요" : "클릭해서 준비 조건 보기"}
+                          onClick={() => {
+                            if (enabled) {
+                              setUploadTarget(ex);
+                              setUpTitle(ex.program_title || "CCUT 편집 영상");
+                              setUpPrivacy("private");
+                            } else if (!isYt) {
+                              setInfoKey(infoKey === `${key}_${ex.id}` ? null : `${key}_${ex.id}`);
+                            }
+                          }}
+                          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border transition-colors ${color} ${enabled ? "" : isYt ? "opacity-50" : "opacity-70"}`}
+                        >
+                          <Icon size={12} />
+                          {label}
+                        </button>
+                        {infoKey === `${key}_${ex.id}` && PLATFORM_INFO[key] && (
+                          <div className="absolute bottom-full mb-2 left-0 z-50 w-[300px] p-3 rounded-lg bg-[hsl(228,12%,12%)] border border-border/30 shadow-xl text-[11px] text-foreground/80 leading-relaxed">
+                            {PLATFORM_INFO[key]}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
+
+                {/* [SNS-YT] 업로드 다이얼로그 (인라인) */}
+                {uploadTarget?.id === ex.id && (
+                  <div className="mx-5 mb-4 rounded-xl border border-red-500/20 bg-red-500/5 p-4 space-y-3">
+                    <p className="text-[12px] font-bold text-foreground">YouTube에 올리기</p>
+                    <input
+                      value={upTitle}
+                      onChange={(e) => setUpTitle(e.target.value)}
+                      placeholder="영상 제목"
+                      className="w-full bg-black/30 border border-white/10 rounded-md px-3 py-2 text-[13px] text-foreground outline-none focus:border-red-500/40"
+                    />
+                    <div className="flex items-center gap-2">
+                      {([["private", "비공개 (나만 보기)"], ["unlisted", "일부공개 (링크로만)"], ["public", "공개"]] as const).map(([v, l]) => (
+                        <button key={v} onClick={() => setUpPrivacy(v)}
+                          className={`px-2.5 py-1 rounded text-[11px] font-bold transition-all ${upPrivacy === v ? "bg-red-500 text-white" : "bg-secondary/40 text-muted-foreground hover:text-foreground"}`}>
+                          {l}
+                        </button>
+                      ))}
+                    </div>
+                    <div className="flex items-center gap-2 justify-end">
+                      <button onClick={() => setUploadTarget(null)} disabled={uploading}
+                        className="px-3 py-1.5 text-[12px] text-muted-foreground hover:text-foreground">취소</button>
+                      <button onClick={doUpload} disabled={uploading || !upTitle.trim()}
+                        className="px-4 py-1.5 rounded-lg bg-red-500 text-white text-[12px] font-bold hover:bg-red-600 disabled:opacity-50 transition-all">
+                        {uploading ? "업로드 중… (영상 크기에 따라 수십 초)" : "지금 업로드"}
+                      </button>
+                    </div>
+                    <p className="text-[10px] text-muted-foreground/50">처음엔 비공개로 올려서 확인한 뒤 YouTube 스튜디오에서 공개로 바꾸는 걸 권합니다.</p>
+                  </div>
+                )}
               </div>
             ))}
           </div>

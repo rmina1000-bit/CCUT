@@ -22,10 +22,23 @@ const BoolDot: React.FC<{ ok: boolean }> = ({ ok }) =>
     </span>
   );
 
+const fmtBytes = (b?: number | null) => {
+  if (b == null) return "—";
+  if (b >= 1024 ** 3) return `${(b / 1024 ** 3).toFixed(1)} GB`;
+  if (b >= 1024 ** 2) return `${(b / 1024 ** 2).toFixed(0)} MB`;
+  return `${Math.ceil(b / 1024)} KB`;
+};
+
+// [SETTINGS] 다른 편집 프로그램(CapCut/Premiere/Descript) 공통 골격 분석 반영:
+// 저장 공간 관리 / 엔진(AI) 상태 / 기능 스위치 상태 — 전부 실데이터, 가짜 토글 없음.
 export const SettingsPanel: React.FC = () => {
   const [diag, setDiag] = useState<SystemDiagnostics | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [storage, setStorage] = useState<{ items: Array<{ label: string; bytes: number }>; disk_free_bytes: number | null } | null>(null);
+  const [gates, setGates] = useState<Record<string, string> | null>(null);
+  const [cleaning, setCleaning] = useState<string | null>(null);
+  const [cleanNote, setCleanNote] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -39,7 +52,31 @@ export const SettingsPanel: React.FC = () => {
     } finally {
       setLoading(false);
     }
+    try {
+      const s = await fetch("/api/settings/storage").then((r) => r.json());
+      if (s?.status === "OK") setStorage(s);
+      const g = await fetch("/api/settings/gates").then((r) => r.json());
+      if (g?.status === "OK") setGates(g.gates);
+    } catch { /* 표시만 생략 */ }
   }, []);
+
+  const cleanup = async (target: string, label: string) => {
+    if (!window.confirm(`${label}을(를) 비울까요?\n(전부 자동으로 다시 만들어지는 캐시입니다)`)) return;
+    setCleaning(target);
+    try {
+      const r = await fetch("/api/settings/cleanup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ target }),
+      }).then((x) => x.json());
+      if (r?.status === "OK") {
+        setCleanNote(`${label}: 파일 ${r.removed}개, ${fmtBytes(r.freed_bytes)} 비웠습니다.`);
+        load();
+      }
+    } finally {
+      setCleaning(null);
+    }
+  };
 
   useEffect(() => {
     load();
@@ -111,6 +148,76 @@ export const SettingsPanel: React.FC = () => {
               ))}
             </div>
           </>
+        )}
+
+        {/* ── 저장 공간 (실측) ───────────────────────────────── */}
+        {storage && (
+          <div className="mt-8">
+            <h2 className="text-[15px] font-bold mb-1">저장 공간</h2>
+            <p className="text-[12px] text-muted-foreground mb-3">
+              디스크 여유 {fmtBytes(storage.disk_free_bytes)} · 아래는 CCUT이 실제로 쓰고 있는 용량입니다.
+            </p>
+            <div className="rounded-xl border border-border/15 bg-[hsl(228,12%,10%)] divide-y divide-border/10 overflow-hidden">
+              {storage.items.map((it) => (
+                <div key={it.label} className="flex items-center justify-between px-4 py-2.5">
+                  <span className="text-[13px] text-foreground/70">{it.label}</span>
+                  <span className="text-[13px] text-foreground font-mono">{fmtBytes(it.bytes)}</span>
+                </div>
+              ))}
+            </div>
+            <div className="flex items-center gap-2 mt-3">
+              <button
+                onClick={() => cleanup("previews", "제안 미리보기 캐시")}
+                disabled={cleaning !== null}
+                className="text-[12px] px-3 py-1.5 rounded-lg border border-border/30 text-foreground/70 hover:text-foreground hover:bg-secondary/40 transition-colors disabled:opacity-50"
+              >
+                {cleaning === "previews" ? "비우는 중…" : "미리보기 캐시 비우기"}
+              </button>
+              <button
+                onClick={() => cleanup("panorama", "파노라마 프레임 캐시")}
+                disabled={cleaning !== null}
+                className="text-[12px] px-3 py-1.5 rounded-lg border border-border/30 text-foreground/70 hover:text-foreground hover:bg-secondary/40 transition-colors disabled:opacity-50"
+              >
+                {cleaning === "panorama" ? "비우는 중…" : "파노라마 캐시 비우기"}
+              </button>
+            </div>
+            {cleanNote && <p className="text-[12px] text-emerald-400 mt-2">{cleanNote}</p>}
+            <p className="text-[11px] text-muted-foreground/50 mt-1.5">
+              두 캐시 모두 필요할 때 자동으로 다시 생성됩니다. 원본 영상·프로젝트는 건드리지 않습니다.
+            </p>
+          </div>
+        )}
+
+        {/* ── 기능 스위치 상태 (읽기 전용 — 검증 게이트) ─────────── */}
+        {gates && (
+          <div className="mt-8 mb-10">
+            <h2 className="text-[15px] font-bold mb-1">기능 스위치</h2>
+            <p className="text-[12px] text-muted-foreground mb-3">
+              편집 판단 엔진의 켜짐/꺼짐 상태입니다. (안정성 검증을 거친 것만 켜져 있습니다)
+            </p>
+            <div className="rounded-xl border border-border/15 bg-[hsl(228,12%,10%)] divide-y divide-border/10 overflow-hidden">
+              {Object.entries({
+                CCUT_HUB_PLAN: "지시 이해 엔진 (허브 판단)",
+                CCUT_AUTO_REINDEX: "장면 자동 재분석",
+                CCUT_SINGLE_CACHE: "판단 결과 기억 (속도)",
+                CCUT_LEGACY_NARRATIVE: "구형 해석기 (차단 권장)",
+                CCUT_REVISION: "수정 명령 (베타)",
+                CCUT_QUALITY_LOG: "품질 신호 수집 (베타)",
+                CCUT_PERSON_REQUERY: "인물 재확인 (베타)",
+              }).map(([k, label]) => {
+                const on = ["1", "true", "True"].includes(gates[k] ?? "");
+                const good = k === "CCUT_LEGACY_NARRATIVE" ? !on : on;
+                return (
+                  <div key={k} className="flex items-center justify-between px-4 py-2.5">
+                    <span className="text-[13px] text-foreground/70">{label}</span>
+                    <span className={`text-[12px] font-bold ${on ? (good ? "text-emerald-400" : "text-amber-400") : (good ? "text-muted-foreground/50" : "text-muted-foreground/50")}`}>
+                      {on ? "켜짐" : "꺼짐"}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
         )}
       </div>
     </div>
