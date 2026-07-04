@@ -3566,6 +3566,30 @@ async def persons_reject(person_id: str):
     return face_palette.reject(person_id)
 
 
+class HubKeepRequest(BaseModel):
+    source_ids: list
+    instruction: str
+
+
+@app.post("/hub/keep")
+async def hub_keep(req: HubKeepRequest):
+    """[L2-SPEED] 외부 도구(골든 러너)용 keep 조회. 서버 인프로세스 plan 캐시를
+    재사용해 같은 명령의 중복 full-judge를 제거한다 — CCUT_SINGLE_CACHE=1이면
+    /proposals/project 직후 호출 시 PLAN-CACHE 히트(0 LLM콜). 캐시 미스면 서버가
+    판정 1회 수행. 조회 전용 — DB 쓰기 없음."""
+    import asyncio
+    from engine import hub
+
+    def _run():
+        return hub.plan_edit(list(req.source_ids), req.instruction, verbose=False)
+
+    plan = await asyncio.get_event_loop().run_in_executor(None, _run)
+    keep = sorted({k.get("fid") for k in (plan.get("keep") or []) if k.get("fid")})
+    return {"status": "OK", "keep_fids": keep, "reason": plan.get("reason"),
+            "intent": plan.get("intent"),
+            "self_check_status": (plan.get("self_check") or {}).get("status")}
+
+
 @app.get("/projects")
 async def list_projects(db: Session = Depends(get_db)):
     """[B-4] 신규 구조(schema_version=2) 프로젝트 목록. project_sources 있는 것만 반환 (빈 프로젝트 숨김)."""

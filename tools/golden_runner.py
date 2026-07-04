@@ -63,6 +63,23 @@ def _request_proposals(project_id, source_ids, instruction):
 
 
 def _hub_keep(source_ids, instruction):
+    # [L2-SPEED] CCUT_L2_SERVER_KEEP=1이면 서버 /hub/keep 재사용 — 러너 로컬
+    # full-judge(대형 풀 ~130s/회) 중복 제거. 서버는 직전 /proposals/project가
+    # 데운 PLAN-CACHE를 히트한다(CCUT_SINGLE_CACHE=1일 때). 실패 시 로컬 폴백.
+    if os.getenv("CCUT_L2_SERVER_KEEP", "0") in ("1", "true", "True"):
+        try:
+            req = urllib.request.Request(
+                f"{API}/hub/keep",
+                data=json.dumps({"source_ids": list(source_ids),
+                                 "instruction": instruction}).encode("utf-8"),
+                headers={"Content-Type": "application/json"})
+            resp = json.load(urllib.request.urlopen(req, timeout=1800))
+            keep = sorted(resp.get("keep_fids") or [])
+            plan = {"intent": resp.get("intent"), "reason": resp.get("reason")}
+            print(f"[GOLDEN] server-keep {len(keep)} ({resp.get('reason')})")
+            return keep, plan
+        except Exception as e:
+            print(f"[GOLDEN] server-keep 실패, 로컬 판정 폴백 ({e})")
     os.chdir(BACKEND)
     from engine import hub
     plan = hub.plan_edit(list(source_ids), instruction)
