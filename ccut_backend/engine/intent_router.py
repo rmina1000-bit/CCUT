@@ -137,6 +137,43 @@ def route_edit_intent(source_ids=None, input_text="", recent_messages=None,
     if not t:
         return _resp("ask_clarification", "말씀을 조금만 더 입력해 주세요.", confidence=1.0)
 
+    # ── 0. 아카이브 포함 승인 응답 [B안] — 직전 편집기 질문이 ask_include_archive였고
+    #      사용자가 짧은 긍정("응, 포함해줘")이면, 그 직전 사용자 지시를 아카이브
+    #      수용 모드로 재해석해 실행으로 전환한다.
+    import re as _re
+    _affirm = (len(t) <= 15
+               and (_re.match(r"^(응|어+|네|예|그래|좋아|좋지|오케이|ok)\b", t, _re.IGNORECASE)
+                    or t.startswith("포함")))
+    if _affirm and recent_messages:
+        _ask_seen = False
+        _prev_user = None
+        for m in reversed(recent_messages):
+            txt = str(m.get("text") or "").strip()
+            if not _ask_seen:
+                if m.get("sender") != "user" and "아카이브까지 포함할까요" in txt:
+                    _ask_seen = True
+                continue
+            if m.get("sender") == "user" and txt:
+                _prev_user = txt
+                break
+        if _ask_seen and _prev_user:
+            r0 = route_edit_intent(source_ids=source_ids, input_text=_prev_user,
+                                   recent_messages=None, allow_llm=allow_llm,
+                                   person_vocab=person_vocab,
+                                   archive_lookup=archive_lookup)
+            if r0.get("action") == "ask_include_archive":
+                fids = r0.get("candidate_fragment_ids") or []
+                rr = _resp("run_proposal",
+                           f"네, 아카이브 조각까지 포함해서 골라볼게요 ({len(fids)}개).",
+                           normalized=r0.get("normalized_instruction"),
+                           confidence=0.9, matched=r0.get("matched"))
+                rr.update({"filters": r0.get("filters"), "scope": "archive_included",
+                           "candidate_fragment_ids": fids,
+                           "include_source_ids": r0.get("candidate_sources") or [],
+                           "by_program": r0.get("by_program") or {}})
+                return rr
+            return r0  # 그새 프로젝트에 생겼으면 그 결과 그대로
+
     # ── 1. 인물/장소 filters 수집 (사람을 만나도 즉시 return 금지 — 복합 조건 유지) ──
     from engine import place_taxonomy as pt
     person = hub.resolve_person_name(t, vocab=person_vocab)
@@ -166,6 +203,7 @@ def route_edit_intent(source_ids=None, input_text="", recent_messages=None,
                     "confidence": person.get("confidence", 0.95)}
             extra = {"filters": filters, "scope": found.get("scope"),
                      "candidate_fragment_ids": found.get("fids") or [],
+                     "candidate_sources": found.get("sources") or [],
                      "by_program": found.get("by_program") or {},
                      "coverage": found.get("coverage")}
             if found.get("scope") == "project":

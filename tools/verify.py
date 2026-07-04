@@ -112,7 +112,8 @@ def run_l0():
                 "filter_counts": {}}
 
     def _fake_arch(filters, project_source_ids=None):
-        return {"scope": "archive", "fids": ["SF_A1"], "by_program": {"Alnilam": 3},
+        return {"scope": "archive", "fids": ["SF_A1_SRC_F8AB3DCE"],
+                "sources": ["SRC_F8AB3DCE"], "by_program": {"Alnilam": 3},
                 "coverage": {"place_labeled": 90, "total": 100}, "filter_counts": {}}
 
     r = ir.route_edit_intent(input_text="병원 장면만", allow_llm=False, person_vocab=_pv)
@@ -132,6 +133,23 @@ def run_l0():
     check("L0", "router 아카이브 히트→ask_include_archive",
           r["action"] == "ask_include_archive" and "Alnilam" in (r.get("reply") or ""),
           r["action"])
+    # [ARCHIVE B] "응, 포함해줘" 승인 응답 → 원 지시 재해석 + 소스 포함 실행
+    _msgs = [
+        {"sender": "user", "text": "은한이가 병원에 있는 장면만 편집해줘"},
+        {"sender": "ai", "text": "지금 프로젝트에는 정은한+병원 조각이 없고, "
+                                 "아카이브에 있어요 (Alnilam 3개). 아카이브까지 포함할까요?"},
+    ]
+    r = ir.route_edit_intent(input_text="응, 포함해줘", recent_messages=_msgs,
+                             allow_llm=False, person_vocab=_pv, archive_lookup=_fake_arch)
+    check("L0", "router 포함승인→실행+소스",
+          r["action"] == "run_proposal" and r.get("include_source_ids") == ["SRC_F8AB3DCE"]
+          and "정은한이" in (r.get("normalized_instruction") or ""),
+          f'{r["action"]}/src={r.get("include_source_ids")}/norm={r.get("normalized_instruction")}')
+    r = ir.route_edit_intent(input_text="응", recent_messages=[],
+                             allow_llm=False, person_vocab=_pv)
+    check("L0", "router 맥락없는 긍정→오작동 없음", r["action"] != "run_proposal" or not r.get("include_source_ids"),
+          r["action"])
+
     # [조사 교정] 단순 replace의 '정은한가' 문법 붕괴 수리 검증
     r = ir.route_edit_intent(input_text="은한이가 병원에 있는 장면만", allow_llm=False,
                              person_vocab=_pv, archive_lookup=_fake_proj)

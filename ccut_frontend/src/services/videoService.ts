@@ -129,6 +129,14 @@ export const videoService = {
         });
     },
 
+    // [ARCHIVE B] 아카이브 포함 승인 시 소스를 프로젝트에 연결 (기존 UI-② 엔드포인트 재사용, 멱등)
+    addSourcesToProject: async (programId: string, sourceIds: string[]) => {
+        return await fetcher(`/projects/${encodeURIComponent(programId)}/sources`, {
+            method: "POST",
+            body: JSON.stringify({ source_ids: sourceIds })
+        });
+    },
+
     // [INTENT-ROUTER] 백엔드 종업원 — 프론트는 말을 거의 그대로 보내고 해석은 서버가.
     routeEditIntent: async (payload: {
         project_id?: string;

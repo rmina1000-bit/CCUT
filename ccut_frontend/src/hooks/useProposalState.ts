@@ -66,6 +66,8 @@ type ConsultationDecision = {
   normalizedInstruction?: string;
   // [ARCHIVE P1] archive_query가 추린 후보 조각 (인물+장소 교집합) — hub가 이만 판정
   candidateFragmentIds?: string[];
+  // [ARCHIVE B] 아카이브 포함 승인 시 프로젝트에 연결할 소스
+  includeSourceIds?: string[];
 };
 
 const LEGACY_NARRATIVE_ENABLED =
@@ -568,6 +570,8 @@ export const useProposalState = (
           : route.action === "ask_include_archive" ? "ambiguous" : undefined,
         normalizedInstruction: route.normalized_instruction || text,
         candidateFragmentIds: route.candidate_fragment_ids || undefined,
+        // [ARCHIVE B] "응, 포함해줘" 승인 시 종업원이 지정한 아카이브 소스
+        includeSourceIds: route.include_source_ids || undefined,
       };
     } catch (e: any) {
       console.warn("[INTENT-ROUTER] 서버 라우팅 실패 → 구 메뉴판 폴백:", e?.message);
@@ -699,6 +703,22 @@ export const useProposalState = (
       }
       if (!orderedSourceIds || orderedSourceIds.length === 0) {
         console.warn("[Consultation] orderedSourceIds empty → fallback source ids:", effectiveSourceIds);
+      }
+
+      // [ARCHIVE B] 아카이브 포함 승인 — 소스를 프로젝트에 연결(멱등)하고 이번 제안에 즉시 반영
+      if (consultationDecision.includeSourceIds?.length) {
+        try {
+          const added = await videoService.addSourcesToProject(
+            projectId || "default_project", consultationDecision.includeSourceIds);
+          effectiveSourceIds = Array.from(new Set([
+            ...effectiveSourceIds, ...consultationDecision.includeSourceIds]));
+          console.log("[ARCHIVE-INCLUDE]\n" + JSON.stringify({
+            requested: consultationDecision.includeSourceIds,
+            added: added?.added, effectiveSourceCount: effectiveSourceIds.length
+          }, null, 2));
+        } catch (e: any) {
+          console.warn("[ARCHIVE-INCLUDE] 소스 연결 실패 — 이번 제안은 기존 소스로만:", e?.message);
+        }
       }
 
       // [INTENT-ROUTER] 종업원이 정규화한 지시문으로 실행 ("은한이만" → "정은한만")

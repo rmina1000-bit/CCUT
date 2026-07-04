@@ -66,7 +66,9 @@ def query(filters, project_source_ids=None, db_path=None):
         proj_sids = set(project_source_ids or [])
         in_proj = sorted(f for f, s in alive.items() if s in proj_sids)
         if in_proj:
-            return {"scope": "project", "fids": in_proj, "by_program": {},
+            return {"scope": "project", "fids": in_proj,
+                    "sources": sorted({alive[f] for f in in_proj}),
+                    "by_program": {},
                     "coverage": _coverage(con, project_source_ids),
                     "filter_counts": filter_counts}
 
@@ -81,6 +83,7 @@ def query(filters, project_source_ids=None, db_path=None):
                 nm = names.get(pid, pid)
                 by_program[nm] = by_program.get(nm, 0) + 1
         return {"scope": "archive" if alive else "none", "fids": sorted(alive.keys()),
+                "sources": sorted(set(alive.values())),
                 "by_program": by_program,
                 "coverage": _coverage(con, project_source_ids),
                 "filter_counts": filter_counts}
