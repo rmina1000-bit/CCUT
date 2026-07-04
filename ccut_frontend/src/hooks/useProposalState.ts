@@ -99,7 +99,16 @@ function isExecutableEditCommand(input: string): boolean {
   const hasCountOrPace = /(\d+\s*개|(한|두|세|네|다섯|여섯|일곱|여덟|아홉|열)\s*개|빠르게|느리게|짧게|길게|템포|속도|페이스)/.test(input);
   const hasConfirm = /이대로|진행|확정|좋아|오케이|ok/i.test(input);
 
-  return hasCountOrPace || hasConfirm || (hasSceneOrSubject && hasEditOperator);
+  // [PERSON-PALETTE 2026-07-04] 인물 편집 '형식'은 이름 저장 여부와 무관하게 실행 명령으로
+  // 통과시킨다. 이름 통일(은한이→정은한) 후 옛 호칭이 KNOWN_PERSON_NAMES에서 빠져 입구에서
+  // "OO만 편집해줘"가 unknown으로 막히던 결함 수리. 최종 keep은 백엔드(hub)가 판정하고,
+  // 해당 인물이 없으면 honest-empty로 정직 응답한다(프론트가 미리 막지 않음).
+  // "나오는 영상"은 기존 (장면|조각|컷|부분)에 빠져 있던 형태 — 함께 보강.
+  const isPersonLikeEditForm =
+    /나오는\s*(장면|조각|컷|부분|영상|것)/.test(input) ||
+    /\S{2,}만\s*(편집|남겨|남기|골라|추려|보여|모아|살려)/.test(input);
+
+  return isPersonLikeEditForm || hasCountOrPace || hasConfirm || (hasSceneOrSubject && hasEditOperator);
 }
 
 export const useProposalState = (
