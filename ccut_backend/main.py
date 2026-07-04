@@ -518,12 +518,24 @@ def _auto_reindex_fire(source_id: str):
         try:
             from engine.fragment_indexer import reindex_source
             reindex_source(source_id)
-            # [PERSON-RELINK C2] 재인덱싱이 visual_desc를 전체 교체하며 지운
-            # named 이름 태그를 재주입 (env 가역, 기본 OFF = 완전 무변).
-            # 근거: reindex 1회가 태그 4→1 소거 → 검색 3→1 재붕괴 (SIM 실측).
             if os.getenv("CCUT_PERSON_RELINK", "0") in ("1", "true", "True"):
-                from engine.face_palette import reinject_names_for_source
-                reinject_names_for_source(source_id)
+                from engine import face_palette as _fp
+                # [PERSON-RELINK C3] 재조각화 직후~다음 프로젝트 열기 사이의 링크
+                # 공백 제거 — 소스가 속한 프로젝트를 즉시 재스캔. scan은 seen-skip
+                # 멱등 + _MODEL_LOCK 직렬화라 UI 발사 scan과 경합해도 안전.
+                # named 링크의 태그는 C1이 스캔 안에서 함께 주입한다.
+                import sqlite3 as _sq3
+                _con = _sq3.connect(_fp.DB_PATH)
+                _pids = [r[0] for r in _con.execute(
+                    "SELECT program_id FROM project_sources WHERE source_id=?",
+                    (source_id,))]
+                _con.close()
+                for _pid in _pids:
+                    _fp.scan_project(_pid)
+                # [PERSON-RELINK C2] 재인덱싱이 visual_desc를 전체 교체하며 지운
+                # named 이름 태그를 재주입 — 스캔이 놓친 기존 링크 보강.
+                # 근거: reindex 1회가 태그 4→1 소거 → 검색 3→1 재붕괴 (SIM 실측).
+                _fp.reinject_names_for_source(source_id)
         except Exception as e:
             print(f"[AUTO-REINDEX][ERROR] source={source_id}: {e}")
         finally:
