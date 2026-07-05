@@ -1204,7 +1204,7 @@ async def generate_fragments(
             "progress": 100,
             "source_id": source_id,
             "count": len(fragments),
-            "fragments": fragments,
+            "fragments": _inject_display_names(fragments, source_id),
             "analysis_mode": analysis_mode,
             "pipeline": "virtual_clipping_v1.0.6",
         }
@@ -1243,7 +1243,7 @@ async def generate_fragments(
                 "progress": 30,
                 "source_id": source_id,
                 "count": len(safe_fragments),
-                "fragments": safe_fragments,
+                "fragments": _inject_display_names(safe_fragments, source_id),
                 "analysis_mode": analysis_mode,
                 "reanalysis": True,
                 "quality": quality,
@@ -1296,7 +1296,7 @@ async def generate_fragments(
         "progress": 100,
         "source_id": source_id,
         "count": len(safe_fragments),
-        "fragments": safe_fragments,
+        "fragments": _inject_display_names(safe_fragments, source_id),
         "analysis_mode": analysis_mode,
         "bg_tasks": ["whisper_transcription", "panorama_generation"],
         "pipeline": "virtual_clipping_v1.0.6",
@@ -1394,11 +1394,11 @@ async def get_fragments_by_source(source_id: str):
     fragments = bams.get_semantic_fragments(source_id)
     if not fragments:
         fragments = bams.get_fragments_by_source(source_id)
-        
+
     return {
         "status": "SUCCESS",
         "source_id": source_id,
-        "fragments": fragments
+        "fragments": _inject_display_names(fragments, source_id)
     }
 
 class ChatSearchRequest(BaseModel):
@@ -1614,8 +1614,35 @@ def inject_semantic_thumbnails(fragments: list):
                 f["thumbnail_url"] = fallback_url
                 if not isinstance(f.get("thumbnail"), dict): f["thumbnail"] = {}
                 f["thumbnail"]["thumbnail_url"] = fallback_url
-    
+
     return fragments
+
+
+def _inject_display_names(fragments: list, source_id: str, title: str = None):
+    """[DISPLAY-NAME] 사용자용 조각 주이름 주입 — 단일 권위(fragment_show.display_name).
+    조각 payload를 반환하는 API는 전부 이 헬퍼 하나를 거친다(이름을 두 번 만들지 않는다).
+    title 미지정 시 sources에서 조회. 실패해도 조용히 통과(표시층 부가정보)."""
+    if not fragments:
+        return fragments
+    if title is None:
+        try:
+            src = bams.get_source(source_id)
+            title = (getattr(src, "title", None) if src else None) or source_id
+        except Exception:
+            title = source_id
+    from engine.fragment_show import display_name as _dn
+    for f in fragments:
+        if not isinstance(f, dict):
+            continue
+        st = (f.get("start_sec") or f.get("start") or f.get("start_time")
+              or (f.get("semantic") or {}).get("start_sec")
+              or (f.get("structural") or {}).get("start_sec") or 0)
+        en = (f.get("end_sec") or f.get("end") or f.get("end_time")
+              or (f.get("semantic") or {}).get("end_sec")
+              or (f.get("structural") or {}).get("end_sec") or st)
+        f["display_name"] = _dn(title, st, en)
+    return fragments
+
 
 def inject_preview_clips(fragments: list, background: bool = True) -> list:
     """
@@ -1786,6 +1813,7 @@ async def generate_semantic_fragments(source_id: str, refresh_proposals: bool = 
 
     # [STEP 10-I.5.22-C] Inject thumbnails
     fragments = inject_semantic_thumbnails(fragments)
+    fragments = _inject_display_names(fragments, source_id)  # [DISPLAY-NAME]
 
     # [PREVIEW_CLIP] inject_preview_clips 제거 — 최종 해결은 proposal_preview_engine이므로 fragment 단위 clip 주입 불필요
     # (preview_clip_engine.py 미존재 시 ImportError → 500 상승 방지)
@@ -1840,13 +1868,13 @@ async def get_semantic_fragments(source_id: str):
         role_dist[role] = role_dist.get(role, 0) + 1
         
     status = "SEMANTIC_FRAGMENT_READY" if fragments else "NOT_FOUND"
-    
+
     return {
         "status": status,
         "source_id": source_id,
         "fragment_count": len(fragments),
         "role_distribution": role_dist,
-        "fragments": fragments
+        "fragments": _inject_display_names(fragments, source_id)
     }
 
 # ═══════════════════════════════════════════════════════════════════
@@ -2019,19 +2047,8 @@ async def get_project_sources(project_id: str):
             else:
                 frags = inject_semantic_thumbnails(frags)
 
-            # [DISPLAY-NAME] 사용자용 조각 주이름 단일 권위 주입 — 조각맵/PBE가 읽는
-            # payload에도 카드와 같은 함수(fragment_show.display_name)로 이름을 실어
-            # 화면 간 명칭 일치를 구조적으로 보장한다. mapFragments와 동일한 시간 폴백.
-            from engine.fragment_show import display_name as _display_name_fn
-            for _f in (frags or []):
-                if isinstance(_f, dict):
-                    _st = (_f.get("start_sec") or _f.get("start") or _f.get("start_time")
-                           or (_f.get("semantic") or {}).get("start_sec")
-                           or (_f.get("structural") or {}).get("start_sec") or 0)
-                    _en = (_f.get("end_sec") or _f.get("end") or _f.get("end_time")
-                           or (_f.get("semantic") or {}).get("end_sec")
-                           or (_f.get("structural") or {}).get("end_sec") or _st)
-                    _f["display_name"] = _display_name_fn(src.title or sid, _st, _en)
+            # [DISPLAY-NAME] 단일 권위 주입 — 공용 헬퍼로 수렴 (커밋 A 인라인 대체)
+            frags = _inject_display_names(frags, sid, title=src.title or sid)
 
             # 비디오 URL 변환 — 파일명을 URL 인코딩하여 한글/공백/특수문자 안전 보장
             video_name = os.path.basename(src.file_path) if src.file_path else f"{sid}.mp4"
