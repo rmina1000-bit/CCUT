@@ -150,6 +150,26 @@ def run_l0():
     check("L0", "router 맥락없는 긍정→오작동 없음", r["action"] != "run_proposal" or not r.get("include_source_ids"),
           r["action"])
 
+    # [SHOW] 조회/열람 — "보여줘/있나"는 편집이 아니라 보여주기 (편집 동사 동반 시 편집 우선)
+    def _fake_show(text, person):
+        return {"results": [{"fragment_id": "SF_X", "title": "테스트영상", "time": "0:00–0:15",
+                             "thumbnail_url": None, "video_url": "/static/uploads/SRC_X.mp4",
+                             "start": 0, "end": 15, "score": None}],
+                "in_project": 1, "in_archive": 0,
+                "person": (person or {}).get("canonical")}
+
+    r = ir.route_edit_intent(input_text="정은한 나오는 영상 있나?", allow_llm=False,
+                             person_vocab=_pv, search_lookup=_fake_show)
+    check("L0", "router 조회(있나)→show_fragments",
+          r["action"] == "show_fragments" and len(r.get("results") or []) == 1, r["action"])
+    r = ir.route_edit_intent(input_text="은한이 보여줘", allow_llm=False,
+                             person_vocab=_pv, search_lookup=_fake_show)
+    check("L0", "router 조회(보여줘)+애칭 안내",
+          r["action"] == "show_fragments" and "정은한" in (r.get("reply") or ""), r.get("reply"))
+    r = ir.route_edit_intent(input_text="은한이 찾아서 편집해줘", allow_llm=False,
+                             person_vocab=_pv, search_lookup=_fake_show)
+    check("L0", "router 조회+편집동사→편집 우선", r["action"] == "run_proposal", r["action"])
+
     # [조사 교정] 단순 replace의 '정은한가' 문법 붕괴 수리 검증
     r = ir.route_edit_intent(input_text="은한이가 병원에 있는 장면만", allow_llm=False,
                              person_vocab=_pv, archive_lookup=_fake_proj)

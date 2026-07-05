@@ -132,7 +132,7 @@ def _llm_route(input_text, recent_messages=None):
 
 def route_edit_intent(source_ids=None, input_text="", recent_messages=None,
                       selected_proposal_id=None, allow_llm=True, person_vocab=None,
-                      archive_lookup=None):
+                      archive_lookup=None, search_lookup=None):
     t = (input_text or "").strip()
     if not t:
         return _resp("ask_clarification", "말씀을 조금만 더 입력해 주세요.", confidence=1.0)
@@ -173,6 +173,38 @@ def route_edit_intent(source_ids=None, input_text="", recent_messages=None,
                            "by_program": r0.get("by_program") or {}})
                 return rr
             return r0  # 그새 프로젝트에 생겼으면 그 결과 그대로
+
+    # ── 0.5 조회/열람 [SHOW] — "보여줘/있나/찾아줘"는 편집이 아니라 보여주기다.
+    #    편집 동사가 함께 있으면(예: "찾아서 편집해줘") 편집 사다리가 우선.
+    #    결과 카드는 자체완결(제목·시간·썸네일·재생 URL) — 흐름에 남고 클릭=재생.
+    if (_re.search(r"보여줘|보여 줘|있나\??|있냐|있어\?|있는지|찾아줘|찾아 줘|찾아봐|불러와|검색해|뭐가 있", t)
+            and not _re.search(r"편집|골라줘|골라 줘|만들어|빼줘|빼 줘|줄여|늘려|남겨", t)):
+        _person0 = hub.resolve_person_name(t, vocab=person_vocab)
+        if search_lookup is not None:
+            found = search_lookup(t, _person0)
+        else:
+            from engine.fragment_show import search_show
+            found = search_show(t, _person0, source_ids)
+        if found is not None:
+            n = len(found.get("results") or [])
+            who = found.get("person")
+            if n == 0:
+                reply = (f"{who} 나오는 조각을 아직 못 찾았어요." if who
+                         else "조건에 맞는 조각을 못 찾았어요.")
+                return _resp("show_fragments", reply, confidence=0.85, via="deterministic")
+            scope = []
+            if found.get("in_project"):
+                scope.append(f"이 프로젝트 {found['in_project']}개")
+            if found.get("in_archive"):
+                scope.append(f"아카이브 {found['in_archive']}개")
+            head = f"{who} 나오는 조각" if who else "조건에 맞는 조각"
+            reply = (f"{head} {n}개를 찾았어요 ({', '.join(scope)}). "
+                     "카드를 누르면 바로 볼 수 있어요.")
+            r = _resp("show_fragments", reply, confidence=0.9, via="deterministic",
+                      matched={"kind": "show", "person": who})
+            r["results"] = found["results"]
+            return r
+        # 판단 불가(검색어 추출 실패 등) → 아래 사다리 계속
 
     # ── 1. 인물/장소 filters 수집 (사람을 만나도 즉시 return 금지 — 복합 조건 유지) ──
     from engine import place_taxonomy as pt
