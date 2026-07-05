@@ -52,6 +52,18 @@ def ensure_schema():
             PRIMARY KEY (date_key, metric_key)
         )"""
     )
+    # [War Room v1] 디자인/카피/메뉴 설정 원장 — 실반영은 후속, v1은 원장+상태만
+    con.execute(
+        """CREATE TABLE IF NOT EXISTS admin_surface_configs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            scope TEXT NOT NULL,
+            key TEXT NOT NULL,
+            value_json TEXT NOT NULL,
+            status TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        )"""
+    )
     # [War Room v1] 구독/포인트/상품 원장 — provider 연동 전 "준비 중"
     con.execute(
         """CREATE TABLE IF NOT EXISTS admin_subscription_events (
@@ -792,6 +804,72 @@ def points_summary() -> dict:
                 "message": "포인트 원장 비어 있음 — 포인트 정책 도입 전"}
     return {"status": "OK",
             "by_type": [{"event_type": t, "count": n, "points": p} for t, n, p in rows]}
+
+
+# ═══════════════════════════════════════════════════════════════════
+#   [War Room v1] 디자인/카피/메뉴 제어 — admin_surface_configs
+# ═══════════════════════════════════════════════════════════════════
+
+_CONFIG_STATUSES = ("draft", "approved", "retired")
+
+
+def design_configs_list() -> dict:
+    con = _connect()
+    rows = con.execute(
+        "SELECT id, scope, key, value_json, status, created_at, updated_at"
+        " FROM admin_surface_configs ORDER BY id DESC LIMIT 100").fetchall()
+    con.close()
+    cols = ["id", "scope", "key", "value_json", "status", "created_at", "updated_at"]
+    return {"configs": [dict(zip(cols, r)) for r in rows]}
+
+
+def design_config_create(payload: dict) -> dict:
+    """텍스트/플래그 설정만 — 자유 HTML 입력 금지(지시서 §STEP7)."""
+    scope = (payload.get("scope") or "").strip()
+    key = (payload.get("key") or "").strip()
+    value_json = payload.get("value_json")
+    if not scope or not key or value_json is None:
+        return {"error": "scope, key, value_json are required"}
+    import json as _json
+    if isinstance(value_json, (dict, list)):
+        value_str = _json.dumps(value_json, ensure_ascii=False)
+    else:
+        value_str = str(value_json)
+    if "<" in value_str and ">" in value_str:
+        return {"error": "HTML 입력 금지 — 텍스트/플래그 값만 허용"}
+    now = datetime.datetime.now().isoformat()
+    con = _connect()
+    cur = con.execute(
+        "INSERT INTO admin_surface_configs (scope, key, value_json, status,"
+        " created_at, updated_at) VALUES (?,?,?,?,?,?)",
+        (scope, key, value_str, "draft", now, now))
+    config_id = cur.lastrowid
+    con.commit()
+    con.close()
+    audit_append("design_config_create", target_type="surface_config",
+                 target_id=str(config_id), note=f"{scope}.{key} = {value_str[:80]}")
+    return {"status": "OK", "id": config_id}
+
+
+def design_config_status(config_id: int, status: str) -> dict:
+    if status not in _CONFIG_STATUSES:
+        return {"error": f"status must be one of {_CONFIG_STATUSES}"}
+    con = _connect()
+    row = con.execute(
+        "SELECT status, scope, key FROM admin_surface_configs WHERE id=?",
+        (config_id,)).fetchone()
+    if not row:
+        con.close()
+        return {"error": "config not found"}
+    con.execute(
+        "UPDATE admin_surface_configs SET status=?, updated_at=? WHERE id=?",
+        (status, datetime.datetime.now().isoformat(), config_id))
+    con.commit()
+    con.close()
+    audit_append("design_config_status", target_type="surface_config",
+                 target_id=str(config_id),
+                 note=f"{row[0]} → {status} ({row[1]}.{row[2]})")
+    return {"status": "OK", "id": config_id, "from": row[0], "to": status}
 
 
 def audit_logs(limit: int = 20, cursor: int = None) -> dict:

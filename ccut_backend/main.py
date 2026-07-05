@@ -3583,6 +3583,24 @@ async def admin_revenue_points():
     return _adm.points_summary()
 
 
+@app.get("/admin/design/configs")
+async def admin_design_configs():
+    from admin import service as _adm
+    return _adm.design_configs_list()
+
+
+@app.post("/admin/design/configs")
+async def admin_design_config_create(payload: dict = None):
+    from admin import service as _adm
+    return _adm.design_config_create(payload or {})
+
+
+@app.post("/admin/design/configs/{config_id}/status")
+async def admin_design_config_status(config_id: int, payload: dict = None):
+    from admin import service as _adm
+    return _adm.design_config_status(config_id, ((payload or {}).get("status") or "").strip())
+
+
 @app.post("/export/final")
 async def run_final_broadcast(project_id: str = "DEFAULT", db: Session = Depends(get_db)):
     """[CCUT 1.0.6 최종 송출] 편집본을 실제 .mp4 파일로 렌더링하고 DB 아카이브에 기록"""
