@@ -338,6 +338,26 @@ def source_fragment_history(source_id):
             "exported_events": n_exported, "fragments": frags}
 
 
+def source_history_summary():
+    """source_id → {fragments, adopted, edited, exported} — 아카이브 목록 뱃지용
+    집계 (GROUP BY 2회, 원본 수와 무관한 상수 쿼리)."""
+    con = _connect()
+    ensure_schema(con)
+    ensure_events_schema(con)
+    out = {}
+    for sid, n in con.execute(
+            "SELECT source_id, COUNT(*) FROM fragment_vault "
+            "WHERE source_id IS NOT NULL GROUP BY source_id"):
+        out[sid] = {"fragments": n, "adopted": 0, "edited": 0, "exported": 0}
+    for sid, kind, n in con.execute(
+            "SELECT source_id, event_kind, COUNT(*) FROM vault_events "
+            "WHERE source_id IS NOT NULL GROUP BY source_id, event_kind"):
+        out.setdefault(sid, {"fragments": 0, "adopted": 0, "edited": 0,
+                             "exported": 0})[kind] = n
+    con.close()
+    return out
+
+
 def stats():
     con = _connect()
     ensure_schema(con)

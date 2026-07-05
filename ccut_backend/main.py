@@ -3128,6 +3128,14 @@ async def vault_stats():
     return {"status": "OK", **fv.stats()}
 
 
+@app.get("/archive/source/{source_id}/fragments")
+async def archive_source_fragments(source_id: str):
+    """[조각 이력] 한 원본의 조각 자산 이력 — 조각 수·채택·편집·방송.
+    프로젝트가 purge돼도 응답 불변(이름 스냅샷·자연키 기반)."""
+    from engine import fragment_vault as fv
+    return {"status": "OK", **fv.source_fragment_history(source_id)}
+
+
 @app.post("/narrative/notes")
 async def add_narrative_notes(payload: dict = None):
     """[서사층 §2.1] 말의 원장 적재 — 사용자의 말은 최상급 자산.
@@ -3267,6 +3275,10 @@ async def get_archive_list(db: Session = Depends(get_db)):
     from engine import narrative_ledger as _nl2
     _src_notes = _nl2.source_note_map()
 
+    # [조각 이력] source_id → 조각·채택·편집·방송 요약 (목록 뱃지용, purge 면역)
+    from engine import fragment_vault as _fvh
+    _frag_hist = _fvh.source_history_summary()
+
     return {
         "sources": [{
             "source_id": s.source_id,
@@ -3279,6 +3291,8 @@ async def get_archive_list(db: Session = Depends(get_db)):
             # [서사층] 촬영일(연대기 축) + 사용자의 말(캡션은 기계 요약이 아니라 그 사람의 말)
             "shot_date": getattr(s, "shot_date", None),
             "note": _src_notes.get(s.source_id),
+            # [조각 이력] 이 원본의 조각 자산 요약 — 프로젝트 purge에 면역
+            "frag_history": _frag_hist.get(s.source_id),
             "program_names": _names(s.source_id),
             "usage": source_usage_map.get(s.source_id, []),
             # [SOURCE] 원본 재생 URL (uploads에 있을 때만, 없으면 null = 원본 삭제됨)
