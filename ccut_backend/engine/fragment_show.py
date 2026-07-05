@@ -23,6 +23,14 @@ def _fmt_time(sec):
     return f"{sec // 60}:{sec % 60:02d}"
 
 
+def display_name(title, start, end):
+    """[단일 진실원] 사용자용 조각 주이름 — 규칙 1개: '원본제목(확장자제거) · m:ss–m:ss'.
+    카드/조각맵/PBE hydration이 모두 이 함수 하나만 호출한다(이름을 두 번 만들지 않는다).
+    title은 확장자 유무 무관 raw로 받아 여기서 벗긴다."""
+    base = os.path.splitext(title or "")[0] or (title or "")
+    return f"{base} · {_fmt_time(start)}–{_fmt_time(end)}"
+
+
 def _video_url(file_path, sid):
     name = os.path.basename(file_path or "") or f"{sid}.mp4"
     play = f"play_{os.path.splitext(name)[0]}.mp4"
@@ -32,12 +40,14 @@ def _video_url(file_path, sid):
 
 
 def _card(con, fid, sid, start, end, src_meta, score=None):
-    title, fpath = src_meta.get(sid, (sid, None))
-    title = os.path.splitext(title or sid)[0]
+    raw_title, fpath = src_meta.get(sid, (sid, None))
+    title = os.path.splitext(raw_title or sid)[0]  # 하위호환 title(확장자 제거)
     thumb = f"/static/thumbnails/{fid}.jpg" if os.path.exists(
         os.path.join(THUMBS_DIR, f"{fid}.jpg")) else None
     return {
         "fragment_id": fid, "source_id": sid,
+        # display_name = 단일 진실원. title/time은 하위호환 위해 유지.
+        "display_name": display_name(raw_title or sid, start, end),
         "title": title, "time": f"{_fmt_time(start)}–{_fmt_time(end)}",
         "start": start, "end": end,
         "thumbnail_url": thumb, "video_url": _video_url(fpath, sid),

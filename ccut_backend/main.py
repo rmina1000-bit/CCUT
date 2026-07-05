@@ -2019,6 +2019,20 @@ async def get_project_sources(project_id: str):
             else:
                 frags = inject_semantic_thumbnails(frags)
 
+            # [DISPLAY-NAME] 사용자용 조각 주이름 단일 권위 주입 — 조각맵/PBE가 읽는
+            # payload에도 카드와 같은 함수(fragment_show.display_name)로 이름을 실어
+            # 화면 간 명칭 일치를 구조적으로 보장한다. mapFragments와 동일한 시간 폴백.
+            from engine.fragment_show import display_name as _display_name_fn
+            for _f in (frags or []):
+                if isinstance(_f, dict):
+                    _st = (_f.get("start_sec") or _f.get("start") or _f.get("start_time")
+                           or (_f.get("semantic") or {}).get("start_sec")
+                           or (_f.get("structural") or {}).get("start_sec") or 0)
+                    _en = (_f.get("end_sec") or _f.get("end") or _f.get("end_time")
+                           or (_f.get("semantic") or {}).get("end_sec")
+                           or (_f.get("structural") or {}).get("end_sec") or _st)
+                    _f["display_name"] = _display_name_fn(src.title or sid, _st, _en)
+
             # 비디오 URL 변환 — 파일명을 URL 인코딩하여 한글/공백/특수문자 안전 보장
             video_name = os.path.basename(src.file_path) if src.file_path else f"{sid}.mp4"
             # [FIX-HEVC-PLAYBACK] playback sidecar 존재 시 우선 서빙
