@@ -217,6 +217,17 @@ def run_l0():
     check("L0", "narrative 오탐 날짜(99일) 거부",
           nl.parse_shot_date("20151199_x.mp4") is None, "None")
 
+    # [조각 금고 v2.2] 자연키 앵커 — 재조각화 경계 흔들림(<0.05s)은 같은 조각
+    from engine import fragment_vault as fv
+    check("L0", "vault 자연키: 미세 경계 흔들림 동일",
+          fv.norm_key("H1", 10.0, 20.0) == fv.norm_key("H1", 10.04, 19.96),
+          fv.norm_key("H1", 10.04, 19.96))
+    check("L0", "vault 자연키: 실제 구간 차이 구분",
+          fv.norm_key("H1", 10.0, 20.0) != fv.norm_key("H1", 10.0, 21.0), "구분")
+    check("L0", "vault 병합: 인지는 잃지 않는다(빈 새값→옛값 보존)",
+          fv.merge_keep("옛 요약", "") == "옛 요약" and fv.merge_keep("옛", None) == "옛"
+          and fv.merge_keep("옛", "새") == "새", "보존+갱신")
+
     # [조사 교정] 단순 replace의 '정은한가' 문법 붕괴 수리 검증
     r = ir.route_edit_intent(input_text="은한이가 병원에 있는 장면만", allow_llm=False,
                              person_vocab=_pv, archive_lookup=_fake_proj)

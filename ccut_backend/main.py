@@ -210,6 +210,15 @@ try:
 except Exception as _nl_e:
     print(f"[NARRATIVE] 초기화 실패 (non-blocking): {_nl_e}")
 
+# [조각 금고 v2.2] 인지조각 = 왕관 자산 — 시작 시 멱등 적재/병합 + 원본 생존 표시.
+# 재조각화가 인지를 버려도 금고는 (hash, 구간) 앵커로 이어받는다. 실패 비차단.
+try:
+    from engine import fragment_vault as _fv
+    _fv.backfill_all()
+    _fv.mark_source_alive()
+except Exception as _fv_e:
+    print(f"[VAULT] 초기화 실패 (non-blocking): {_fv_e}")
+
 def get_video_range_response(file_path: Path, request: Request):
     from fastapi.responses import StreamingResponse, FileResponse
     from fastapi import HTTPException
@@ -1857,6 +1866,15 @@ async def generate_semantic_fragments(source_id: str, refresh_proposals: bool = 
     fragments = inject_semantic_thumbnails(fragments)
     fragments = _inject_display_names(fragments, source_id)  # [DISPLAY-NAME]
 
+    # [조각 금고 v2.2] 재조각화 = 인지를 버리는 순간이었다 → 이제 금고가 이어받는
+    # 순간이다. 새 세대 인지를 (hash, 구간) 앵커로 병합 — 옛 인지는 불멸. 비차단.
+    try:
+        from engine import fragment_vault as _fv2
+        _r = _fv2.ingest_source(source_id)
+        print(f"[VAULT] 재조각화 승계 {source_id}: +{_r.get('inserted', 0)} 병합 {_r.get('merged', 0)}")
+    except Exception as _fv_e:
+        print(f"[VAULT] 승계 실패 (비차단): {_fv_e}")
+
     # [PREVIEW_CLIP] inject_preview_clips 제거 — 최종 해결은 proposal_preview_engine이므로 fragment 단위 clip 주입 불필요
     # (preview_clip_engine.py 미존재 시 ImportError → 500 상승 방지)
 
@@ -3045,6 +3063,13 @@ def _proposal_display_names(db) -> dict:
         out[pr.proposal_id] = (f"{pname} · {_ko_ordinal(seq)} 제안{mode}"
                                if seq else f"{pname}{mode}")
     return out
+
+
+@app.get("/vault/stats")
+async def vault_stats():
+    """[조각 금고] 인지조각 원장 현황 — 왕관 자산의 건강 지표."""
+    from engine import fragment_vault as fv
+    return {"status": "OK", **fv.stats()}
 
 
 @app.post("/narrative/notes")
