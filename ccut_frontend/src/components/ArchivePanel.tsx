@@ -25,6 +25,8 @@ interface Source {
   // [서사층] 촬영일(연대기 축) + 사용자의 말(캡션은 기계 요약이 아니라 그 사람의 말)
   shot_date?: string | null;
   note?: string | null;
+  // [조각 이력] 이 원본의 조각 자산 요약 — 프로젝트 purge에 면역
+  frag_history?: { fragments: number; adopted: number; edited: number; exported: number } | null;
   program_names: string[];
   usage: SourceUsage[];
   play_url: string | null;
@@ -85,6 +87,17 @@ export const ArchivePanel: React.FC<{
   const [searchQuery, setSearchQuery] = useState("");
   // [국장지시] 원본 리스트 정렬 선택 — 최신순(기본) / 촬영일순(연대기) / 이름순
   const [srcSort, setSrcSort] = useState<"recent" | "shot" | "name">("recent");
+  // [조각 이력] 펼침 시 lazy 조회 (source_id → 조각 목록+사건)
+  const [fragHistory, setFragHistory] = useState<Record<string, any>>({});
+  const loadFragHistory = async (sid: string) => {
+    if (fragHistory[sid]) return;
+    try {
+      const r = await fetcher(`/archive/source/${encodeURIComponent(sid)}/fragments`);
+      setFragHistory((prev) => ({ ...prev, [sid]: r }));
+    } catch (e) {
+      console.warn("[FRAG-HISTORY] 조회 실패:", e);
+    }
+  };
   const [activeSubTab, setActiveSubTab] = useState<"sources" | "programs" | "proposals" | "exports">("sources");
   const [exports, setExports] = useState<ExportRecord[]>([]);
   const [playingId, setPlayingId] = useState<string | null>(null);
@@ -546,6 +559,22 @@ export const ArchivePanel: React.FC<{
                             <span className="flex items-center gap-1"><Clock size={10} /> {formatSecs(s.duration)}</span>
                             <span>·</span>
                             <span>{s.fps} FPS</span>
+                            {/* [조각 이력] 조각 자산 요약 — 프로젝트 purge에도 남는 숫자들 */}
+                            {(s.frag_history?.fragments ?? 0) > 0 && (
+                              <>
+                                <span>·</span>
+                                <span className="text-foreground/70 font-semibold">조각 {s.frag_history!.fragments}</span>
+                                {s.frag_history!.adopted > 0 && (
+                                  <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-primary/10 text-primary border border-primary/20">채택 {s.frag_history!.adopted}</span>
+                                )}
+                                {s.frag_history!.edited > 0 && (
+                                  <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-500/10 text-amber-400 border border-amber-500/20">편집 {s.frag_history!.edited}</span>
+                                )}
+                                {s.frag_history!.exported > 0 && (
+                                  <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">방송 {s.frag_history!.exported}</span>
+                                )}
+                              </>
+                            )}
                             {shortHash && (
                               <>
                                 <span>·</span>
@@ -571,9 +600,13 @@ export const ArchivePanel: React.FC<{
                             {sourcePlayingId === s.source_id ? "닫기" : "재생"}
                           </button>
                         )}
-                        {usageCount > 0 && (
+                        {(usageCount > 0 || (s.frag_history?.fragments ?? 0) > 0) && (
                           <button
-                            onClick={() => setExpandedSourceId(isExpanded ? null : s.source_id)}
+                            onClick={() => {
+                              const next = isExpanded ? null : s.source_id;
+                              setExpandedSourceId(next);
+                              if (next) loadFragHistory(s.source_id); // [조각 이력] 펼칠 때 lazy
+                            }}
                             className="flex items-center gap-1 px-2 py-1.5 rounded-md bg-secondary/40 hover:bg-secondary/70 text-[10px] font-semibold text-foreground/60 transition-colors"
                           >
                             이력 {usageCount}
@@ -615,6 +648,37 @@ export const ArchivePanel: React.FC<{
                             </span>
                           </button>
                         ))}
+                      </div>
+                    )}
+                    {/* [조각 이력] 이 원본에서 태어난 조각들 — 채택·편집·방송 경험까지.
+                        프로젝트를 지워도 이 목록은 변하지 않는다(스냅샷·자연키). */}
+                    {isExpanded && fragHistory[s.source_id]?.fragments?.length > 0 && (
+                      <div className="px-4 pb-4 pl-[68px]">
+                        <p className="text-[10px] font-black tracking-widest uppercase text-muted-foreground/50 mb-1.5">
+                          조각 {fragHistory[s.source_id].fragment_count}개
+                        </p>
+                        <div className="space-y-1">
+                          {fragHistory[s.source_id].fragments.map((f: any) => (
+                            <div key={`${f.start_ds}_${f.end_ds}`}
+                              className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-secondary/15 text-[11px]">
+                              <span className="text-foreground/80 font-medium truncate max-w-[280px]">{f.display_name}</span>
+                              {f.people && <span className="text-primary/70 flex-shrink-0">{f.people}</span>}
+                              <span className="ml-auto flex items-center gap-1 flex-shrink-0">
+                                {(f.adopted?.length ?? 0) > 0 && (
+                                  <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-primary/10 text-primary border border-primary/20"
+                                    title={f.adopted.join(", ")}>채택 {f.adopted.length}</span>
+                                )}
+                                {f.edited && (
+                                  <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-500/10 text-amber-400 border border-amber-500/20">편집됨</span>
+                                )}
+                                {(f.exported?.length ?? 0) > 0 && (
+                                  <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
+                                    title={f.exported.join(", ")}>방송 {f.exported.length}</span>
+                                )}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
                       </div>
                     )}
                   </div>
