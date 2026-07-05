@@ -462,7 +462,10 @@ def route_edit_intent(source_ids=None, input_text="", recent_messages=None,
     #    ("응 지금 너를 만들고 잇는데" → '만들'·'진행' 정규식이 편집으로 납치하던 사건,
     #     "오늘 몇일이지?" → 날짜 모른 채 22일 환각 사건 — 실데이터 주입으로 봉쇄)
     #    짧은 승인어("좋아")는 제외 — 제안 확정 흐름은 기존 사다리가 처리.
-    if _CHAT_SIGNAL_RE.search(t) and not _AFFIRM_SHORT_RE.match(t):
+    #    LLM 불가(allow_llm=False) 시엔 편집 표지가 있으면 게이트를 건너뛴다 —
+    #    "생일잔치만 편집해줄래?"(질문꼴 편집요청)는 결정론 모드에서 편집 우선(L0 골든).
+    if _CHAT_SIGNAL_RE.search(t) and not _AFFIRM_SHORT_RE.match(t) \
+            and (allow_llm or not _EDIT_MARK_RE.search(t)):
         if allow_llm:
             und = _llm_understand(t, recent_messages, source_ids, person_vocab)
             if und:
