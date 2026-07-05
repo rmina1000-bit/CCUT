@@ -4,6 +4,7 @@ import { Search, Film, Calendar, Clock, RotateCcw, Box, ArrowRight, Play, Edit3,
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { videoService } from "@/services/videoService";
+import { sourceDisplayName } from "@/lib/fragmentIdentity";
 
 interface SourceUsage {
   program_id: string;
@@ -473,7 +474,7 @@ export const ArchivePanel: React.FC<{
                                 title="클릭하여 이름 변경"
                                 className="text-sm font-semibold text-foreground/90 text-left hover:text-primary transition-colors truncate"
                               >
-                                {s.title || s.source_id}
+                                {sourceDisplayName(s.title)}
                               </button>
                             )}
                             {!s.play_url && (
@@ -665,7 +666,7 @@ export const ArchivePanel: React.FC<{
                                 <button onClick={() => playSourceInline(s)}
                                   className="w-full flex items-center gap-2 text-[11px] text-foreground/70 px-2 py-1 rounded bg-secondary/15 hover:bg-secondary/40 hover:text-primary transition-colors text-left">
                                   {drillPlay?.key === s.source_id ? <X size={10} className="text-emerald-400 flex-shrink-0" /> : <Play size={10} className="text-blue-400 flex-shrink-0" />}
-                                  <span className="truncate">{s.title || s.source_id}</span>
+                                  <span className="truncate">{sourceDisplayName(s.title)}</span>
                                   <span className="text-muted-foreground/40 ml-auto flex-shrink-0">{formatSecs(s.duration)}</span>
                                 </button>
                                 {drillPlay?.key === s.source_id && (
@@ -865,7 +866,7 @@ export const ArchivePanel: React.FC<{
               </div>
               <div>
                 <h3 className="text-[15px] font-bold text-foreground">원본을 삭제하시겠습니까?</h3>
-                <p className="text-[12px] text-red-400/80 truncate max-w-[320px]">“{srcDelete.title}”</p>
+                <p className="text-[12px] text-red-400/80 truncate max-w-[320px]">“{sourceDisplayName(srcDelete.title)}”</p>
               </div>
             </div>
 
