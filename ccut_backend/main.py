@@ -2554,6 +2554,41 @@ async def post_render(export_input_id: str, payload: dict = None, db: Session = 
             if snap:
                 row.display_name = snap
             db.commit()
+            # [송출층 §3.1] 크레딧 매니페스트 — 방송의 엔딩 크레딧처럼, 완성본이
+            # DB 없이도 자기 정체(이름·회차·소재 계보·레시피)를 증언하는 사이드카.
+            # 실패해도 렌더 흐름은 비차단.
+            try:
+                import json as _json
+                ei2 = db.query(ExportInputTable).filter_by(export_id=export_input_id).first()
+                clips = (ei2.clips if ei2 else None) or []
+                src_ids = set()
+                for c in clips:
+                    fid = str(c.get("fragment_id", ""))
+                    if "_SRC_" in fid:  # SF_XXXX_SRC_YYYY[_Pnnn] → SRC_YYYY
+                        src_ids.add("SRC_" + fid.split("_SRC_")[-1].split("_")[0])
+                src_ids = sorted(src_ids)
+                src_rows = db.query(SourceTable).filter(SourceTable.source_id.in_(src_ids)).all() if src_ids else []
+                manifest = {
+                    "kind": "ccut_credit_manifest_v1",
+                    "render_id": row.id,
+                    "display_name": row.display_name,
+                    "program": {"program_id": program_id, "name": program_title},
+                    "proposal_id": row.proposal_id,
+                    "rendered_at": str(row.created_at),
+                    "output_url": row.output_url,
+                    "clips": clips,
+                    "sources": [{"source_id": s.source_id, "title": s.title,
+                                 "shot_date": getattr(s, "shot_date", None),
+                                 "hash": s.hash_value} for s in src_rows],
+                }
+                _adir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                                     "storage", "archive")
+                os.makedirs(_adir, exist_ok=True)
+                with open(os.path.join(_adir, f"{row.id}.json"), "w", encoding="utf-8") as _f:
+                    _json.dump(manifest, _f, ensure_ascii=False, indent=1)
+                print(f"[CREDIT] 매니페스트 기록: storage/archive/{row.id}.json")
+            except Exception as _cm_e:
+                print(f"[CREDIT] 매니페스트 실패 (비차단): {_cm_e}")
     return result
 
 @app.get("/render-result/{export_input_id}")
