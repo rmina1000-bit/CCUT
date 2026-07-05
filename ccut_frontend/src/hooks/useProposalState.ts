@@ -556,6 +556,16 @@ export const useProposalState = (
     // 프론트는 빈 입력만 막고 말을 거의 그대로 보낸다. 서버 불가 시에만 구 메뉴판 폴백(가역성).
     let consultationDecision: ConsultationDecision;
     try {
+      // [조각 라벨 지정 편집 2026-07-06] 조각맵 타일 라벨(display_id "K1")→조각ID 매핑 동봉 —
+      // "K1,K4,K6만으로 편집해줘"를 백엔드가 정확한 조각 후보로 해석할 수 있게.
+      const fragmentLabels: Record<string, string> = {};
+      (sourceFragments ?? []).forEach((f: any) => {
+        if (!f || f.status === "removed") return;
+        const label = String(f.display_id || "").toUpperCase();
+        if (/^[A-Z]{1,2}\d{1,3}$/.test(label)) {
+          fragmentLabels[label] = String(f.fragment_id || "").replace(/_[LMR]\d*$/, "");
+        }
+      });
       const route = await videoService.routeEditIntent({
         project_id: projectId,
         source_ids: orderedSourceIds ?? [],
@@ -564,6 +574,7 @@ export const useProposalState = (
           .slice(-6)
           .map((m: any) => ({ sender: m.sender, text: m.text })),
         selected_proposal_id: selectedProposalId,
+        fragment_labels: fragmentLabels,
       });
       console.log("[INTENT-ROUTER route]\n" + JSON.stringify({
         action: route.action,

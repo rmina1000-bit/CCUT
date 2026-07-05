@@ -277,7 +277,7 @@ def _llm_smalltalk(input_text, recent_messages=None, facts=""):
 
 def route_edit_intent(source_ids=None, input_text="", recent_messages=None,
                       selected_proposal_id=None, allow_llm=True, person_vocab=None,
-                      archive_lookup=None, search_lookup=None):
+                      archive_lookup=None, search_lookup=None, fragment_labels=None):
     t = (input_text or "").strip()
     if not t:
         return _resp("ask_clarification", "말씀을 조금만 더 입력해 주세요.", confidence=1.0)
@@ -370,6 +370,63 @@ def route_edit_intent(source_ids=None, input_text="", recent_messages=None,
             r["results"] = found["results"]
             return r
         # 판단 불가(검색어 추출 실패 등) → 아래 사다리 계속
+
+    # ── 0.55 [조각 라벨 지정 편집 국장지시 2026-07-06] "K1,K4,K6만으로 편집해줘" —
+    #    조각맵 타일 라벨(display_id)로 조각을 지목하는 편집. 프론트가 동봉한
+    #    fragment_labels(라벨→조각ID)로 해석해 그 조각들만 후보로 실행한다.
+    #    모르는 라벨은 실행하지 않고 정직 보고 (날조 실행 사건 봉쇄: "정은한..." 지어내기).
+    _label_hits = _re.findall(r"[A-Za-z]{1,2}\d{1,3}", t)
+    if _label_hits and _re.search(r"만으로|으로만|만 가지고|편집|골라|구성|묶|모아|합쳐|넣|빼|제외|말고|없이", t):
+        _lmap = {str(k).upper(): v for k, v in (fragment_labels or {}).items()}
+        _asked = []
+        for _h in _label_hits:  # 순서 보존 + 중복 제거
+            _u = _h.upper()
+            if _u not in _asked:
+                _asked.append(_u)
+        if not _lmap:
+            return _resp("answer_only",
+                         "조각 번호로 지정하는 편집은 조각맵 라벨 연결이 필요한데, 지금 "
+                         "화면에서 매핑을 받지 못했어요. 조각맵에서 해당 조각을 직접 "
+                         "클릭해 다뤄주시거나, 조건(인물·장면)으로 말씀해 주세요.",
+                         confidence=0.9, matched={"kind": "fragment_labels_unavailable"})
+        _known = [u for u in _asked if u in _lmap]
+        # 미지 라벨 보고는 단일 문자 접두(진짜 타일 형태 "K1")만 — "MP4"/"H264" 같은
+        # 파일 포맷 토큰이 "조각맵에 없는 번호"로 오탐되지 않게
+        _unknown = [u for u in _asked
+                    if u not in _lmap and _re.match(r"^[A-Z]\d{1,3}$", u)]
+        if _known:
+            _is_excl = bool(_re.search(r"빼|제외|말고|없이", t))
+            if _is_excl:
+                _excl_ids = {_lmap[u] for u in _known}
+                _fids = [v for k, v in _lmap.items() if v not in _excl_ids]
+                # 시간순 아님(사전순)이지만 후보군 제약 목적이라 순서 무관 — 판사가 배치
+                _desc = f"{', '.join(_known)}를 뺀 나머지 조각 {len(_fids)}개"
+                _norm = f"지정 조각({', '.join(_known)})을 제외한 나머지로 구성"
+            else:
+                _fids = [_lmap[u] for u in _known]
+                _desc = f"조각 {', '.join(_known)} ({len(_fids)}개)"
+                _norm = f"지정한 조각({', '.join(_known)})만 전부 사용해 구성"
+            if not _fids:
+                return _resp("ask_clarification",
+                             "그렇게 빼면 남는 조각이 없어요. 다른 기준으로 말씀해 주세요.",
+                             confidence=0.9, matched={"kind": "fragment_labels_empty"})
+            _warn = (f" (참고: {', '.join(_unknown)}은 조각맵에 없어 뺐어요)"
+                     if _unknown else "")
+            r = _resp("run_proposal",
+                      f"네, {_desc}만 가지고 골라볼게요.{_warn}",
+                      normalized=_norm, confidence=0.95, via="deterministic",
+                      matched={"kind": "fragment_labels", "labels": _known,
+                               "unknown": _unknown, "exclude": _is_excl})
+            r["candidate_fragment_ids"] = _fids
+            return r
+        if _unknown:
+            _avail = ", ".join(sorted(_lmap.keys())[:12])
+            return _resp("ask_clarification",
+                         f"{', '.join(_unknown)}은 지금 조각맵에 없는 번호예요. "
+                         f"현재 있는 조각: {_avail}{'…' if len(_lmap) > 12 else ''}. "
+                         "다시 지정해 주시겠어요?",
+                         confidence=0.9,
+                         matched={"kind": "fragment_labels_unknown", "unknown": _unknown})
 
     # ── 0.6 [실행 사칭 금지 국장승인 2026-07-06 B안] 프레임 단위 미세조정·복원 요청은
     #    이 경로에 능력이 없다 — 재제안을 돌리며 "잘랐습니다"라고 사칭하던 사건

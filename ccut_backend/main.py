@@ -4253,6 +4253,8 @@ class EditIntentRouteRequest(BaseModel):
     input_text: str
     recent_messages: list = []
     selected_proposal_id: Optional[str] = None
+    # [조각 라벨 지정 편집] 프론트 조각맵 타일 라벨 -> 조각ID 매핑 ("K1" -> "SF_xxx")
+    fragment_labels: dict = {}
 
 
 @app.post("/intent/route-edit")
@@ -4267,7 +4269,8 @@ async def route_edit_intent_api(req: EditIntentRouteRequest):
         return route_edit_intent(
             source_ids=req.source_ids, input_text=req.input_text,
             recent_messages=req.recent_messages,
-            selected_proposal_id=req.selected_proposal_id)
+            selected_proposal_id=req.selected_proposal_id,
+            fragment_labels=req.fragment_labels)
 
     return await asyncio.get_event_loop().run_in_executor(None, _run)
 

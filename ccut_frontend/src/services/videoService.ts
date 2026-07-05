@@ -164,6 +164,8 @@ export const videoService = {
         input_text: string;
         recent_messages?: any[];
         selected_proposal_id?: string | null;
+        // [조각 라벨 지정 편집] 조각맵 타일 라벨("K1") → 조각ID 매핑
+        fragment_labels?: Record<string, string>;
     }) => {
         const response = await fetch(`${API_BASE_URL}/intent/route-edit`, {
             method: "POST",
