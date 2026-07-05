@@ -436,6 +436,20 @@ const Index: React.FC = () => {
         }
         markTiming("upload_done");
 
+        // [서사층 §2.1] 말의 원장 — 문진에서 들려준 말을 소스 원장에 영구 귀속
+        // (대화에만 표류하지 않게. 실패해도 업로드 흐름은 계속 — 노트는 재전송 멱등)
+        if (intakeRef.current?.videoNotes?.length) {
+          const byName = new Map(collectedEntries.map((e) => [e.title, e.source_id]));
+          const notes = intakeRef.current.videoNotes
+            .filter((v) => v.note && byName.get(v.name))
+            .map((v) => ({ target_kind: "source", target_id: byName.get(v.name)!, text: v.note, origin: "intake" }));
+          if (notes.length) {
+            videoService.addNarrativeNotes(notes)
+              .then((r) => console.log(`[NARRATIVE] 문진 노트 원장 귀속: +${r?.added}`))
+              .catch((e) => console.warn("[NARRATIVE] 노트 귀속 실패 (비차단):", e));
+          }
+        }
+
         const today = new Date();
         const dateStrYYMMDD = `${today.getFullYear().toString().slice(2)}${String(today.getMonth() + 1).padStart(2, "0")}${String(today.getDate()).padStart(2, "0")}`;
         const fileCount = allFiles.length;

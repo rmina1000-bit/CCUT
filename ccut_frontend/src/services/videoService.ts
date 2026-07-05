@@ -129,6 +129,14 @@ export const videoService = {
         });
     },
 
+    // [서사층 §2.1] 말의 원장 — 사용자의 말을 대상(source/person/program)에 영구 귀속
+    addNarrativeNotes: async (notes: Array<{ target_kind: string; target_id: string; text: string; origin?: string }>) => {
+        return await fetcher(`/narrative/notes`, {
+            method: "POST",
+            body: JSON.stringify({ notes })
+        });
+    },
+
     // [TIMELINE] append-only 영속 타임라인 — 사건 즉시 기록(멱등), 커서 페이지네이션
     appendTimeline: async (programId: string, entries: any[]) => {
         return await fetcher(`/projects/${encodeURIComponent(programId)}/timeline`, {

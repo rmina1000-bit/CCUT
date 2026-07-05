@@ -22,6 +22,9 @@ interface Source {
   fps: number;
   hash_value: string | null;
   created_at: string | null;
+  // [서사층] 촬영일(연대기 축) + 사용자의 말(캡션은 기계 요약이 아니라 그 사람의 말)
+  shot_date?: string | null;
+  note?: string | null;
   program_names: string[];
   usage: SourceUsage[];
   play_url: string | null;
@@ -80,8 +83,8 @@ export const ArchivePanel: React.FC<{
   const [data, setData] = useState<ArchiveData | null>(null);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
-  // [국장지시] 원본 리스트 정렬 선택 — 최신순(기본) / 이름순
-  const [srcSort, setSrcSort] = useState<"recent" | "name">("recent");
+  // [국장지시] 원본 리스트 정렬 선택 — 최신순(기본) / 촬영일순(연대기) / 이름순
+  const [srcSort, setSrcSort] = useState<"recent" | "shot" | "name">("recent");
   const [activeSubTab, setActiveSubTab] = useState<"sources" | "programs" | "proposals" | "exports">("sources");
   const [exports, setExports] = useState<ExportRecord[]>([]);
   const [playingId, setPlayingId] = useState<string | null>(null);
@@ -226,7 +229,10 @@ export const ArchivePanel: React.FC<{
   const sortedSources = [...filteredSources].sort((a, b) =>
     srcSort === "recent"
       ? srcLatest(b) - srcLatest(a)
-      : sourceDisplayName(a.title).localeCompare(sourceDisplayName(b.title), "ko"));
+      : srcSort === "shot"
+        // [서사층] 연대기 — '살아진 날' 최신부터 (촬영일 없는 원본은 뒤로)
+        ? (b.shot_date || "").localeCompare(a.shot_date || "")
+        : sourceDisplayName(a.title).localeCompare(sourceDisplayName(b.title), "ko"));
 
   const filteredPrograms = data?.programs.filter(p =>
     _has(p.name) || _has(p.program_id)
@@ -468,9 +474,9 @@ export const ArchivePanel: React.FC<{
             {/* ── 원본 리스트 탭 ── */}
             {activeSubTab === "sources" && (
               <>
-              {/* [국장지시] 정렬 선택 — 최신순(사용/생성 기준) / 이름순 */}
+              {/* [국장지시] 정렬 선택 — 최신순 / 촬영일순(연대기) / 이름순 */}
               <div className="flex items-center gap-1.5 mb-2">
-                {([["recent", "최신순"], ["name", "이름순"]] as const).map(([v, l]) => (
+                {([["recent", "최신순"], ["shot", "촬영일순"], ["name", "이름순"]] as const).map(([v, l]) => (
                   <button key={v} onClick={() => setSrcSort(v)}
                     className={`px-2.5 py-1 rounded-md text-[11px] font-bold transition-all ${srcSort === v ? "bg-primary/20 text-primary" : "bg-secondary/30 text-muted-foreground/60 hover:text-foreground/80"}`}>
                     {l}
@@ -530,6 +536,13 @@ export const ArchivePanel: React.FC<{
                             )}
                           </div>
                           <div className="flex items-center gap-2.5 text-[11px] text-muted-foreground/60 mt-1">
+                            {/* [서사층] 촬영일이 첫 자리 — 원본은 '살아진 날'에 속한다 */}
+                            {s.shot_date && (
+                              <>
+                                <span className="flex items-center gap-1 text-foreground/70 font-semibold"><Calendar size={10} /> {s.shot_date}</span>
+                                <span>·</span>
+                              </>
+                            )}
                             <span className="flex items-center gap-1"><Clock size={10} /> {formatSecs(s.duration)}</span>
                             <span>·</span>
                             <span>{s.fps} FPS</span>
@@ -542,6 +555,10 @@ export const ArchivePanel: React.FC<{
                               </>
                             )}
                           </div>
+                          {/* [서사층 §2.1] 캡션 = 기계 요약이 아니라 그 사람의 말 */}
+                          {s.note && (
+                            <p className="mt-1 text-[11px] text-primary/70 truncate max-w-[520px]">“{s.note}”</p>
+                          )}
                         </div>
                       </div>
                       <div className="flex items-center gap-2 flex-shrink-0">
