@@ -210,14 +210,17 @@ try:
 except Exception as _nl_e:
     print(f"[NARRATIVE] 초기화 실패 (non-blocking): {_nl_e}")
 
-# [조각 금고 v2.2] 인지조각 = 왕관 자산 — 시작 시 멱등 적재/병합 + 원본 생존 표시.
-# 재조각화가 인지를 버려도 금고는 (hash, 구간) 앵커로 이어받는다. 실패 비차단.
+# [조각 금고 v2.2] 스키마 보장만 — 실제 적재는 조각화 완료 시점(증분 훅)에서만
+# 일어난다. 전량 backfill을 부팅 동기 경로에 두면 sources가 커질수록(현재 68건)
+# 시작 지연·DB 점유가 선형으로 자라 항상성 원칙과 충돌한다는 지적을 반영해 제거.
+# 과거분 적재는 필요 시 tools/vault_backfill.py를 수동/스케줄 실행으로 분리.
 try:
     from engine import fragment_vault as _fv
-    _fv.backfill_all()
-    _fv.mark_source_alive()
+    _fv_con = __import__("sqlite3").connect(str(Path(__file__).parent / "ccut_app.db"))
+    _fv.ensure_schema(_fv_con)
+    _fv_con.close()
 except Exception as _fv_e:
-    print(f"[VAULT] 초기화 실패 (non-blocking): {_fv_e}")
+    print(f"[VAULT] 스키마 보장 실패 (non-blocking): {_fv_e}")
 
 def get_video_range_response(file_path: Path, request: Request):
     from fastapi.responses import StreamingResponse, FileResponse
@@ -4102,11 +4105,23 @@ async def delete_source(source_id: str, mode: str = "source_only", db: Session =
             db.rollback()
             print(f"[DELETE-GUARD] delete_source full rollback: {_e}")
             raise
+        # [조각 금고] source row 자체가 사라지는 시점 — vault의 source_alive를
+        # 즉시 갱신(주기 작업이 아니라 삭제 이벤트에 훅). 비차단.
+        try:
+            from engine import fragment_vault as _fv3
+            _fv3.mark_source_alive()
+        except Exception as _fv_e:
+            print(f"[VAULT] source_alive 갱신 실패 (비차단): {_fv_e}")
         return {"status": "DELETED_FULL", "source_id": source_id, "file_removed": file_removed}
     else:
         # source_only: 파일만 제거, 레코드는 원본 부재 표시
         s.file_path = None
         db.commit()
+        try:
+            from engine import fragment_vault as _fv3
+            _fv3.mark_source_alive()
+        except Exception as _fv_e:
+            print(f"[VAULT] source_alive 갱신 실패 (비차단): {_fv_e}")
         return {"status": "DELETED_SOURCE_ONLY", "source_id": source_id, "file_removed": file_removed}
 
 

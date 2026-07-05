@@ -4,17 +4,23 @@
 CCUT 아카이브의 왕관 자산은 원본이 아니라 '인지조각'이다: 구간 영상에
 요약·자막·시각서술·인물·장소·가치평가·임베딩(=인지)이 붙은 것. 현재 구조는
 재조각화가 fragment_id를 재발급하며 인지를 버린다(실측: 인물링크 33.5%·
-인지잔재 39.9% 사망). 금고는 이를 구조로 종결한다:
+인지잔재 39.9% 사망). 금고는 이 문제의 '자주 벌어지는 경우'만 종결한다:
 
-  자연키 = (원본 내용 hash, 구간 deciseconds)
-  — fragment_id가 몇 번 갈려도, 파일명이 바뀌어도, 심지어 원본이 유실됐다
-    다시 들어와도(hash 재일치) 같은 조각으로 이어진다.
+  자연키 = (원본 내용 hash, 구간 deciseconds — 0.1초 반올림)
+  — 경계가 거의 그대로인 재조각화(구간 흔들림 <0.05s)는 fragment_id가
+    바뀌어도, 파일명이 바뀌어도, 원본이 유실됐다 재유입돼도(hash 재일치)
+    같은 조각으로 이어진다.
 
-  적재 = append/merge only. 인지는 절대 버리지 않는다 — 새 세대가 오면
-  비어있는 칸만 채우고(merge_keep), 채워진 인지는 값이 올 때만 갱신한다.
+  [v1 한계 — 정직히 명시] 자연키가 구간 자체에 묶여 있어, 한 조각이
+  둘로 쪼개지거나 여러 조각이 하나로 합쳐지는 재조각화(경계가 실질적으로
+  달라지는 경우)는 새 자연키가 되어 별도 행으로 적재된다 — 이 경우 옛
+  인지는 승계되지 않는다. "인지의 불멸"은 이번 v1의 코드가 보장하는
+  범위가 아니라 지향점이다. 분할/병합 대응은 후속 버전 과제.
 
-원본이 유실돼도 금고의 데이터값(인지+임베딩)은 남는다 — 검색·서사·재창조의
-재료가 거저 유지된다.
+  적재는 append/merge only. merge_keep: 새 세대가 오면 비어있는 칸만
+  채우고, 채워진 인지는 값이 올 때만 갱신한다(있던 값을 지우지는 않는다).
+
+원본이 유실돼도(자연키가 유지되는 한) 금고의 데이터값은 남는다.
 """
 import datetime
 import json
@@ -199,11 +205,21 @@ def backfill_all():
 
 
 def mark_source_alive():
-    """원본 실존 여부 갱신 — 유실돼도 금고 행은 남는다(source_alive=0 표시만)."""
+    """원본 실존 여부 갱신 — 유실돼도 금고 행은 남는다(source_alive=0 표시만).
+
+    [버그 수정 2026-07-05] 기존 구현은 sources 테이블을 기준으로 순회해
+    갱신했다 — source row 자체가 삭제되면 그 vault 행은 갱신 대상에서
+    빠져 source_alive=1로 방치되고 stats()가 낙관적으로 거짓말했다.
+    지금은 vault가 보유한 source_id 집합을 기준으로 sources 존재 여부를
+    LEFT JOIN으로 판정 — sources row 삭제·file_path 유실 양쪽 모두 잡는다."""
     con = _connect()
     ensure_schema(con)
+    vault_sids = [r[0] for r in con.execute(
+        "SELECT DISTINCT source_id FROM fragment_vault WHERE source_id IS NOT NULL")]
+    src_paths = dict(con.execute("SELECT source_id, file_path FROM sources"))
     n_dead = 0
-    for sid, path in con.execute("SELECT source_id, file_path FROM sources"):
+    for sid in vault_sids:
+        path = src_paths.get(sid)  # sources에 없으면 None → 죽음 판정
         alive = 1 if (path and os.path.exists(path)) else 0
         if not alive:
             n_dead += 1

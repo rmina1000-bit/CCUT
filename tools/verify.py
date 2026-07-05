@@ -228,6 +228,32 @@ def run_l0():
           fv.merge_keep("옛 요약", "") == "옛 요약" and fv.merge_keep("옛", None) == "옛"
           and fv.merge_keep("옛", "새") == "새", "보존+갱신")
 
+    # [BUG-FIX 2026-07-05] mark_source_alive: source row 삭제 시에도 vault
+    # source_alive가 정확히 갱신되는지 (기존 결함: sources 순회라 삭제된 row는
+    # 갱신 대상에서 빠져 stats가 낙관적으로 거짓말했음)
+    import sqlite3 as _sq_t
+    _tmp_db = fv.DB_PATH + ".l0test"
+    if os.path.exists(_tmp_db):
+        os.remove(_tmp_db)
+    _tcon = _sq_t.connect(_tmp_db)
+    fv.ensure_schema(_tcon)
+    _tcon.execute("CREATE TABLE sources (source_id TEXT, file_path TEXT)")
+    _tcon.execute("INSERT INTO sources VALUES ('SRC_GONE', NULL)")  # sources엔 없는 셈 치되 남겨 file_path=NULL로 죽음 표현
+    _tcon.execute(
+        "INSERT INTO fragment_vault (anchor_hash, start_ds, end_ds, start, end, source_id) "
+        "VALUES ('H_TEST', 0, 100, 0.0, 10.0, 'SRC_GHOST')")  # sources 테이블에 아예 없는 유령 source_id
+    _tcon.commit()
+    _orig_db_path = fv.DB_PATH
+    fv.DB_PATH = _tmp_db
+    fv.mark_source_alive()
+    _alive = _tcon.execute(
+        "SELECT source_alive FROM fragment_vault WHERE source_id='SRC_GHOST'").fetchone()[0]
+    fv.DB_PATH = _orig_db_path
+    _tcon.close()
+    os.remove(_tmp_db)
+    check("L0", "vault source_alive: sources에 없는 유령 source_id도 죽음 판정",
+          _alive == 0, f"source_alive={_alive}")
+
     # [조사 교정] 단순 replace의 '정은한가' 문법 붕괴 수리 검증
     r = ir.route_edit_intent(input_text="은한이가 병원에 있는 장면만", allow_llm=False,
                              person_vocab=_pv, archive_lookup=_fake_proj)
