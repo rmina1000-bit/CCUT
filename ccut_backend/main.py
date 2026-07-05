@@ -3541,6 +3541,24 @@ async def admin_support_case_classify(case_id: int):
     return _adm.support_case_classify(case_id)
 
 
+@app.get("/admin/security/events")
+async def admin_security_events(status: str = "open", limit: int = 50):
+    from admin import service as _adm
+    return _adm.security_events_list(status=status, limit=limit)
+
+
+@app.post("/admin/security/events")
+async def admin_security_event_create(payload: dict = None):
+    from admin import service as _adm
+    return _adm.security_event_create(payload or {})
+
+
+@app.post("/admin/security/events/{event_id}/status")
+async def admin_security_event_status(event_id: int, payload: dict = None):
+    from admin import service as _adm
+    return _adm.security_event_status(event_id, ((payload or {}).get("status") or "").strip())
+
+
 @app.post("/export/final")
 async def run_final_broadcast(project_id: str = "DEFAULT", db: Session = Depends(get_db)):
     """[CCUT 1.0.6 최종 송출] 편집본을 실제 .mp4 파일로 렌더링하고 DB 아카이브에 기록"""

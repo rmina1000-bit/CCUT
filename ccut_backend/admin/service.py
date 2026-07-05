@@ -52,6 +52,21 @@ def ensure_schema():
             PRIMARY KEY (date_key, metric_key)
         )"""
     )
+    # [War Room v1] 보안 이벤트 원장 — 자동 차단 금지, 상태 전이만
+    con.execute(
+        """CREATE TABLE IF NOT EXISTS admin_security_events (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            event_type TEXT NOT NULL,
+            severity TEXT NOT NULL,
+            user_id TEXT,
+            ip_hash TEXT,
+            target_type TEXT,
+            target_id TEXT,
+            detail_json TEXT,
+            status TEXT NOT NULL,
+            created_at TEXT NOT NULL
+        )"""
+    )
     # [War Room v1] 지원/문의 접수 큐 — 문의·불만·아이디어·버그 단일 원장
     con.execute(
         """CREATE TABLE IF NOT EXISTS admin_support_cases (
@@ -592,6 +607,72 @@ def support_case_classify(case_id: int) -> dict:
                  target_id=str(case_id),
                  note=f"{res.get('category')}/{res.get('severity')}: {res.get('summary')}")
     return {"status": "OK", "id": case_id, **res}
+
+
+# ═══════════════════════════════════════════════════════════════════
+#   [War Room v1] 보안 관제 — admin_security_events (자동 차단 금지)
+# ═══════════════════════════════════════════════════════════════════
+
+_SEC_STATUSES = ("open", "triaged", "closed")
+
+
+def security_events_list(status: str = "open", limit: int = 50) -> dict:
+    limit = max(1, min(int(limit or 50), 100))
+    con = _connect()
+    sql = ("SELECT id, event_type, severity, user_id, target_type, target_id,"
+           " detail_json, status, created_at FROM admin_security_events")
+    params: tuple = ()
+    if status and status != "all":
+        sql += " WHERE status = ?"
+        params = (status,)
+    sql += " ORDER BY id DESC LIMIT ?"
+    rows = con.execute(sql, params + (limit,)).fetchall()
+    con.close()
+    cols = ["id", "event_type", "severity", "user_id", "target_type", "target_id",
+            "detail_json", "status", "created_at"]
+    return {"events": [dict(zip(cols, r)) for r in rows]}
+
+
+def security_event_create(payload: dict) -> dict:
+    event_type = (payload.get("event_type") or "").strip()
+    if not event_type:
+        return {"error": "event_type is required"}
+    severity = (payload.get("severity") or "P2").strip()
+    if severity not in _PRIORITIES:
+        return {"error": f"severity must be one of {_PRIORITIES}"}
+    con = _connect()
+    cur = con.execute(
+        "INSERT INTO admin_security_events (event_type, severity, user_id, ip_hash,"
+        " target_type, target_id, detail_json, status, created_at)"
+        " VALUES (?,?,?,?,?,?,?,?,?)",
+        (event_type, severity, payload.get("user_id"), payload.get("ip_hash"),
+         payload.get("target_type"), payload.get("target_id"),
+         payload.get("detail_json"), "open",
+         datetime.datetime.now().isoformat()))
+    event_id = cur.lastrowid
+    con.commit()
+    con.close()
+    audit_append("security_event_create", target_type="security_event",
+                 target_id=str(event_id), note=f"[{severity}] {event_type}")
+    return {"status": "OK", "id": event_id}
+
+
+def security_event_status(event_id: int, status: str) -> dict:
+    if status not in _SEC_STATUSES:
+        return {"error": f"status must be one of {_SEC_STATUSES}"}
+    con = _connect()
+    row = con.execute("SELECT status, event_type FROM admin_security_events WHERE id=?",
+                      (event_id,)).fetchone()
+    if not row:
+        con.close()
+        return {"error": "security event not found"}
+    con.execute("UPDATE admin_security_events SET status=? WHERE id=?",
+                (status, event_id))
+    con.commit()
+    con.close()
+    audit_append("security_event_status", target_type="security_event",
+                 target_id=str(event_id), note=f"{row[0]} → {status} ({row[1]})")
+    return {"status": "OK", "id": event_id, "from": row[0], "to": status}
 
 
 def audit_logs(limit: int = 20, cursor: int = None) -> dict:

@@ -4,6 +4,7 @@ import { AdminShell } from "@/components/admin/AdminShell";
 import { AdminTab } from "@/components/admin/AdminLeftNav";
 import { AdminSituationPanel } from "@/components/admin/AdminSituationPanel";
 import { AdminSupportPanel } from "@/components/admin/AdminSupportPanel";
+import { AdminSecurityPanel } from "@/components/admin/AdminSecurityPanel";
 import { AdminUsersPanel } from "@/components/admin/AdminUsersPanel";
 import { AdminRevenuePanel } from "@/components/admin/AdminRevenuePanel";
 import { AdminInsightsPanel } from "@/components/admin/AdminInsightsPanel";
@@ -56,7 +57,7 @@ const AdminIndex: React.FC = () => {
       {active === "analytics" && <PendingLedger label="행동 분석" step="후속 커밋" />}
       {active === "design" && <PendingLedger label="디자인 제어" step="STEP 7" />}
       {active === "ai" && <AdminInsightsPanel />}
-      {active === "security" && <PendingLedger label="보안 관제" step="STEP 5" />}
+      {active === "security" && <AdminSecurityPanel />}
       {active === "legal" && <PendingLedger label="법무/수사공조" step="STEP 9" />}
       {active === "audit" && <AdminAuditPanel />}
     </AdminShell>
