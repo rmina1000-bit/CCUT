@@ -3601,6 +3601,28 @@ async def admin_design_config_status(config_id: int, payload: dict = None):
     return _adm.design_config_status(config_id, ((payload or {}).get("status") or "").strip())
 
 
+@app.get("/admin/ai/status")
+async def admin_ai_status():
+    from admin import service as _adm
+    return _adm.ai_status()
+
+
+@app.get("/admin/ai/runs")
+async def admin_ai_runs(limit: int = 50):
+    from admin import service as _adm
+    return _adm.ai_runs(limit=limit)
+
+
+@app.post("/admin/ai/query")
+async def admin_ai_query(payload: dict = None):
+    from admin import service as _adm
+    p = payload or {}
+    query = (p.get("query") or "").strip()
+    if not query:
+        raise HTTPException(status_code=400, detail="query is required")
+    return _adm.ai_query((p.get("role") or "ops_brief").strip(), query)
+
+
 @app.post("/export/final")
 async def run_final_broadcast(project_id: str = "DEFAULT", db: Session = Depends(get_db)):
     """[CCUT 1.0.6 최종 송출] 편집본을 실제 .mp4 파일로 렌더링하고 DB 아카이브에 기록"""

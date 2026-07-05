@@ -52,6 +52,20 @@ def ensure_schema():
             PRIMARY KEY (date_key, metric_key)
         )"""
     )
+    # [War Room v1] AI 실행 로그 — 역할·모델·성공/실패·시간 전부 기록
+    con.execute(
+        """CREATE TABLE IF NOT EXISTS admin_ai_runs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            role TEXT NOT NULL,
+            model_key TEXT NOT NULL,
+            status TEXT NOT NULL,
+            input_summary TEXT,
+            output_summary TEXT,
+            error TEXT,
+            duration_ms INTEGER,
+            created_at TEXT NOT NULL
+        )"""
+    )
     # [War Room v1] 디자인/카피/메뉴 설정 원장 — 실반영은 후속, v1은 원장+상태만
     con.execute(
         """CREATE TABLE IF NOT EXISTS admin_surface_configs (
@@ -870,6 +884,105 @@ def design_config_status(config_id: int, status: str) -> dict:
                  target_id=str(config_id),
                  note=f"{row[0]} → {status} ({row[1]}.{row[2]})")
     return {"status": "OK", "id": config_id, "from": row[0], "to": status}
+
+
+# ═══════════════════════════════════════════════════════════════════
+#   [War Room v1] AI 운영실 — 역할별 로컬 질의 + 실행 로그
+#   외부 API AI: v1에서 호출 경로 자체 없음 (슬롯만, 별도 승인 트랙)
+# ═══════════════════════════════════════════════════════════════════
+
+_AI_ROLES = ("ops_brief", "support_classify", "security_triage",
+             "strategy_advice", "copy_suggest")
+
+_ROLE_PROMPTS = {
+    "ops_brief": "너는 CCUT 운영 브리핑 담당이다. 아래 실측 지표만 근거로 운영자 질문에 답하라.",
+    "support_classify": "너는 지원 문의 분류 담당이다. 질문 내용을 분류·요약하라.",
+    "security_triage": "너는 보안 이벤트 triage 담당이다. 위험도와 첫 조치를 제안하라.",
+    "strategy_advice": "너는 서비스 전략 조언 담당이다. 아래 실측 지표 범위 안에서만 조언하라.",
+    "copy_suggest": "너는 UI 문구 제안 담당이다. 짧고 조용한 한국어 운영 도구 톤으로 제안하라.",
+}
+
+
+def ai_status() -> dict:
+    """로컬 hub 실측 ping — 하드코딩 상태 금지."""
+    import urllib.request
+    from engine.hub import OLLAMA_URL, HUB_MODEL
+    local = {"model": HUB_MODEL, "url": OLLAMA_URL}
+    try:
+        with urllib.request.urlopen(OLLAMA_URL + "/api/tags", timeout=3) as r:
+            r.read()
+        local["reachable"] = True
+    except Exception as e:
+        local["reachable"] = False
+        local["error"] = str(e)
+    con = _connect()
+    try:
+        total, failed = con.execute(
+            "SELECT COUNT(*), SUM(CASE WHEN status='failed' THEN 1 ELSE 0 END)"
+            " FROM admin_ai_runs").fetchone()
+    except Exception:
+        total, failed = 0, 0
+    con.close()
+    return {
+        "local": local,
+        "external": {"status": "disabled",
+                     "note": "외부 API AI는 별도 승인 트랙 — v1에 호출 경로 없음"},
+        "runs_total": total or 0,
+        "runs_failed": failed or 0,
+        "roles": list(_AI_ROLES),
+    }
+
+
+def ai_runs(limit: int = 50) -> dict:
+    limit = max(1, min(int(limit or 50), 100))
+    con = _connect()
+    try:
+        rows = con.execute(
+            "SELECT id, role, model_key, status, input_summary, output_summary,"
+            " error, duration_ms, created_at FROM admin_ai_runs"
+            " ORDER BY id DESC LIMIT ?", (limit,)).fetchall()
+    except Exception:
+        rows = []
+    con.close()
+    cols = ["id", "role", "model_key", "status", "input_summary", "output_summary",
+            "error", "duration_ms", "created_at"]
+    return {"runs": [dict(zip(cols, r)) for r in rows]}
+
+
+def ai_query(role: str, query: str) -> dict:
+    """역할별 로컬 질의 — 전 실행 admin_ai_runs 기록. 한 번에 모델 1개, 역할 1개."""
+    import time as _time
+    if role not in _AI_ROLES:
+        return {"error": f"role must be one of {_AI_ROLES}"}
+
+    con = _connect()
+    ctx = _service_counts(con)
+    con.close()
+    ctx_lines = "\n".join(f"- {k}: {v}" for k, v in ctx.items())
+    prompt = (
+        f"{_ROLE_PROMPTS[role]}\n"
+        "지표에 없는 수치는 지어내지 말고 '지표에 없음'이라고 말하라.\n"
+        f"[운영 지표]\n{ctx_lines}\n\n"
+        f"[운영자 입력]\n{query}\n\n"
+        'JSON만 출력. 형식: {"answer": "한국어 답변 (3문장 이내)"}'
+    )
+    t0 = _time.time()
+    try:
+        from engine.hub import _ollama_json, HUB_MODEL
+        res = _ollama_json(prompt, timeout=60)
+        answer = (res or {}).get("answer")
+        if not answer:
+            raise ValueError("empty answer")
+    except Exception as e:
+        _log_ai_run(role, "local_hub", "failed", input_summary=query, error=e,
+                    duration_ms=int((_time.time() - t0) * 1000))
+        return {"error": "hub 응답 없음", "role": role, "detail": str(e)}
+    duration = int((_time.time() - t0) * 1000)
+    _log_ai_run(role, "local_hub", "ok", input_summary=query,
+                output_summary=answer, duration_ms=duration)
+    audit_append("ai_query", target_type="ai_run", note=f"[{role}] {query}")
+    return {"role": role, "query": query, "result": answer,
+            "duration_ms": duration, "sources_referenced": len(ctx)}
 
 
 def audit_logs(limit: int = 20, cursor: int = None) -> dict:

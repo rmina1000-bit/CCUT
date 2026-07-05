@@ -38,9 +38,9 @@ export const AdminAIPanel: React.FC<{ screen: string }> = ({ screen }) => {
     if (!q || loading) return;
     setLoading(true);
     try {
-      const r = await fetcher("/admin/insights/query", {
+      const r = await fetcher("/admin/ai/query", {
         method: "POST",
-        body: JSON.stringify({ query: `[화면: ${screen}] ${q}` }),
+        body: JSON.stringify({ role: "ops_brief", query: `[화면: ${screen}] ${q}` }),
       }) as QueryResult;
       setHistory(prev => [r, ...prev].slice(0, 10));
       setQuery("");
