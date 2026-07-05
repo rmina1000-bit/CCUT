@@ -129,6 +129,18 @@ export const videoService = {
         });
     },
 
+    // [TIMELINE] append-only 영속 타임라인 — 사건 즉시 기록(멱등), 커서 페이지네이션
+    appendTimeline: async (programId: string, entries: any[]) => {
+        return await fetcher(`/projects/${encodeURIComponent(programId)}/timeline`, {
+            method: "POST",
+            body: JSON.stringify({ entries })
+        });
+    },
+    getTimeline: async (programId: string, limit: number = 300, before?: number) => {
+        const q = `limit=${limit}` + (before ? `&before=${before}` : "");
+        return await fetcher(`/projects/${encodeURIComponent(programId)}/timeline?${q}`);
+    },
+
     // [ARCHIVE B] 아카이브 포함 승인 시 소스를 프로젝트에 연결 (기존 UI-② 엔드포인트 재사용, 멱등)
     addSourcesToProject: async (programId: string, sourceIds: string[]) => {
         return await fetcher(`/projects/${encodeURIComponent(programId)}/sources`, {

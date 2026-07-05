@@ -990,22 +990,28 @@ const Index: React.FC = () => {
             // [B-5d] ui_state 스냅샷 복원 (단일 스냅샷 패턴)
             try {
               const stateRes = await videoService.getProjectState(activeNavItem);
-              // [TIMELINE-PERSIST 2026-07-05] 중앙창 타임라인 복원 — 대화(storyPlan)와
-              // 제안 세대(proposalHistory)가 프로젝트 삭제 전까지 쌓이는 영속 흐름.
-              // 저장은 아래 자동저장 effect(chat_state), 여기는 열 때 되살리는 절반.
-              if (stateRes && stateRes.chat_state && isMounted) {
-                try {
-                  const chat = JSON.parse(stateRes.chat_state);
-                  if (chat?.story_plan) {
-                    setStoryPlan(chat.story_plan);
-                    console.log(`[TIMELINE-PERSIST] 대화 복원: ${chat.story_plan?.messages?.length ?? 0}개 메시지`);
+              // [TIMELINE 2026-07-05] append-only 타임라인 복원 — 상용 채팅 동형 구조.
+              // 행 단위 사건 로그를 시간순으로 되살린다 (v1 chat_state blob은 서버가
+              // 첫 조회 때 행으로 자동 이관). 복원분 id는 synced에 등록해 재전송 방지.
+              syncedTimelineIdsRef.current = new Set();
+              restoredTimelineRef.current = null;
+              try {
+                const tl = await videoService.getTimeline(activeNavItem, 300);
+                if (tl?.entries?.length && isMounted) {
+                  const msgs: any[] = [];
+                  const gens: any[] = [];
+                  for (const en of tl.entries) {
+                    syncedTimelineIdsRef.current.add(en.client_id);
+                    if (en.kind === "message" && en.payload) msgs.push(en.payload);
+                    else if (en.kind === "generation" && en.payload) gens.push(en.payload);
                   }
-                  if (chat?.proposal_history?.length) {
-                    hydrateProposalHistory(chat.proposal_history);
-                  }
-                } catch (e) {
-                  console.warn("[TIMELINE-PERSIST] chat_state 파싱 실패 — 새 흐름으로 시작", e);
+                  if (msgs.length) restoredTimelineRef.current = msgs; // 스켈레톤이 승계
+                  if (gens.length) hydrateProposalHistory(gens);
+                  console.log(`[TIMELINE] 복원: 메시지 ${msgs.length} · 세대 ${gens.length}` +
+                    (tl.has_more ? " (이전 페이지 더 있음)" : ""));
                 }
+              } catch (e) {
+                console.warn("[TIMELINE] 복원 실패 — 새 흐름으로 시작", e);
               }
               if (stateRes && stateRes.ui_state && isMounted) {
                 const snap = JSON.parse(stateRes.ui_state);
@@ -1121,7 +1127,9 @@ const Index: React.FC = () => {
         narrative_draft: draft,
         // [FLOW] 재생성 시 기존 대화를 지우지 않는다 — 개략은 새 메시지로 흐름에 추가.
         // (프로젝트 전환은 setStoryPlan(null)로 이미 초기화되므로 여기 병합은 같은 프로젝트 한정)
+        // [TIMELINE] 저장된 과거 흐름(복원분)을 맨 앞에 승계 — 삭제 전까지 쌓이는 역사
         messages: [
+            ...(restoredTimelineRef.current ?? []),
             ...(((storyPlan as any)?.messages) ?? []),
             { id: `ai_init_${Date.now()}`, sender: "ai", text: draft, timestamp: Date.now() },
             // [UI-③⑤] 문진 요약 — 사용자가 말해준 정보를 흐름에 새겨 둔다
@@ -1148,35 +1156,56 @@ const Index: React.FC = () => {
         }
     };
     intakeRef.current = null; // 1회 주입 후 소진
+    restoredTimelineRef.current = null; // [TIMELINE] 복원분 1회 승계 후 소진
 
     setStoryPlan(newPlan);
   }, [appState, proposals, sourceEntries, storyPlan, setStoryPlan]);
 
-  // [TIMELINE-PERSIST 2026-07-05] 중앙창 타임라인 자동저장 — 대화·제안 세대가 바뀔
-  // 때마다 debounce 후 chat_state(기존 미사용 컬럼)에 통째 저장. 프로젝트 삭제 전까지
-  // 계속 쌓이는 영속 흐름의 나머지 절반 (복원은 hydration에서).
-  // 하이드레이션 중에는 저장 금지 — 초기화된 빈 상태로 저장분을 덮어쓰는 사고 방지.
-  const timelineSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // [TIMELINE 2026-07-05] append-only 동기화 — 상용 채팅 동형 구조.
+  // 새로 생긴 메시지만 골라 사건 발생 즉시 기록(유실 창 ~0). client_id 멱등이라
+  // 재전송·멀티탭에 안전하고, 과거 행은 불변이라 역사 파괴가 구조적으로 불가능.
+  // 해석중(isInterpreting) 임시 메시지는 최종 문구로 교체된 뒤에 기록.
+  // 제안 세대는 4초 숙성 후 저장 — 프리뷰 URL 주입까지 끝난 완성 스냅샷을 남긴다.
+  const restoredTimelineRef = useRef<any[] | null>(null);
+  const syncedTimelineIdsRef = useRef<Set<string>>(new Set());
+  const genSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
     if (!activeNavItem || !activeNavItem.startsWith("proj_")) return;
     if (isSwitchingProject) return;
-    const msgCount = (storyPlan as any)?.messages?.length ?? 0;
-    if (msgCount === 0 && proposalHistory.length === 0) return; // 빈 상태 저장 금지
-    if (timelineSaveTimerRef.current) clearTimeout(timelineSaveTimerRef.current);
-    timelineSaveTimerRef.current = setTimeout(() => {
-      videoService.saveProjectState(activeNavItem, {
-        chat_state: JSON.stringify({
-          v: 1,
-          story_plan: storyPlan,
-          proposal_history: proposalHistory,
-        }),
-      }).then(() => {
-        console.log(`[TIMELINE-PERSIST] saved msgs=${msgCount} generations=${proposalHistory.length}`);
-      }).catch((e) => console.warn("[TIMELINE-PERSIST] 저장 실패", e));
-    }, 1500);
-    return () => {
-      if (timelineSaveTimerRef.current) clearTimeout(timelineSaveTimerRef.current);
-    };
+
+    const newMsgs: any[] = [];
+    for (const m of (((storyPlan as any)?.messages) ?? [])) {
+      const cid = String(m?.id ?? `m_${m?.timestamp}`);
+      if (!m || m.isInterpreting || syncedTimelineIdsRef.current.has(cid)) continue;
+      newMsgs.push({ kind: "message", client_id: cid, ts: m.timestamp ?? Date.now(), payload: m });
+    }
+    if (newMsgs.length) {
+      newMsgs.forEach((e) => syncedTimelineIdsRef.current.add(e.client_id));
+      videoService.appendTimeline(activeNavItem, newMsgs)
+        .then((r) => console.log(`[TIMELINE] +${newMsgs.length} message (server added=${r?.added})`))
+        .catch((err) => {
+          newMsgs.forEach((e) => syncedTimelineIdsRef.current.delete(e.client_id));
+          console.warn("[TIMELINE] message append 실패 — 다음 변경 시 재시도", err);
+        });
+    }
+
+    const hasPendingGen = proposalHistory.some((g) => !syncedTimelineIdsRef.current.has(`gen_${g.id}`));
+    if (hasPendingGen) {
+      if (genSaveTimerRef.current) clearTimeout(genSaveTimerRef.current);
+      genSaveTimerRef.current = setTimeout(() => {
+        const gens = proposalHistory
+          .filter((g) => !syncedTimelineIdsRef.current.has(`gen_${g.id}`))
+          .map((g) => ({ kind: "generation", client_id: `gen_${g.id}`, ts: g.ts, payload: g }));
+        if (!gens.length) return;
+        gens.forEach((e) => syncedTimelineIdsRef.current.add(e.client_id));
+        videoService.appendTimeline(activeNavItem, gens)
+          .then((r) => console.log(`[TIMELINE] +${gens.length} generation (server added=${r?.added})`))
+          .catch((err) => {
+            gens.forEach((e) => syncedTimelineIdsRef.current.delete(e.client_id));
+            console.warn("[TIMELINE] generation append 실패 — 다음 변경 시 재시도", err);
+          });
+      }, 4000);
+    }
   }, [activeNavItem, isSwitchingProject, storyPlan, proposalHistory]);
 
   // handleProposalPreview, handleProposalCommit moved to useProposalState

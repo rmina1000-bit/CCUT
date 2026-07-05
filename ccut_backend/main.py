@@ -3703,6 +3703,36 @@ async def get_project_state(program_id: str, db: Session = Depends(get_db)):
         "ui_state": pg.ui_state,
     }
 
+class TimelineAppendRequest(BaseModel):
+    entries: list = []
+
+
+@app.post("/projects/{program_id}/timeline")
+async def timeline_append(program_id: str, req: TimelineAppendRequest):
+    """[TIMELINE] append-only 이벤트 로그 — 사건 발생 즉시 기록.
+    client_id 멱등이라 재전송·멀티탭에 안전. 과거 행 불변 = 역사 파괴 불가."""
+    from engine import timeline_store
+    added = timeline_store.append_entries(program_id, req.entries)
+    return {"status": "OK", "added": added}
+
+
+@app.get("/projects/{program_id}/timeline")
+async def timeline_fetch(program_id: str, limit: int = 300, before: int = None,
+                         db: Session = Depends(get_db)):
+    """[TIMELINE] 최근 limit개(시간순) + before 커서 페이지네이션.
+    v1 chat_state blob은 첫 조회 때 행으로 자동 이관 후 비운다."""
+    from engine import timeline_store
+    pg = db.query(ProgramTable).filter_by(program_id=program_id).first()
+    if pg is not None and pg.chat_state:
+        n = timeline_store.migrate_from_blob(program_id, pg.chat_state)
+        pg.chat_state = None
+        db.commit()
+        print(f"[TIMELINE] chat_state blob -> 행 자동 이관: {program_id} {n}건")
+    entries = timeline_store.fetch(program_id, limit=limit, before=before)
+    return {"status": "OK", "entries": entries,
+            "has_more": len(entries) == int(limit)}
+
+
 @app.delete("/projects/{program_id}")
 async def delete_project(program_id: str, db: Session = Depends(get_db)):
     """[SOFT-DELETE] 프로젝트를 휴지통으로 이동(status='DELETED' + deleted_at).

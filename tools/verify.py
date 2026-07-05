@@ -165,6 +165,35 @@ def run_l0():
           ir.replace_name("은한이 나오는 장면만", "은한이", "정은한") == "정은한 나오는 장면만",
           ir.replace_name("은한이 나오는 장면만", "은한이", "정은한"))
 
+    # [TIMELINE] append-only 저장소 — 멱등/시간순/커서/blob 이관 (temp DB, 라이브 무관)
+    from engine import timeline_store as tls
+    import tempfile
+    _tmp = os.path.join(tempfile.gettempdir(), "ccut_l0_timeline.db")
+    if os.path.exists(_tmp):
+        os.remove(_tmp)
+    _orig_tls = tls.DB_PATH
+    tls.DB_PATH = _tmp
+    try:
+        n1 = tls.append_entries("proj_T", [
+            {"kind": "message", "client_id": "m1", "ts": 1, "payload": {"t": "a"}},
+            {"kind": "generation", "client_id": "gen_g1", "ts": 2, "payload": {"p": 1}}])
+        n2 = tls.append_entries("proj_T", [
+            {"kind": "message", "client_id": "m1", "ts": 1, "payload": {"t": "a"}}])
+        rows = tls.fetch("proj_T")
+        check("L0", "timeline append+멱등", n1 == 2 and n2 == 0 and len(rows) == 2,
+              f"n1={n1} n2={n2} rows={len(rows)}")
+        check("L0", "timeline 시간순+커서",
+              rows[0]["client_id"] == "m1"
+              and tls.fetch("proj_T", before=rows[1]["entry_id"])[0]["client_id"] == "m1")
+        n3 = tls.migrate_from_blob("proj_T", json.dumps({
+            "story_plan": {"messages": [{"id": "m1", "timestamp": 1},
+                                        {"id": "m9", "timestamp": 9}]},
+            "proposal_history": [{"id": "g1", "ts": 2}]}))
+        check("L0", "timeline blob 이관(중복 skip)", n3 == 1
+              and len(tls.fetch("proj_T")) == 3, f"n3={n3}")
+    finally:
+        tls.DB_PATH = _orig_tls
+
     # 골든 단락: 대소문/공백 정규화 포함 exact
     cases = hub._load_golden_cases()
     if cases:
