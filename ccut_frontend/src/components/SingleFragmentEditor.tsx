@@ -107,7 +107,19 @@ export const SingleFragmentEditor: React.FC<SingleFragmentEditorProps> = ({
   const [size, setSize] = useState<{ width: number; height: number } | null>(null);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
-  const [extractReady, setExtractReady] = useState(false);
+  // [PBE-RACE FIX 2026-07-05] ready를 불리언이 아니라 '어느 조각·밀도가 준비됐나'로.
+  // 단일 불리언이던 시절: 이전 밀도의 COMPLETED(또는 실패 catch)가 다른 밀도
+  // 이미지를 개방 → 존재하지 않는 d{n} 프레임 404 폭풍 (국장 실측 37건).
+  const [readyKey, setReadyKey] = useState<string | null>(null);
+  const [extractFailed, setExtractFailed] = useState(false);
+  const wantKey = fragment ? `${fragment.fragment_id}_d${frameCount}` : "";
+  const wantKeyRef = useRef(wantKey);
+  wantKeyRef.current = wantKey;
+  const extractReady = readyKey === wantKey;
+  // 늦게 도착한 응답/프로브가 현재 요청을 덮지 않게 — 자기 키가 아직 유효할 때만 개방
+  const openGate = (key: string) => {
+    if (wantKeyRef.current === key) setReadyKey(key);
+  };
 
   const containerRef = useRef<HTMLDivElement>(null);
   const dialogRef = useRef<HTMLDivElement>(null);
@@ -148,7 +160,8 @@ export const SingleFragmentEditor: React.FC<SingleFragmentEditorProps> = ({
     setLoadedFrames({});
     setImageErrorAttempts({});
     setFrameCacheBuster({});
-    setExtractReady(false);
+    setReadyKey(null);
+    setExtractFailed(false);
     setFrameCount(12); // [PBE-DENSITY] 열 때는 항상 기본 밀도
     setDeletedFrames(new Set());
     setCtxMenu(null);
@@ -163,36 +176,45 @@ export const SingleFragmentEditor: React.FC<SingleFragmentEditorProps> = ({
 
     if (startSec === undefined || endSec === undefined) return;
 
-    const payload = {
-      fragments: [
-        {
-          source_id: fragment.source_id,
-          fragment_id: fragment.fragment_id,
-          start_time: startSec,
-          end_time: endSec
-        }
-      ]
-    };
+    // [PBE-SPEED 2026-07-05] 캐시 프로브 — 첫 프레임이 이미 디스크에 있으면(재방문)
+    // 추출 왕복을 기다리지 않고 즉시 개방. 열기 체감을 왕복 1장 확인으로 단축.
+    const key = `${fragment.fragment_id}_d12`;
+    const probe = new Image();
+    probe.onload = () => openGate(key);
+    probe.src = `/static/thumbnails/P_${fragment.fragment_id}_0.jpg`;
 
+    requestExtract(fragment, 12, startSec, endSec);
+  }, [open, fragment, startSec, endSec]);
+
+  // [PBE-RACE FIX] 추출 요청 단일 경로 — 응답이 '내가 요청한 (조각,밀도)'일 때만 개방.
+  // 실패 시 게이트를 열지 않는다(구버전 catch가 열어서 404 폭풍의 방아쇠였음) —
+  // 실패 배너 + 다시 시도 버튼으로 정직하게.
+  const requestExtract = (frag: any, n: number, s?: number, e?: number) => {
+    const key = `${frag.fragment_id}_d${n}`;
+    setExtractFailed(false);
     fetch("/api/pbe/extract-panoramas", {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify(payload)
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        num_frames: n,
+        fragments: [{
+          source_id: frag.source_id,
+          fragment_id: frag.fragment_id,
+          start_time: s,
+          end_time: e,
+        }],
+      }),
     })
-      .then(res => res.json())
+      .then((res) => res.json())
       .then((data) => {
-        // 추출 완료(COMPLETED) 응답을 받은 뒤에만 썸네일 렌더 게이트 개방
         if (data && data.status === "COMPLETED") {
-          setExtractReady(true);
+          openGate(key);
+        } else if (wantKeyRef.current === key) {
+          setExtractFailed(true);
         }
       })
-      .catch(() => {
-        // Silent error
-      });
-
-  }, [open, fragment, startSec, endSec]);
+      .catch(() => { if (wantKeyRef.current === key) setExtractFailed(true); });
+  };
 
   useEffect(() => {
     if (!dragging) return;
@@ -280,12 +302,15 @@ export const SingleFragmentEditor: React.FC<SingleFragmentEditorProps> = ({
     typeof value === "number" ? `${value.toFixed(1)}s` : "—";
 
   const handleImageError = (index: number) => {
+    // [PBE 404 완화 2026-07-05] 10회/1s → 3회/2s. 게이트가 (조각,밀도) 키에 결속돼
+    // 이제 존재하지 않는 밀도로는 열리지 않으므로, 재시도는 파일 쓰기 직후의
+    // 짧은 창만 메우면 된다 (404 폭풍 37건 사건의 증폭기 제거).
     const attempts = imageErrorAttempts[index] || 0;
-    if (attempts < 10) {
+    if (attempts < 3) {
       setTimeout(() => {
         setImageErrorAttempts(prev => ({ ...prev, [index]: attempts + 1 }));
         setFrameCacheBuster(prev => ({ ...prev, [index]: Date.now() }));
-      }, 1000);
+      }, 2000);
     }
   };
 
@@ -320,26 +345,16 @@ export const SingleFragmentEditor: React.FC<SingleFragmentEditorProps> = ({
     setLoadedFrames({});
     setImageErrorAttempts({});
     setFrameCacheBuster({});
-    setExtractReady(false);
     setDeletedFrames(new Set()); // 밀도가 바뀌면 프레임 인덱스 의미가 바뀌므로 삭제 표시는 초기화
     setCtxMenu(null);
     setFrameCount(clamped);
-    fetch("/api/pbe/extract-panoramas", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        num_frames: clamped,
-        fragments: [{
-          source_id: fragment.source_id,
-          fragment_id: fragment.fragment_id,
-          start_time: startSec,
-          end_time: endSec,
-        }],
-      }),
-    })
-      .then((res) => res.json())
-      .then((data) => { if (data && data.status === "COMPLETED") setExtractReady(true); })
-      .catch(() => setExtractReady(true)); // 실패해도 기존 캐시 프레임 시도
+    // 이 밀도 캐시가 이미 있으면 즉시 개방 (프로브), 없으면 추출 완료 응답으로만 개방
+    const key = `${fragment.fragment_id}_d${clamped}`;
+    const suffix = clamped === 12 ? "" : `_d${clamped}`;
+    const probe = new Image();
+    probe.onload = () => openGate(key);
+    probe.src = `/static/thumbnails/P_${fragment.fragment_id}${suffix}_0.jpg`;
+    requestExtract(fragment, clamped, startSec, endSec);
   };
 
   // 밀도 프리셋: 초 단위 간격 → 프레임 수 (전체 길이 기준)
@@ -623,6 +638,16 @@ export const SingleFragmentEditor: React.FC<SingleFragmentEditorProps> = ({
                 alt="Preview"
                 className="w-full h-full object-contain"
               />
+            ) : extractFailed ? (
+              /* [PBE-RACE FIX] 실패를 숨기고 게이트를 열던 구코드 대신 — 정직한 배너 */
+              <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-black/70 z-10">
+                <span className="text-[12px] text-red-300">프레임 추출에 실패했어요 (네트워크/서버)</span>
+                <button
+                  type="button"
+                  onClick={() => fragment && requestExtract(fragment, frameCount, startSec, endSec)}
+                  className="px-3 py-1 rounded-md bg-primary/20 text-primary text-[11px] font-bold hover:bg-primary/35"
+                >다시 시도</button>
+              </div>
             ) : (
               <div className="absolute inset-0 flex items-center justify-center bg-black/70 z-10">
                 <svg className="animate-spin h-6 w-6 text-primary" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
