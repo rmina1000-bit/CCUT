@@ -4245,11 +4245,14 @@ async def persons_reject(person_id: str):
 
 
 class EditIntentRouteRequest(BaseModel):
-    project_id: str = None
+    # [422 사건 2026-07-06] `str = None`은 pydantic v2에서 null 입력을 거부한다 —
+    # 제안 미선택 상태의 프론트가 selected_proposal_id: null을 보내면 422 →
+    # 프론트가 구 메뉴판 폴백("자유롭게 대화하는 AI는 아니에요")으로 강등되던 원인.
+    project_id: Optional[str] = None
     source_ids: list = []
     input_text: str
     recent_messages: list = []
-    selected_proposal_id: str = None
+    selected_proposal_id: Optional[str] = None
 
 
 @app.post("/intent/route-edit")
