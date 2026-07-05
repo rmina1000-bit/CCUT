@@ -786,7 +786,7 @@ class BAMSManager:
     def get_all_exports(self):
         """내보낸 영상 전체 목록 (최신순, ProgramTable JOIN으로 최신 프로젝트명/작업시각 반영)"""
         with SessionLocal() as db:
-            from archive.db_models import ExportResultTable, ProgramTable
+            from archive.db_models import ExportResultTable, ProgramTable, ProjectSourceTable
             rows = (
                 db.query(ExportResultTable, ProgramTable.name, ProgramTable.last_updated_at)
                 .outerjoin(ProgramTable, ExportResultTable.program_id == ProgramTable.program_id)
@@ -795,6 +795,7 @@ class BAMSManager:
                 .all()
             )
             import os as _os
+            from engine import fragment_vault as _fv
             result = []
             for r, live_name, live_updated_at in rows:
                 # [CACHE-BUST] 파일 mtime을 쿼리로 붙여 재렌더 후 브라우저 캐시 무력화
@@ -806,6 +807,22 @@ class BAMSManager:
                     sep = "&" if (out_url and "?" in out_url) else "?"
                     out_url = f"{out_url}{sep}v={mtime}"
                     real_size = _os.path.getsize(path)
+                # [국장지시] 내보낸 영상 목록도 대표 이미지 — 원본 첫 조각 썸네일 재사용.
+                # export_results.source_id는 실측상 전량 NULL(레거시 미기입) —
+                # program_id → project_sources 첫 원본(display_order)으로 대표 소스를 역추적한다.
+                thumb = None
+                rep_source_id = r.source_id
+                if not rep_source_id and r.program_id:
+                    ps = (
+                        db.query(ProjectSourceTable.source_id)
+                          .filter(ProjectSourceTable.program_id == r.program_id)
+                          .order_by(ProjectSourceTable.display_order.asc())
+                          .first()
+                    )
+                    rep_source_id = ps[0] if ps else None
+                if rep_source_id:
+                    frags = _fv.source_fragment_history(rep_source_id).get("fragments") or []
+                    thumb = frags[0]["thumbnail_url"] if frags else None
                 result.append({
                     "id": r.id,
                     "program_id": r.program_id,
@@ -818,6 +835,7 @@ class BAMSManager:
                     "program_last_updated_at": str(live_updated_at) if live_updated_at else None,
                     # [EXPORT-NAME-SNAPSHOT] 렌더 시점에 고정된 이름 — proposal 재생성과 무관
                     "display_name": getattr(r, "display_name", None),
+                    "thumbnail_url": thumb,
                 })
             return result
 

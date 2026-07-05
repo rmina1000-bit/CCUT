@@ -7,68 +7,72 @@ import { videoService } from "@/services/videoService";
 import { sourceDisplayName } from "@/lib/fragmentIdentity";
 import { SingleFragmentEditor } from "@/components/SingleFragmentEditor";
 
+// [Archive 단계B] hydrate 분리 — /archive/list 대형 응답 폐지.
+// summary(경량) + sources(페이징) + source 상세(lazy) + timeline(day 페이징)로 분리.
+
+interface ArchiveSummary {
+  source_count: number;
+  program_count: number;
+  latest_shot_date: string | null;
+  recent_source_ids: string[];
+}
+
+interface SourceCard {
+  source_id: string;
+  title: string;
+  shot_date: string | null;
+  shot_date_fallback: boolean;
+  created_at: string | null;
+  duration: number | null;
+  thumbnail_url: string | null;
+  fragment_count: number;
+}
+
 interface SourceUsage {
   program_id: string;
   name: string | null;
   used_at: string | null;
-  // [국장지시] 프로젝트 안에서의 원본 라벨(A,B..) — 배지 "Vega-A" 병기용
   label?: string;
-}
-
-interface Source {
-  source_id: string;
-  file_path: string;
-  title: string;
-  duration: number;
-  fps: number;
-  hash_value: string | null;
-  created_at: string | null;
-  // [서사층] 촬영일(연대기 축) + 사용자의 말(캡션은 기계 요약이 아니라 그 사람의 말)
-  shot_date?: string | null;
-  note?: string | null;
-  // [조각 이력] 이 원본의 조각 자산 요약 — 프로젝트 purge에 면역
-  frag_history?: { fragments: number; adopted: number; edited: number; exported: number } | null;
-  program_names: string[];
-  usage: SourceUsage[];
-  play_url: string | null;
-}
-
-interface Program {
-  program_id: string;
-  name: string;
-  status: string;
-  created_at: string | null;
-  last_updated_at: string | null;
-  source_count: number;
-  proposal_count?: number;
-  export_count?: number;
   deleted_at?: string | null;
 }
 
-interface Proposal {
-  proposal_id: string;
-  source_id: string;
-  // [DISPLAY-NAME] 백엔드 권위: "{프로젝트명} · {N}번째 제안 · {mode}안"
-  display_name?: string;
-  mode: string;
-  duration: number;
-  created_at: string | null;
-  program_id?: string | null;
-  program_name: string | null;
-  program_name_inferred: boolean;
-  program_deleted?: boolean;
+interface SourceNote {
+  note_id: number;
+  text: string;
+  origin: string;
+  said_at: string;
 }
 
-interface ArchiveData {
-  sources: Source[];
-  programs: Program[];
-  proposals: Proposal[];
+interface SourceDetail {
+  source_id: string;
+  title: string;
+  duration: number | null;
+  fps: number | null;
+  hash_value: string | null;
+  created_at: string | null;
+  shot_date: string | null;
+  shot_date_fallback: boolean;
+  play_url: string | null;
+  notes: SourceNote[];
+  usage: SourceUsage[];
+  exports: { id: string; program_id: string | null; display_name: string | null; output_url: string; status: string; created_at: string | null }[];
+  fragment_count: number;
+  adopted_events: number;
+  edited_events: number;
+  exported_events: number;
+  fragments: any[];
+}
+
+interface TimelineDay {
+  date_key: string;
+  source_count: number;
+  thumbnail_url: string | null;
+  has_fallback: boolean;
 }
 
 interface ExportRecord {
   id: string;
   program_id: string | null;
-  // [DISPLAY-NAME] 그 제안의 이름 상속: "{프로젝트명} · 첫 번째 제안 · A안"
   display_name?: string | null;
   program_title: string | null;
   proposal_id: string;
@@ -77,23 +81,37 @@ interface ExportRecord {
   duration: number | null;
   created_at: string | null;
   program_last_updated_at: string | null;
+  thumbnail_url?: string | null;
 }
+
+const videoSrc = (url: string) =>
+  url.startsWith("http") ? url : `${videoService.API_BASE_URL.replace("/api", "")}${url}`;
+
+const formatSecs = (seconds?: number | null) => {
+  if (!seconds) return "0초";
+  const mins = Math.floor(seconds / 60);
+  const secs = Math.floor(seconds % 60);
+  return mins > 0 ? `${mins}분 ${secs}초` : `${secs}초`;
+};
 
 export const ArchivePanel: React.FC<{
   onNavigateToProject?: (id: string) => void;
   onRenameProject?: (id: string, newName: string) => void;
 }> = ({ onNavigateToProject, onRenameProject }) => {
-  const [data, setData] = useState<ArchiveData | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [summary, setSummary] = useState<ArchiveSummary | null>(null);
+  const [sourceCards, setSourceCards] = useState<SourceCard[]>([]);
+  const [sourcesCursor, setSourcesCursor] = useState<string | null>(null);
+  const [sourcesLoading, setSourcesLoading] = useState(true);
+  const [sourcesLoadingMore, setSourcesLoadingMore] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
-  // [국장지시] 원본 리스트 정렬 선택 — 최신순(기본) / 촬영일순(연대기) / 이름순
-  const [srcSort, setSrcSort] = useState<"recent" | "shot" | "name">("recent");
-  // [조각 이력] 펼침 시 lazy 조회 (source_id → 조각 목록+사건)
-  const [fragHistory, setFragHistory] = useState<Record<string, any>>({});
-  // [조각 뷰어] 파노라마 조각 클릭 → 정밀편집창 '보기 전용' (수정은 새 프로젝트에서)
+  const [srcSort, setSrcSort] = useState<"shot_date_desc" | "created_desc">("shot_date_desc");
+
+  // [상세 lazy hydrate] source_id → 상세(note/usage/export/조각 이력), 클릭 시에만 조회
+  const [detailCache, setDetailCache] = useState<Record<string, SourceDetail>>({});
+  const [detailLoading, setDetailLoading] = useState<Record<string, boolean>>({});
+
   const [viewerFrag, setViewerFrag] = useState<any | null>(null);
   const [viewerOpen, setViewerOpen] = useState(false);
-  // [신규 프로젝트 생성] 이 원본으로 새 프로젝트 — 재업로드 없이 연결
   const [creatingFor, setCreatingFor] = useState<string | null>(null);
   const createProjectFromSource = async (sourceId: string) => {
     if (creatingFor) return;
@@ -107,39 +125,51 @@ export const ArchivePanel: React.FC<{
       setCreatingFor(null);
     }
   };
-  const loadFragHistory = async (sid: string) => {
-    if (fragHistory[sid]) return;
+
+  const fetchSourceDetail = async (sid: string): Promise<SourceDetail | null> => {
+    if (detailCache[sid]) return detailCache[sid];
+    setDetailLoading(prev => ({ ...prev, [sid]: true }));
     try {
-      const r = await fetcher(`/archive/source/${encodeURIComponent(sid)}/fragments`);
-      setFragHistory((prev) => ({ ...prev, [sid]: r }));
+      const r = await fetcher(`/archive/source/${encodeURIComponent(sid)}`) as SourceDetail;
+      setDetailCache(prev => ({ ...prev, [sid]: r }));
+      return r;
     } catch (e) {
-      console.warn("[FRAG-HISTORY] 조회 실패:", e);
+      console.warn("[SOURCE-DETAIL] 조회 실패:", e);
+      return null;
+    } finally {
+      setDetailLoading(prev => ({ ...prev, [sid]: false }));
     }
   };
-  const [activeSubTab, setActiveSubTab] = useState<"sources" | "programs" | "proposals" | "exports">("sources");
+
+  const [activeSubTab, setActiveSubTab] = useState<"sources" | "timeline" | "programs" | "proposals" | "exports">("sources");
+
+  // [exports] 첫 진입 필수 아님 — exports 탭 클릭 시에만 lazy 조회
   const [exports, setExports] = useState<ExportRecord[]>([]);
+  const [exportsLoaded, setExportsLoaded] = useState(false);
+  const [exportsLoading, setExportsLoading] = useState(false);
   const [playingId, setPlayingId] = useState<string | null>(null);
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState("");
   const [expandedSourceId, setExpandedSourceId] = useState<string | null>(null);
-  const [expandedProgramId, setExpandedProgramId] = useState<string | null>(null);
-  const [propPlayingId, setPropPlayingId] = useState<string | null>(null);
-  const [propPreviewUrl, setPropPreviewUrl] = useState<string | null>(null);
-  const [propLoading, setPropLoading] = useState(false);
   const videoRef = useRef<HTMLVideoElement | null>(null);
 
-  // [SOURCE] 원본 재생/이름변경/삭제
   const [sourcePlayingId, setSourcePlayingId] = useState<string | null>(null);
   const [srcDelete, setSrcDelete] = useState<{ id: string; title: string } | null>(null);
 
-  const handleRenameSource = async (s: Source, newName: string) => {
+  // [연대기] 날짜 묶음 페이징 + day 상세
+  const [timelineDays, setTimelineDays] = useState<TimelineDay[]>([]);
+  const [timelineCursor, setTimelineCursor] = useState<string | null>(null);
+  const [timelineLoaded, setTimelineLoaded] = useState(false);
+  const [timelineLoading, setTimelineLoading] = useState(false);
+  const [selectedDay, setSelectedDay] = useState<string | null>(null);
+  const [dayDetail, setDayDetail] = useState<{ date_key: string; sources: SourceCard[] } | null>(null);
+  const [dayLoading, setDayLoading] = useState(false);
+
+  const handleRenameSource = async (s: SourceCard, newName: string) => {
     const trimmed = newName.trim();
     setRenamingId(null);
     if (!trimmed || trimmed === s.title) return;
-    setData(prev => prev ? {
-      ...prev,
-      sources: prev.sources.map(x => x.source_id === s.source_id ? { ...x, title: trimmed } : x),
-    } : prev);
+    setSourceCards(prev => prev.map(x => x.source_id === s.source_id ? { ...x, title: trimmed } : x));
     try {
       await videoService.renameSource(s.source_id, trimmed);
     } catch (e) {
@@ -153,171 +183,314 @@ export const ArchivePanel: React.FC<{
     setSrcDelete(null);
     try {
       await videoService.deleteSource(id, mode);
-      await fetchArchive();
+      setSourceCards(prev => prev.filter(s => s.source_id !== id));
     } catch (e) {
       console.error("[ArchivePanel] source delete failed:", e);
     }
   };
 
-  // [드릴다운 인라인 플레이] 이력 항목 클릭 -> 그 자리에서 바로 재생
   const [drillPlay, setDrillPlay] = useState<{ key: string; url: string | null; loading: boolean } | null>(null);
 
-  const playSourceInline = (s: Source) => {
-    if (drillPlay?.key === s.source_id) { setDrillPlay(null); return; }
-    setDrillPlay({ key: s.source_id, url: s.play_url, loading: false });
-  };
   const playExportInline = (ex: ExportRecord) => {
     if (drillPlay?.key === ex.id) { setDrillPlay(null); return; }
     setDrillPlay({ key: ex.id, url: ex.output_url, loading: false });
   };
-  const playProposalInline = async (proposalId: string) => {
-    if (drillPlay?.key === proposalId) { setDrillPlay(null); return; }
-    setDrillPlay({ key: proposalId, url: null, loading: true });
+
+  const fetchSummary = async () => {
     try {
-      const res = await videoService.makeProposalPreview(proposalId);
-      setDrillPlay({ key: proposalId, url: res.preview_url, loading: false });
+      const r = await fetcher("/archive/summary") as ArchiveSummary;
+      setSummary(r);
     } catch (e) {
-      console.error("[ArchivePanel] drill proposal preview failed:", e);
-      setDrillPlay({ key: proposalId, url: null, loading: false });
+      console.error("[ArchivePanel] summary error:", e);
     }
   };
 
-  const drillVideoSrc = (url: string) =>
-    url.startsWith("http") ? url : `${videoService.API_BASE_URL.replace("/api", "")}${url}`;
-
-  // [PROPOSAL-PREVIEW] 제안 재생: 즉석 렌더(또는 캐시) 후 mp4 표시
-  const handlePlayProposal = async (proposalId: string) => {
-    if (propPlayingId === proposalId) {
-      setPropPlayingId(null);
-      setPropPreviewUrl(null);
-      return;
-    }
-    setPropPlayingId(proposalId);
-    setPropPreviewUrl(null);
-    setPropLoading(true);
+  const fetchSourcesPage = async (reset: boolean) => {
+    if (reset) setSourcesLoading(true); else setSourcesLoadingMore(true);
     try {
-      const res = await videoService.makeProposalPreview(proposalId);
-      if (res.preview_url) setPropPreviewUrl(res.preview_url);
+      const params = new URLSearchParams();
+      params.set("limit", "20");
+      params.set("sort", srcSort);
+      if (searchQuery.trim()) params.set("q", searchQuery.trim());
+      if (!reset && sourcesCursor) params.set("cursor", sourcesCursor);
+      const r = await fetcher(`/archive/sources?${params.toString()}`) as { sources: SourceCard[]; next_cursor: string | null };
+      setSourceCards(prev => reset ? r.sources : [...prev, ...r.sources]);
+      setSourcesCursor(r.next_cursor);
     } catch (e) {
-      console.error("[ArchivePanel] proposal preview failed:", e);
+      console.error("[ArchivePanel] sources error:", e);
     } finally {
-      setPropLoading(false);
+      setSourcesLoading(false);
+      setSourcesLoadingMore(false);
     }
   };
 
-  // [SOFT-DELETE] 프로젝트 복원
-  const handleRestore = async (programId: string) => {
+  const fetchExports = async () => {
+    setExportsLoading(true);
     try {
-      await videoService.restoreProject(programId);
-      await fetchArchive();
-    } catch (e) {
-      console.error("[ArchivePanel] restore failed:", e);
-    }
-  };
-
-  // [작업4] 제안 -> 내보낸 영상 연결 맵 (proposal_id -> ExportRecord)
-  const exportByProposal = React.useMemo(() => {
-    const m = new Map<string, ExportRecord>();
-    exports.forEach(ex => { if (ex.proposal_id) m.set(ex.proposal_id, ex); });
-    return m;
-  }, [exports]);
-
-  const fetchArchive = async () => {
-    setLoading(true);
-    try {
-      const [archiveRes, exportsRes] = await Promise.all([
-        fetcher("/archive/list") as Promise<ArchiveData>,
-        fetch(`${videoService.API_BASE_URL}/exports/list`).then(r => r.json()).catch(() => ({ exports: [] })),
-      ]);
-      setData(archiveRes);
-      setExports(exportsRes.exports ?? []);
-    } catch (e) {
-      console.error("[ArchivePanel] Error:", e);
+      const r = await fetch(`${videoService.API_BASE_URL}/exports/list`).then(r => r.json()).catch(() => ({ exports: [] }));
+      setExports(r.exports ?? []);
     } finally {
-      setLoading(false);
+      setExportsLoading(false);
+      setExportsLoaded(true);
     }
   };
 
-  useEffect(() => { fetchArchive(); }, []);
-
-  // [HOTFIX 국장보고] 검색 크래시 — 빈 검색어에선 || 단락으로 숨어 있다가 글자 입력 시
-  // null 필드(.toLowerCase)에 도달해 화면 전체 소멸. 모든 필드 널가드 단일화.
-  const _q = searchQuery.toLowerCase();
-  const _has = (v?: string | null) => (v || "").toLowerCase().includes(_q);
-
-  const filteredSources = data?.sources.filter(s =>
-    _has(s.title) || _has(s.source_id) ||
-    // [국장지시] 프로젝트명으로도 원본을 찾는다 ("Dahlia" 검색 → 그 프로젝트 소스들)
-    s.program_names?.some(n => _has(n))
-  ) || [];
-
-  // [국장지시] 원본 리스트 정렬 선택 — 최신순(사용/생성 기준, 기본) / 이름순.
-  // 백엔드 정렬과 무관하게 화면에서 확정 정렬(데이터 캐시·형식 차이에 면역).
-  const srcLatest = (s: Source) => Math.max(
-    ...(s.usage?.map(u => Date.parse(u.used_at || "") || 0) ?? [0]),
-    Date.parse(s.created_at || "") || 0,
-  );
-  const sortedSources = [...filteredSources].sort((a, b) =>
-    srcSort === "recent"
-      ? srcLatest(b) - srcLatest(a)
-      : srcSort === "shot"
-        // [서사층] 연대기 — '살아진 날' 최신부터 (촬영일 없는 원본은 뒤로)
-        ? (b.shot_date || "").localeCompare(a.shot_date || "")
-        : sourceDisplayName(a.title).localeCompare(sourceDisplayName(b.title), "ko"));
-
-  const filteredPrograms = data?.programs.filter(p =>
-    _has(p.name) || _has(p.program_id)
-  ) || [];
-
-  const filteredProposals = data?.proposals.filter(pr =>
-    _has(pr.display_name) || _has(pr.program_name) ||
-    _has(pr.proposal_id) || _has(pr.source_id)
-  ) || [];
-
-  const formatSecs = (seconds?: number) => {
-    if (!seconds) return "0초";
-    const mins = Math.floor(seconds / 60);
-    const secs = Math.floor(seconds % 60);
-    return mins > 0 ? `${mins}분 ${secs}초` : `${secs}초`;
+  const fetchTimelineDays = async (reset: boolean) => {
+    setTimelineLoading(true);
+    try {
+      const params = new URLSearchParams();
+      params.set("limit", "20");
+      if (!reset && timelineCursor) params.set("before", timelineCursor);
+      const r = await fetcher(`/archive/timeline/days?${params.toString()}`) as { days: TimelineDay[]; next_cursor: string | null };
+      setTimelineDays(prev => reset ? r.days : [...prev, ...r.days]);
+      setTimelineCursor(r.next_cursor);
+    } catch (e) {
+      console.error("[ArchivePanel] timeline days error:", e);
+    } finally {
+      setTimelineLoading(false);
+      setTimelineLoaded(true);
+    }
   };
 
-  const startRenameExport = (ex: ExportRecord) => {
-    setRenamingId("ex_" + ex.id);
-    setRenameValue(ex.program_title || "");
+  const openDay = async (dateKey: string) => {
+    if (selectedDay === dateKey) { setSelectedDay(null); setDayDetail(null); return; }
+    setSelectedDay(dateKey);
+    setDayLoading(true);
+    try {
+      const r = await fetcher(`/archive/timeline/day/${encodeURIComponent(dateKey)}`) as { date_key: string; sources: SourceCard[] };
+      setDayDetail(r);
+    } catch (e) {
+      console.error("[ArchivePanel] timeline day error:", e);
+    } finally {
+      setDayLoading(false);
+    }
   };
 
-  const startRenameProgram = (p: Program) => {
-    setRenamingId("pg_" + p.program_id);
-    setRenameValue(p.name || "");
+  // [마운트] summary + sources 첫 페이지만 — /archive/list, /exports/list 전량 fetch 제거
+  useEffect(() => { fetchSummary(); fetchSourcesPage(true); }, []);
+
+  // 정렬 변경 시 처음부터 다시 — 각 effect가 자신의 최초 실행(마운트와 동시 발화)만 개별 스킵.
+  // 공유 ref로 스킵하면 마운트 effect가 먼저 ref를 true로 바꿔 다음 effect가 오작동한다.
+  const isFirstSort = useRef(true);
+  useEffect(() => {
+    if (isFirstSort.current) { isFirstSort.current = false; return; }
+    fetchSourcesPage(true);
+  }, [srcSort]);
+
+  // 검색어 디바운스 재조회 (최초 마운트 제외)
+  const isFirstSearch = useRef(true);
+  useEffect(() => {
+    if (isFirstSearch.current) { isFirstSearch.current = false; return; }
+    const t = setTimeout(() => { fetchSourcesPage(true); }, 400);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchQuery]);
+
+  useEffect(() => {
+    if (activeSubTab === "exports" && !exportsLoaded) fetchExports();
+    if (activeSubTab === "timeline" && !timelineLoaded) fetchTimelineDays(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeSubTab]);
+
+  const toggleExpand = async (sid: string) => {
+    const next = expandedSourceId === sid ? null : sid;
+    setExpandedSourceId(next);
+    if (next) await fetchSourceDetail(sid);
   };
 
-  const commitRenameExport = async (ex: ExportRecord) => {
-    const trimmed = renameValue.trim();
-    setRenamingId(null);
-    if (!trimmed || !ex.program_id) return;
-    setExports(prev => prev.map(e => e.id === ex.id ? { ...e, program_title: trimmed } : e));
-    onRenameProject?.(ex.program_id, trimmed);
-    await fetch(`${videoService.API_BASE_URL}/programs/${ex.program_id}/name`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: trimmed }),
-    }).catch(e => console.error("[Archive rename export]", e));
+  const togglePlay = async (s: SourceCard) => {
+    if (sourcePlayingId === s.source_id) { setSourcePlayingId(null); return; }
+    const detail = await fetchSourceDetail(s.source_id);
+    if (detail?.play_url) setSourcePlayingId(s.source_id);
   };
 
-  const commitRenameProgram = async (p: Program) => {
-    const trimmed = renameValue.trim();
-    setRenamingId(null);
-    if (!trimmed) return;
-    setData(prev => prev ? {
-      ...prev,
-      programs: prev.programs.map(pg => pg.program_id === p.program_id ? { ...pg, name: trimmed } : pg),
-    } : prev);
-    onRenameProject?.(p.program_id, trimmed);
-    await fetch(`${videoService.API_BASE_URL}/programs/${p.program_id}/name`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: trimmed }),
-    }).catch(e => console.error("[Archive rename program]", e));
+  const renderSourceCard = (s: SourceCard) => {
+    const isExpanded = expandedSourceId === s.source_id;
+    const detail = detailCache[s.source_id];
+    const isDetailLoading = !!detailLoading[s.source_id];
+    return (
+      <div key={s.source_id} className="hover:bg-secondary/20 transition-colors">
+        <div className="p-4 flex items-center justify-between gap-3">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="w-14 h-10 flex-shrink-0 rounded-lg bg-primary/10 flex items-center justify-center overflow-hidden">
+              {s.thumbnail_url ? (
+                <img src={s.thumbnail_url} className="w-full h-full object-cover" draggable={false} />
+              ) : (
+                <Film size={16} className="text-primary" />
+              )}
+            </div>
+            <div className="min-w-0">
+              <div className="flex items-center gap-2 flex-wrap">
+                {renamingId === "src_" + s.source_id ? (
+                  <input
+                    autoFocus
+                    value={renameValue}
+                    onChange={e => setRenameValue(e.target.value)}
+                    onBlur={() => handleRenameSource(s, renameValue)}
+                    onKeyDown={e => {
+                      if (e.key === "Enter") handleRenameSource(s, renameValue);
+                      if (e.key === "Escape") setRenamingId(null);
+                    }}
+                    className="text-sm font-semibold bg-secondary/40 border border-primary/40 rounded px-2 py-0.5 text-foreground/90 outline-none focus:border-primary"
+                  />
+                ) : (
+                  <button
+                    onClick={() => { setRenameValue(s.title); setRenamingId("src_" + s.source_id); }}
+                    title="클릭하여 이름 변경"
+                    className="text-sm font-semibold text-foreground/90 text-left hover:text-primary transition-colors truncate"
+                  >
+                    {sourceDisplayName(s.title)}
+                  </button>
+                )}
+                <button
+                  onClick={() => createProjectFromSource(s.source_id)}
+                  disabled={creatingFor === s.source_id}
+                  className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/25 hover:bg-emerald-500/25 transition-colors flex-shrink-0 disabled:opacity-50"
+                >
+                  {creatingFor === s.source_id ? "생성 중…" : "+ 신규 프로젝트 생성"}
+                </button>
+              </div>
+              <div className="flex items-center gap-2.5 text-[11px] text-muted-foreground/60 mt-1">
+                {s.shot_date && (
+                  <>
+                    <span className="flex items-center gap-1 text-foreground/70 font-semibold"><Calendar size={10} /> {s.shot_date}</span>
+                    <span>·</span>
+                  </>
+                )}
+                {s.shot_date_fallback && (
+                  <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-500/10 text-amber-400 border border-amber-500/20">업로드일 기준</span>
+                )}
+                <span className="flex items-center gap-1"><Clock size={10} /> {formatSecs(s.duration)}</span>
+                {s.fragment_count > 0 && (
+                  <>
+                    <span>·</span>
+                    <span className="text-foreground/70 font-semibold">조각 {s.fragment_count}</span>
+                  </>
+                )}
+              </div>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 flex-shrink-0">
+            <button
+              onClick={() => togglePlay(s)}
+              disabled={isDetailLoading}
+              className="flex items-center gap-1 px-2 py-1.5 rounded-md bg-emerald-500/15 hover:bg-emerald-500/25 text-[10px] font-semibold text-emerald-400 transition-colors disabled:opacity-50"
+            >
+              {sourcePlayingId === s.source_id ? <X size={11} /> : <Play size={11} />}
+              {sourcePlayingId === s.source_id ? "닫기" : "재생"}
+            </button>
+            <button
+              onClick={() => toggleExpand(s.source_id)}
+              className="flex items-center gap-1 px-2 py-1.5 rounded-md bg-secondary/40 hover:bg-secondary/70 text-[10px] font-semibold text-foreground/60 transition-colors"
+            >
+              상세 {isExpanded ? <ChevronUp size={11} /> : <ChevronDown size={11} />}
+            </button>
+            <button
+              onClick={() => setSrcDelete({ id: s.source_id, title: s.title })}
+              className="flex items-center gap-1 px-2 py-1.5 rounded-md bg-red-500/10 hover:bg-red-500/20 text-[10px] font-semibold text-red-400 transition-colors"
+            >
+              <Trash2 size={11} /> 삭제
+            </button>
+          </div>
+        </div>
+
+        {sourcePlayingId === s.source_id && detail?.play_url && (
+          <div className="px-4 pb-4 pl-[68px]">
+            <video src={videoSrc(detail.play_url)} controls autoPlay className="w-[360px] max-w-full aspect-video rounded-lg bg-black" />
+          </div>
+        )}
+
+        {isExpanded && (
+          <div className="px-4 pb-4 pl-[68px] space-y-3">
+            {isDetailLoading && !detail ? (
+              <div className="text-[11px] text-muted-foreground/50 animate-pulse">상세 불러오는 중...</div>
+            ) : detail ? (
+              <>
+                {detail.notes.length > 0 && (
+                  <p className="text-[11px] text-primary/70">“{detail.notes[0].text}”</p>
+                )}
+                {detail.usage.length > 0 && (
+                  <div className="space-y-1.5">
+                    <p className="text-[10px] font-black tracking-widest uppercase text-muted-foreground/50">사용 프로젝트 {detail.usage.length}</p>
+                    {detail.usage.map(u => (
+                      <button
+                        key={u.program_id}
+                        onClick={() => onNavigateToProject?.(u.program_id)}
+                        className="w-full flex items-center justify-between gap-3 px-3 py-2 rounded-lg bg-secondary/20 hover:bg-secondary/40 transition-colors group"
+                      >
+                        <div className="flex items-center gap-2 min-w-0">
+                          <Box size={12} className="text-blue-400 flex-shrink-0" />
+                          <span className="text-xs font-medium text-foreground/80 truncate group-hover:text-primary transition-colors">
+                            {u.name || u.program_id}{u.label ? <span className="text-blue-400/60">-{u.label}</span> : null}
+                          </span>
+                        </div>
+                        <span className="text-[10px] text-muted-foreground/40 flex-shrink-0">
+                          {u.used_at && new Date(u.used_at).toLocaleString()}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+                {detail.fragments.length > 0 && (
+                  <div>
+                    <p className="text-[10px] font-black tracking-widest uppercase text-muted-foreground/50 mb-1.5">
+                      조각 파노라마 — 최종 수정 기준 · 클릭하면 크게 봅니다
+                    </p>
+                    <div className="flex gap-1.5 overflow-x-auto pb-2">
+                      {detail.fragments.map((f: any) => (
+                        <button
+                          key={`${f.start_ds}_${f.end_ds}`}
+                          onClick={() => {
+                            setViewerFrag({
+                              fragment_id: f.fragment_id,
+                              fragment_uid: f.fragment_id,
+                              source_id: s.source_id,
+                              source_video: "",
+                              display_name: f.display_name,
+                              start_time: f.eff_start, end_time: f.eff_end,
+                              start_frame: Math.round((f.eff_start ?? 0) * 30),
+                              end_frame: Math.round((f.eff_end ?? 0) * 30),
+                              duration: Math.max(1, Math.round(((f.eff_end ?? 0) - (f.eff_start ?? 0)) * 30)),
+                              selection_state: "S", status: "committed",
+                            });
+                            setViewerOpen(true);
+                          }}
+                          title={`${f.display_name}${f.edited ? " · 편집됨" : ""}`}
+                          className={`relative flex-shrink-0 w-[104px] rounded-lg overflow-hidden border transition-colors text-left group
+                            ${f.edited ? "border-amber-400/50" : "border-border/20"} hover:border-primary/60
+                            ${f.excluded ? "opacity-40" : ""}`}
+                        >
+                          <div className="aspect-video bg-black/50">
+                            {f.thumbnail_url ? (
+                              <img src={f.thumbnail_url} className="w-full h-full object-cover" draggable={false} />
+                            ) : (
+                              <div className="w-full h-full flex items-center justify-center text-[9px] text-muted-foreground/50">미리보기 없음</div>
+                            )}
+                          </div>
+                          <div className="px-1.5 py-1 bg-black/40">
+                            <p className="text-[9px] text-white/80 truncate">{f.display_name?.split(" · ")[1] ?? ""}</p>
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {detail.exports.length > 0 && (
+                  <div className="space-y-1">
+                    <p className="text-[10px] font-black tracking-widest uppercase text-muted-foreground/50">내보낸 영상 {detail.exports.length}</p>
+                    {detail.exports.map(ex => (
+                      <div key={ex.id} className="text-[11px] text-foreground/70 px-2 py-1 rounded bg-secondary/15">
+                        {ex.display_name || ex.id} <span className="text-muted-foreground/40">· {ex.status}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </>
+            ) : null}
+          </div>
+        )}
+      </div>
+    );
   };
 
   return (
@@ -333,7 +506,7 @@ export const ArchivePanel: React.FC<{
           </p>
         </div>
         <button
-          onClick={fetchArchive}
+          onClick={() => { fetchSummary(); fetchSourcesPage(true); }}
           className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-secondary/80 hover:bg-secondary text-xs text-foreground/80 transition-colors border border-border/20"
         >
           <RotateCcw size={12} />
@@ -341,7 +514,7 @@ export const ArchivePanel: React.FC<{
         </button>
       </div>
 
-      {/* Stats Board */}
+      {/* Stats Board — /archive/summary 경량 지표 */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <Card className="bg-card/30 border-border/20">
           <CardHeader className="p-4 flex flex-row items-center justify-between pb-2">
@@ -349,7 +522,7 @@ export const ArchivePanel: React.FC<{
             <Film size={14} className="text-primary" />
           </CardHeader>
           <CardContent className="p-4 pt-0">
-            <div className="text-xl font-bold text-foreground/90">{data?.sources.length ?? 0}개</div>
+            <div className="text-xl font-bold text-foreground/90">{summary?.source_count ?? 0}개</div>
           </CardContent>
         </Card>
         <Card className="bg-card/30 border-border/20">
@@ -358,16 +531,16 @@ export const ArchivePanel: React.FC<{
             <Box size={14} className="text-primary" />
           </CardHeader>
           <CardContent className="p-4 pt-0">
-            <div className="text-xl font-bold text-foreground/90">{data?.programs.length ?? 0}개</div>
+            <div className="text-xl font-bold text-foreground/90">{summary?.program_count ?? 0}개</div>
           </CardContent>
         </Card>
         <Card className="bg-card/30 border-border/20">
           <CardHeader className="p-4 flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-xs font-semibold text-muted-foreground/60">AI 편집 제안서 이력</CardTitle>
-            <ArrowRight size={14} className="text-primary" />
+            <CardTitle className="text-xs font-semibold text-muted-foreground/60">최근 촬영일</CardTitle>
+            <Calendar size={14} className="text-primary" />
           </CardHeader>
           <CardContent className="p-4 pt-0">
-            <div className="text-xl font-bold text-foreground/90">{data?.proposals.length ?? 0}개</div>
+            <div className="text-xl font-bold text-foreground/90">{summary?.latest_shot_date ?? "—"}</div>
           </CardContent>
         </Card>
       </div>
@@ -375,7 +548,7 @@ export const ArchivePanel: React.FC<{
       {/* Search & Tabs */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-card/15 p-3 rounded-xl border border-border/10">
         <div className="flex items-center gap-1.5 bg-secondary/30 rounded-lg p-0.5">
-          {(["sources", "programs", "proposals", "exports"] as const).map(tab => (
+          {(["sources", "timeline", "programs", "proposals", "exports"] as const).map(tab => (
             <button
               key={tab}
               onClick={() => setActiveSubTab(tab)}
@@ -383,14 +556,14 @@ export const ArchivePanel: React.FC<{
                 activeSubTab === tab ? "bg-primary/20 text-primary" : "text-muted-foreground/60 hover:text-foreground/80"
               }`}
             >
-              {tab === "sources" ? "원본 리스트" : tab === "programs" ? "프로젝트 관리" : tab === "proposals" ? "AI 편집제안 이력" : "내보낸 영상"}
+              {tab === "sources" ? "원본 리스트" : tab === "timeline" ? "연대기" : tab === "programs" ? "프로젝트 관리" : tab === "proposals" ? "AI 편집제안 이력" : "내보낸 영상"}
             </button>
           ))}
         </div>
         <div className="relative w-full md:w-72">
           <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground/40" />
           <Input
-            placeholder="아카이브 내 검색..."
+            placeholder="원본 제목 검색..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="pl-9 h-8 bg-secondary/30 border-border/10 text-xs focus-visible:ring-primary/40 rounded-lg"
@@ -400,626 +573,208 @@ export const ArchivePanel: React.FC<{
 
       {/* Content Area */}
       <div className="flex-1 min-h-[300px]">
-        {loading ? (
-          <div className="flex flex-col items-center justify-center h-64 text-muted-foreground/40 text-xs gap-2">
-            <div className="w-6 h-6 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
-            아카이브 데이터 로드 중...
-          </div>
-        ) : (
-          <div className="space-y-3">
+        <div className="space-y-3">
 
-            {/* ── 내보낸 영상 탭 (SNS 카드 스타일) ── */}
-            {activeSubTab === "exports" && (
-              exports.length === 0 ? (
-                <div className="flex flex-col items-center justify-center h-64 gap-3 text-muted-foreground/30">
-                  <Film size={36} strokeWidth={1} />
-                  <p className="text-sm font-medium">아직 내보낸 영상이 없습니다</p>
-                </div>
-              ) : exports.map((ex, idx) => (
-                <div
-                  key={ex.id}
-                  className="rounded-2xl border border-border/10 bg-card/20 overflow-hidden hover:border-border/20 transition-colors"
-                >
-                  <div className="flex items-center gap-4 p-5">
-                    <div className="relative flex-shrink-0">
-                      <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center">
-                        <Film size={18} className="text-primary" />
-                      </div>
-                      <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-primary/80 text-[9px] font-black text-white flex items-center justify-center">
-                        {idx + 1}
-                      </span>
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      {renamingId === "ex_" + ex.id ? (
-                        <input
-                          autoFocus
-                          value={renameValue}
-                          onChange={e => setRenameValue(e.target.value)}
-                          onBlur={() => commitRenameExport(ex)}
-                          onKeyDown={e => {
-                            if (e.key === "Enter") commitRenameExport(ex);
-                            if (e.key === "Escape") setRenamingId(null);
-                          }}
-                          className="w-full text-[15px] font-bold bg-secondary/40 border border-primary/40 rounded px-2 py-0.5 text-foreground/90 outline-none focus:border-primary"
-                        />
-                      ) : (
-                        <button
-                          onClick={() => startRenameExport(ex)}
-                          title="클릭하여 이름 변경"
-                          className="text-[15px] font-bold text-foreground/90 truncate max-w-full text-left hover:text-primary transition-colors"
-                        >
-                          {/* [DISPLAY-NAME] 제안 이름 상속 — 어느 제안에서 나온 영상인지 즉시 인식 */}
-                          {ex.display_name || ex.program_title || "내보낸 영상"}
-                        </button>
-                      )}
-                      <div className="flex items-center gap-3 mt-1 text-[11px] text-muted-foreground/50">
-                        {ex.duration != null && <span className="flex items-center gap-1"><Clock size={10} />{formatSecs(ex.duration)}</span>}
-                        {ex.file_size != null && <span>{(ex.file_size / 1024 / 1024).toFixed(1)} MB</span>}
-                        {(ex.program_last_updated_at || ex.created_at) && <span className="flex items-center gap-1"><Calendar size={10} />{new Date(ex.program_last_updated_at || ex.created_at!).toLocaleString()}</span>}
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2 flex-shrink-0">
-                      <button
-                        onClick={() => setPlayingId(playingId === ex.id ? null : ex.id)}
-                        className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-secondary/60 hover:bg-secondary text-xs font-medium transition-colors"
-                      >
-                        {playingId === ex.id ? <X size={13} /> : <Play size={13} />}
-                        {playingId === ex.id ? "닫기" : "재생"}
-                      </button>
-                      {ex.program_id && (
-                        <button
-                          onClick={() => onNavigateToProject?.(ex.program_id!)}
-                          className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-white/5 hover:bg-white/10 text-foreground/70 text-xs font-medium transition-colors border border-border/15"
-                        >
-                          <Edit3 size={13} />
-                          다시 편집
-                        </button>
-                      )}
-                    </div>
-                  </div>
-
-                  {playingId === ex.id && (
-                    <div className="mx-5 mb-3 rounded-xl overflow-hidden bg-black w-[360px] aspect-video">
-                      <video
-                        src={`${videoService.API_BASE_URL.replace("/api", "")}${ex.output_url}`}
-                        controls
-                        autoPlay
-                        className="w-full h-full"
-                      />
-                    </div>
-                  )}
-
-                  <div className="flex items-center gap-2 px-5 pb-4 flex-wrap">
-                    <span className="flex items-center gap-1 px-2 py-1 rounded-md bg-emerald-500/10 text-emerald-400 text-[10px] font-semibold border border-emerald-500/20">
-                      <Check size={9} />
-                      아카이브 저장됨
-                    </span>
-                    <span className="text-[10px] text-muted-foreground/40">
-                      SNS 업로드는 좌측 메뉴 “SNS 업로드”에서
-                    </span>
-                  </div>
-                </div>
-              ))
-            )}
-
-            {/* ── 원본 리스트 탭 ── */}
-            {activeSubTab === "sources" && (
-              <>
-              {/* [국장지시] 정렬 선택 — 최신순 / 촬영일순(연대기) / 이름순 */}
+          {/* ── 원본 리스트 탭 (hydrate 분리: summary + sources 페이징) ── */}
+          {activeSubTab === "sources" && (
+            <>
               <div className="flex items-center gap-1.5 mb-2">
-                {([["recent", "최신순"], ["shot", "촬영일순"], ["name", "이름순"]] as const).map(([v, l]) => (
+                {([["shot_date_desc", "촬영일순"], ["created_desc", "최신 업로드순"]] as const).map(([v, l]) => (
                   <button key={v} onClick={() => setSrcSort(v)}
                     className={`px-2.5 py-1 rounded-md text-[11px] font-bold transition-all ${srcSort === v ? "bg-primary/20 text-primary" : "bg-secondary/30 text-muted-foreground/60 hover:text-foreground/80"}`}>
                     {l}
                   </button>
                 ))}
               </div>
-              <div className="bg-card/20 rounded-xl border border-border/10 overflow-hidden divide-y divide-border/10">
-                {sortedSources.length > 0 ? sortedSources.map(s => {
-                  const usageCount = s.usage?.length ?? 0;
-                  const isExpanded = expandedSourceId === s.source_id;
-                  const shortHash = s.hash_value ? s.hash_value.slice(0, 8) : null;
-                  return (
-                  <div key={s.source_id} className="hover:bg-secondary/20 transition-colors">
-                    <div className="p-4 flex items-center justify-between">
-                      <div className="flex items-center gap-3 min-w-0">
-                        <div className="w-10 h-10 flex-shrink-0 rounded-lg bg-primary/10 flex items-center justify-center">
-                          <Film size={16} className="text-primary" />
-                        </div>
-                        <div className="min-w-0">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            {renamingId === "src_" + s.source_id ? (
-                              <input
-                                autoFocus
-                                value={renameValue}
-                                onChange={e => setRenameValue(e.target.value)}
-                                onBlur={() => handleRenameSource(s, renameValue)}
-                                onKeyDown={e => {
-                                  if (e.key === "Enter") handleRenameSource(s, renameValue);
-                                  if (e.key === "Escape") setRenamingId(null);
-                                }}
-                                className="text-sm font-semibold bg-secondary/40 border border-primary/40 rounded px-2 py-0.5 text-foreground/90 outline-none focus:border-primary"
-                              />
-                            ) : (
-                              <button
-                                onClick={() => { setRenameValue(s.title); setRenamingId("src_" + s.source_id); }}
-                                title="클릭하여 이름 변경"
-                                className="text-sm font-semibold text-foreground/90 text-left hover:text-primary transition-colors truncate"
-                              >
-                                {sourceDisplayName(s.title)}
-                              </button>
-                            )}
-                            {!s.play_url && (
-                              <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-red-500/10 text-red-400 border border-red-500/20 flex-shrink-0">원본 삭제됨</span>
-                            )}
-                            {/* [국장지시] 배지 = 최신 사용 프로젝트부터 + "-라벨" 병기
-                                ("Vega-A" = Vega 프로젝트 원본맵의 A) — 아카이브↔원본맵 연결 */}
-                            {s.usage?.slice(0, 3).map(u => (
-                              <span key={u.program_id} className="px-2 py-0.5 rounded text-[11px] font-bold bg-blue-500/10 text-blue-400 border border-blue-500/20 flex-shrink-0">
-                                {u.name}{u.label ? <span className="text-blue-400/60">-{u.label}</span> : null}
-                              </span>
-                            ))}
-                            {s.usage && s.usage.length > 3 && (
-                              <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-blue-500/5 text-blue-400/70 flex-shrink-0">+{s.usage.length - 3}</span>
-                            )}
-                            {(!s.usage || s.usage.length === 0) && (
-                              <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-secondary/40 text-muted-foreground/40">미분류</span>
-                            )}
-                            {/* [국장지시] 이 원본으로 새 프로젝트 — 재업로드 없이 즉시.
-                                아카이브 조각은 보기 전용이므로, 수정의 유일한 문 */}
-                            <button
-                              onClick={() => createProjectFromSource(s.source_id)}
-                              disabled={creatingFor === s.source_id}
-                              className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/25 hover:bg-emerald-500/25 transition-colors flex-shrink-0 disabled:opacity-50"
-                            >
-                              {creatingFor === s.source_id ? "생성 중…" : "+ 신규 프로젝트 생성"}
-                            </button>
-                          </div>
-                          <div className="flex items-center gap-2.5 text-[11px] text-muted-foreground/60 mt-1">
-                            {/* [서사층] 촬영일이 첫 자리 — 원본은 '살아진 날'에 속한다 */}
-                            {s.shot_date && (
-                              <>
-                                <span className="flex items-center gap-1 text-foreground/70 font-semibold"><Calendar size={10} /> {s.shot_date}</span>
-                                <span>·</span>
-                              </>
-                            )}
-                            <span className="flex items-center gap-1"><Clock size={10} /> {formatSecs(s.duration)}</span>
-                            <span>·</span>
-                            <span>{s.fps} FPS</span>
-                            {/* [조각 이력] 조각 자산 요약 — 프로젝트 purge에도 남는 숫자들 */}
-                            {(s.frag_history?.fragments ?? 0) > 0 && (
-                              <>
-                                <span>·</span>
-                                <span className="text-foreground/70 font-semibold">조각 {s.frag_history!.fragments}</span>
-                                {s.frag_history!.adopted > 0 && (
-                                  <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-primary/10 text-primary border border-primary/20">채택 {s.frag_history!.adopted}</span>
-                                )}
-                                {s.frag_history!.edited > 0 && (
-                                  <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-500/10 text-amber-400 border border-amber-500/20">편집 {s.frag_history!.edited}</span>
-                                )}
-                                {s.frag_history!.exported > 0 && (
-                                  <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">방송 {s.frag_history!.exported}</span>
-                                )}
-                              </>
-                            )}
-                            {shortHash && (
-                              <>
-                                <span>·</span>
-                                <span className="flex items-center gap-0.5 font-mono text-muted-foreground/45" title={`전체 해시: ${s.hash_value}`}>
-                                  <Hash size={9} />{shortHash}
-                                </span>
-                              </>
-                            )}
-                          </div>
-                          {/* [서사층 §2.1] 캡션 = 기계 요약이 아니라 그 사람의 말 */}
-                          {s.note && (
-                            <p className="mt-1 text-[11px] text-primary/70 truncate max-w-[520px]">“{s.note}”</p>
+              {sourcesLoading ? (
+                <div className="flex flex-col items-center justify-center h-64 text-muted-foreground/40 text-xs gap-2">
+                  <div className="w-6 h-6 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
+                  원본 목록 로드 중...
+                </div>
+              ) : (
+                <>
+                  <div className="bg-card/20 rounded-xl border border-border/10 overflow-hidden divide-y divide-border/10">
+                    {sourceCards.length > 0 ? sourceCards.map(renderSourceCard) : (
+                      <div className="p-8 text-center text-xs text-muted-foreground/40">검색 조건에 맞는 원본 영상이 없습니다.</div>
+                    )}
+                  </div>
+                  {sourcesCursor && (
+                    <div className="flex justify-center pt-3">
+                      <button
+                        onClick={() => fetchSourcesPage(false)}
+                        disabled={sourcesLoadingMore}
+                        className="px-4 py-2 rounded-lg bg-secondary/40 hover:bg-secondary/70 text-xs font-semibold text-foreground/70 transition-colors disabled:opacity-50"
+                      >
+                        {sourcesLoadingMore ? "불러오는 중..." : "더보기"}
+                      </button>
+                    </div>
+                  )}
+                </>
+              )}
+            </>
+          )}
+
+          {/* ── 연대기 탭 (shot_date 기반 day 페이징) ── */}
+          {activeSubTab === "timeline" && (
+            <>
+              {timelineLoading && timelineDays.length === 0 ? (
+                <div className="flex flex-col items-center justify-center h-64 text-muted-foreground/40 text-xs gap-2">
+                  <div className="w-6 h-6 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
+                  연대기 로드 중...
+                </div>
+              ) : (
+                <div className="bg-card/20 rounded-xl border border-border/10 overflow-hidden divide-y divide-border/10">
+                  {timelineDays.length > 0 ? timelineDays.map(d => (
+                    <div key={d.date_key}>
+                      <button
+                        onClick={() => openDay(d.date_key)}
+                        className="w-full flex items-center gap-3 p-4 hover:bg-secondary/20 transition-colors text-left"
+                      >
+                        <div className="w-14 h-10 flex-shrink-0 rounded-lg bg-primary/10 flex items-center justify-center overflow-hidden">
+                          {d.thumbnail_url ? (
+                            <img src={d.thumbnail_url} className="w-full h-full object-cover" draggable={false} />
+                          ) : (
+                            <Calendar size={16} className="text-primary" />
                           )}
                         </div>
-                      </div>
-                      <div className="flex items-center gap-2 flex-shrink-0">
-                        {s.play_url && (
-                          <button
-                            onClick={() => setSourcePlayingId(sourcePlayingId === s.source_id ? null : s.source_id)}
-                            className="flex items-center gap-1 px-2 py-1.5 rounded-md bg-emerald-500/15 hover:bg-emerald-500/25 text-[10px] font-semibold text-emerald-400 transition-colors"
-                          >
-                            {sourcePlayingId === s.source_id ? <X size={11} /> : <Play size={11} />}
-                            {sourcePlayingId === s.source_id ? "닫기" : "재생"}
-                          </button>
-                        )}
-                        {(usageCount > 0 || (s.frag_history?.fragments ?? 0) > 0) && (
-                          <button
-                            onClick={() => {
-                              const next = isExpanded ? null : s.source_id;
-                              setExpandedSourceId(next);
-                              if (next) loadFragHistory(s.source_id); // [조각 이력] 펼칠 때 lazy
-                            }}
-                            className="flex items-center gap-1 px-2 py-1.5 rounded-md bg-secondary/40 hover:bg-secondary/70 text-[10px] font-semibold text-foreground/60 transition-colors"
-                          >
-                            이력 {usageCount}
-                            {isExpanded ? <ChevronUp size={11} /> : <ChevronDown size={11} />}
-                          </button>
-                        )}
-                        <button
-                          onClick={() => setSrcDelete({ id: s.source_id, title: s.title })}
-                          className="flex items-center gap-1 px-2 py-1.5 rounded-md bg-red-500/10 hover:bg-red-500/20 text-[10px] font-semibold text-red-400 transition-colors"
-                        >
-                          <Trash2 size={11} /> 삭제
-                        </button>
-                      </div>
-                    </div>
-                    {sourcePlayingId === s.source_id && s.play_url && (
-                      <div className="px-4 pb-4 pl-[68px]">
-                        <video
-                          src={`${videoService.API_BASE_URL.replace("/api", "")}${s.play_url}`}
-                          controls
-                          autoPlay
-                          className="w-[360px] max-w-full aspect-video rounded-lg bg-black"
-                        />
-                      </div>
-                    )}
-                    {isExpanded && usageCount > 0 && (
-                      <div className="px-4 pb-3 pl-[68px] space-y-1.5">
-                        {s.usage.map(u => (
-                          <button
-                            key={u.program_id}
-                            onClick={() => onNavigateToProject?.(u.program_id)}
-                            className="w-full flex items-center justify-between gap-3 px-3 py-2 rounded-lg bg-secondary/20 hover:bg-secondary/40 transition-colors group"
-                          >
-                            <div className="flex items-center gap-2 min-w-0">
-                              <Box size={12} className="text-blue-400 flex-shrink-0" />
-                              <span className="text-xs font-medium text-foreground/80 truncate group-hover:text-primary transition-colors">{u.name || u.program_id}</span>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm font-semibold text-foreground/90">{d.date_key}</span>
+                            {d.has_fallback && (
+                              <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-500/10 text-amber-400 border border-amber-500/20">업로드일 기준 포함</span>
+                            )}
+                          </div>
+                          <p className="text-[11px] text-muted-foreground/60 mt-0.5">원본 {d.source_count}개</p>
+                        </div>
+                        {selectedDay === d.date_key ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                      </button>
+                      {selectedDay === d.date_key && (
+                        <div className="px-4 pb-4 pl-[68px]">
+                          {dayLoading ? (
+                            <div className="text-[11px] text-muted-foreground/50 animate-pulse">불러오는 중...</div>
+                          ) : dayDetail ? (
+                            <div className="space-y-2">
+                              {dayDetail.sources.map(s => renderSourceCard(s))}
                             </div>
-                            <span className="text-[10px] text-muted-foreground/40 flex items-center gap-1 flex-shrink-0">
-                              {u.used_at && <><Calendar size={9} />{new Date(u.used_at).toLocaleString()}</>}
-                            </span>
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                    {/* [조각 파노라마 국장지시] 조각은 명칭만으론 안 된다 — 보여야 한다.
-                        사용자가 가장 마지막으로 수정한 기준(eff 경계)으로 그린 스트립.
-                        클릭 = 정밀편집창 '보기 전용'. 프로젝트를 지워도 불변. */}
-                    {isExpanded && fragHistory[s.source_id]?.fragments?.length > 0 && (
-                      <div className="px-4 pb-4 pl-[68px]">
-                        <p className="text-[10px] font-black tracking-widest uppercase text-muted-foreground/50 mb-1.5">
-                          조각 파노라마 — 최종 수정 기준 · 클릭하면 크게 봅니다
-                        </p>
-                        <div className="flex gap-1.5 overflow-x-auto pb-2">
-                          {fragHistory[s.source_id].fragments.map((f: any) => (
-                            <button
-                              key={`${f.start_ds}_${f.end_ds}`}
-                              onClick={() => {
-                                setViewerFrag({
-                                  fragment_id: f.fragment_id,
-                                  fragment_uid: f.fragment_id,
-                                  source_id: s.source_id,
-                                  source_video: "",
-                                  display_name: f.display_name,
-                                  start_time: f.eff_start, end_time: f.eff_end,
-                                  start_frame: Math.round((f.eff_start ?? 0) * 30),
-                                  end_frame: Math.round((f.eff_end ?? 0) * 30),
-                                  duration: Math.max(1, Math.round(((f.eff_end ?? 0) - (f.eff_start ?? 0)) * 30)),
-                                  selection_state: "S", status: "committed",
-                                });
-                                setViewerOpen(true);
-                              }}
-                              title={`${f.display_name}${f.edited ? " · 편집됨" : ""}${f.adopted?.length ? ` · 채택 ${f.adopted.join(", ")}` : ""}`}
-                              className={`relative flex-shrink-0 w-[104px] rounded-lg overflow-hidden border transition-colors text-left group
-                                ${f.edited ? "border-amber-400/50" : "border-border/20"} hover:border-primary/60
-                                ${f.excluded ? "opacity-40" : ""}`}
-                            >
-                              <div className="aspect-video bg-black/50">
-                                {f.thumbnail_url ? (
-                                  <img src={f.thumbnail_url} className="w-full h-full object-cover" draggable={false} />
-                                ) : (
-                                  <div className="w-full h-full flex items-center justify-center text-[9px] text-muted-foreground/50">미리보기 없음</div>
-                                )}
-                              </div>
-                              <div className="px-1.5 py-1 bg-black/40">
-                                <p className="text-[9px] text-white/80 truncate">{f.display_name?.split(" · ")[1] ?? ""}</p>
-                                <div className="flex gap-0.5 mt-0.5">
-                                  {f.edited && <span className="px-1 rounded text-[8px] font-bold bg-amber-500/20 text-amber-300">편집됨</span>}
-                                  {(f.adopted?.length ?? 0) > 0 && <span className="px-1 rounded text-[8px] font-bold bg-primary/20 text-primary">채택 {f.adopted.length}</span>}
-                                  {(f.exported?.length ?? 0) > 0 && <span className="px-1 rounded text-[8px] font-bold bg-emerald-500/20 text-emerald-300">방송</span>}
-                                </div>
-                              </div>
-                            </button>
-                          ))}
+                          ) : null}
                         </div>
-                      </div>
-                    )}
-                  </div>
-                  );
-                }) : (
-                  <div className="p-8 text-center text-xs text-muted-foreground/40">검색 조건에 맞는 원본 영상이 없습니다.</div>
-                )}
-              </div>
-              </>
-            )}
-
-            {/* ── 프로젝트 관리 탭 (드릴다운: 원본/제안/내보내기 + 복귀/복원) ── */}
-            {activeSubTab === "programs" && (
-              <div className="bg-card/20 rounded-xl border border-border/10 overflow-hidden divide-y divide-border/10">
-                {filteredPrograms.length > 0 ? filteredPrograms.map(p => {
-                  const isExp = expandedProgramId === p.program_id;
-                  const isDeleted = !!p.deleted_at;
-                  const daysLeft = p.deleted_at
-                    ? Math.max(0, 30 - Math.floor((Date.now() - new Date(p.deleted_at).getTime()) / 86400000))
-                    : null;
-                  const projSources = data?.sources.filter(s => s.usage?.some(u => u.program_id === p.program_id)) ?? [];
-                  const projProposals = data?.proposals.filter(pr => pr.program_id === p.program_id) ?? [];
-                  const projExports = exports.filter(e => e.program_id === p.program_id);
-                  return (
-                  <div key={p.program_id} className={isDeleted ? "bg-red-500/[0.04]" : ""}>
-                    <div className="p-4 hover:bg-secondary/20 transition-colors flex items-center justify-between">
-                      <div className="flex items-center gap-3 min-w-0">
-                        <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${isDeleted ? "bg-red-500/10" : "bg-primary/10"}`}>
-                          <Box size={16} className={isDeleted ? "text-red-400" : "text-primary"} />
-                        </div>
-                        <div className="min-w-0">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            {renamingId === "pg_" + p.program_id ? (
-                              <input
-                                autoFocus
-                                value={renameValue}
-                                onChange={e => setRenameValue(e.target.value)}
-                                onBlur={() => commitRenameProgram(p)}
-                                onKeyDown={e => {
-                                  if (e.key === "Enter") commitRenameProgram(p);
-                                  if (e.key === "Escape") setRenamingId(null);
-                                }}
-                                className="text-sm font-semibold bg-secondary/40 border border-primary/40 rounded px-2 py-0.5 text-foreground/90 outline-none focus:border-primary"
-                              />
-                            ) : (
-                              <button
-                                onClick={() => startRenameProgram(p)}
-                                title="클릭하여 이름 변경"
-                                className="text-sm font-semibold text-foreground/90 text-left hover:text-primary transition-colors"
-                              >
-                                {p.name || p.program_id}
-                              </button>
-                            )}
-                            {isDeleted && (
-                              <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-red-500/15 text-red-400 border border-red-500/25">
-                                🗑 삭제됨 · {daysLeft}일 후 영구삭제
-                              </span>
-                            )}
-                          </div>
-                          <div className="flex items-center gap-2 text-[11px] text-muted-foreground/60 mt-1">
-                            <span className="text-muted-foreground/60">원본 {p.source_count}</span>
-                            <span>·</span>
-                            <span className="text-muted-foreground/60">제안 {p.proposal_count ?? 0}</span>
-                            <span>·</span>
-                            <span className="text-muted-foreground/60">내보내기 {p.export_count ?? 0}</span>
-                          </div>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-2 flex-shrink-0">
-                        {isDeleted ? (
-                          <button
-                            onClick={() => handleRestore(p.program_id)}
-                            className="flex items-center gap-1 px-2.5 py-1.5 rounded-md bg-emerald-500/15 hover:bg-emerald-500/25 text-[11px] font-semibold text-emerald-400 transition-colors"
-                          >
-                            <RotateCcw size={11} /> 복원
-                          </button>
-                        ) : (
-                          <button
-                            onClick={() => onNavigateToProject?.(p.program_id)}
-                            className="flex items-center gap-1 px-2.5 py-1.5 rounded-md bg-primary/15 hover:bg-primary/25 text-[11px] font-semibold text-primary transition-colors"
-                          >
-                            열기 <ArrowRight size={11} />
-                          </button>
-                        )}
-                        <button
-                          onClick={() => setExpandedProgramId(isExp ? null : p.program_id)}
-                          className="flex items-center gap-1 px-2 py-1.5 rounded-md bg-secondary/40 hover:bg-secondary/70 text-[10px] font-semibold text-foreground/60 transition-colors"
-                        >
-                          이력 {isExp ? <ChevronUp size={11} /> : <ChevronDown size={11} />}
-                        </button>
-                      </div>
+                      )}
                     </div>
-                    {isExp && (
-                      <div className="px-4 pb-4 pl-[68px] space-y-3 animate-in fade-in slide-in-from-top-1 duration-300">
-                        {isDeleted && (
-                          <div className="text-[11px] text-red-400/80 bg-red-500/5 border border-red-500/15 rounded-lg px-3 py-2">
-                            이 프로젝트는 삭제되었습니다. <span className="font-semibold">{daysLeft}일</span> 안에 복원하지 않으면 모든 이력이 영구 삭제됩니다.
-                          </div>
-                        )}
-                        {/* 원본 */}
-                        <div>
-                          <div className="text-[10px] font-bold text-muted-foreground/50 uppercase mb-1.5">원본 {projSources.length}</div>
-                          <div className="space-y-1">
-                            {projSources.length ? projSources.map(s => (
-                              <div key={s.source_id}>
-                                <button onClick={() => playSourceInline(s)}
-                                  className="w-full flex items-center gap-2 text-[11px] text-foreground/70 px-2 py-1 rounded bg-secondary/15 hover:bg-secondary/40 hover:text-primary transition-colors text-left">
-                                  {drillPlay?.key === s.source_id ? <X size={10} className="text-emerald-400 flex-shrink-0" /> : <Play size={10} className="text-blue-400 flex-shrink-0" />}
-                                  <span className="truncate">{sourceDisplayName(s.title)}</span>
-                                  <span className="text-muted-foreground/40 ml-auto flex-shrink-0">{formatSecs(s.duration)}</span>
-                                </button>
-                                {drillPlay?.key === s.source_id && (
-                                  drillPlay.url
-                                    ? <video src={drillVideoSrc(drillPlay.url)} controls autoPlay className="w-[320px] max-w-full aspect-video rounded-lg bg-black mt-1.5" />
-                                    : <div className="text-[10px] text-muted-foreground/40 px-2 py-2">원본이 삭제되어 재생할 수 없습니다</div>
-                                )}
-                              </div>
-                            )) : <div className="text-[11px] text-muted-foreground/30 px-2">없음</div>}
-                          </div>
-                        </div>
-                        {/* 제안 */}
-                        <div>
-                          <div className="text-[10px] font-bold text-muted-foreground/50 uppercase mb-1.5">AI 편집제안 {projProposals.length}</div>
-                          <div className="space-y-1">
-                            {projProposals.length ? projProposals.slice(0, 8).map(pr => (
-                              <div key={pr.proposal_id}>
-                                <button onClick={() => playProposalInline(pr.proposal_id)}
-                                  className="w-full flex items-center gap-2 text-[11px] text-foreground/70 px-2 py-1 rounded bg-secondary/15 hover:bg-secondary/40 hover:text-primary transition-colors text-left">
-                                  {drillPlay?.key === pr.proposal_id
-                                    ? (drillPlay.loading ? <RotateCcw size={10} className="animate-spin text-emerald-400 flex-shrink-0" /> : <X size={10} className="text-emerald-400 flex-shrink-0" />)
-                                    : <Play size={10} className="text-primary flex-shrink-0" />}
-                                  <span className="font-mono truncate">{pr.proposal_id}</span>
-                                  <span className="text-muted-foreground/40 ml-auto flex-shrink-0">{pr.mode} · {formatSecs(pr.duration)}</span>
-                                </button>
-                                {drillPlay?.key === pr.proposal_id && (
-                                  drillPlay.loading
-                                    ? <div className="text-[10px] text-muted-foreground/50 px-2 py-2 animate-pulse">제안 영상 생성 중...</div>
-                                    : drillPlay.url
-                                      ? <video src={drillVideoSrc(drillPlay.url)} controls autoPlay className="w-[320px] max-w-full aspect-video rounded-lg bg-black mt-1.5" />
-                                      : <div className="text-[10px] text-muted-foreground/40 px-2 py-2">재생할 조각이 없습니다</div>
-                                )}
-                              </div>
-                            )) : <div className="text-[11px] text-muted-foreground/30 px-2">없음</div>}
-                            {projProposals.length > 8 && <div className="text-[10px] text-muted-foreground/40 px-2">외 {projProposals.length - 8}개</div>}
-                          </div>
-                        </div>
-                        {/* 내보내기 */}
-                        <div>
-                          <div className="text-[10px] font-bold text-muted-foreground/50 uppercase mb-1.5">내보낸 영상 {projExports.length}</div>
-                          <div className="space-y-1">
-                            {projExports.length ? projExports.map(ex => (
-                              <div key={ex.id}>
-                                <button onClick={() => playExportInline(ex)}
-                                  className="w-full flex items-center gap-2 text-[11px] text-foreground/70 px-2 py-1 rounded bg-secondary/15 hover:bg-secondary/40 hover:text-primary transition-colors text-left">
-                                  {drillPlay?.key === ex.id ? <X size={10} className="text-emerald-400 flex-shrink-0" /> : <Play size={10} className="text-emerald-400 flex-shrink-0" />}
-                                  <span className="truncate">{ex.program_title || ex.id}</span>
-                                  <span className="text-muted-foreground/40 ml-auto flex-shrink-0">{ex.created_at ? new Date(ex.created_at).toLocaleDateString() : ""}</span>
-                                </button>
-                                {drillPlay?.key === ex.id && drillPlay.url && (
-                                  <video src={drillVideoSrc(drillPlay.url)} controls autoPlay className="w-[320px] max-w-full aspect-video rounded-lg bg-black mt-1.5" />
-                                )}
-                              </div>
-                            )) : <div className="text-[11px] text-muted-foreground/30 px-2">없음</div>}
-                          </div>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                  );
-                }) : (
-                  <div className="p-8 text-center text-xs text-muted-foreground/40">검색 조건에 맞는 프로젝트가 없습니다.</div>
-                )}
-              </div>
-            )}
+                  )) : (
+                    <div className="p-8 text-center text-xs text-muted-foreground/40">연대기 데이터가 없습니다.</div>
+                  )}
+                </div>
+              )}
+              {timelineCursor && (
+                <div className="flex justify-center pt-3">
+                  <button
+                    onClick={() => fetchTimelineDays(false)}
+                    disabled={timelineLoading}
+                    className="px-4 py-2 rounded-lg bg-secondary/40 hover:bg-secondary/70 text-xs font-semibold text-foreground/70 transition-colors disabled:opacity-50"
+                  >
+                    {timelineLoading ? "불러오는 중..." : "더보기"}
+                  </button>
+                </div>
+              )}
+            </>
+          )}
 
-            {/* ── AI 편집제안 이력 탭 (프로젝트 귀속 + 플레이 + 복귀/복원) ── */}
-            {activeSubTab === "proposals" && (
-              <div className="bg-card/20 rounded-xl border border-border/10 overflow-hidden divide-y divide-border/10">
-                {filteredProposals.length > 0 ? filteredProposals.map(pr => {
-                  const linkedExport = exportByProposal.get(pr.proposal_id);
-                  const isPlaying = propPlayingId === pr.proposal_id;
-                  const isDeleted = !!pr.program_deleted;
-                  const isLoadingThis = isPlaying && propLoading;
-                  return (
-                  <div key={pr.proposal_id} className={isDeleted ? "bg-red-500/[0.04]" : ""}>
-                    <div className="p-4 hover:bg-secondary/20 transition-colors flex items-center justify-between">
-                      <div className="flex items-center gap-3 min-w-0">
-                        <div className={`w-10 h-10 flex-shrink-0 rounded-lg flex items-center justify-center ${isDeleted ? "bg-red-500/10" : "bg-primary/10"}`}>
-                          <ArrowRight size={16} className={isDeleted ? "text-red-400" : "text-primary"} />
-                        </div>
-                        <div className="min-w-0">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            {/* [DISPLAY-NAME] 주이름 = "{프로젝트명} · N번째 제안 · X안" — raw PROP_ id는 툴팁으로만 */}
-                            <h4 className="text-[15px] font-bold text-foreground/90 truncate" title={pr.proposal_id}>
-                              {pr.display_name || `${pr.program_name || "프로젝트 미상"} · ${pr.mode}안`}
-                            </h4>
-                            {pr.program_name ? (
-                              <span
-                                className={`px-1.5 py-0.5 rounded text-[9px] font-bold border flex-shrink-0 ${
-                                  isDeleted
-                                    ? "bg-red-500/10 text-red-400 border-red-500/20"
-                                    : "bg-blue-500/10 text-blue-400 border-blue-500/20"
-                                }`}
-                              >
-                                {isDeleted ? "🗑 " : ""}{pr.program_name}
-                              </span>
-                            ) : (
-                              <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-secondary/40 text-muted-foreground/40 border border-border/10">레거시</span>
-                            )}
-                          </div>
-                          <div className="flex items-center gap-2 text-[11px] text-muted-foreground/60 mt-1">
-                            <span className="bg-primary/10 text-primary px-1 py-0.5 rounded text-[9px] font-bold">{pr.mode} Mode</span>
-                            <span>·</span>
-                            <span>길이: {formatSecs(pr.duration)}</span>
-                            {linkedExport && (
-                              <>
-                                <span>·</span>
-                                <span className="text-emerald-400/70 text-[9px] font-bold">✓ 내보냄</span>
-                              </>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-2 flex-shrink-0">
-                        <button
-                          onClick={() => handlePlayProposal(pr.proposal_id)}
-                          disabled={isLoadingThis}
-                          className="flex items-center gap-1 px-2.5 py-1.5 rounded-md bg-emerald-500/15 hover:bg-emerald-500/25 text-[11px] font-semibold text-emerald-400 transition-colors disabled:opacity-50"
-                        >
-                          {isLoadingThis ? <RotateCcw size={11} className="animate-spin" /> : isPlaying ? <X size={11} /> : <Play size={11} />}
-                          {isLoadingThis ? "렌더 중" : isPlaying ? "닫기" : "재생"}
-                        </button>
-                        {isDeleted ? (
-                          pr.program_id && (
-                            <button
-                              onClick={() => handleRestore(pr.program_id!)}
-                              className="flex items-center gap-1 px-2.5 py-1.5 rounded-md bg-emerald-500/15 hover:bg-emerald-500/25 text-[11px] font-semibold text-emerald-400 transition-colors"
-                            >
-                              <RotateCcw size={11} /> 복원
-                            </button>
-                          )
-                        ) : pr.program_id ? (
-                          <button
-                            onClick={() => onNavigateToProject?.(pr.program_id!)}
-                            className="flex items-center gap-1 px-2.5 py-1.5 rounded-md bg-primary/15 hover:bg-primary/25 text-[11px] font-semibold text-primary transition-colors"
-                          >
-                            열기 <ArrowRight size={11} />
-                          </button>
-                        ) : null}
-                        {pr.created_at && (
-                          <div className="text-[10px] text-muted-foreground/40 hidden sm:flex items-center gap-1">
-                            <Calendar size={9} />
-                            {new Date(pr.created_at).toLocaleDateString()}
-                          </div>
-                        )}
-                      </div>
+          {/* ── 프로젝트 관리 / AI 편집제안 이력 탭 — 이번 단계(sources-first) 범위 밖.
+              [국장지시] project/program read 구조는 후속 단계로 넘긴다. ── */}
+          {(activeSubTab === "programs" || activeSubTab === "proposals") && (
+            <div className="flex flex-col items-center justify-center h-64 gap-3 text-muted-foreground/30">
+              <Box size={36} strokeWidth={1} />
+              <p className="text-sm font-medium">
+                {activeSubTab === "programs" ? "프로젝트 관리" : "AI 편집제안 이력"} 조회는 다음 단계에서 제공됩니다
+              </p>
+              <p className="text-[11px] text-muted-foreground/40">
+                이번 단계는 sources 중심 read path 개편만 포함합니다 (아카이브 단계B)
+              </p>
+            </div>
+          )}
+
+          {/* ── 내보낸 영상 탭 (exports 탭 클릭 시 lazy 조회) ── */}
+          {activeSubTab === "exports" && (
+            exportsLoading ? (
+              <div className="flex flex-col items-center justify-center h-64 text-muted-foreground/40 text-xs gap-2">
+                <div className="w-6 h-6 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
+                내보낸 영상 로드 중...
+              </div>
+            ) : exports.length === 0 ? (
+              <div className="flex flex-col items-center justify-center h-64 gap-3 text-muted-foreground/30">
+                <Film size={36} strokeWidth={1} />
+                <p className="text-sm font-medium">아직 내보낸 영상이 없습니다</p>
+              </div>
+            ) : exports.map((ex, idx) => (
+              <div
+                key={ex.id}
+                className="rounded-2xl border border-border/10 bg-card/20 overflow-hidden hover:border-border/20 transition-colors"
+              >
+                <div className="flex items-center gap-4 p-5">
+                  <div className="relative flex-shrink-0">
+                    <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center overflow-hidden">
+                      {ex.thumbnail_url ? (
+                        <img src={ex.thumbnail_url} className="w-full h-full object-cover" draggable={false} />
+                      ) : (
+                        <Film size={18} className="text-primary" />
+                      )}
                     </div>
-                    {isDeleted && (
-                      <div className="px-4 pb-3 pl-[68px] text-[11px] text-red-400/80">
-                        이 제안이 속한 프로젝트는 삭제되었습니다. <span className="font-semibold">복원</span>하면 다시 편집할 수 있습니다.
-                      </div>
-                    )}
-                    {isPlaying && (
-                      <div className="px-4 pb-4 pl-[68px]">
-                        {isLoadingThis ? (
-                          <div className="w-[360px] max-w-full aspect-video rounded-lg bg-black/60 flex flex-col items-center justify-center gap-2">
-                            <RotateCcw size={20} className="animate-spin text-emerald-400" />
-                            <span className="text-[11px] text-muted-foreground/60 animate-pulse">제안 영상 생성 중...</span>
-                          </div>
-                        ) : propPreviewUrl ? (
-                          <video
-                            src={`${videoService.API_BASE_URL}${propPreviewUrl}`}
-                            controls
-                            autoPlay
-                            className="w-[360px] max-w-full aspect-video rounded-lg bg-black"
-                          />
-                        ) : (
-                          <div className="w-[360px] max-w-full aspect-video rounded-lg bg-black/40 flex items-center justify-center">
-                            <span className="text-[11px] text-muted-foreground/50">재생할 조각이 없습니다</span>
-                          </div>
-                        )}
-                      </div>
+                    <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-primary/80 text-[9px] font-black text-white flex items-center justify-center">
+                      {idx + 1}
+                    </span>
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[15px] font-bold text-foreground/90 truncate">
+                      {ex.display_name || ex.program_title || "내보낸 영상"}
+                    </p>
+                    <div className="flex items-center gap-3 mt-1 text-[11px] text-muted-foreground/50">
+                      {ex.duration != null && <span className="flex items-center gap-1"><Clock size={10} />{formatSecs(ex.duration)}</span>}
+                      {ex.file_size != null && <span>{(ex.file_size / 1024 / 1024).toFixed(1)} MB</span>}
+                      {(ex.program_last_updated_at || ex.created_at) && <span className="flex items-center gap-1"><Calendar size={10} />{new Date(ex.program_last_updated_at || ex.created_at!).toLocaleString()}</span>}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 flex-shrink-0">
+                    <button
+                      onClick={() => setPlayingId(playingId === ex.id ? null : ex.id)}
+                      className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-secondary/60 hover:bg-secondary text-xs font-medium transition-colors"
+                    >
+                      {playingId === ex.id ? <X size={13} /> : <Play size={13} />}
+                      {playingId === ex.id ? "닫기" : "재생"}
+                    </button>
+                    {ex.program_id && (
+                      <button
+                        onClick={() => onNavigateToProject?.(ex.program_id!)}
+                        className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-white/5 hover:bg-white/10 text-foreground/70 text-xs font-medium transition-colors border border-border/15"
+                      >
+                        <Edit3 size={13} />
+                        다시 편집
+                      </button>
                     )}
                   </div>
-                  );
-                }) : (
-                  <div className="p-8 text-center text-xs text-muted-foreground/40">검색 조건에 맞는 제안 이력이 없습니다.</div>
-                )}
-              </div>
-            )}
+                </div>
 
-          </div>
-        )}
+                {playingId === ex.id && (
+                  <div className="mx-5 mb-3 rounded-xl overflow-hidden bg-black w-[360px] aspect-video">
+                    <video
+                      src={videoSrc(ex.output_url)}
+                      controls
+                      autoPlay
+                      className="w-full h-full"
+                    />
+                  </div>
+                )}
+
+                <div className="flex items-center gap-2 px-5 pb-4 flex-wrap">
+                  <span className="flex items-center gap-1 px-2 py-1 rounded-md bg-emerald-500/10 text-emerald-400 text-[10px] font-semibold border border-emerald-500/20">
+                    <Check size={9} />
+                    아카이브 저장됨
+                  </span>
+                </div>
+              </div>
+            ))
+          )}
+
+        </div>
       </div>
 
       {/* [SOURCE] 원본 삭제 모달 (전체 / 원본만 선택) */}
