@@ -28,7 +28,7 @@ import { useAnalysisFlow } from "@/hooks/useAnalysisFlow";
 import { useAppNavigation } from "@/hooks/useAppNavigation";
 import type { SourceEntry } from "@/types";
 
-import { assignShortDisplayIds, getUid, recalcDisplayIds } from "@/lib/fragmentIdentity";
+import { assignShortDisplayIds, getUid, recalcDisplayIds, rangeDisplayName } from "@/lib/fragmentIdentity";
 import { videoService } from "@/services/videoService";
 
 import { Direction, DirectionSnapshot, Proposal, StoryPlanPreview } from "@/proposal/proposalTypes";
@@ -1356,6 +1356,8 @@ const Index: React.FC = () => {
           fragment_id: `${(fr as any).fragment_id}_c${k + 1}`,
           fragment_uid: `${getUid(fr)}_c${k + 1}`,
           display_id: `${(fr as any).display_id ?? ""}${(fr as any).display_id ? `-${k + 1}` : ""}` || (fr as any).display_id,
+          // [DISPLAY-NAME] 분할 파생 — 제목부 승계 + 시간부 새 구간으로 (낡은 구간 이름 승계 금지)
+          display_name: rangeDisplayName((fr as any).display_name, seg.startSec, seg.endSec),
           start_sec: seg.startSec,
           end_sec: seg.endSec,
           start_time: seg.startSec,
@@ -1767,6 +1769,8 @@ const Index: React.FC = () => {
             source_video: s.source_video || matchSource?.source_video || activeSource,
             source_id: s.source_id || matchSource?.source_id || currentSourceId,
             display_id: matchSource?.display_id || (s.display_id && !/^\d+$/.test(s.display_id) && !s.display_id.startsWith("?") ? s.display_id : undefined),
+            // [DISPLAY-NAME] 시퀀스 즉시표시 경로에도 권위 이름 통과
+            display_name: (s as any).display_name || matchSource?.display_name,
             start_frame: startF,
             end_frame: endF,
             duration: endF - startF,
@@ -1915,6 +1919,8 @@ const Index: React.FC = () => {
             fragment_uid: id,
             root_fragment_uid: id,
             display_id: sourceFragment?.display_id || alias.display_id || id,
+            // [DISPLAY-NAME] 제안 복원 경로에도 백엔드 권위 이름 통과 (조각맵→PBE 승계)
+            display_name: sourceFragment?.display_name,
             selection_state: "S" as SelectionState,
             status: "committed" as FragmentStatus,
             source_video: sourceLabel || alias.source_id || "",

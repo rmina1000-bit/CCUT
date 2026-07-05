@@ -47,6 +47,25 @@ export function sourceDisplayName(title?: string | null): string {
     return base || "이름 없는 영상";
 }
 
+/**
+ * [DISPLAY-NAME] 분할/트림으로 구간이 바뀐 파생 조각의 이름.
+ * 권위 이름의 제목부는 승계하고 시간부만 새 구간으로 다시 쓴다
+ * (제목은 프론트가 짓지 않는다 — 명칭 로직은 이 모듈 하나에만 산다).
+ */
+export function rangeDisplayName(
+    baseDisplayName: string | undefined,
+    startSec?: number,
+    endSec?: number,
+): string | undefined {
+    if (!baseDisplayName) return undefined;
+    const title = String(baseDisplayName).split(" · ")[0];
+    const fmt = (v?: number) => {
+        const s = Math.max(0, Math.round(v ?? 0));
+        return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+    };
+    return `${title} · ${fmt(startSec)}–${fmt(endSec)}`;
+}
+
 let _uidCounter = Date.now();
 export function generateUid(): string {
     return `frag_${(_uidCounter++).toString(36)}`;
