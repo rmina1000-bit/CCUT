@@ -2502,6 +2502,7 @@ const Index: React.FC = () => {
         open={singleEditOpen}
         onOpenChange={setSingleEditOpen}
         fragment={singleEditTarget}
+        projectName={projects.find(p => p.id === activeNavItem)?.name}
         onApply={handleSingleFragmentApply}
       />
     </div>

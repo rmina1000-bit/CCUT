@@ -67,6 +67,8 @@ interface SingleFragmentEditorProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   fragment: Fragment | null;
+  // [UI-⑩] 헤더 표기용 프로젝트명 — "{프로젝트명} · {A2} · 조각 정밀 편집"
+  projectName?: string;
   onApply?: (payload: {
     fragmentUid: string;
     newStartSec: number;
@@ -82,6 +84,7 @@ export const SingleFragmentEditor: React.FC<SingleFragmentEditorProps> = ({
   open,
   onOpenChange,
   fragment,
+  projectName,
   onApply,
 }) => {
   const [leftCut, setLeftCut] = useState(0);
@@ -574,19 +577,22 @@ export const SingleFragmentEditor: React.FC<SingleFragmentEditorProps> = ({
         className="sm:max-w-[720px] w-[90vw] max-h-[100vh] bg-[hsl(228,12%,10%)] border-border/15 text-foreground"
       >
         <DialogHeader className="mb-1 select-none cursor-move flex-shrink-0" onMouseDown={handleTitleMouseDown}>
-          <div className="flex items-center gap-3 min-w-0">
-            {/* [UI-⑩ 국장지시] display_id("E1")를 좌측 제일 앞에 크게 — 편집 조작의 기준 표식 */}
-            {(fragment as any).display_id && !String((fragment as any).display_id).startsWith("SF_") && (
-              <span className="flex-shrink-0 text-lg leading-none font-black text-primary bg-primary/15 border border-primary/25 px-2.5 py-1 rounded-md">
-                {(fragment as any).display_id}
-              </span>
-            )}
-            <DialogTitle className="text-base font-bold text-foreground flex-shrink-0">조각 정밀 편집 (1단계 파노라마)</DialogTitle>
+          <div className="flex items-center gap-2 min-w-0">
+            {/* [UI-⑩ 국장지시 v2] "{프로젝트명} · {A2} · 조각 정밀 편집" — 배지 대신 같은
+                글줄, 모든 요소를 우측 주이름과 같은 폰트 사이즈로 (부담 제거) */}
+            <DialogTitle className="text-[12px] font-bold text-foreground truncate">
+              {[
+                projectName,
+                (fragment as any).display_id && !String((fragment as any).display_id).startsWith("SF_")
+                  ? (fragment as any).display_id : null,
+                "조각 정밀 편집 (1단계 파노라마)",
+              ].filter(Boolean).join(" · ")}
+            </DialogTitle>
             {/* [DISPLAY-NAME] 주이름 = 단일 진실원("원본제목 · m:ss–m:ss") — 우측,
                 내부 id는 title 툴팁으로만(UI-⑧ 유지). 닫기 ✕와 겹치지 않게 mr-8(UI-⑨) */}
             <span
               title={fragment.fragment_id}
-              className="ml-auto mr-8 text-[11px] text-foreground/80 font-bold truncate max-w-[280px]"
+              className="ml-auto mr-8 flex-shrink-0 text-[12px] text-foreground/80 font-bold truncate max-w-[280px]"
             >
               {displayName(fragment as any)}
             </span>
