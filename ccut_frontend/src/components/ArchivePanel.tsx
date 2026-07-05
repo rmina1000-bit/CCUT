@@ -78,6 +78,8 @@ export const ArchivePanel: React.FC<{
   const [data, setData] = useState<ArchiveData | null>(null);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
+  // [국장지시] 원본 리스트 정렬 선택 — 최신순(기본) / 이름순
+  const [srcSort, setSrcSort] = useState<"recent" | "name">("recent");
   const [activeSubTab, setActiveSubTab] = useState<"sources" | "programs" | "proposals" | "exports">("sources");
   const [exports, setExports] = useState<ExportRecord[]>([]);
   const [playingId, setPlayingId] = useState<string | null>(null);
@@ -202,23 +204,35 @@ export const ArchivePanel: React.FC<{
 
   useEffect(() => { fetchArchive(); }, []);
 
+  // [HOTFIX 국장보고] 검색 크래시 — 빈 검색어에선 || 단락으로 숨어 있다가 글자 입력 시
+  // null 필드(.toLowerCase)에 도달해 화면 전체 소멸. 모든 필드 널가드 단일화.
+  const _q = searchQuery.toLowerCase();
+  const _has = (v?: string | null) => (v || "").toLowerCase().includes(_q);
+
   const filteredSources = data?.sources.filter(s =>
-    s.title?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    s.source_id.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    _has(s.title) || _has(s.source_id) ||
     // [국장지시] 프로젝트명으로도 원본을 찾는다 ("Dahlia" 검색 → 그 프로젝트 소스들)
-    s.program_names?.some(n => n.toLowerCase().includes(searchQuery.toLowerCase()))
+    s.program_names?.some(n => _has(n))
   ) || [];
 
+  // [국장지시] 원본 리스트 정렬 선택 — 최신순(사용/생성 기준, 기본) / 이름순.
+  // 백엔드 정렬과 무관하게 화면에서 확정 정렬(데이터 캐시·형식 차이에 면역).
+  const srcLatest = (s: Source) => Math.max(
+    ...(s.usage?.map(u => Date.parse(u.used_at || "") || 0) ?? [0]),
+    Date.parse(s.created_at || "") || 0,
+  );
+  const sortedSources = [...filteredSources].sort((a, b) =>
+    srcSort === "recent"
+      ? srcLatest(b) - srcLatest(a)
+      : sourceDisplayName(a.title).localeCompare(sourceDisplayName(b.title), "ko"));
+
   const filteredPrograms = data?.programs.filter(p =>
-    p.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    p.program_id.toLowerCase().includes(searchQuery.toLowerCase())
+    _has(p.name) || _has(p.program_id)
   ) || [];
 
   const filteredProposals = data?.proposals.filter(pr =>
-    (pr.display_name || "").toLowerCase().includes(searchQuery.toLowerCase()) ||
-    (pr.program_name || "").toLowerCase().includes(searchQuery.toLowerCase()) ||
-    pr.proposal_id.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    pr.source_id.toLowerCase().includes(searchQuery.toLowerCase())
+    _has(pr.display_name) || _has(pr.program_name) ||
+    _has(pr.proposal_id) || _has(pr.source_id)
   ) || [];
 
   const formatSecs = (seconds?: number) => {
@@ -451,8 +465,18 @@ export const ArchivePanel: React.FC<{
 
             {/* ── 원본 리스트 탭 ── */}
             {activeSubTab === "sources" && (
+              <>
+              {/* [국장지시] 정렬 선택 — 최신순(사용/생성 기준) / 이름순 */}
+              <div className="flex items-center gap-1.5 mb-2">
+                {([["recent", "최신순"], ["name", "이름순"]] as const).map(([v, l]) => (
+                  <button key={v} onClick={() => setSrcSort(v)}
+                    className={`px-2.5 py-1 rounded-md text-[11px] font-bold transition-all ${srcSort === v ? "bg-primary/20 text-primary" : "bg-secondary/30 text-muted-foreground/60 hover:text-foreground/80"}`}>
+                    {l}
+                  </button>
+                ))}
+              </div>
               <div className="bg-card/20 rounded-xl border border-border/10 overflow-hidden divide-y divide-border/10">
-                {filteredSources.length > 0 ? filteredSources.map(s => {
+                {sortedSources.length > 0 ? sortedSources.map(s => {
                   const usageCount = s.usage?.length ?? 0;
                   const isExpanded = expandedSourceId === s.source_id;
                   const shortHash = s.hash_value ? s.hash_value.slice(0, 8) : null;
@@ -577,6 +601,7 @@ export const ArchivePanel: React.FC<{
                   <div className="p-8 text-center text-xs text-muted-foreground/40">검색 조건에 맞는 원본 영상이 없습니다.</div>
                 )}
               </div>
+              </>
             )}
 
             {/* ── 프로젝트 관리 탭 (드릴다운: 원본/제안/내보내기 + 복귀/복원) ── */}
