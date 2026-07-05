@@ -118,9 +118,15 @@ def _llm_route(input_text, recent_messages=None):
         action = str(out.get("action") or "").strip()
         if action not in _ACTIONS:
             return None
+        # [위생] 라우팅 답문도 중국어/모델 정체 유출 차단 — 걸리면 행동별 기본 문구
+        reply = _sanitize_talk(str(out.get("reply") or "").strip())
+        if not reply:
+            reply = ("무엇이든 편하게 물어보세요 — 편집은 '생일잔치 장면만'처럼 "
+                     "말씀하시면 바로 움직일게요." if action == "answer_only"
+                     else "네, 말씀하신 기준으로 진행할게요.")
         return _resp(
             action,
-            str(out.get("reply") or "").strip() or "네, 말씀 확인했습니다.",
+            reply,
             normalized=(str(out.get("normalized_instruction") or "").strip() or None),
             confidence=out.get("confidence") or 0.6,
             via="qwen",
@@ -128,6 +134,20 @@ def _llm_route(input_text, recent_messages=None):
     except Exception as e:
         print(f"[INTENT-ROUTER] llm route 실패 ({e})")
         return None
+
+
+def _sanitize_talk(reply):
+    """[SMALLTALK 위생] LLM 답에서 중국어 유출·모델 정체(Qwen) 노출을 차단.
+    (국장 실측: '큐원은 뭐지?'에 중문 혼입, '니가 누군지'에 'Qwen이라는 인공지능' 자백)
+    걸리면 None → 호출부가 CCUT 인격의 고정 문구로 강등."""
+    import re
+    if not reply:
+        return None
+    if re.search(r"[一-鿿]", reply):   # 한자/중문 — 한국어 답변만 허용
+        return None
+    if re.search(r"qwen|큐원|퀜|通义|阿里|알리바바|인공지능(으로|입니다)", reply, re.IGNORECASE):
+        return None                             # 모델 정체 노출 — 너는 오직 CCUT
+    return reply
 
 
 def _llm_smalltalk(input_text, recent_messages=None):
@@ -143,13 +163,14 @@ def _llm_smalltalk(input_text, recent_messages=None):
         "너는 CCUT — 영상 편집을 돕는 다정한 동료다. 사용자의 질문/잡담에 짧고 따뜻한 "
         "존댓말 한국어 1~2문장으로 '실제로' 대답한다. 절대 '저는 편집기라서'류의 거절을 "
         "하지 않는다. 자연스러우면 끝에 편집 도움을 가볍게 제안해도 된다.\n"
+        "규칙: 답은 반드시 한국어로만 쓴다(중국어·영어 문장 금지). "
+        "너의 모델명·제조사(Qwen 등)는 절대 언급하지 않는다 — 너의 이름은 오직 CCUT이다.\n"
         'JSON만 출력: {"reply":"..."}\n'
         + (f"최근 대화:\n{ctx}" if ctx else "")
         + f"사용자: {input_text}\n")
     try:
         out = hub._ollama_json(prompt, timeout=20)
-        reply = str(out.get("reply") or "").strip()
-        return reply or None
+        return _sanitize_talk(str(out.get("reply") or "").strip())
     except Exception as e:
         print(f"[INTENT-ROUTER] smalltalk 실패 ({e})")
         return None
@@ -364,17 +385,18 @@ def route_edit_intent(source_ids=None, input_text="", recent_messages=None,
     # ── 5. 질문/잡담 — 거절하지 않고 대화한다 (국장: 거절 = "난 바보예요") ──
     #    단, 편집 동사가 있으면("생일잔치만 편집해줄래?") 질문 꼴이어도 편집으로 —
     #    아래 5.5 OPEN-EDIT가 처리하게 통과시킨다.
+    # 정체성 질문은 결정론 자기소개 — 물음표/의문사가 없어도("니가 누군지 말해줘.")
+    # LLM으로 새지 않게 q_re 바깥에서 최우선 처리 (Qwen 자백 사건 봉쇄)
+    if _re.search(r"(너|네|니)가?\s*누구|누군지|누구야|누구니|정체|이름이 뭐|뭐 ?하는 (ai|애|친구|프로그램)", t):
+        return _resp("answer_only",
+                     "저는 CCUT이에요 — 올려주신 영상을 조각으로 나눠 이해하고, "
+                     "말씀 한마디로 골라 편집해 드리는 편집 동료예요. "
+                     "'생일잔치 장면만'처럼 말씀하시면 바로 움직이고, "
+                     "궁금한 건 뭐든 물어보셔도 좋아요.",
+                     confidence=0.9, matched={"kind": "self_intro"})
+
     q_re, vague_re = _regexes()
     if q_re.search(t) and not _re.search(r"편집|나오게|남게|남겨|골라|만들|빼|줄여|늘려|위주|중심|모아|추려", t):
-        # 정체성 질문은 결정론 자기소개 — LLM 부재/실패 시에도 동문서답 금지
-        # (국장 실측: "너가 누군지 설명해줘"에 엉뚱한 고정 문구가 나감)
-        if _re.search(r"누구|누군지|정체|이름이 뭐|뭐 하는|뭐하는", t):
-            return _resp("answer_only",
-                         "저는 CCUT이에요 — 올려주신 영상을 조각으로 나눠 이해하고, "
-                         "말씀 한마디로 골라 편집해 드리는 편집 동료예요. "
-                         "'생일잔치 장면만'처럼 말씀하시면 바로 움직이고, "
-                         "궁금한 건 뭐든 물어보셔도 좋아요.",
-                         confidence=0.9, matched={"kind": "self_intro"})
         if allow_llm:
             _talk = _llm_smalltalk(t, recent_messages)
             if _talk:

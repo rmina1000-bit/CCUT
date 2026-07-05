@@ -197,6 +197,16 @@ def run_l0():
     r = ir.route_edit_intent(input_text="너가 누군지 설명해줘.", allow_llm=False)
     check("L0", "router 정체성 질문→자기소개",
           r["action"] == "answer_only" and "CCUT" in (r.get("reply") or ""), (r.get("reply") or "")[:25])
+    r = ir.route_edit_intent(input_text="니가 누군지 말해줘.", allow_llm=False)
+    check("L0", "router 정체성(물음표 없이)→자기소개",
+          r["action"] == "answer_only" and "CCUT" in (r.get("reply") or ""), (r.get("reply") or "")[:25])
+
+    # [SMALLTALK 위생] 중국어·모델 정체(Qwen) 유출 차단 (국장: 중국말 나오지 말게)
+    check("L0", "sanitize 중문 차단", ir._sanitize_talk("你是视频剪辑的热心伙伴呢") is None, "None")
+    check("L0", "sanitize Qwen 자백 차단",
+          ir._sanitize_talk("저는 Qwen이라는 인공지능으로, 도와드립니다") is None, "None")
+    check("L0", "sanitize 정상 한국어 통과",
+          ir._sanitize_talk("네, 편하게 말씀하세요!") == "네, 편하게 말씀하세요!", "통과")
 
     # [조사 교정] 단순 replace의 '정은한가' 문법 붕괴 수리 검증
     r = ir.route_edit_intent(input_text="은한이가 병원에 있는 장면만", allow_llm=False,
