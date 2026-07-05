@@ -425,6 +425,7 @@ const Index: React.FC = () => {
           collectedEntries.push({
             source_id: sid,
             label,
+            title: allFiles[i].name,
             video_url: vurl,
             fragments: initialFrags,
             file_size_bytes: allFiles[i].size,
@@ -965,6 +966,7 @@ const Index: React.FC = () => {
             return {
               source_id: src.source_id,
               label: label,
+              title: src.title,
               video_url: src.video_url,
               fragments: mappedFrags,
               file_size_bytes: src.file_size_bytes || 0,
@@ -1173,17 +1175,17 @@ const Index: React.FC = () => {
             // 결정론 id — 열 때마다 새 개략이 역사에 중복 누적되지 않게 (프로젝트×소스수당 1개;
             // 서버 client_id 멱등 + 복원 병합의 id 중복 제외가 같은 id로 물린다)
             { id: `ai_init_${activeNavItem}_${sourceCount}`, sender: "ai", text: draft, timestamp: Date.now() },
-            // [UI-③⑤] 문진 요약 — 사용자가 말해준 정보를 흐름에 새겨 둔다
+            // [UI-③⑤ 국장지시 v2] 영상 소개 기록 — 프로젝트의 시작이자 가장 중요한 내용.
+            // 전 영상을 라벨(A,B..)·원본 제목과 함께 남겨 "어느 영상이 어느 영상인지"
+            // 재생 없이도 알 수 있게 한다 (라벨 = 업로드 순서 = 원본맵 탭 순서)
             ...(intakeRef.current ? [{
                 id: `ai_intake_${Date.now()}`,
                 sender: "ai" as const,
-                text: "알려주신 내용 정리 — " + [
-                    ...intakeRef.current.videoNotes
-                        .filter((v) => v.note)
-                        .map((v) => `${v.name}: ${v.note}`),
-                    `화면 기준: ${intakeRef.current.aspectPreference === "portrait" ? "세로" : intakeRef.current.aspectPreference === "landscape" ? "가로" : "자동"}`,
-                    `사운드: ${intakeRef.current.soundPreference === "normalize" ? "볼륨 고르게" : "원본 그대로"}`,
-                ].join(" · ") + "\n이 정보를 편집 판단에 반영합니다.",
+                text: "영상 소개 — 말씀해주신 내용을 편집 판단에 그대로 반영합니다.\n" + [
+                    ...intakeRef.current.videoNotes.map((v, i) =>
+                        `${String.fromCharCode(65 + i)} · ${v.name.replace(/\.[A-Za-z0-9]{2,4}$/, "")}: ${v.note || "(설명 없음)"}`),
+                    `화면 기준: ${intakeRef.current.aspectPreference === "portrait" ? "세로" : intakeRef.current.aspectPreference === "landscape" ? "가로" : "자동"} · 사운드: ${intakeRef.current.soundPreference === "normalize" ? "볼륨 고르게" : "원본 그대로"}`,
+                ].join("\n"),
                 timestamp: Date.now() + 1,
             }] : []),
         ],
@@ -2440,6 +2442,7 @@ const Index: React.FC = () => {
                   ? sourceEntries.map((e) => ({
                     source_id: e.source_id,
                     label: e.label,
+                    title: e.title,
                     video_url: e.video_url,
                   }))
                   : currentSourceId

@@ -24,7 +24,7 @@ interface OriginalPanoramaProps {
   onRemoveSource?: (source: any) => void;
   onBoundaryClick?: (leftFragId: string | null, rightFragId: string | null) => void;
   sourceFragments?: Fragment[];
-  sources?: { source_id: string; label?: string; file_path?: string; video_url?: string }[];
+  sources?: { source_id: string; label?: string; title?: string; file_path?: string; video_url?: string }[];
 }
 
 const OriginalPanorama: React.FC<OriginalPanoramaProps> = ({
@@ -90,6 +90,8 @@ const OriginalPanorama: React.FC<OriginalPanoramaProps> = ({
                 <span key={s.source_id} className="relative group/srctab flex-shrink-0">
                   <button
                     onClick={() => onSourceChange(s.label || s.source_id)}
+                    /* [DISPLAY-NAME] 라벨만으론 어느 영상인지 알 수 없다 — 원본 제목 툴팁 */
+                    title={(s as any).title ? String((s as any).title).replace(/\.[A-Za-z0-9]{2,4}$/, "") : undefined}
                     className={`px-2 py-0.5 rounded-[3px] text-[9px] font-medium transition-all
                       ${(s.label || s.source_id) === activeSource
                         ? "bg-primary/20 text-primary"

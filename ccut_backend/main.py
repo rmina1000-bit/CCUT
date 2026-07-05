@@ -2073,6 +2073,7 @@ async def get_project_sources(project_id: str):
             collected_sources.append({
                 "source_id": sid,
                 "label": label,
+                "title": src.title,  # [DISPLAY-NAME] 라벨(A,B..)↔원본 제목 연결
                 "video_url": vurl,
                 "fragments": frags,
                 "file_size_bytes": 0, # mock size
