@@ -73,8 +73,10 @@ type ConsultationDecision = {
 const LEGACY_NARRATIVE_ENABLED =
   String(import.meta.env.CCUT_LEGACY_NARRATIVE ?? "0") === "1";
 
+// [2026-07-06 국장지시] CCUT은 대화하는 동료다 — 이 폴백은 서버 연결 실패 시에만
+// 도달하므로, "대화 못 하는 AI" 자기부정 대신 연결 문제를 정직하게 알린다.
 const P6_FALLBACK_UNKNOWN =
-  "저는 자유롭게 대화하는 AI는 아니에요. 영상 편집에 관한 지시를 알아듣고 실행하는 편집기예요. '실내만', '5개로 줄여줘' 처럼 편집 조건으로 말씀해주시면 바로 해드릴게요.";
+  "죄송해요, 지금 대화 엔진 연결이 잠시 원활하지 않아 말씀을 제대로 해석하지 못했어요. 잠시 후 다시 말씀해 주세요 — 편집 지시('실내만', '5개로 줄여줘')는 연결이 복구되는 대로 바로 반영할게요.";
 const P6_FALLBACK_AMBIGUOUS =
   "말씀하신 느낌을 정확히는 못 알아들었어요. 컷을 더 빠르게 할까요, 특정 장면(실내/야외/사람) 위주로 줄일까요 — 편집 조건으로 말씀해주시면 반영해드릴게요.";
 const P6_FALLBACK_REPEAT =
