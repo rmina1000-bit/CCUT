@@ -160,6 +160,9 @@ class ExportResultTable(Base):
     source_id = Column(String, index=True)
     program_id = Column(String, nullable=True, index=True)
     program_title = Column(String, nullable=True)
+    # [EXPORT-NAME-SNAPSHOT] 렌더 시점 이름 스냅샷 — proposal_id 조인이 아니라
+    # 여기 박힌 값이 진실원. 제안 재생성으로 옛 proposal_id가 사라져도 불변.
+    display_name = Column(String, nullable=True)
     output_path_internal = Column(String)
     output_url = Column(String)
     status = Column(String) # RENDER_SUCCESS / RENDER_FAILED

@@ -161,6 +161,12 @@ def _run_db_migrations():
         if "program_title" not in cols:
             cur.execute("ALTER TABLE export_results ADD COLUMN program_title TEXT")
             print("[MIGRATION] export_results.program_title 컬럼 추가")
+        if "display_name" not in cols:
+            # [EXPORT-NAME-SNAPSHOT] 제안 재생성으로 proposal_id가 사라져도
+            # 이름이 유실되지 않게 — export 시점에 이름을 스냅샷으로 박아 넣는다
+            # (조인 → 스냅샷). null 컬럼이면 하위호환 폴백(조인)으로 계속 동작.
+            cur.execute("ALTER TABLE export_results ADD COLUMN display_name TEXT")
+            print("[MIGRATION] export_results.display_name 컬럼 추가")
         conn.commit()
         conn.close()
     except Exception as e:
@@ -2519,12 +2525,22 @@ async def post_render(export_input_id: str, payload: dict = None, db: Session = 
                 pg = db.query(ProgramTable).filter_by(program_id=program_id).first()
                 program_title = pg.name if pg else None
     result = render_engine.render_from_export_input(export_input_id)
-    if result and result.get("success") and program_id:
+    if result and result.get("success"):
         from archive.db_models import ExportResultTable as _ERT
         row = db.query(_ERT).filter_by(export_input_id=export_input_id).first()
         if row:
-            row.program_id = program_id
-            row.program_title = program_title
+            if program_id:
+                row.program_id = program_id
+                row.program_title = program_title
+            # [EXPORT-NAME-SNAPSHOT] 렌더 성공 시점에 이름을 스냅샷으로 고정 —
+            # 이후 제안이 재생성되어 proposal_id가 사라져도 이 값은 불변으로 남는다
+            # (조인 방식이던 옛 코드가 export display_name null 회귀를 냈던 원인 수리).
+            names = _proposal_display_names(db)
+            snap = names.get(row.proposal_id)
+            if not snap and program_title:
+                snap = f"{program_title} · 내보낸 영상"
+            if snap:
+                row.display_name = snap
             db.commit()
     return result
 
@@ -2540,11 +2556,12 @@ async def get_render_result(export_input_id: str):
 async def get_exports_list(db: Session = Depends(get_db)):
     """내보낸 영상 전체 목록 (아카이브/SNS 패널용)"""
     exports = bams.get_all_exports()
-    # [DISPLAY-NAME 국장지시] 내보낸 영상 이름 = 그 제안의 이름 그대로 상속
-    # ("어느 제안에서 나온 영상인지" — 같은 권위 함수 1개)
+    # [EXPORT-NAME-SNAPSHOT] 렌더 시점 스냅샷(display_name 컬럼)이 우선 — 제안이
+    # 재생성돼 proposal_id가 사라져도 이름이 유실되지 않는다. 스냅샷이 없는
+    # 레거시 행(백필 전/실패)만 하위호환 조인으로 보충.
     names = _proposal_display_names(db)
     for e in exports or []:
-        if isinstance(e, dict):
+        if isinstance(e, dict) and not e.get("display_name"):
             e["display_name"] = names.get(e.get("proposal_id"))
     return {"exports": exports}
 

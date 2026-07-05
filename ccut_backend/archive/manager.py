@@ -816,6 +816,8 @@ class BAMSManager:
                     "duration": r.duration,
                     "created_at": str(r.created_at) if r.created_at else None,
                     "program_last_updated_at": str(live_updated_at) if live_updated_at else None,
+                    # [EXPORT-NAME-SNAPSHOT] 렌더 시점에 고정된 이름 — proposal 재생성과 무관
+                    "display_name": getattr(r, "display_name", None),
                 })
             return result
 
