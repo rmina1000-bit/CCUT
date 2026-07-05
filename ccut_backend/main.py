@@ -174,6 +174,30 @@ def _run_db_migrations():
 
 _run_db_migrations()
 
+# [기초층 §8] DB 자동 순환 백업 — 최소 백업 단위는 DB 1파일(말의 원장·편성일지·
+# 계보 전부 포함, MB급). 시작 시 sqlite backup API로 backups/에 7개 순환.
+# 수동 .bak 난립(실측 39개)의 제도적 대체. 실패 비차단.
+def _auto_db_backup(keep: int = 7):
+    import sqlite3 as _s
+    try:
+        db_path = str(Path(__file__).parent / "ccut_app.db")
+        bdir = Path(__file__).parent / "backups"
+        bdir.mkdir(exist_ok=True)
+        stamp = __import__("datetime").datetime.now().strftime("%Y%m%d_%H%M%S")
+        dst_path = bdir / f"ccut_app.{stamp}.db"
+        src = _s.connect(db_path)
+        dst = _s.connect(str(dst_path))
+        src.backup(dst)
+        dst.close(); src.close()
+        olds = sorted(bdir.glob("ccut_app.*.db"))
+        for old in olds[:-keep]:
+            old.unlink()
+        print(f"[BACKUP] DB 순환 백업: {dst_path.name} (보관 {min(len(olds), keep)}개)")
+    except Exception as e:
+        print(f"[BACKUP] 자동 백업 실패 (non-blocking): {e}")
+
+_auto_db_backup()
+
 # [서사층 v2.1] 말의 원장·촬영일 스키마 보장 + 멱등 백필 (가볍게 — NULL만)
 try:
     from engine import narrative_ledger as _nl
