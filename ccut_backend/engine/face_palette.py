@@ -53,6 +53,13 @@ SKIN_MIN = 0.30           # 피부색 비율 문턱 — 하관·중안부 상대
 # 어두운 실내 정상 눈(절대 41~47, 상대 0.69~1.12)을 오탐하지 않고
 # 밝은 얼굴 위의 검은 렌즈(상대 ~0.2대)만 걸러낸다. 실측 분리대: 정상 최저 0.61.
 EYE_REL_MIN = 0.55
+# [카드 자격 v4 국장지시 2026-07-05] "정확히·명확히·선명하게 알아볼 수 있는,
+# 데이터화하기 가장 좋은 얼굴만" 카드 대상 — 링크(MIN_FACE=40)와 별도의 상위 자격.
+CARD_MIN_FACE = 64        # px — 카드 대표는 사람이 알아볼 크기여야 한다.
+                          # 근거: UI 카드 원=64px(1:1), 실측 얼굴 중앙값 65px에서
+                          # 72는 68% 탈락·군집 2개만 생존 vs 64는 군집 5개 생존(2026-07-05)
+DET_SCORE_MIN = 0.90      # YuNet 검출 신뢰도 — 저신뢰(가림/잘림/이상 각도) 배제
+EDGE_PAD = 2              # px — 프레임 경계에 닿은(잘린) 얼굴 배제
 
 _detector = None
 _recognizer = None
@@ -195,9 +202,39 @@ def _face_quality(aligned):
     return True, "ok"
 
 
+def _card_quality(d, img_w, img_h, aligned):
+    """[v4] 카드 대표 사진 자격 — (ok, 사유). 정면도(FRONTAL_MIN)는 호출부 별도.
+    잘린 얼굴(프레임 경계)·저신뢰 검출·작은 얼굴을 원천 배제한 뒤
+    노출/흐림/선글라스/마스크(_face_quality)까지 통과해야 대표 자격."""
+    bw, bh = float(d[2]), float(d[3])
+    if bw < CARD_MIN_FACE or bh < CARD_MIN_FACE:
+        return False, f"small={bw:.0f}x{bh:.0f}"
+    det_score = float(d[14]) if len(d) > 14 else 1.0
+    if det_score < DET_SCORE_MIN:
+        return False, f"detscore={det_score:.2f}"
+    x, y = float(d[0]), float(d[1])
+    if x < EDGE_PAD or y < EDGE_PAD or x + bw > img_w - EDGE_PAD or y + bh > img_h - EDGE_PAD:
+        return False, "edge_cut"
+    for k in range(4, 14, 2):
+        lx, ly = float(d[k]), float(d[k + 1])
+        if not (0 <= lx < img_w and 0 <= ly < img_h):
+            return False, "lm_out"
+    return _face_quality(aligned)
+
+
 def _ensure_frontal_column(con):
     try:
         con.execute("ALTER TABLE persons ADD COLUMN frontal REAL DEFAULT 0")
+        con.commit()
+    except sqlite3.OperationalError:
+        pass  # 이미 있음
+
+
+def _ensure_rep_ok_column(con):
+    # [v4] 대표 사진이 카드 자격(_card_quality)을 통과했는지 — 자격 미달 대표는
+    # 카드에 나가지 않는다(원천 차단). 레거시 행은 refresh(force)가 소급 판정.
+    try:
+        con.execute("ALTER TABLE persons ADD COLUMN rep_ok INTEGER DEFAULT 0")
         con.commit()
     except sqlite3.OperationalError:
         pass  # 이미 있음
@@ -226,6 +263,7 @@ def scan_project(project_id: str, max_frames: int = 400) -> dict:
     con = _connect()
     ensure_schema(con)
     _ensure_frontal_column(con)
+    _ensure_rep_ok_column(con)
 
     sids = [r[0] for r in con.execute(
         "SELECT source_id FROM project_sources WHERE program_id=?", (project_id,))]
@@ -287,10 +325,12 @@ def scan_project(project_id: str, max_frames: int = 400) -> dict:
                 best["emb"] = (best["emb"] * 0.8 + feat * 0.2).astype(np.float32)
                 con.execute("UPDATE persons SET embedding=?, face_count=face_count+1, updated_at=? WHERE person_id=?",
                             (best["emb"].tobytes(), now, pid))
-                # [정면 대표] 더 정면인 얼굴이 오면 대표 사진 교체 (품질 게이트 통과분만)
-                if fs > best.get("frontal", 0.0) + 0.03 and _face_quality(aligned)[0]:
+                # [정면 대표 v4] 더 정면인 얼굴이 오면 대표 교체 — 카드 자격 통과분만
+                if fs > best.get("frontal", 0.0) + 0.03 and _card_quality(d, w, h, aligned)[0]:
                     cv2.imwrite(os.path.join(FACES_DIR, f"{pid}.jpg"), aligned)
-                    con.execute("UPDATE persons SET frontal=? WHERE person_id=?", (fs, pid))
+                    con.execute(
+                        "UPDATE persons SET frontal=?, rep_ok=1, face_path=? WHERE person_id=?",
+                        (fs, f"/static/faces/{pid}.jpg", pid))
                     best["frontal"] = fs
                 # [PERSON-RELINK C1] named 군집에 새 조각이 귀속되면 이름 태그도 즉시 주입.
                 # 재조각화 후 scan이 링크는 복구하는데 검색 어휘(visual_desc 태그)는
@@ -300,15 +340,19 @@ def scan_project(project_id: str, max_frames: int = 400) -> dict:
                     _inject_name_tag(con, best["name"], fid, now)
             else:
                 pid = f"PER_{uuid.uuid4().hex[:8].upper()}"
-                face_path = os.path.join(FACES_DIR, f"{pid}.jpg")
-                cv2.imwrite(face_path, aligned)
-                # 품질 미달(흐림/마스크/선글라스) 첫 얼굴은 frontal=0 → 카드 자격 없음.
-                # 이후 스캔/refresh에서 품질 통과 얼굴이 나오면 그때 대표·frontal 갱신.
-                rep_fs = fs if _face_quality(aligned)[0] else 0.0
+                # [카드 자격 v4 국장지시] 자격 미달 대표는 파일 자체를 만들지 않는다
+                # (구버전의 무조건 imwrite 삭제 — 나쁜 crop이 카드로 새던 원천).
+                # 자격 통과 얼굴이 이후 스캔/refresh에서 나오면 그때 대표가 생긴다.
+                ok_rep = fs >= FRONTAL_MIN and _card_quality(d, w, h, aligned)[0]
+                face_url = None
+                if ok_rep:
+                    cv2.imwrite(os.path.join(FACES_DIR, f"{pid}.jpg"), aligned)
+                    face_url = f"/static/faces/{pid}.jpg"
+                rep_fs = fs if ok_rep else 0.0
                 con.execute(
-                    "INSERT INTO persons (person_id, name, status, embedding, face_path, face_count, frontal, created_at, updated_at) "
-                    "VALUES (?, NULL, 'pending', ?, ?, 1, ?, ?, ?)",
-                    (pid, feat.tobytes(), f"/static/faces/{pid}.jpg", rep_fs, now, now))
+                    "INSERT INTO persons (person_id, name, status, embedding, face_path, face_count, frontal, rep_ok, created_at, updated_at) "
+                    "VALUES (?, NULL, 'pending', ?, ?, 1, ?, ?, ?, ?)",
+                    (pid, feat.tobytes(), face_url, rep_fs, 1 if ok_rep else 0, now, now))
                 persons.append({"pid": pid, "emb": feat, "status": "pending", "frontal": rep_fs})
                 new_clusters += 1
             con.execute("INSERT OR REPLACE INTO person_faces (person_id, fragment_id, score) VALUES (?, ?, ?)",
@@ -447,6 +491,7 @@ def refresh_representatives(min_gain: float = 0.03, force: bool = False) -> int:
     con = _connect()
     ensure_schema(con)
     _ensure_frontal_column(con)
+    _ensure_rep_ok_column(con)
     rows = list(con.execute(
         "SELECT person_id, embedding, COALESCE(frontal, 0) FROM persons WHERE status='pending' AND embedding IS NOT NULL"))
     refreshed = 0
@@ -472,24 +517,25 @@ def refresh_representatives(min_gain: float = 0.03, force: bool = False) -> int:
                 if fs <= best_fs + min_gain:
                     continue
                 aligned = rec.alignCrop(img, d)
-                if not _face_quality(aligned)[0]:
-                    continue  # 흐림/마스크/선글라스 crop은 대표 자격 없음
+                if not _card_quality(d, w, h, aligned)[0]:
+                    continue  # [v4] 잘림/저신뢰/작음/흐림/마스크/선글라스 — 대표 자격 없음
                 feat = rec.feature(aligned).flatten().astype(np.float32)
                 if _cos(feat, emb) < SAME_PERSON_COS:
                     continue  # 같은 프레임의 다른 사람 얼굴 배제
                 best_fs, best_img = fs, aligned
         if best_img is not None:
             cv2.imwrite(os.path.join(FACES_DIR, f"{pid}.jpg"), best_img)
-            con.execute("UPDATE persons SET frontal=?, updated_at=? WHERE person_id=?",
-                        (best_fs, datetime.datetime.now().isoformat(), pid))
+            con.execute("UPDATE persons SET frontal=?, rep_ok=1, face_path=?, updated_at=? WHERE person_id=?",
+                        (best_fs, f"/static/faces/{pid}.jpg",
+                         datetime.datetime.now().isoformat(), pid))
             refreshed += 1
             print(f"[PERSON-PALETTE] rep refreshed {pid} frontal={best_fs:.3f}")
         elif force:
-            # 재선정 모드에서 정면 얼굴을 한 건도 재확인 못한 군집 → 새 점수 기준으로 기록
-            # (구식 점수로 문턱을 넘어 옆모습 카드가 남는 것 방지)
-            con.execute("UPDATE persons SET frontal=?, updated_at=? WHERE person_id=?",
+            # [v4 소급] 재선정 모드에서 자격 통과 얼굴을 한 건도 못 찾은 군집 —
+            # 새 기준으로 카드 부적격(rep_ok=0) 처리 (구식 점수·나쁜 crop 잔존 방지)
+            con.execute("UPDATE persons SET frontal=?, rep_ok=0, updated_at=? WHERE person_id=?",
                         (best_fs, datetime.datetime.now().isoformat(), pid))
-            print(f"[PERSON-PALETTE] rep re-scored(no better face) {pid} frontal={best_fs:.3f}")
+            print(f"[PERSON-PALETTE] rep disqualified(no card-grade face) {pid} frontal={best_fs:.3f}")
     con.commit()
     con.close()
     return refreshed
@@ -500,12 +546,15 @@ def list_pending(project_id: str = None, min_faces: int = 2) -> list:
     con = _connect()
     ensure_schema(con)
     _ensure_frontal_column(con)
-    # [정면 대표] 정면 얼굴이 한 번도 안 잡힌 군집(옆모습뿐)은 알아볼 수 없어 묻지 않는다.
-    # 이후 스캔에서 정면이 나오면(frontal 갱신) 자동으로 다시 후보에 오른다.
+    _ensure_rep_ok_column(con)
+    # [정면 대표 v4] 카드 = 정면(frontal) + 대표 자격(rep_ok=1) + 대표 파일 존재.
+    # 자격 통과 대표가 없는 군집은 묻지 않는다 — 이후 스캔에서 자격 얼굴이
+    # 나오면(rep_ok 갱신) 자동으로 다시 후보에 오른다.
     q = """SELECT p.person_id, p.face_path, p.face_count, p.updated_at,
                   (SELECT COUNT(*) FROM person_faces pf WHERE pf.person_id = p.person_id) AS links
            FROM persons p WHERE p.status = 'pending' AND p.face_count >= ?
                  AND COALESCE(p.frontal, 0) >= ?
+                 AND COALESCE(p.rep_ok, 0) = 1 AND p.face_path IS NOT NULL
            ORDER BY p.face_count DESC"""
     rows = list(con.execute(q, (min_faces, FRONTAL_MIN)))
     out = []
