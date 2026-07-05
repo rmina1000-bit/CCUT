@@ -1,14 +1,25 @@
 import React from "react";
-import { LayoutDashboard, Users, Wallet, Sparkles, ScrollText, ArrowLeft } from "lucide-react";
+import {
+  Radar, Users, LifeBuoy, Wallet, BarChart3, Paintbrush,
+  Sparkles, ShieldAlert, Scale, ScrollText, ArrowLeft,
+} from "lucide-react";
 
-export type AdminTab = "overview" | "users" | "revenue" | "insights" | "audit";
+// [War Room v1] 최상위 메뉴 10개 — IA 확정본(CCUT_ADMIN_WAR_ROOM_IA_FINAL.md)이 단일 진실원.
+export type AdminTab =
+  | "situation" | "users" | "support" | "revenue" | "analytics"
+  | "design" | "ai" | "security" | "legal" | "audit";
 
 const MENU: { key: AdminTab; label: string; icon: React.ReactNode }[] = [
-  { key: "overview", label: "운영 대시보드", icon: <LayoutDashboard size={14} /> },
-  { key: "users", label: "사용자 운영", icon: <Users size={14} /> },
-  { key: "revenue", label: "수익/정산", icon: <Wallet size={14} /> },
-  { key: "insights", label: "세분 분석실", icon: <Sparkles size={14} /> },
-  { key: "audit", label: "감사 로그", icon: <ScrollText size={14} /> },
+  { key: "situation", label: "상황실", icon: <Radar size={14} /> },
+  { key: "users", label: "사용자 360", icon: <Users size={14} /> },
+  { key: "support", label: "지원/문의", icon: <LifeBuoy size={14} /> },
+  { key: "revenue", label: "수익/구독/포인트", icon: <Wallet size={14} /> },
+  { key: "analytics", label: "행동 분석", icon: <BarChart3 size={14} /> },
+  { key: "design", label: "디자인 제어", icon: <Paintbrush size={14} /> },
+  { key: "ai", label: "AI 운영실", icon: <Sparkles size={14} /> },
+  { key: "security", label: "보안 관제", icon: <ShieldAlert size={14} /> },
+  { key: "legal", label: "법무/수사공조", icon: <Scale size={14} /> },
+  { key: "audit", label: "감사/작업기록", icon: <ScrollText size={14} /> },
 ];
 
 export const AdminLeftNav: React.FC<{
@@ -18,9 +29,9 @@ export const AdminLeftNav: React.FC<{
   <nav className="w-52 flex-shrink-0 border-r border-border/15 bg-[hsl(228_12%_9%)] flex flex-col">
     <div className="px-4 py-4 border-b border-border/15">
       <p className="text-sm font-black tracking-wide text-foreground/90">CCUT 관제실</p>
-      <p className="text-[10px] text-muted-foreground/50 mt-0.5">중앙 관리자 콘솔 v0</p>
+      <p className="text-[10px] text-muted-foreground/50 mt-0.5">전쟁상황판 v1</p>
     </div>
-    <div className="flex-1 py-2">
+    <div className="flex-1 py-2 overflow-y-auto">
       {MENU.map(m => (
         <button
           key={m.key}
