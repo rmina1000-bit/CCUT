@@ -1,0 +1,274 @@
+"""[Admin v0] 중앙 관리자 콘솔 서비스 계층 — read-mostly.
+
+원칙 (설계서 SPEC/CONTRACT 기준):
+- 전 KPI는 실 DB 집계. 하드코딩 금지.
+- 관리자 행동은 admin_audit_log에 append-only 기록.
+- insights 질의는 로컬 hub(qwen2.5, engine.hub._ollama_json)로만 —
+  mock 반환 금지, hub 미응답 시 정직하게 에러 반환.
+- billing 계열은 daily_service_metrics 실집계 — 데이터 없으면 "준비 중".
+"""
+import os
+import sqlite3
+import datetime
+
+BACKEND_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+DB_PATH = os.path.join(BACKEND_DIR, "ccut_app.db")
+
+OPERATOR_ID = "CCUT_PRO"  # auth.manager.user_manager 실계정과 동일 키
+
+
+def _connect():
+    con = sqlite3.connect(DB_PATH, timeout=30)
+    con.execute("PRAGMA busy_timeout=30000")
+    return con
+
+
+def ensure_schema():
+    """startup 자동 생성 — CREATE IF NOT EXISTS만, 기존 데이터 불변."""
+    con = _connect()
+    con.execute(
+        """CREATE TABLE IF NOT EXISTS admin_audit_log (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            action TEXT NOT NULL,
+            target_type TEXT,
+            target_id TEXT,
+            note TEXT,
+            created_at TEXT NOT NULL
+        )"""
+    )
+    con.execute(
+        """CREATE TABLE IF NOT EXISTS admin_saved_queries (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            query_text TEXT NOT NULL,
+            result_summary TEXT,
+            created_at TEXT NOT NULL
+        )"""
+    )
+    con.execute(
+        """CREATE TABLE IF NOT EXISTS daily_service_metrics (
+            date_key TEXT NOT NULL,
+            metric_key TEXT NOT NULL,
+            metric_value REAL,
+            PRIMARY KEY (date_key, metric_key)
+        )"""
+    )
+    con.commit()
+    con.close()
+
+
+def audit_append(action, target_type=None, target_id=None, note=None):
+    """append-only — 수정/삭제 API를 만들지 않는다 (구조원칙 3)."""
+    con = _connect()
+    con.execute(
+        "INSERT INTO admin_audit_log (action, target_type, target_id, note, created_at)"
+        " VALUES (?,?,?,?,?)",
+        (action, target_type, target_id, note,
+         datetime.datetime.now().isoformat()),
+    )
+    con.commit()
+    con.close()
+
+
+def _service_counts(con) -> dict:
+    """전 KPI 실 DB 집계 — 단일 진실원."""
+    def _one(sql):
+        try:
+            return con.execute(sql).fetchone()[0]
+        except Exception:
+            return None
+    return {
+        "source_count": _one("SELECT COUNT(*) FROM sources"),
+        "program_count": _one("SELECT COUNT(*) FROM programs"),
+        "proposal_count": _one("SELECT COUNT(*) FROM proposals"),
+        "vault_event_count": _one("SELECT COUNT(*) FROM vault_events"),
+        "fragment_vault_count": _one("SELECT COUNT(*) FROM fragment_vault"),
+        "export_success_count": _one(
+            "SELECT COUNT(*) FROM export_results WHERE status='RENDER_SUCCESS'"),
+        "person_count": _one("SELECT COUNT(*) FROM persons"),
+    }
+
+
+def overview() -> dict:
+    con = _connect()
+    kpis = _service_counts(con)
+    recent_audit = [
+        {"id": r[0], "action": r[1], "target_type": r[2], "target_id": r[3],
+         "note": r[4], "created_at": r[5]}
+        for r in con.execute(
+            "SELECT id, action, target_type, target_id, note, created_at"
+            " FROM admin_audit_log ORDER BY id DESC LIMIT 5")
+    ]
+    latest_shot = con.execute(
+        "SELECT MAX(shot_date) FROM sources WHERE shot_date IS NOT NULL"
+    ).fetchone()[0]
+    con.close()
+    return {
+        "kpis": kpis,
+        "latest_shot_date": latest_shot,
+        "recent_audit": recent_audit,
+        "generated_at": datetime.datetime.now().isoformat(),
+    }
+
+
+def _operator_stats(con) -> dict:
+    stats = _service_counts(con)
+    first = con.execute("SELECT MIN(created_at) FROM sources").fetchone()[0]
+    last = con.execute("SELECT MAX(last_updated_at) FROM programs").fetchone()[0]
+    stats["first_activity"] = str(first) if first else None
+    stats["last_activity"] = str(last) if last else None
+    return stats
+
+
+def users_list() -> dict:
+    """로컬 단일 사용자 환경 — 운영자 1인 + 실사용 통계."""
+    from auth.manager import user_manager
+    con = _connect()
+    stats = _operator_stats(con)
+    con.close()
+    u = user_manager.current_user
+    return {
+        "users": [{
+            "user_id": u.get("id", OPERATOR_ID),
+            "display_name": u.get("name"),
+            "role": u.get("role"),
+            "plan": u.get("status"),
+            **stats,
+        }],
+        "total": 1,
+        "environment": "local_single_user",
+    }
+
+
+def user_detail(user_id: str) -> dict:
+    from auth.manager import user_manager
+    u = user_manager.current_user
+    if user_id != u.get("id", OPERATOR_ID):
+        return {"status": "ERROR", "message": "user not found (로컬 단일 사용자 환경)"}
+    con = _connect()
+    stats = _operator_stats(con)
+    notes = [
+        {"id": r[0], "note": r[1], "created_at": r[2]}
+        for r in con.execute(
+            "SELECT id, note, created_at FROM admin_audit_log"
+            " WHERE action='user_note' AND target_type='user' AND target_id=?"
+            " ORDER BY id DESC LIMIT 20", (user_id,))
+    ]
+    con.close()
+    return {
+        "status": "OK",
+        "user_id": u.get("id"),
+        "display_name": u.get("name"),
+        "role": u.get("role"),
+        "plan": u.get("status"),
+        "stats": stats,
+        "operator_notes": notes,
+    }
+
+
+def add_user_note(user_id: str, note: str) -> dict:
+    audit_append("user_note", target_type="user", target_id=user_id, note=note)
+    return {"status": "OK", "user_id": user_id, "note": note}
+
+
+def revenue_summary() -> dict:
+    """daily_service_metrics 실집계 — 데이터 없으면 '준비 중' 정직 반환 (0 하드코딩 금지)."""
+    con = _connect()
+    rows = con.execute(
+        "SELECT metric_key, COUNT(*), SUM(metric_value) FROM daily_service_metrics"
+        " WHERE metric_key LIKE 'revenue%' GROUP BY metric_key"
+    ).fetchall()
+    total_days = con.execute(
+        "SELECT COUNT(DISTINCT date_key) FROM daily_service_metrics").fetchone()[0]
+    con.close()
+    if not rows:
+        return {
+            "status": "준비 중",
+            "total": None,
+            "message": "구독 데이터 준비 중 — billing_accounts/subscription_events 미도입 (로컬 단일 사용자 환경)",
+            "metric_days_recorded": total_days,
+        }
+    return {
+        "status": "OK",
+        "metrics": [
+            {"metric_key": k, "days": n, "total": s} for k, n, s in rows
+        ],
+        "metric_days_recorded": total_days,
+    }
+
+
+def insights_query(query: str) -> dict:
+    """운영 질의 → 실 DB 집계 컨텍스트 + 로컬 hub 판단. mock 금지.
+
+    로컬 AI 원칙(SPEC §3.1): 원장 집계를 컨텍스트로 압축해 hub에 전달,
+    hub가 답을 만든다. hub 미응답 시 정직하게 에러 반환."""
+    con = _connect()
+    ctx = _service_counts(con)
+    latest_shot = con.execute(
+        "SELECT MAX(shot_date) FROM sources WHERE shot_date IS NOT NULL").fetchone()[0]
+    recent_exports = con.execute(
+        "SELECT COUNT(*) FROM export_results WHERE status='RENDER_SUCCESS'"
+        " AND created_at >= datetime('now','-7 day')").fetchone()[0]
+    con.close()
+    ctx["latest_shot_date"] = latest_shot
+    ctx["exports_last_7d"] = recent_exports
+
+    ctx_lines = "\n".join(f"- {k}: {v}" for k, v in ctx.items())
+    prompt = (
+        "너는 CCUT 영상 아카이브 서비스의 운영 보조 AI다.\n"
+        "아래는 방금 실 DB에서 집계한 운영 지표다. 이 수치만 근거로 답하라.\n"
+        "지표에 없는 수치는 지어내지 말고 '지표에 없음'이라고 말하라.\n"
+        f"[운영 지표]\n{ctx_lines}\n\n"
+        f"[운영자 질문]\n{query}\n\n"
+        'JSON만 출력. 형식: {"answer": "한국어 답변 (수치 근거 포함, 3문장 이내)"}'
+    )
+    try:
+        from engine.hub import _ollama_json
+        res = _ollama_json(prompt, timeout=60)
+        answer = (res or {}).get("answer")
+        if not answer:
+            raise ValueError("empty answer")
+    except Exception as e:
+        audit_append("insights_query_failed", target_type="query", note=f"{query} | {e}")
+        return {"error": "hub 응답 없음", "query": query, "detail": str(e)}
+
+    # 질의·결과를 원장에 남긴다 (재사용 가능한 형태로 저장 — 데이터 원칙 §1.3)
+    con = _connect()
+    con.execute(
+        "INSERT INTO admin_saved_queries (query_text, result_summary, created_at)"
+        " VALUES (?,?,?)",
+        (query, answer[:500], datetime.datetime.now().isoformat()),
+    )
+    con.commit()
+    con.close()
+    audit_append("insights_query", target_type="query", note=query)
+
+    return {
+        "query": query,
+        "result": answer,
+        "sources_referenced": len(ctx),
+        "context_used": ctx,
+    }
+
+
+def audit_logs(limit: int = 20, cursor: int = None) -> dict:
+    limit = max(1, min(int(limit or 20), 100))
+    con = _connect()
+    sql = ("SELECT id, action, target_type, target_id, note, created_at"
+           " FROM admin_audit_log")
+    params: tuple = ()
+    if cursor:
+        sql += " WHERE id < ?"
+        params = (int(cursor),)
+    sql += " ORDER BY id DESC LIMIT ?"
+    params = params + (limit + 1,)
+    rows = con.execute(sql, params).fetchall()
+    con.close()
+    has_more = len(rows) > limit
+    rows = rows[:limit]
+    return {
+        "logs": [
+            {"id": r[0], "action": r[1], "target_type": r[2], "target_id": r[3],
+             "note": r[4], "created_at": r[5]} for r in rows
+        ],
+        "next_cursor": rows[-1][0] if (has_more and rows) else None,
+    }

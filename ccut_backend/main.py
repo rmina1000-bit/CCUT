@@ -174,6 +174,14 @@ def _run_db_migrations():
 
 _run_db_migrations()
 
+# [ADMIN v0] 관리자 콘솔 테이블 — startup 자동 생성 (CREATE IF NOT EXISTS, 실패 비차단)
+try:
+    from admin import service as _admin_service
+    _admin_service.ensure_schema()
+    print("[ADMIN] admin tables ensured (audit_log/saved_queries/daily_metrics)")
+except Exception as _admin_e:
+    print(f"[ADMIN] schema ensure 실패 (non-blocking): {_admin_e}")
+
 # [기초층 §8] DB 자동 순환 백업 — 최소 백업 단위는 DB 1파일(말의 원장·편성일지·
 # 계보 전부 포함, MB급). 시작 시 sqlite backup API로 backups/에 7개 순환.
 # 수동 .bak 난립(실측 39개)의 제도적 대체. 실패 비차단.
@@ -3425,6 +3433,59 @@ async def get_archive_timeline_day(date_key: str, db: Session = Depends(get_db))
         }
 
     return {"date_key": date_key, "sources": [_card(r) for r in rows]}
+
+
+# ═══════════════════════════════════════════════════════════════════
+#   [ADMIN v0] 중앙 관리자 콘솔 — read-mostly MVP (설계서 3편 SSOT)
+#   전 KPI 실 DB 집계 · 관리자 행동 append-only 감사 · insights는 로컬 hub만
+# ═══════════════════════════════════════════════════════════════════
+
+@app.get("/admin/overview")
+async def admin_overview():
+    from admin import service as _adm
+    return _adm.overview()
+
+
+@app.get("/admin/users")
+async def admin_users():
+    from admin import service as _adm
+    return _adm.users_list()
+
+
+@app.get("/admin/users/{user_id}")
+async def admin_user_detail(user_id: str):
+    from admin import service as _adm
+    return _adm.user_detail(user_id)
+
+
+@app.post("/admin/users/{user_id}/note")
+async def admin_user_note(user_id: str, payload: dict = None):
+    from admin import service as _adm
+    note = ((payload or {}).get("note") or "").strip()
+    if not note:
+        raise HTTPException(status_code=400, detail="note is required")
+    return _adm.add_user_note(user_id, note)
+
+
+@app.get("/admin/revenue/summary")
+async def admin_revenue_summary():
+    from admin import service as _adm
+    return _adm.revenue_summary()
+
+
+@app.post("/admin/insights/query")
+async def admin_insights_query(payload: dict = None):
+    from admin import service as _adm
+    query = ((payload or {}).get("query") or "").strip()
+    if not query:
+        raise HTTPException(status_code=400, detail="query is required")
+    return _adm.insights_query(query)
+
+
+@app.get("/admin/audit/logs")
+async def admin_audit_logs(limit: int = 20, cursor: int = None):
+    from admin import service as _adm
+    return _adm.audit_logs(limit=limit, cursor=cursor)
 
 
 @app.post("/export/final")
