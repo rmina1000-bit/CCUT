@@ -3202,6 +3202,67 @@ async def get_archive_summary(db: Session = Depends(get_db)):
     return _archive_summary_payload(db)
 
 
+@app.get("/archive/sources")
+async def get_archive_sources(
+    cursor: str = None,
+    limit: int = 20,
+    sort: str = "shot_date_desc",
+    q: str = None,
+    db: Session = Depends(get_db),
+):
+    """[Archive 단계B] sources 목록 — cursor 기반 페이징(국장 판정: sources 먼저).
+    기본 정렬 shot_date DESC, shot_date 없으면 created_at fallback(NULL last)."""
+    from sqlalchemy import func as _func, tuple_ as _tuple
+    from engine import fragment_vault as _fv
+
+    limit = max(1, min(int(limit or 20), 50))
+    sort = sort if sort in ("shot_date_desc", "created_desc") else "shot_date_desc"
+
+    query = db.query(SourceTable)
+    if q:
+        query = query.filter(SourceTable.title.ilike(f"%{q}%"))
+
+    if sort == "created_desc":
+        order_cols = (SourceTable.created_at.desc(), SourceTable.source_id.desc())
+        cursor_cols = (SourceTable.created_at, SourceTable.source_id)
+    else:
+        # shot_date 없으면 created_at 앞 10자(YYYY-MM-DD)로 대체 — NULL이 뒤로 밀리지 않게
+        sort_key = _func.coalesce(SourceTable.shot_date, _func.substr(SourceTable.created_at, 1, 10))
+        order_cols = (sort_key.desc(), SourceTable.created_at.desc(), SourceTable.source_id.desc())
+        cursor_cols = (sort_key, SourceTable.created_at, SourceTable.source_id)
+
+    if cursor:
+        cur_row = db.query(*cursor_cols).filter(SourceTable.source_id == cursor).first()
+        if cur_row:
+            query = query.filter(_tuple(*cursor_cols) < _tuple(*cur_row))
+
+    # [즉시 축소 원칙] 전량 .all() 금지 — 반드시 LIMIT. +1은 next_cursor 존재 판별용.
+    rows = query.order_by(*order_cols).limit(limit + 1).all()
+    has_more = len(rows) > limit
+    rows = rows[:limit]
+
+    def _card(s):
+        # [조각 이력 재사용] fv.source_fragment_history는 이미 검증된 함수(커밋 C/D) —
+        # anchor_hash 기반 조각 목록·썸네일 경로를 다시 만들지 않고 그대로 재사용
+        hist = _fv.source_fragment_history(s.source_id)
+        frags = hist.get("fragments") or []
+        return {
+            "source_id": s.source_id,
+            "title": s.title,
+            "shot_date": s.shot_date,
+            "shot_date_fallback": s.shot_date is None,
+            "created_at": s.created_at.isoformat() if s.created_at else None,
+            "duration": s.duration,
+            "thumbnail_url": frags[0]["thumbnail_url"] if frags else None,
+            "fragment_count": hist.get("fragment_count", 0),
+        }
+
+    return {
+        "sources": [_card(s) for s in rows],
+        "next_cursor": rows[-1].source_id if (has_more and rows) else None,
+    }
+
+
 @app.post("/export/final")
 async def run_final_broadcast(project_id: str = "DEFAULT", db: Session = Depends(get_db)):
     """[CCUT 1.0.6 최종 송출] 편집본을 실제 .mp4 파일로 렌더링하고 DB 아카이브에 기록"""
