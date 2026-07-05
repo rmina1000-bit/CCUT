@@ -52,6 +52,45 @@ def ensure_schema():
             PRIMARY KEY (date_key, metric_key)
         )"""
     )
+    # [War Room v1] 구독/포인트/상품 원장 — provider 연동 전 "준비 중"
+    con.execute(
+        """CREATE TABLE IF NOT EXISTS admin_subscription_events (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id TEXT,
+            event_type TEXT NOT NULL,
+            plan_code TEXT,
+            amount REAL,
+            currency TEXT,
+            provider TEXT,
+            raw_ref TEXT,
+            created_at TEXT NOT NULL
+        )"""
+    )
+    con.execute(
+        """CREATE TABLE IF NOT EXISTS admin_point_events (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id TEXT,
+            event_type TEXT NOT NULL,
+            points INTEGER NOT NULL,
+            reason TEXT,
+            ref_type TEXT,
+            ref_id TEXT,
+            created_at TEXT NOT NULL
+        )"""
+    )
+    con.execute(
+        """CREATE TABLE IF NOT EXISTS admin_products (
+            product_id TEXT PRIMARY KEY,
+            kind TEXT NOT NULL,
+            name TEXT NOT NULL,
+            status TEXT NOT NULL,
+            price REAL,
+            currency TEXT,
+            config_json TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        )"""
+    )
     # [War Room v1] 보안 이벤트 원장 — 자동 차단 금지, 상태 전이만
     con.execute(
         """CREATE TABLE IF NOT EXISTS admin_security_events (
@@ -673,6 +712,86 @@ def security_event_status(event_id: int, status: str) -> dict:
     audit_append("security_event_status", target_type="security_event",
                  target_id=str(event_id), note=f"{row[0]} → {status} ({row[1]})")
     return {"status": "OK", "id": event_id, "from": row[0], "to": status}
+
+
+# ═══════════════════════════════════════════════════════════════════
+#   [War Room v1] 수익/구독/포인트 — 상품 카탈로그 + 포인트 원장
+# ═══════════════════════════════════════════════════════════════════
+
+_PRODUCT_STATUSES = ("draft", "approved", "published", "retired")
+
+
+def products_list() -> dict:
+    con = _connect()
+    rows = con.execute(
+        "SELECT product_id, kind, name, status, price, currency, config_json,"
+        " created_at, updated_at FROM admin_products ORDER BY created_at DESC"
+    ).fetchall()
+    con.close()
+    cols = ["product_id", "kind", "name", "status", "price", "currency",
+            "config_json", "created_at", "updated_at"]
+    return {"products": [dict(zip(cols, r)) for r in rows]}
+
+
+def product_create(payload: dict) -> dict:
+    product_id = (payload.get("product_id") or "").strip()
+    kind = (payload.get("kind") or "").strip()
+    name = (payload.get("name") or "").strip()
+    if not product_id or not kind or not name:
+        return {"error": "product_id, kind, name are required"}
+    now = datetime.datetime.now().isoformat()
+    con = _connect()
+    dup = con.execute("SELECT 1 FROM admin_products WHERE product_id=?",
+                      (product_id,)).fetchone()
+    if dup:
+        con.close()
+        return {"error": "product_id already exists"}
+    con.execute(
+        "INSERT INTO admin_products (product_id, kind, name, status, price,"
+        " currency, config_json, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?)",
+        (product_id, kind, name, "draft", payload.get("price"),
+         payload.get("currency"), payload.get("config_json"), now, now))
+    con.commit()
+    con.close()
+    audit_append("product_create", target_type="product", target_id=product_id,
+                 note=f"[draft/{kind}] {name}")
+    return {"status": "OK", "product_id": product_id}
+
+
+def product_status(product_id: str, status: str) -> dict:
+    """공개(published)는 승인 상태 전이 필수 — draft에서 바로 published 금지."""
+    if status not in _PRODUCT_STATUSES:
+        return {"error": f"status must be one of {_PRODUCT_STATUSES}"}
+    con = _connect()
+    row = con.execute("SELECT status, name FROM admin_products WHERE product_id=?",
+                      (product_id,)).fetchone()
+    if not row:
+        con.close()
+        return {"error": "product not found"}
+    if status == "published" and row[0] != "approved":
+        con.close()
+        return {"error": "published 전이는 approved 상태에서만 가능 (승인 단계 필수)"}
+    con.execute(
+        "UPDATE admin_products SET status=?, updated_at=? WHERE product_id=?",
+        (status, datetime.datetime.now().isoformat(), product_id))
+    con.commit()
+    con.close()
+    audit_append("product_status", target_type="product", target_id=product_id,
+                 note=f"{row[0]} → {status} ({row[1]})")
+    return {"status": "OK", "product_id": product_id, "from": row[0], "to": status}
+
+
+def points_summary() -> dict:
+    con = _connect()
+    rows = con.execute(
+        "SELECT event_type, COUNT(*), SUM(points) FROM admin_point_events"
+        " GROUP BY event_type").fetchall()
+    con.close()
+    if not rows:
+        return {"status": "준비 중", "total": None,
+                "message": "포인트 원장 비어 있음 — 포인트 정책 도입 전"}
+    return {"status": "OK",
+            "by_type": [{"event_type": t, "count": n, "points": p} for t, n, p in rows]}
 
 
 def audit_logs(limit: int = 20, cursor: int = None) -> dict:

@@ -3559,6 +3559,30 @@ async def admin_security_event_status(event_id: int, payload: dict = None):
     return _adm.security_event_status(event_id, ((payload or {}).get("status") or "").strip())
 
 
+@app.get("/admin/revenue/products")
+async def admin_revenue_products():
+    from admin import service as _adm
+    return _adm.products_list()
+
+
+@app.post("/admin/revenue/products")
+async def admin_revenue_product_create(payload: dict = None):
+    from admin import service as _adm
+    return _adm.product_create(payload or {})
+
+
+@app.post("/admin/revenue/products/{product_id}/status")
+async def admin_revenue_product_status(product_id: str, payload: dict = None):
+    from admin import service as _adm
+    return _adm.product_status(product_id, ((payload or {}).get("status") or "").strip())
+
+
+@app.get("/admin/revenue/points")
+async def admin_revenue_points():
+    from admin import service as _adm
+    return _adm.points_summary()
+
+
 @app.post("/export/final")
 async def run_final_broadcast(project_id: str = "DEFAULT", db: Session = Depends(get_db)):
     """[CCUT 1.0.6 최종 송출] 편집본을 실제 .mp4 파일로 렌더링하고 DB 아카이브에 기록"""
