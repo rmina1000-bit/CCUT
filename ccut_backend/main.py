@@ -2272,6 +2272,35 @@ async def post_generate_project_proposals(req: ProjectProposalRequest):
         # [B-3b-3] inject·rerank 후 program_id 기준 저장 — GET 복원(filter_by program_id)과 맞물림
         bams.save_project_proposals(project_id, proposals)
 
+        # [조각 이력] 채택(adopted) 사건 기록 — 제안이 나중에 교체·purge돼도
+        # "이 조각이 이 프로젝트 제안에 채택됐다"는 사실은 스냅샷으로 영속. 비차단.
+        try:
+            from engine import fragment_vault as _fvE
+            from database import SessionLocal as _SLe
+            with _SLe() as _dbe:
+                _pg = _dbe.query(ProgramTable).filter_by(program_id=project_id).first()
+                _pgname = _pg.name if _pg else None
+            _pnames = None
+            _events = []
+            for _p in (proposals or []):
+                _pid = _p.get("proposal_id")
+                _mode = _p.get("mode")
+                for _s in (_p.get("sequence") or []):
+                    _events.append({
+                        "source_id": _s.get("source_id"),
+                        "start": _s.get("start"), "end": _s.get("end"),
+                        "fragment_id": _s.get("fragment_id"),
+                        "event_kind": "adopted", "ref_id": _pid or f"{project_id}_{_mode}",
+                        "program_id": project_id, "program_name": _pgname,
+                        "proposal_id": _pid,
+                        "proposal_name": (f"{_pgname} · {_mode}안" if _pgname and _mode else None),
+                        "detail": {"mode": _mode},
+                    })
+            _n = _fvE.record_events(_events)
+            print(f"[VAULT-EVENT] adopted 기록: +{_n} (제안 {len(proposals or [])}건)")
+        except Exception as _ve:
+            print(f"[VAULT-EVENT] adopted 기록 실패 (비차단): {_ve}")
+
         # [B-4] 프로젝트-소스 다대다 기록 (project_sources upsert, 멱등). 실패해도 응답엔 영향 없음
         try:
             from database import SessionLocal as _SL
@@ -2632,6 +2661,30 @@ async def post_render(export_input_id: str, payload: dict = None, db: Session = 
                 with open(os.path.join(_adir, f"{row.id}.json"), "w", encoding="utf-8") as _f:
                     _json.dump(manifest, _f, ensure_ascii=False, indent=1)
                 print(f"[CREDIT] 매니페스트 기록: storage/archive/{row.id}.json")
+                # [조각 이력] 방송(exported) 사건 — 이 조각이 완성본에 실렸다는
+                # 사실을 자연키+이름 스냅샷으로 영속. 비차단.
+                try:
+                    from engine import fragment_vault as _fvX
+                    _xev = []
+                    for _c in clips:
+                        _fid = str(_c.get("fragment_id", ""))
+                        _csid = ("SRC_" + _fid.split("_SRC_")[-1].split("_")[0]
+                                 if "_SRC_" in _fid else None)
+                        if not _csid:
+                            continue
+                        _xev.append({
+                            "source_id": _csid,
+                            "start": _c.get("start"), "end": _c.get("end"),
+                            "fragment_id": _fid,
+                            "event_kind": "exported", "ref_id": row.id,
+                            "program_id": program_id, "program_name": program_title,
+                            "proposal_id": row.proposal_id,
+                            "proposal_name": row.display_name,
+                        })
+                    _nx = _fvX.record_events(_xev)
+                    print(f"[VAULT-EVENT] exported 기록: +{_nx}")
+                except Exception as _ve:
+                    print(f"[VAULT-EVENT] exported 기록 실패 (비차단): {_ve}")
             except Exception as _cm_e:
                 print(f"[CREDIT] 매니페스트 실패 (비차단): {_cm_e}")
     return result
@@ -3315,6 +3368,8 @@ class EditOverlayRequest(BaseModel):
     parent_fragment_id: str | None = None
     overlay_id: str | None = None
     metadata_json: dict | None = None
+    # [조각 이력] 어느 프로젝트에서의 정밀조정인지 — 실측: 기존 44행 전부 None이던 결함
+    program_id: str | None = None
 
 
 @app.post("/edit-overlay")
@@ -3331,6 +3386,8 @@ async def upsert_edit_overlay(req: EditOverlayRequest, db: Session = Depends(get
         row.root_fragment_id = req.root_fragment_id
         row.parent_fragment_id = req.parent_fragment_id
         row.metadata_json = req.metadata_json or {}
+        if req.program_id:
+            row.program_id = req.program_id
         row.updated_at = _dt.datetime.now()
     else:
         row = EditOverlayTable(
@@ -3344,9 +3401,35 @@ async def upsert_edit_overlay(req: EditOverlayRequest, db: Session = Depends(get
             root_fragment_id=req.root_fragment_id,
             parent_fragment_id=req.parent_fragment_id,
             metadata_json=req.metadata_json or {},
+            program_id=req.program_id,
         )
         db.add(row)
     db.commit()
+    # [조각 이력] 편집(edited) 사건 기록 — 사용자가 이 조각의 경계를 직접
+    # 만졌다는 사실은 원본의 자산 이력. 조각(원 경계)은 semantic_fragments에서
+    # 역조회해 자연키를 정확히 잡는다(overlay 좌표는 수정 후 값이므로). 비차단.
+    try:
+        from engine import fragment_vault as _fvO
+        from archive.db_models import SemanticFragmentTable as _SFT
+        _sf = db.query(_SFT).filter_by(fragment_id=req.fragment_id).first()
+        _st, _en = (_sf.start, _sf.end) if _sf else (req.effective_start_sec, req.effective_end_sec)
+        _pgname = None
+        if req.program_id:
+            _pg2 = db.query(ProgramTable).filter_by(program_id=req.program_id).first()
+            _pgname = _pg2.name if _pg2 else None
+        _n = _fvO.record_events([{
+            "source_id": req.source_id, "start": _st, "end": _en,
+            "fragment_id": req.fragment_id,
+            "event_kind": "edited", "ref_id": oid,
+            "program_id": req.program_id, "program_name": _pgname,
+            "detail": {"edit_type": req.edit_type,
+                       "after": [req.effective_start_sec, req.effective_end_sec],
+                       "excluded": req.excluded},
+        }])
+        if _n:
+            print(f"[VAULT-EVENT] edited 기록: {oid}")
+    except Exception as _ve:
+        print(f"[VAULT-EVENT] edited 기록 실패 (비차단): {_ve}")
     return {"ok": True, "overlay_id": oid}
 
 

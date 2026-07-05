@@ -230,6 +230,114 @@ def mark_source_alive():
     return n_dead
 
 
+# ═══════════════════════════════════════════════════════════════════
+# [조각 이력 v1 — 작업지시서 "아카이브 원본 조각 영속화"]
+# 조각은 원본영상의 자산이고, 프로젝트는 그 자산을 빌려 쓴 작업이다.
+# 작업(프로젝트)이 purge돼도 자산의 경험(채택·편집·방송)은 남아야 한다.
+# 사건은 vault와 같은 자연키(anchor, 구간)로 기록하고, 프로젝트/제안의
+# 이름은 조인이 아니라 스냅샷으로 박는다(제2조) — 죽은 참조에 면역.
+# ═══════════════════════════════════════════════════════════════════
+
+_EVENT_KINDS = ("adopted", "edited", "exported")
+
+
+def ensure_events_schema(con):
+    con.execute("""CREATE TABLE IF NOT EXISTS vault_events (
+        event_id INTEGER PRIMARY KEY AUTOINCREMENT,
+        anchor_hash TEXT NOT NULL,
+        start_ds INTEGER NOT NULL,
+        end_ds INTEGER NOT NULL,
+        source_id TEXT,
+        fragment_id TEXT,
+        event_kind TEXT NOT NULL,
+        ref_id TEXT NOT NULL,
+        program_id TEXT, program_name TEXT,
+        proposal_id TEXT, proposal_name TEXT,
+        detail TEXT,
+        happened_at TEXT)""")
+    # 멱등: 같은 사건(같은 종류·같은 참조·같은 조각)은 1회만
+    con.execute("CREATE UNIQUE INDEX IF NOT EXISTS uq_vev_dedup "
+                "ON vault_events(event_kind, ref_id, anchor_hash, start_ds, end_ds)")
+    con.execute("CREATE INDEX IF NOT EXISTS idx_vev_source ON vault_events(source_id)")
+    con.commit()
+
+
+def record_events(entries):
+    """사건 배치 기록 — entries: [{source_id, start, end, event_kind, ref_id,
+    fragment_id?, program_id?, program_name?, proposal_id?, proposal_name?,
+    detail?, happened_at?}]. anchor는 source hash로 자체 해석. 멱등. 기록 수 반환."""
+    con = _connect()
+    ensure_events_schema(con)
+    hashes = dict(con.execute("SELECT source_id, hash_value FROM sources"))
+    now = datetime.datetime.now().isoformat()
+    added = 0
+    for e in entries or []:
+        kind = e.get("event_kind")
+        sid = e.get("source_id")
+        ref = e.get("ref_id")
+        if kind not in _EVENT_KINDS or not sid or not ref:
+            continue
+        anchor, sds, eds = norm_key(hashes.get(sid) or sid, e.get("start"), e.get("end"))
+        cur = con.execute(
+            "INSERT OR IGNORE INTO vault_events (anchor_hash, start_ds, end_ds, "
+            "source_id, fragment_id, event_kind, ref_id, program_id, program_name, "
+            "proposal_id, proposal_name, detail, happened_at) "
+            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            (anchor, sds, eds, sid, e.get("fragment_id"), kind, str(ref),
+             e.get("program_id"), e.get("program_name"),
+             e.get("proposal_id"), e.get("proposal_name"),
+             json.dumps(e.get("detail"), ensure_ascii=False) if e.get("detail") else None,
+             e.get("happened_at") or now))
+        added += cur.rowcount
+    con.commit()
+    con.close()
+    return added
+
+
+def source_fragment_history(source_id):
+    """[아카이브 펼침면용] 한 원본의 조각 자산 이력 — vault 조각 목록 + 사건 요약.
+    프로젝트가 purge돼도 이 응답은 변하지 않는다(이름은 스냅샷, 키는 자연키)."""
+    con = _connect()
+    ensure_schema(con)
+    ensure_events_schema(con)
+    src = con.execute("SELECT hash_value FROM sources WHERE source_id=?",
+                      (source_id,)).fetchone()
+    anchor = (src[0] if src and src[0] else source_id)
+    frags = []
+    for r in con.execute(
+            """SELECT start_ds, end_ds, start, end, display_name, generations,
+                      people, transcript IS NOT NULL AND transcript != ''
+               FROM fragment_vault WHERE anchor_hash=? ORDER BY start_ds""", (anchor,)):
+        frags.append({"start_ds": r[0], "end_ds": r[1], "start": r[2], "end": r[3],
+                      "display_name": r[4], "generations": r[5],
+                      "people": r[6], "has_transcript": bool(r[7]),
+                      "adopted": [], "edited": False, "exported": []})
+    by_key = {(f["start_ds"], f["end_ds"]): f for f in frags}
+    n_adopted = n_edited = n_exported = 0
+    for sds, eds, kind, pname, prname, detail in con.execute(
+            """SELECT start_ds, end_ds, event_kind, program_name, proposal_name, detail
+               FROM vault_events WHERE anchor_hash=? ORDER BY event_id""", (anchor,)):
+        f = by_key.get((sds, eds))
+        if kind == "adopted":
+            n_adopted += 1
+            if f is not None and (prname or pname):
+                label = prname or pname
+                if label not in f["adopted"]:
+                    f["adopted"].append(label)
+        elif kind == "edited":
+            n_edited += 1
+            if f is not None:
+                f["edited"] = True
+        elif kind == "exported":
+            n_exported += 1
+            if f is not None and pname and pname not in f["exported"]:
+                f["exported"].append(pname)
+    con.close()
+    return {"source_id": source_id, "fragment_count": len(frags),
+            "adopted_events": n_adopted, "edited_events": n_edited,
+            "exported_events": n_exported, "fragments": frags}
+
+
 def stats():
     con = _connect()
     ensure_schema(con)
