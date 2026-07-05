@@ -1001,6 +1001,37 @@ def ai_query(role: str, query: str) -> dict:
 
 
 # ═══════════════════════════════════════════════════════════════════
+#   [War Room v1] 행동 분석 — 실 원장 created_at 집계만 (세그먼트는 원장 미도입)
+# ═══════════════════════════════════════════════════════════════════
+
+def analytics_activity(days: int = 14) -> dict:
+    days = max(1, min(int(days or 14), 90))
+    con = _connect()
+
+    def _per_day(table):
+        try:
+            return dict(con.execute(
+                f"SELECT substr(created_at,1,10) AS d, COUNT(*) FROM {table}"
+                f" WHERE created_at >= datetime('now','-{days} day') GROUP BY d"
+            ).fetchall())
+        except Exception:
+            return {}
+
+    src = _per_day("sources")
+    prop = _per_day("proposals")
+    exp = _per_day("export_results")
+    con.close()
+
+    out = []
+    today = datetime.date.today()
+    for i in range(days - 1, -1, -1):
+        d = (today - datetime.timedelta(days=i)).isoformat()
+        out.append({"date": d, "sources": src.get(d, 0),
+                    "proposals": prop.get(d, 0), "exports": exp.get(d, 0)})
+    return {"days": out, "note": "실 원장 created_at 집계 — 세그먼트 분석은 원장 미도입"}
+
+
+# ═══════════════════════════════════════════════════════════════════
 #   [War Room v1] 법무/수사공조 — 요청 원장 (추출 기능 없음, 별도 승인 후)
 # ═══════════════════════════════════════════════════════════════════
 

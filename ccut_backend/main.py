@@ -3623,6 +3623,12 @@ async def admin_ai_query(payload: dict = None):
     return _adm.ai_query((p.get("role") or "ops_brief").strip(), query)
 
 
+@app.get("/admin/analytics/activity")
+async def admin_analytics_activity(days: int = 14):
+    from admin import service as _adm
+    return _adm.analytics_activity(days=days)
+
+
 @app.get("/admin/legal/requests")
 async def admin_legal_requests():
     from admin import service as _adm

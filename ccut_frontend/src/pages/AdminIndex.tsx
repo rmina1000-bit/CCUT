@@ -7,6 +7,7 @@ import { AdminSupportPanel } from "@/components/admin/AdminSupportPanel";
 import { AdminSecurityPanel } from "@/components/admin/AdminSecurityPanel";
 import { AdminDesignPanel } from "@/components/admin/AdminDesignPanel";
 import { AdminLegalPanel } from "@/components/admin/AdminLegalPanel";
+import { AdminAnalyticsPanel } from "@/components/admin/AdminAnalyticsPanel";
 import { AdminUsersPanel } from "@/components/admin/AdminUsersPanel";
 import { AdminRevenuePanel } from "@/components/admin/AdminRevenuePanel";
 import { AdminAIOpsPanel } from "@/components/admin/AdminAIOpsPanel";
@@ -32,13 +33,6 @@ const LABELS: Record<AdminTab, string> = {
   audit: "감사/작업기록",
 };
 
-// [정직 상태] 원장·화면이 후속 STEP에서 연결되는 메뉴의 임시 표기 — mock 데이터 아님.
-const PendingLedger: React.FC<{ label: string; step: string }> = ({ label, step }) => (
-  <div className="flex flex-col items-center justify-center h-64 gap-2 text-muted-foreground/40">
-    <p className="text-sm font-medium">{label}</p>
-    <p className="text-[11px]">원장·화면은 전쟁상황판 v1 {step}에서 연결됩니다 (준비 중)</p>
-  </div>
-);
 
 const AdminIndex: React.FC = () => {
   const location = useLocation();
@@ -56,7 +50,7 @@ const AdminIndex: React.FC = () => {
       {active === "users" && <AdminUsersPanel />}
       {active === "support" && <AdminSupportPanel />}
       {active === "revenue" && <AdminRevenuePanel />}
-      {active === "analytics" && <PendingLedger label="행동 분석" step="후속 커밋" />}
+      {active === "analytics" && <AdminAnalyticsPanel />}
       {active === "design" && <AdminDesignPanel />}
       {active === "ai" && <AdminAIOpsPanel />}
       {active === "security" && <AdminSecurityPanel />}
