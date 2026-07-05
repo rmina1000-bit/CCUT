@@ -3012,6 +3012,7 @@ async def get_archive_list(db: Session = Depends(get_db)):
             ProjectSourceTable.source_id,
             ProjectSourceTable.program_id,
             ProjectSourceTable.added_at,
+            ProjectSourceTable.display_order,
             ProgramTable.name,
             ProgramTable.last_updated_at,
         )
@@ -3019,8 +3020,18 @@ async def get_archive_list(db: Session = Depends(get_db)):
         .filter(ProgramTable.schema_version == 2)
         .all()
     )
+
+    def _xl(n):  # 프로젝트 내 원본 라벨 (A..Z, AA..) — get_project_sources와 동일 규칙
+        s = ""
+        n = int(n or 0)
+        while True:
+            s = chr(65 + (n % 26)) + s
+            n = n // 26 - 1
+            if n < 0:
+                return s
+
     source_usage_map: dict = {}
-    for sid, pid, added_at, pname, lua in ps_rows:
+    for sid, pid, added_at, disp_order, pname, lua in ps_rows:
         source_usage_map.setdefault(sid, [])
         if any(u["program_id"] == pid for u in source_usage_map[sid]):
             continue
@@ -3030,7 +3041,13 @@ async def get_archive_list(db: Session = Depends(get_db)):
             "program_id": pid,
             "name": pname,
             "used_at": used_at,
+            # [국장지시] 프로젝트 안에서의 원본 라벨 — 배지에 "Vega-A"로 병기해
+            # 아카이브 원본과 프로젝트 원본맵을 잇는다
+            "label": _xl(disp_order),
         })
+    # [국장지시] 배지는 최신 사용 프로젝트부터 — 지금 프로젝트가 "+N" 뒤에 숨지 않게
+    for _sid in source_usage_map:
+        source_usage_map[_sid].sort(key=lambda u: str(u["used_at"] or ""), reverse=True)
 
     def _names(sid) -> list:
         return [u["name"] for u in source_usage_map.get(sid, []) if u["name"]]

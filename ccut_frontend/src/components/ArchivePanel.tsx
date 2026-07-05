@@ -10,6 +10,8 @@ interface SourceUsage {
   program_id: string;
   name: string | null;
   used_at: string | null;
+  // [국장지시] 프로젝트 안에서의 원본 라벨(A,B..) — 배지 "Vega-A" 병기용
+  label?: string;
 }
 
 interface Source {
@@ -513,14 +515,17 @@ export const ArchivePanel: React.FC<{
                             {!s.play_url && (
                               <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-red-500/10 text-red-400 border border-red-500/20 flex-shrink-0">원본 삭제됨</span>
                             )}
-                            {/* [국장지시] 프로젝트명이 찾기의 실마리 — 배지 확대 (9px→11px) */}
-                            {s.program_names?.slice(0, 3).map(name => (
-                              <span key={name} className="px-2 py-0.5 rounded text-[11px] font-bold bg-blue-500/10 text-blue-400 border border-blue-500/20 flex-shrink-0">{name}</span>
+                            {/* [국장지시] 배지 = 최신 사용 프로젝트부터 + "-라벨" 병기
+                                ("Vega-A" = Vega 프로젝트 원본맵의 A) — 아카이브↔원본맵 연결 */}
+                            {s.usage?.slice(0, 3).map(u => (
+                              <span key={u.program_id} className="px-2 py-0.5 rounded text-[11px] font-bold bg-blue-500/10 text-blue-400 border border-blue-500/20 flex-shrink-0">
+                                {u.name}{u.label ? <span className="text-blue-400/60">-{u.label}</span> : null}
+                              </span>
                             ))}
-                            {s.program_names && s.program_names.length > 3 && (
-                              <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-blue-500/5 text-blue-400/70 flex-shrink-0">+{s.program_names.length - 3}</span>
+                            {s.usage && s.usage.length > 3 && (
+                              <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-blue-500/5 text-blue-400/70 flex-shrink-0">+{s.usage.length - 3}</span>
                             )}
-                            {(!s.program_names || s.program_names.length === 0) && (
+                            {(!s.usage || s.usage.length === 0) && (
                               <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-secondary/40 text-muted-foreground/40">미분류</span>
                             )}
                           </div>
