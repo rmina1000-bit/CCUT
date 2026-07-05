@@ -1175,7 +1175,7 @@ const Index: React.FC = () => {
             ...(intakeRef.current ? [{
                 id: `ai_intake_${Date.now()}`,
                 sender: "ai" as const,
-                text: "문진 정리 — " + [
+                text: "알려주신 내용 정리 — " + [
                     ...intakeRef.current.videoNotes
                         .filter((v) => v.note)
                         .map((v) => `${v.name}: ${v.note}`),

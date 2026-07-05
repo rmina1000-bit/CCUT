@@ -574,23 +574,21 @@ export const SingleFragmentEditor: React.FC<SingleFragmentEditorProps> = ({
         className="sm:max-w-[720px] w-[90vw] max-h-[100vh] bg-[hsl(228,12%,10%)] border-border/15 text-foreground"
       >
         <DialogHeader className="mb-1 select-none cursor-move flex-shrink-0" onMouseDown={handleTitleMouseDown}>
-          <div className="flex items-center justify-between">
-            <DialogTitle className="text-base font-bold text-foreground">조각 정밀 편집 (1단계 파노라마)</DialogTitle>
-            {/* [DISPLAY-NAME] 주이름 = 단일 진실원("원본제목 · m:ss–m:ss") + display_id 보조 배지
-                — 조각맵/조회카드와 동일 이름. 내부 id는 title 툴팁으로만(UI-⑧ 유지) */}
-            {/* [UI-⑨] 우상단 닫기 ✕와 겹치지 않게 오른쪽 여백 확보 */}
-            <span className="mr-8 flex items-center gap-1.5 min-w-0">
-              <span
-                title={fragment.fragment_id}
-                className="text-[11px] text-foreground/80 font-bold truncate max-w-[280px]"
-              >
-                {displayName(fragment as any)}
+          <div className="flex items-center gap-3 min-w-0">
+            {/* [UI-⑩ 국장지시] display_id("E1")를 좌측 제일 앞에 크게 — 편집 조작의 기준 표식 */}
+            {(fragment as any).display_id && !String((fragment as any).display_id).startsWith("SF_") && (
+              <span className="flex-shrink-0 text-lg leading-none font-black text-primary bg-primary/15 border border-primary/25 px-2.5 py-1 rounded-md">
+                {(fragment as any).display_id}
               </span>
-              {(fragment as any).display_id && !String((fragment as any).display_id).startsWith("SF_") && (
-                <span className="flex-shrink-0 text-[10px] text-muted-foreground/70 font-mono bg-secondary/30 px-1.5 py-0.5 rounded font-bold">
-                  {(fragment as any).display_id}
-                </span>
-              )}
+            )}
+            <DialogTitle className="text-base font-bold text-foreground flex-shrink-0">조각 정밀 편집 (1단계 파노라마)</DialogTitle>
+            {/* [DISPLAY-NAME] 주이름 = 단일 진실원("원본제목 · m:ss–m:ss") — 우측,
+                내부 id는 title 툴팁으로만(UI-⑧ 유지). 닫기 ✕와 겹치지 않게 mr-8(UI-⑨) */}
+            <span
+              title={fragment.fragment_id}
+              className="ml-auto mr-8 text-[11px] text-foreground/80 font-bold truncate max-w-[280px]"
+            >
+              {displayName(fragment as any)}
             </span>
           </div>
           <DialogDescription className="text-xs text-muted-foreground">
