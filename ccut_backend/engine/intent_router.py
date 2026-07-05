@@ -130,6 +130,31 @@ def _llm_route(input_text, recent_messages=None):
         return None
 
 
+def _llm_smalltalk(input_text, recent_messages=None):
+    """[SMALLTALK] 질문/잡담에 사람다운 답 — '나는 편집기라서'류 거절 금지 (국장:
+    거절은 사용자를 바보 취급하는 것). 실패 시 None → 호출부가 따뜻한 고정 문구."""
+    ctx = ""
+    for m in (recent_messages or [])[-4:]:
+        who = "사용자" if (m.get("sender") == "user") else "CCUT"
+        txt = str(m.get("text") or "")[:80]
+        if txt:
+            ctx += f"{who}: {txt}\n"
+    prompt = (
+        "너는 CCUT — 영상 편집을 돕는 다정한 동료다. 사용자의 질문/잡담에 짧고 따뜻한 "
+        "존댓말 한국어 1~2문장으로 '실제로' 대답한다. 절대 '저는 편집기라서'류의 거절을 "
+        "하지 않는다. 자연스러우면 끝에 편집 도움을 가볍게 제안해도 된다.\n"
+        'JSON만 출력: {"reply":"..."}\n'
+        + (f"최근 대화:\n{ctx}" if ctx else "")
+        + f"사용자: {input_text}\n")
+    try:
+        out = hub._ollama_json(prompt, timeout=20)
+        reply = str(out.get("reply") or "").strip()
+        return reply or None
+    except Exception as e:
+        print(f"[INTENT-ROUTER] smalltalk 실패 ({e})")
+        return None
+
+
 def route_edit_intent(source_ids=None, input_text="", recent_messages=None,
                       selected_proposal_id=None, allow_llm=True, person_vocab=None,
                       archive_lookup=None, search_lookup=None):
@@ -336,12 +361,20 @@ def route_edit_intent(source_ids=None, input_text="", recent_messages=None,
         except Exception:
             pass
 
-    # ── 5. 질문/모호 ──
+    # ── 5. 질문/잡담 — 거절하지 않고 대화한다 (국장: 거절 = "난 바보예요") ──
+    #    단, 편집 동사가 있으면("생일잔치만 편집해줄래?") 질문 꼴이어도 편집으로 —
+    #    아래 5.5 OPEN-EDIT가 처리하게 통과시킨다.
     q_re, vague_re = _regexes()
-    if q_re.search(t):
+    if q_re.search(t) and not _re.search(r"편집|나오게|남게|남겨|골라|만들|빼|줄여|늘려|위주|중심|모아|추려", t):
+        if allow_llm:
+            _talk = _llm_smalltalk(t, recent_messages)
+            if _talk:
+                return _resp("answer_only", _talk, confidence=0.8, via="qwen",
+                             matched={"kind": "smalltalk"})
         return _resp("answer_only",
-                     "저는 편집 지시를 실행하는 편집기예요. '정은한 나오는 장면만', "
-                     "'실내만', '5개로 줄여줘'처럼 조건을 말씀해주시면 바로 움직일게요.",
+                     "그럼요, 편하게 말씀하세요. 저는 영상 편집을 돕는 CCUT이에요 — "
+                     "궁금한 건 뭐든 물어보시고, 편집은 '생일잔치 장면만'처럼 "
+                     "말씀하시면 바로 움직일게요.",
                      confidence=0.8)
     if vague_re.search(t):
         if allow_llm:

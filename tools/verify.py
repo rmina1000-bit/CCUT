@@ -187,6 +187,14 @@ def run_l0():
     r = ir.route_edit_intent(input_text="생일잔치만 편집해줘.", allow_llm=False)
     check("L0", "router 자유테마 축약형→판사 통과", r["action"] == "run_proposal", r["action"])
 
+    # [SMALLTALK] 질문/잡담은 거절하지 않는다 — 편집 동사 있으면 질문 꼴이어도 편집
+    r = ir.route_edit_intent(input_text="편하게 말해도 되?", allow_llm=False)
+    check("L0", "router 잡담→따뜻한 응답(거절 금지)",
+          r["action"] == "answer_only" and "편집기예요" not in (r.get("reply") or ""),
+          (r.get("reply") or "")[:30])
+    r = ir.route_edit_intent(input_text="생일잔치만 편집해줄래?", allow_llm=False)
+    check("L0", "router 질문꼴 편집요청→편집 우선", r["action"] == "run_proposal", r["action"])
+
     # [조사 교정] 단순 replace의 '정은한가' 문법 붕괴 수리 검증
     r = ir.route_edit_intent(input_text="은한이가 병원에 있는 장면만", allow_llm=False,
                              person_vocab=_pv, archive_lookup=_fake_proj)
