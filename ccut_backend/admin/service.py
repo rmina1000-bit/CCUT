@@ -52,6 +52,24 @@ def ensure_schema():
             PRIMARY KEY (date_key, metric_key)
         )"""
     )
+    # [War Room v1] 운영 작업큐 — 삭제 API 금지, 닫기=status 전이(closed_at)
+    con.execute(
+        """CREATE TABLE IF NOT EXISTS admin_work_items (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            kind TEXT NOT NULL,
+            title TEXT NOT NULL,
+            status TEXT NOT NULL,
+            priority TEXT NOT NULL,
+            target_type TEXT,
+            target_id TEXT,
+            assigned_ai_role TEXT,
+            next_action TEXT,
+            due_at TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            closed_at TEXT
+        )"""
+    )
     con.commit()
     con.close()
 
@@ -357,6 +375,82 @@ def situation() -> dict:
         "action_queue": action_queue,
         "recent_audit": recent_audit,
     }
+
+
+# ═══════════════════════════════════════════════════════════════════
+#   [War Room v1] 운영 작업큐 — admin_work_items 원장
+# ═══════════════════════════════════════════════════════════════════
+
+_WORK_STATUSES = ("open", "in_progress", "blocked", "closed")
+_WORK_KINDS = ("support", "security", "billing", "ops", "review")
+_PRIORITIES = ("P0", "P1", "P2", "P3")
+
+
+def work_items_list(status: str = "open", limit: int = 50) -> dict:
+    limit = max(1, min(int(limit or 50), 100))
+    con = _connect()
+    sql = ("SELECT id, kind, title, status, priority, target_type, target_id,"
+           " next_action, due_at, created_at, updated_at, closed_at"
+           " FROM admin_work_items")
+    params: tuple = ()
+    if status and status != "all":
+        sql += " WHERE status = ?"
+        params = (status,)
+    sql += " ORDER BY id DESC LIMIT ?"
+    rows = con.execute(sql, params + (limit,)).fetchall()
+    con.close()
+    cols = ["id", "kind", "title", "status", "priority", "target_type", "target_id",
+            "next_action", "due_at", "created_at", "updated_at", "closed_at"]
+    return {"items": [dict(zip(cols, r)) for r in rows]}
+
+
+def work_item_create(payload: dict) -> dict:
+    kind = (payload.get("kind") or "ops").strip()
+    title = (payload.get("title") or "").strip()
+    priority = (payload.get("priority") or "P2").strip()
+    if not title:
+        return {"error": "title is required"}
+    if kind not in _WORK_KINDS:
+        return {"error": f"kind must be one of {_WORK_KINDS}"}
+    if priority not in _PRIORITIES:
+        return {"error": f"priority must be one of {_PRIORITIES}"}
+    now = datetime.datetime.now().isoformat()
+    con = _connect()
+    cur = con.execute(
+        "INSERT INTO admin_work_items (kind, title, status, priority, target_type,"
+        " target_id, next_action, due_at, created_at, updated_at)"
+        " VALUES (?,?,?,?,?,?,?,?,?,?)",
+        (kind, title, "open", priority, payload.get("target_type"),
+         payload.get("target_id"), payload.get("next_action"),
+         payload.get("due_at"), now, now))
+    item_id = cur.lastrowid
+    con.commit()
+    con.close()
+    audit_append("work_item_create", target_type="work_item",
+                 target_id=str(item_id), note=f"[{priority}/{kind}] {title}")
+    return {"status": "OK", "id": item_id}
+
+
+def work_item_transition(item_id: int, status: str, note: str = None) -> dict:
+    if status not in _WORK_STATUSES:
+        return {"error": f"status must be one of {_WORK_STATUSES}"}
+    now = datetime.datetime.now().isoformat()
+    con = _connect()
+    row = con.execute("SELECT status, title FROM admin_work_items WHERE id=?",
+                      (item_id,)).fetchone()
+    if not row:
+        con.close()
+        return {"error": "work item not found"}
+    closed_at = now if status == "closed" else None
+    con.execute(
+        "UPDATE admin_work_items SET status=?, updated_at=?, closed_at=?"
+        " WHERE id=?", (status, now, closed_at, item_id))
+    con.commit()
+    con.close()
+    audit_append("work_item_transition", target_type="work_item",
+                 target_id=str(item_id),
+                 note=f"{row[0]} → {status}" + (f" | {note}" if note else ""))
+    return {"status": "OK", "id": item_id, "from": row[0], "to": status}
 
 
 def audit_logs(limit: int = 20, cursor: int = None) -> dict:

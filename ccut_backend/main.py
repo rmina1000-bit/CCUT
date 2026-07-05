@@ -3495,6 +3495,25 @@ async def admin_audit_logs(limit: int = 20, cursor: int = None):
     return _adm.audit_logs(limit=limit, cursor=cursor)
 
 
+@app.get("/admin/work-items")
+async def admin_work_items(status: str = "open", limit: int = 50):
+    from admin import service as _adm
+    return _adm.work_items_list(status=status, limit=limit)
+
+
+@app.post("/admin/work-items")
+async def admin_work_item_create(payload: dict = None):
+    from admin import service as _adm
+    return _adm.work_item_create(payload or {})
+
+
+@app.post("/admin/work-items/{item_id}/transition")
+async def admin_work_item_transition(item_id: int, payload: dict = None):
+    from admin import service as _adm
+    p = payload or {}
+    return _adm.work_item_transition(item_id, (p.get("status") or "").strip(), p.get("note"))
+
+
 @app.post("/export/final")
 async def run_final_broadcast(project_id: str = "DEFAULT", db: Session = Depends(get_db)):
     """[CCUT 1.0.6 최종 송출] 편집본을 실제 .mp4 파일로 렌더링하고 DB 아카이브에 기록"""
