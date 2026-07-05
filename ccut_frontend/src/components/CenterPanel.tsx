@@ -1245,7 +1245,12 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
 
             <div className="flex flex-col gap-8">
               {[
-                ...(storyPlan.messages || []).map((msg: any) => ({ kind: "msg" as const, ts: msg.timestamp ?? 0, msg })),
+                // timestamp 없는 메시지는 ts=0으로 맨 위로 튀지 않게 — 직전 메시지
+                // 시각을 승계해 입력 순서(아래로 쌓임)를 지킨다.
+                ...(() => { let last = 0; return (storyPlan.messages || []).map((msg: any) => {
+                  last = typeof msg.timestamp === "number" && msg.timestamp > 0 ? msg.timestamp : last + 1;
+                  return { kind: "msg" as const, ts: last, msg };
+                }); })(),
                 ...proposalHistory
                   .map((h) => ({ kind: "pair" as const, ts: h.ts, entry: h })),
               ]

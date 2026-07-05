@@ -1005,7 +1005,36 @@ const Index: React.FC = () => {
                     if (en.kind === "message" && en.payload) msgs.push(en.payload);
                     else if (en.kind === "generation" && en.payload) gens.push(en.payload);
                   }
-                  if (msgs.length) restoredTimelineRef.current = msgs; // 스켈레톤이 승계
+                  if (msgs.length) {
+                    restoredTimelineRef.current = msgs; // 스켈레톤이 승계
+                    // [TIMELINE-RACE] 스켈레톤이 이미 지나간 뒤 복원이 도착하면(HTTP가
+                    // setProposals보다 느린 보통의 경우) ref는 영영 소비되지 않는다 —
+                    // storyPlan이 있으면 직접 병합(id 중복 제외, 과거이므로 앞에).
+                    setStoryPlan((prev: any) => {
+                      if (!prev) return prev;
+                      restoredTimelineRef.current = null;
+                      const have = new Set((prev.messages ?? []).map((m: any) => String(m.id)));
+                      const texts = new Set((prev.messages ?? []).map((m: any) => m.text));
+                      // 재열기 시 fresh 개략(같은 id)이 매번 맨 아래로 재인사하지 않게 —
+                      // 복원분의 원래 시각을 승계해 역사 위치에 놓는다
+                      const restoredTs = new Map(msgs.map((m: any) => [String(m.id), m.timestamp]));
+                      const base = (prev.messages ?? []).map((m: any) => {
+                        const ts = restoredTs.get(String(m.id));
+                        return typeof ts === "number" && ts > 0 && ts < m.timestamp ? { ...m, timestamp: ts } : m;
+                      });
+                      // 개략(ai_init)은 결정론 id 도입 전 열 때마다 새 id로 쌓인 레거시가
+                      // 있다 — 같은 텍스트의 개략은 화면에서 1개로 접는다 (복원분끼리 포함)
+                      const olds = msgs.filter((m: any) => {
+                        if (have.has(String(m.id))) return false;
+                        if (String(m.id).startsWith("ai_init_")) {
+                          if (texts.has(m.text)) return false;
+                          texts.add(m.text);
+                        }
+                        return true;
+                      });
+                      return { ...prev, messages: [...olds, ...base] };
+                    });
+                  }
                   if (gens.length) hydrateProposalHistory(gens);
                   console.log(`[TIMELINE] 복원: 메시지 ${msgs.length} · 세대 ${gens.length}` +
                     (tl.has_more ? " (이전 페이지 더 있음)" : ""));
@@ -1129,9 +1158,17 @@ const Index: React.FC = () => {
         // (프로젝트 전환은 setStoryPlan(null)로 이미 초기화되므로 여기 병합은 같은 프로젝트 한정)
         // [TIMELINE] 저장된 과거 흐름(복원분)을 맨 앞에 승계 — 삭제 전까지 쌓이는 역사
         messages: [
-            ...(restoredTimelineRef.current ?? []),
+            // 같은 텍스트의 개략(ai_init) 레거시 중복은 화면에서 1개로 접는다 —
+            // 아래 fresh 개략(draft)과 겹치는 복원분 제외 (복원분끼리 포함)
+            ...(() => { const seen = new Set([draft]); return (restoredTimelineRef.current ?? []).filter((m: any) => {
+                if (!String(m.id).startsWith("ai_init_")) return true;
+                if (seen.has(m.text)) return false;
+                seen.add(m.text); return true;
+            }); })(),
             ...(((storyPlan as any)?.messages) ?? []),
-            { id: `ai_init_${Date.now()}`, sender: "ai", text: draft, timestamp: Date.now() },
+            // 결정론 id — 열 때마다 새 개략이 역사에 중복 누적되지 않게 (프로젝트×소스수당 1개;
+            // 서버 client_id 멱등 + 복원 병합의 id 중복 제외가 같은 id로 물린다)
+            { id: `ai_init_${activeNavItem}_${sourceCount}`, sender: "ai", text: draft, timestamp: Date.now() },
             // [UI-③⑤] 문진 요약 — 사용자가 말해준 정보를 흐름에 새겨 둔다
             ...(intakeRef.current ? [{
                 id: `ai_intake_${Date.now()}`,
