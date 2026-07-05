@@ -319,6 +319,14 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
   const [pendingPersons, setPendingPersons] = useState<Array<{ person_id: string; face_url: string; appearances: number }>>([]);
   const [personNameDraft, setPersonNameDraft] = useState<Record<string, string>>({});
   const [personSavedNote, setPersonSavedNote] = useState<string | null>(null);
+  // [PERSON-PALETTE→FLOW 국장지시] 팔레트가 흐름 밖 하단 고정이면 새 대화가 그 '위'에
+  // 생기는 것처럼 보인다 — 첫 등장 시각을 잡아 흐름 속 아이템으로 흘려보낸다
+  const paletteTsRef = useRef<number | null>(null);
+  useEffect(() => {
+    if ((pendingPersons.length > 0 || personSavedNote) && paletteTsRef.current === null) {
+      paletteTsRef.current = Date.now();
+    }
+  }, [pendingPersons.length, personSavedNote]);
 
   useEffect(() => {
     // 프로젝트가 열리고 분석이 끝나 있으면 얼굴 스캔(멱등) 후 미명명 군집 조회
@@ -1253,9 +1261,70 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
                 }); })(),
                 ...proposalHistory
                   .map((h) => ({ kind: "pair" as const, ts: h.ts, entry: h })),
+                // [PERSON-PALETTE→FLOW] 인물 문답도 흐름 속 한 지점 — 이후 대화는 아래로
+                ...(paletteTsRef.current && (pendingPersons.length > 0 || personSavedNote)
+                  ? [{ kind: "palette" as const, ts: paletteTsRef.current }]
+                  : []),
               ]
                 .sort((a, b) => a.ts - b.ts)
-                .map((item) => item.kind === "msg" ? (
+                .map((item: any) => item.kind === "palette" ? (
+                <div key="person_palette" className="flex flex-col gap-3">
+                  {personSavedNote && (
+                    <div className="flex justify-start animate-in fade-in duration-500">
+                      <div className="flex gap-4 max-w-[85%]">
+                        <div className="w-8 h-8 rounded-lg flex-shrink-0 flex items-center justify-center mt-1 bg-primary/10 text-primary">
+                          <BookOpen size={16} />
+                        </div>
+                        <div className="px-5 py-3.5 rounded-2xl rounded-tl-none bg-secondary/10 border border-border/5 text-[14px] text-foreground/90">
+                          {personSavedNote}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                  {pendingPersons.length > 0 && (
+                    <div className="flex justify-start animate-in fade-in duration-500">
+                      <div className="flex gap-4 w-full max-w-[85%]">
+                        <div className="w-8 h-8 rounded-lg flex-shrink-0 flex items-center justify-center mt-1 bg-primary/10 text-primary">
+                          <BookOpen size={16} />
+                        </div>
+                        <div className="flex-1 px-5 py-3.5 rounded-2xl rounded-tl-none bg-secondary/10 border border-border/5 space-y-3">
+                          <p className="text-[13px] text-foreground/90">영상에 자주 나오는 분들이 보여요. 누구인지 알려주시면 편집할 때 이름으로 부를 수 있어요.</p>
+                          <div className="flex flex-wrap gap-3">
+                            {pendingPersons.map((p) => (
+                              <div key={p.person_id} className="flex flex-col items-center gap-1.5 bg-black/20 rounded-lg p-2.5 w-[120px]">
+                                <img
+                                  src={p.face_url}
+                                  alt="face"
+                                  className="w-16 h-16 rounded-full object-cover border border-white/10"
+                                />
+                                <span className="text-[9px] text-muted-foreground/50">{p.appearances}개 장면 등장</span>
+                                <input
+                                  value={personNameDraft[p.person_id] ?? ""}
+                                  onChange={(e) => setPersonNameDraft((prev) => ({ ...prev, [p.person_id]: e.target.value }))}
+                                  onKeyDown={(e) => { if (e.key === "Enter" && !e.nativeEvent.isComposing) savePersonName(p.person_id); }}
+                                  placeholder="이름"
+                                  className="w-full bg-transparent border-b border-white/15 focus:border-primary/60 text-center text-[12px] text-foreground py-0.5 outline-none"
+                                />
+                                <div className="flex gap-1">
+                                  <button
+                                    onClick={() => savePersonName(p.person_id)}
+                                    disabled={!(personNameDraft[p.person_id] ?? "").trim()}
+                                    className="px-2 py-0.5 rounded text-[10px] font-bold bg-primary/15 text-primary hover:bg-primary hover:text-primary-foreground disabled:opacity-30 transition-all"
+                                  >저장</button>
+                                  <button
+                                    onClick={() => rejectPerson(p.person_id)}
+                                    className="px-2 py-0.5 rounded text-[10px] text-muted-foreground/60 hover:text-foreground transition-all"
+                                  >건너뛰기</button>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+                ) : item.kind === "msg" ? (
                 <div key={item.msg.id} className={`flex ${item.msg.sender === "user" ? "justify-end" : "justify-start"} animate-in fade-in slide-in-from-bottom-2 duration-500`}>
                   <div className={`flex gap-4 max-w-[85%] ${item.msg.sender === "user" ? "flex-row-reverse" : "flex-row"}`}>
                     <div className={`w-8 h-8 rounded-lg flex-shrink-0 flex items-center justify-center mt-1 ${item.msg.sender === "ai" ? "bg-primary/10 text-primary" : "bg-secondary/40 text-muted-foreground"}`}>
@@ -1316,65 +1385,7 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
           </div>
         )}
         
-        {/* [PERSON-PALETTE] 문진: 반복 등장 인물 이름 묻기 — 저장하면 judge·검색이 그 이름을 본다 */}
-        {storyPlan && (pendingPersons.length > 0 || personSavedNote) && (
-          <div className="w-full max-w-[800px] flex flex-col gap-3">
-            {personSavedNote && (
-              <div className="flex justify-start animate-in fade-in duration-500">
-                <div className="flex gap-4 max-w-[85%]">
-                  <div className="w-8 h-8 rounded-lg flex-shrink-0 flex items-center justify-center mt-1 bg-primary/10 text-primary">
-                    <BookOpen size={16} />
-                  </div>
-                  <div className="px-5 py-3.5 rounded-2xl rounded-tl-none bg-secondary/10 border border-border/5 text-[14px] text-foreground/90">
-                    {personSavedNote}
-                  </div>
-                </div>
-              </div>
-            )}
-            {pendingPersons.length > 0 && (
-              <div className="flex justify-start animate-in fade-in duration-500">
-                <div className="flex gap-4 w-full max-w-[85%]">
-                  <div className="w-8 h-8 rounded-lg flex-shrink-0 flex items-center justify-center mt-1 bg-primary/10 text-primary">
-                    <BookOpen size={16} />
-                  </div>
-                  <div className="flex-1 px-5 py-3.5 rounded-2xl rounded-tl-none bg-secondary/10 border border-border/5 space-y-3">
-                    <p className="text-[13px] text-foreground/90">영상에 자주 나오는 분들이 보여요. 누구인지 알려주시면 편집할 때 이름으로 부를 수 있어요.</p>
-                    <div className="flex flex-wrap gap-3">
-                      {pendingPersons.map((p) => (
-                        <div key={p.person_id} className="flex flex-col items-center gap-1.5 bg-black/20 rounded-lg p-2.5 w-[120px]">
-                          <img
-                            src={p.face_url}
-                            alt="face"
-                            className="w-16 h-16 rounded-full object-cover border border-white/10"
-                          />
-                          <span className="text-[9px] text-muted-foreground/50">{p.appearances}개 장면 등장</span>
-                          <input
-                            value={personNameDraft[p.person_id] ?? ""}
-                            onChange={(e) => setPersonNameDraft((prev) => ({ ...prev, [p.person_id]: e.target.value }))}
-                            onKeyDown={(e) => { if (e.key === "Enter" && !e.nativeEvent.isComposing) savePersonName(p.person_id); }}
-                            placeholder="이름"
-                            className="w-full bg-transparent border-b border-white/15 focus:border-primary/60 text-center text-[12px] text-foreground py-0.5 outline-none"
-                          />
-                          <div className="flex gap-1">
-                            <button
-                              onClick={() => savePersonName(p.person_id)}
-                              disabled={!(personNameDraft[p.person_id] ?? "").trim()}
-                              className="px-2 py-0.5 rounded text-[10px] font-bold bg-primary/15 text-primary hover:bg-primary hover:text-primary-foreground disabled:opacity-30 transition-all"
-                            >저장</button>
-                            <button
-                              onClick={() => rejectPerson(p.person_id)}
-                              className="px-2 py-0.5 rounded text-[10px] text-muted-foreground/60 hover:text-foreground transition-all"
-                            >건너뛰기</button>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
-        )}
+        {/* [PERSON-PALETTE→FLOW] 팔레트는 이제 흐름 속 아이템으로 렌더 (위 타임라인 map) */}
 
         {/* [FLOW-STAGE] 무대(방향바+A/B 플레이어+상세+내보내기)를 하나의 콘텐츠로 묶어,
             타임라인의 활성 제안 위치(slot)로 portal 이동. slot이 없으면 기존 위치에 그대로. */}

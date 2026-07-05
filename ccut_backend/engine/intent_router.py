@@ -366,6 +366,15 @@ def route_edit_intent(source_ids=None, input_text="", recent_messages=None,
     #    아래 5.5 OPEN-EDIT가 처리하게 통과시킨다.
     q_re, vague_re = _regexes()
     if q_re.search(t) and not _re.search(r"편집|나오게|남게|남겨|골라|만들|빼|줄여|늘려|위주|중심|모아|추려", t):
+        # 정체성 질문은 결정론 자기소개 — LLM 부재/실패 시에도 동문서답 금지
+        # (국장 실측: "너가 누군지 설명해줘"에 엉뚱한 고정 문구가 나감)
+        if _re.search(r"누구|누군지|정체|이름이 뭐|뭐 하는|뭐하는", t):
+            return _resp("answer_only",
+                         "저는 CCUT이에요 — 올려주신 영상을 조각으로 나눠 이해하고, "
+                         "말씀 한마디로 골라 편집해 드리는 편집 동료예요. "
+                         "'생일잔치 장면만'처럼 말씀하시면 바로 움직이고, "
+                         "궁금한 건 뭐든 물어보셔도 좋아요.",
+                         confidence=0.9, matched={"kind": "self_intro"})
         if allow_llm:
             _talk = _llm_smalltalk(t, recent_messages)
             if _talk:

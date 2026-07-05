@@ -194,6 +194,9 @@ def run_l0():
           (r.get("reply") or "")[:30])
     r = ir.route_edit_intent(input_text="생일잔치만 편집해줄래?", allow_llm=False)
     check("L0", "router 질문꼴 편집요청→편집 우선", r["action"] == "run_proposal", r["action"])
+    r = ir.route_edit_intent(input_text="너가 누군지 설명해줘.", allow_llm=False)
+    check("L0", "router 정체성 질문→자기소개",
+          r["action"] == "answer_only" and "CCUT" in (r.get("reply") or ""), (r.get("reply") or "")[:25])
 
     # [조사 교정] 단순 replace의 '정은한가' 문법 붕괴 수리 검증
     r = ir.route_edit_intent(input_text="은한이가 병원에 있는 장면만", allow_llm=False,
