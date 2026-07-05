@@ -179,6 +179,14 @@ def run_l0():
     r = ir.route_edit_intent(input_text="은한이만 다시 편집해줘", allow_llm=False, person_vocab=_pv)
     check("L0", "router 조건있는 다시→정상 편집", r["action"] == "run_proposal", r["action"])
 
+    # [OPEN-EDIT] 메뉴판 밖 자유 테마도 편집 동사가 명확하면 판사 통과 (생일잔치 거부 사건)
+    r = ir.route_edit_intent(input_text="생일잔치 장면만 나오게 해줘.", allow_llm=False)
+    check("L0", "router 자유테마+편집동사→판사 통과",
+          r["action"] == "run_proposal" and "생일잔치" in ((r.get("matched") or {}).get("core") or ""),
+          f"{r['action']}/{(r.get('matched') or {}).get('core')}")
+    r = ir.route_edit_intent(input_text="생일잔치만 편집해줘.", allow_llm=False)
+    check("L0", "router 자유테마 축약형→판사 통과", r["action"] == "run_proposal", r["action"])
+
     # [조사 교정] 단순 replace의 '정은한가' 문법 붕괴 수리 검증
     r = ir.route_edit_intent(input_text="은한이가 병원에 있는 장면만", allow_llm=False,
                              person_vocab=_pv, archive_lookup=_fake_proj)

@@ -353,6 +353,22 @@ def route_edit_intent(source_ids=None, input_text="", recent_messages=None,
                      "예: '정은한 나오는 장면만', '실내만', '더 빠르게'.",
                      confidence=0.7)
 
+    # ── 5.5 [OPEN-EDIT] 편집 동사 + 내용어가 있으면 거절하지 않는다 — 해석은 판사가.
+    #    메뉴판(인물/장소/개수/템포)에 없는 말이라도 편집 요청이 명확하면 원문 그대로
+    #    hub 판사(조각 서술 기반 LLM 판단)에 넘긴다 (국장 지적 2026-07-05:
+    #    "생일잔치 장면만 나오게 해줘"가 되묻기로 거절된 사건 — 정해지지 않은 요구에
+    #    해석·인식으로 반응). 조건 미달이면 하류의 정직한 빈 제안이 설명한다.
+    if _re.search(r"편집|나오게|남게|남겨|골라|만들|위주|중심|모아|추려|빼|줄여|늘려|장면만|컷만|부분만", t):
+        _core = _re.sub(
+            r"(의)?\s*(장면|부분|컷|것|영상|조각)?\s*(만|들만|을|를|이|가|으로|로)?\s*"
+            r"(나오게|남게|보이게)?\s*(위주로|중심으로)?\s*(다시)?\s*(편집|모아|골라|추려|만들어|남겨)?\s*"
+            r"(해\s*줘|해줘|해\s*봐|해봐|줘|주세요|부탁해?)?[.!?~\s]*$", "", t).strip()
+        if len(_core) >= 2:
+            return _resp("run_proposal",
+                         f"네, \"{_core}\" 기준으로 골라볼게요. 맞는 조각이 없으면 솔직히 말씀드릴게요.",
+                         normalized=t, confidence=0.75, via="deterministic",
+                         matched={"kind": "open_theme", "core": _core})
+
     # ── 6. 결정론이 전부 놓친 말 → Qwen 종업원 ──
     if allow_llm:
         llm = _llm_route(t, recent_messages)
