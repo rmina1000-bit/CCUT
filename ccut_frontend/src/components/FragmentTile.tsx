@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { Fragment, formatDuration } from "@/data/fragmentData";
+import { displayName } from "@/lib/fragmentIdentity";
 import { Clock, Play } from "lucide-react";
 
 interface FragmentTileProps {
@@ -231,12 +232,18 @@ const FragmentTile: React.FC<FragmentTileProps> = ({
       <div className="absolute inset-0 z-10 p-3 flex flex-col justify-between">
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0">
-            <span className="block text-[10px] font-black text-white/75 tracking-tight truncate">
-              {fragment.display_id ?? fragment.fragment_id}
+            {/* [DISPLAY-NAME] 주이름 = 단일 진실원("원본제목 · m:ss–m:ss") — raw ID 비노출 */}
+            <span className="block text-[10px] font-black text-white/80 tracking-tight truncate" title={displayName(fragment)}>
+              {displayName(fragment)}
             </span>
           </div>
 
-
+          {/* [UI-⑧] display_id("A1")는 편집 위치용 보조 배지로 축소 존치 */}
+          {fragment.display_id && !fragment.display_id.startsWith("SF_") && (
+            <span className="flex-shrink-0 px-1 py-px rounded bg-black/45 border border-white/15 text-[9px] font-black text-white/60">
+              {fragment.display_id}
+            </span>
+          )}
         </div>
 
         <div className="flex items-end justify-between gap-2">

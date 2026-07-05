@@ -21,6 +21,32 @@ export function getDisplayId(f: Pick<Fragment, "display_id" | "fragment_id">): s
     return f.display_id ?? f.fragment_id;
 }
 
+/**
+ * [DISPLAY-NAME] 사용자용 조각 주이름 — 단일 진실원 읽기.
+ * 백엔드(fragment_show.display_name)가 만든 "원본제목 · m:ss–m:ss"를 그대로 쓴다.
+ * 폴백에서도 raw ID(SF_/SRC_)는 절대 반환하지 않는다 — 이름 권위 부재 시
+ * 시간 구간만이라도 사람 말로 보여준다(프론트에서 이름을 새로 짓지 않는다).
+ */
+export function displayName(
+    f: Pick<Fragment, "display_name" | "start_frame" | "end_frame">,
+): string {
+    if (f.display_name) return f.display_name;
+    const fmt = (fr?: number) => {
+        const s = Math.max(0, Math.round((fr ?? 0) / 30));
+        return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+    };
+    return `조각 · ${fmt(f.start_frame)}–${fmt(f.end_frame)}`;
+}
+
+/**
+ * [DISPLAY-NAME] 사용자용 파일(원본) 이름 — 확장자 제거 통일.
+ * raw ID(SRC_) 폴백 금지.
+ */
+export function sourceDisplayName(title?: string | null): string {
+    const base = (title || "").trim().replace(/\.[A-Za-z0-9]{2,4}$/, "");
+    return base || "이름 없는 영상";
+}
+
 let _uidCounter = Date.now();
 export function generateUid(): string {
     return `frag_${(_uidCounter++).toString(36)}`;

@@ -9,6 +9,9 @@ export interface Fragment {
   secondary_parent_uid?: string;
   derivedFrom?: string;
   display_id?: string;
+  // [DISPLAY-NAME] 사용자용 주이름 — 백엔드 단일 권위(fragment_show.display_name)가
+  // 만든 "원본제목 · m:ss–m:ss". 프론트는 읽기만 한다(이름을 두 번 만들지 않는다).
+  display_name?: string;
   source_video: string;
   start_frame: number;
   end_frame: number;

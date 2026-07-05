@@ -233,6 +233,8 @@ const Index: React.FC = () => {
         fragment_uid: f.fragment_id,
         root_fragment_uid: f.root_fragment_uid || f.fragment_id,
         display_id: f.display_id || f.fragment_id,
+        // [DISPLAY-NAME] 백엔드 단일 권위가 실어준 주이름을 그대로 통과 (프론트 재조립 금지)
+        display_name: f.display_name,
         selection_state: "S" as SelectionState,
         status: "committed" as FragmentStatus,
         source_video: label,
