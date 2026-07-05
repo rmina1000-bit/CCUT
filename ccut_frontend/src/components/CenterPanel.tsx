@@ -214,6 +214,56 @@ function extractSourceIdFromAny(value: any): string {
   return "";
 }
 
+// [SHOW 2026-07-05] 조회 결과 카드 — "OO 보여줘/있나"의 답. 사람 말 명칭
+// (원본 제목 · m:ss–m:ss)만 보여주고 내부 ID는 노출하지 않는다.
+// 클릭 = 카드 그 자리에서 해당 구간 재생 (자체완결 URL — pool 상태 무관).
+const SearchResultCards: React.FC<{ results: any[] }> = ({ results }) => {
+  const [playingId, setPlayingId] = React.useState<string | null>(null);
+  return (
+    <div className="grid grid-cols-3 gap-2 mt-1 w-full max-w-[560px]">
+      {results.map((r) => (
+        <div
+          key={r.fragment_id}
+          className="rounded-lg overflow-hidden border border-border/30 bg-secondary/20 cursor-pointer group hover:border-primary/40 transition-colors"
+          onClick={() => setPlayingId(playingId === r.fragment_id ? null : r.fragment_id)}
+        >
+          <div className="relative aspect-video bg-black/40">
+            {playingId === r.fragment_id && r.video_url ? (
+              <video
+                src={r.video_url}
+                className="absolute inset-0 w-full h-full object-cover"
+                autoPlay controls playsInline
+                onLoadedMetadata={(e) => { e.currentTarget.currentTime = r.start ?? 0; }}
+                onTimeUpdate={(e) => {
+                  const v = e.currentTarget;
+                  if (r.end && v.currentTime >= r.end) v.pause();
+                }}
+                onClick={(e) => e.stopPropagation()}
+              />
+            ) : r.thumbnail_url ? (
+              <>
+                <img src={r.thumbnail_url} className="absolute inset-0 w-full h-full object-cover" draggable={false} />
+                <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-black/30">
+                  <Play size={18} className="text-white fill-white/40" />
+                </div>
+              </>
+            ) : (
+              <div className="absolute inset-0 flex flex-col items-center justify-center gap-1 text-muted-foreground">
+                <Play size={16} />
+                <span className="text-[10px]">눌러서 재생</span>
+              </div>
+            )}
+          </div>
+          <div className="px-2 py-1.5">
+            <div className="text-[11px] text-foreground truncate">{r.title}</div>
+            <div className="text-[10px] text-muted-foreground">{r.time}</div>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+};
+
 const CenterPanel: React.FC<CenterPanelProps> = ({
   selectedFragment,
   selectedSource,
@@ -344,7 +394,15 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
       return;
     }
 
-    // [FRAGMENT-SEARCH] 검색 의도면 조각 검색 먼저. is_search=false면 기존 흐름 위임.
+    // [SHOW 2026-07-05] 컨설팅 모드에서는 검색 가로채기 금지 — 조회/편집 판단은
+    // 종업원(route-edit)이 한다. 구식 가로채기는 결과를 흐름 밖 상단 패널에 띄우고
+    // 사용자 메시지를 대화·저장에서 누락시키던 원인("다 사라짐" 증상).
+    if (storyPlan) {
+      onConsultation?.(raw);
+      return;
+    }
+
+    // [FRAGMENT-SEARCH] (레거시 입력구 한정) 검색 의도면 조각 검색 먼저.
     try {
       setFragSearch({ query: raw, searching: true, results: [], done: false });
       const sr = await videoService.chatFragmentSearch(raw, { top_k: 12 });
@@ -356,12 +414,6 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
     } catch (e) {
       console.warn("[CenterPanel] fragment search failed, fallback to chat:", e);
       setFragSearch(null);
-    }
-
-    // 검색 아님 → 상태별 기존 흐름 보존
-    if (storyPlan) {
-      onConsultation?.(raw);
-      return;
     }
     const parsedDirection = parseDirectionFromText(raw);
     if (parsedDirection) {
@@ -1218,6 +1270,10 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
                         )}
                         {item.msg.text}
                       </div>
+                      {/* [SHOW] 조회 결과 카드 — 사람 말 명칭(제목·시간), 클릭=그 자리 재생 */}
+                      {(item.msg as any).kind === "search_results" && Array.isArray((item.msg as any).results) && (item.msg as any).results.length > 0 && (
+                        <SearchResultCards results={(item.msg as any).results} />
+                      )}
                       <span className="text-[10px] text-muted-foreground/40 px-1">{new Date(item.msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
                     </div>
                   </div>

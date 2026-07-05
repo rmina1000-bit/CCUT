@@ -570,6 +570,23 @@ export const useProposalState = (
         normalized: route.normalized_instruction,
         matched: route.matched
       }, null, 2));
+
+      // [SHOW 2026-07-05] 조회/열람 — 편집이 아니라 보여주기. 결과 카드를 흐름 속
+      // 메시지로 남긴다(타임라인 diff-sync가 자동 영속 → F5에도 유지, 클릭=재생).
+      if (route.action === "show_fragments") {
+        setStoryPlan((prev: any) => {
+          if (!prev) return prev;
+          return {
+            ...prev,
+            messages: (prev.messages ?? []).map((m: any) =>
+              m.id === aiMsgId
+                ? { ...m, text: route.reply || "찾은 조각입니다.", isInterpreting: false,
+                    kind: "search_results", results: route.results ?? [] }
+                : m),
+          };
+        });
+        return; // 제안 생성 없음 — 편집하라고 할 때만 편집한다
+      }
       consultationDecision = {
         text: route.reply || "네, 확인했습니다.",
         // revise_current는 현 단계에선 재제안 경로로 수렴 (백엔드 REVISION 게이트가 하류 처리)
