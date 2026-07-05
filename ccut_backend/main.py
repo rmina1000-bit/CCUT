@@ -3623,6 +3623,24 @@ async def admin_ai_query(payload: dict = None):
     return _adm.ai_query((p.get("role") or "ops_brief").strip(), query)
 
 
+@app.get("/admin/legal/requests")
+async def admin_legal_requests():
+    from admin import service as _adm
+    return _adm.legal_requests_list()
+
+
+@app.post("/admin/legal/requests")
+async def admin_legal_request_create(payload: dict = None):
+    from admin import service as _adm
+    return _adm.legal_request_create(payload or {})
+
+
+@app.post("/admin/legal/requests/{req_id}/status")
+async def admin_legal_request_status(req_id: int, payload: dict = None):
+    from admin import service as _adm
+    return _adm.legal_request_status(req_id, ((payload or {}).get("status") or "").strip())
+
+
 @app.post("/export/final")
 async def run_final_broadcast(project_id: str = "DEFAULT", db: Session = Depends(get_db)):
     """[CCUT 1.0.6 최종 송출] 편집본을 실제 .mp4 파일로 렌더링하고 DB 아카이브에 기록"""

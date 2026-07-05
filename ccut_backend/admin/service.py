@@ -52,6 +52,21 @@ def ensure_schema():
             PRIMARY KEY (date_key, metric_key)
         )"""
     )
+    # [War Room v1] 법무/수사공조 요청 원장 — v1 추출 기능 없음(요청 기록까지만)
+    con.execute(
+        """CREATE TABLE IF NOT EXISTS admin_legal_requests (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            requester TEXT NOT NULL,
+            legal_basis TEXT,
+            target_user_id TEXT,
+            requested_range TEXT,
+            status TEXT NOT NULL,
+            data_scope_json TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            closed_at TEXT
+        )"""
+    )
     # [War Room v1] AI 실행 로그 — 역할·모델·성공/실패·시간 전부 기록
     con.execute(
         """CREATE TABLE IF NOT EXISTS admin_ai_runs (
@@ -983,6 +998,67 @@ def ai_query(role: str, query: str) -> dict:
     audit_append("ai_query", target_type="ai_run", note=f"[{role}] {query}")
     return {"role": role, "query": query, "result": answer,
             "duration_ms": duration, "sources_referenced": len(ctx)}
+
+
+# ═══════════════════════════════════════════════════════════════════
+#   [War Room v1] 법무/수사공조 — 요청 원장 (추출 기능 없음, 별도 승인 후)
+# ═══════════════════════════════════════════════════════════════════
+
+_LEGAL_STATUSES = ("draft", "reviewing", "approved", "closed")
+
+
+def legal_requests_list() -> dict:
+    con = _connect()
+    rows = con.execute(
+        "SELECT id, requester, legal_basis, target_user_id, requested_range,"
+        " status, data_scope_json, created_at, updated_at, closed_at"
+        " FROM admin_legal_requests ORDER BY id DESC LIMIT 100").fetchall()
+    con.close()
+    cols = ["id", "requester", "legal_basis", "target_user_id", "requested_range",
+            "status", "data_scope_json", "created_at", "updated_at", "closed_at"]
+    return {"requests": [dict(zip(cols, r)) for r in rows]}
+
+
+def legal_request_create(payload: dict) -> dict:
+    requester = (payload.get("requester") or "").strip()
+    if not requester:
+        return {"error": "requester is required"}
+    now = datetime.datetime.now().isoformat()
+    con = _connect()
+    cur = con.execute(
+        "INSERT INTO admin_legal_requests (requester, legal_basis, target_user_id,"
+        " requested_range, status, data_scope_json, created_at, updated_at)"
+        " VALUES (?,?,?,?,?,?,?,?)",
+        (requester, payload.get("legal_basis"), payload.get("target_user_id"),
+         payload.get("requested_range"), "draft",
+         payload.get("data_scope_json"), now, now))
+    req_id = cur.lastrowid
+    con.commit()
+    con.close()
+    audit_append("legal_request_create", target_type="legal_request",
+                 target_id=str(req_id), note=f"{requester}")
+    return {"status": "OK", "id": req_id}
+
+
+def legal_request_status(req_id: int, status: str) -> dict:
+    if status not in _LEGAL_STATUSES:
+        return {"error": f"status must be one of {_LEGAL_STATUSES}"}
+    now = datetime.datetime.now().isoformat()
+    con = _connect()
+    row = con.execute("SELECT status, requester FROM admin_legal_requests WHERE id=?",
+                      (req_id,)).fetchone()
+    if not row:
+        con.close()
+        return {"error": "legal request not found"}
+    closed_at = now if status == "closed" else None
+    con.execute(
+        "UPDATE admin_legal_requests SET status=?, updated_at=?, closed_at=?"
+        " WHERE id=?", (status, now, closed_at, req_id))
+    con.commit()
+    con.close()
+    audit_append("legal_request_status", target_type="legal_request",
+                 target_id=str(req_id), note=f"{row[0]} → {status} ({row[1]})")
+    return {"status": "OK", "id": req_id, "from": row[0], "to": status}
 
 
 def audit_logs(limit: int = 20, cursor: int = None) -> dict:

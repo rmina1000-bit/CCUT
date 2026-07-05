@@ -6,6 +6,7 @@ import { AdminSituationPanel } from "@/components/admin/AdminSituationPanel";
 import { AdminSupportPanel } from "@/components/admin/AdminSupportPanel";
 import { AdminSecurityPanel } from "@/components/admin/AdminSecurityPanel";
 import { AdminDesignPanel } from "@/components/admin/AdminDesignPanel";
+import { AdminLegalPanel } from "@/components/admin/AdminLegalPanel";
 import { AdminUsersPanel } from "@/components/admin/AdminUsersPanel";
 import { AdminRevenuePanel } from "@/components/admin/AdminRevenuePanel";
 import { AdminAIOpsPanel } from "@/components/admin/AdminAIOpsPanel";
@@ -59,7 +60,7 @@ const AdminIndex: React.FC = () => {
       {active === "design" && <AdminDesignPanel />}
       {active === "ai" && <AdminAIOpsPanel />}
       {active === "security" && <AdminSecurityPanel />}
-      {active === "legal" && <PendingLedger label="법무/수사공조" step="STEP 9" />}
+      {active === "legal" && <AdminLegalPanel />}
       {active === "audit" && <AdminAuditPanel />}
     </AdminShell>
   );
