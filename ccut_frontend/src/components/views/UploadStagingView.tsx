@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from "react";
-import { Upload, X, Plus, Clock } from "lucide-react";
+import React, { useEffect, useRef, useState } from "react";
+import { Upload, X, Plus, Clock, Play } from "lucide-react";
 
 /* [UI-①③④⑤] 업로드 스테이징 + 문진(問診)
    - 파일을 넣고/빼고/더 넣고 자유롭게 정리 (분석은 사용자가 시작 버튼을 눌러야)
@@ -50,6 +50,19 @@ export function UploadStagingView({ staged, onAddFiles, onRemove, onNoteChange, 
   const [aspect, setAspect] = useState<IntakeAnswers["aspectPreference"]>("auto");
   const [sound, setSound] = useState<IntakeAnswers["soundPreference"]>("original");
 
+  // [UI-⑪ 국장지시] 여기서 바로 재생 — 별도 탐색기 없이 영상을 보고 한 줄을 단다.
+  // 로컬 File 그대로 objectURL 재생(서버 왕복 없음). 한 번에 하나만, 닫으면 URL 해제.
+  const [playingIdx, setPlayingIdx] = useState<number | null>(null);
+  const playUrlRef = useRef<string | null>(null);
+  const togglePlay = (i: number) => {
+    if (playUrlRef.current) { URL.revokeObjectURL(playUrlRef.current); playUrlRef.current = null; }
+    if (playingIdx === i) { setPlayingIdx(null); return; }
+    playUrlRef.current = URL.createObjectURL(staged[i].file);
+    setPlayingIdx(i);
+  };
+  useEffect(() => () => { if (playUrlRef.current) URL.revokeObjectURL(playUrlRef.current); }, []);
+  useEffect(() => { if (playingIdx !== null && playingIdx >= staged.length) setPlayingIdx(null); }, [staged.length, playingIdx]);
+
   const { totalDur, analyzeSec, proposalSec } = estimateTimes(staged);
   const orientations = new Set(staged.map((s) => s.orientation).filter(Boolean));
   const mixedOrientation = orientations.size > 1;
@@ -69,24 +82,39 @@ export function UploadStagingView({ staged, onAddFiles, onRemove, onNoteChange, 
         {/* 파일 목록 — 박스 없이 글자 행으로 */}
         <div className="divide-y divide-white/5">
           {staged.map((s, i) => (
-            <div key={`${s.file.name}_${s.file.size}`} className="flex items-center gap-3 py-2.5 group/row">
-              <span className="text-[12px] font-bold text-foreground truncate max-w-[220px]">{s.file.name}</span>
-              <span className="text-[10px] text-muted-foreground/50 font-mono flex-shrink-0">
-                {fmtDur(s.duration)}{s.orientation ? ` · ${s.orientation}` : ""}
-              </span>
-              <input
-                value={s.note}
-                onChange={(e) => onNoteChange(i, e.target.value)}
-                placeholder="무엇을 찍은 영상인가요? (예: 운동회 계주)"
-                className="flex-1 min-w-0 bg-transparent border-b border-white/10 focus:border-primary/50 px-1 py-1 text-[12px] text-foreground placeholder:text-muted-foreground/30 outline-none transition-colors"
-              />
-              <button
-                onClick={() => onRemove(i)}
-                title="이 영상 빼기"
-                className="p-1 text-muted-foreground/40 hover:text-red-400 transition-colors flex-shrink-0"
-              >
-                <X size={13} />
-              </button>
+            <div key={`${s.file.name}_${s.file.size}`} className="py-2.5 group/row">
+              <div className="flex items-center gap-3">
+                {/* [UI-⑪] 파일명 클릭 = 그 자리 재생/닫기 — 보고 나서 한 줄을 단다 */}
+                <button
+                  onClick={() => togglePlay(i)}
+                  title={playingIdx === i ? "재생 닫기" : "여기서 바로 재생"}
+                  className={`flex items-center gap-1.5 text-[12px] font-bold truncate max-w-[220px] transition-colors ${playingIdx === i ? "text-primary" : "text-foreground hover:text-primary"}`}
+                >
+                  <Play size={11} className={`flex-shrink-0 ${playingIdx === i ? "fill-primary" : "opacity-50"}`} />
+                  <span className="truncate">{s.file.name}</span>
+                </button>
+                <span className="text-[10px] text-muted-foreground/50 font-mono flex-shrink-0">
+                  {fmtDur(s.duration)}{s.orientation ? ` · ${s.orientation}` : ""}
+                </span>
+                <input
+                  value={s.note}
+                  onChange={(e) => onNoteChange(i, e.target.value)}
+                  placeholder="무엇을 찍은 영상인가요? (예: 운동회 계주)"
+                  className="flex-1 min-w-0 bg-transparent border-b border-white/10 focus:border-primary/50 px-1 py-1 text-[12px] text-foreground placeholder:text-muted-foreground/30 outline-none transition-colors"
+                />
+                <button
+                  onClick={() => onRemove(i)}
+                  title="이 영상 빼기"
+                  className="p-1 text-muted-foreground/40 hover:text-red-400 transition-colors flex-shrink-0"
+                >
+                  <X size={13} />
+                </button>
+              </div>
+              {playingIdx === i && playUrlRef.current && (
+                <div className="mt-2 rounded-lg overflow-hidden border border-border/30 bg-black max-w-[420px]">
+                  <video src={playUrlRef.current} controls autoPlay playsInline className="w-full max-h-[240px]" />
+                </div>
+              )}
             </div>
           ))}
           <div className="py-2.5">
@@ -99,15 +127,17 @@ export function UploadStagingView({ staged, onAddFiles, onRemove, onNoteChange, 
           </div>
         </div>
 
-        {/* 전역 문진: 완성본 기준 — 무엇을 정하는 질문인지 명확하게 */}
-        {staged.length > 0 && (
+        {/* [UI-⑫ 국장지시] 완성본 기준 질문은 '차이가 감지될 때만' —
+            전부 같은 방향이면 방향을 묻지 않고, 영상이 1개면 볼륨을 묻지 않는다.
+            (매번 같은 질문은 질문이 아니라 소음) */}
+        {(mixedOrientation || staged.length > 1) && (
           <div className="space-y-3 pt-1">
+            {mixedOrientation && (
             <div className="space-y-1.5">
               <p className="text-[12px] text-foreground">
-                완성본 화면을 어느 방향으로 만들까요?
+                화면 방향이 섞여 있어요 — 완성본은 어느 방향으로 만들까요?
                 <span className="text-[10px] text-muted-foreground/50 ml-2">
-                  지금 {staged.filter((s) => s.orientation === "가로").length}개 가로 · {staged.filter((s) => s.orientation === "세로").length}개 세로
-                  {mixedOrientation && " — 섞여 있어서 기준이 필요해요"}
+                  가로 {staged.filter((s) => s.orientation === "가로").length}개 · 세로 {staged.filter((s) => s.orientation === "세로").length}개
                 </span>
               </p>
               <div className="flex gap-1.5">
@@ -119,10 +149,12 @@ export function UploadStagingView({ staged, onAddFiles, onRemove, onNoteChange, 
                 ))}
               </div>
             </div>
+            )}
+            {staged.length > 1 && (
             <div className="space-y-1.5">
               <p className="text-[12px] text-foreground">
-                완성본 소리는 어떻게 할까요?
-                <span className="text-[10px] text-muted-foreground/50 ml-2">영상마다 녹음 크기가 다르면 고르게 맞출 수 있어요</span>
+                영상이 여러 개예요 — 완성본 소리는 어떻게 할까요?
+                <span className="text-[10px] text-muted-foreground/50 ml-2">녹음 크기가 서로 다르면 고르게 맞출 수 있어요</span>
               </p>
               <div className="flex gap-1.5">
                 {([["original", "원본 소리 그대로"], ["normalize", "영상 간 볼륨 고르게"]] as const).map(([v, l]) => (
@@ -133,6 +165,7 @@ export function UploadStagingView({ staged, onAddFiles, onRemove, onNoteChange, 
                 ))}
               </div>
             </div>
+            )}
           </div>
         )}
 
