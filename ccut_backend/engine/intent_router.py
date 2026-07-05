@@ -18,10 +18,35 @@
 """
 import json
 import os
+import re as _re_mod
 
 from engine import hub
 
 _ACTIONS = ("run_proposal", "revise_current", "ask_clarification", "answer_only")
+
+# ── [CHAT-GATE 국장지시 2026-07-06] "무슨 말을 해도 다 편집으로 끌고가" 수리 ──
+# 편집 표지가 전혀 없는 일상 대화는 인물/테마 사다리보다 먼저 대화로 보낸다.
+# 편집 표지: 이게 하나라도 있으면 게이트를 지나쳐 기존 편집 사다리로 (편집 보호 우선)
+_EDIT_MARK_RE = _re_mod.compile(
+    r"편집|나오게|남게|남겨|골라|만들|위주|중심|모아|추려|빼|제외|줄여|늘려|"
+    r"장면|컷|조각|부분만|\d+\s*개|짧게|길게|빠르게|느리게|템포|속도|"
+    r"이대로|진행|확정|제안|내보내|렌더|썸네일|자막|프로젝트|"
+    r"넣어|넣고|바꾸|바꿔|교체|삭제|추가|순서|"
+    r"(게|하게)\s*(해\s*줘|해줘|해\s*봐|해봐)")
+# 대화 신호: 물음/웃음/인사/감정/서술 종결어미 — 하나는 있어야 대화로 판단.
+# 종결어미에 어/아/요 포함: 축약 과거형("탔어!","갔어","했어요")이 대화의 주력 형태.
+_CHAT_SIGNAL_RE = _re_mod.compile(
+    r"[?？]"
+    r"|[ㅋㅎ]{2,}|ㅠ|ㅜ"
+    r"|안녕|고마워|고맙|감사|반가|수고|잘자|잘 자|주무|굿모닝|굿나잇"
+    r"|피곤|힘들|심심|외롭|기분|행복|슬프|슬퍼|우울|배고|졸리|졸려|스트레스"
+    r"|짜증|화나|신나|즐겁|즐거|사랑|보고싶|설레|걱정|불안|아프|맛있|재밌|재미있|귀엽|귀여"
+    r"|예뻐|이뻐|기뻐|바빠|나빠|고파|추워|더워|무서워|웃겨|어려워|쉬워|미워"
+    r"|(었|았|였)(어|다|네|지|죠|는데)"
+    r"|(다|야|네|지|죠|잖아|거든|는데|대|래|어|아|요|구나|군|자|음|함)[.!~\s]*$")
+# 짧은 승인어는 게이트 제외 — 제안 확정("좋아", "이대로") 흐름 보호
+_AFFIRM_SHORT_RE = _re_mod.compile(
+    r"^(응+|어+|네|예|그래|좋아요?|좋지|좋네|오케이|ok|콜)[.!~\s]*$", _re_mod.IGNORECASE)
 
 # 받침 유무에 따라 형태가 갈리는 조사 (받침없음형, 받침있음형)
 _PARTICLE_PAIRS = [("가", "이"), ("는", "은"), ("를", "을"), ("와", "과"),
@@ -93,47 +118,111 @@ def _resp(action, reply, normalized=None, confidence=0.9, matched=None, via="det
     }
 
 
-def _llm_route(input_text, recent_messages=None):
-    """Qwen2.5 라우팅 — 결정론이 못 잡은 말만 온다. 실패 시 None(호출부가 되묻기)."""
+def _llm_understand(input_text, recent_messages=None, source_ids=None,
+                    person_vocab=None):
+    """[문맥 종업원 v2 — 국장지시 2026-07-06] 매트릭스가 아니라 문맥으로 판단한다.
+    한 번의 호출로 대화/편집/승인/모호를 분류하고, 대화면 그 자리에서 진짜 답을 만든다.
+    실제 날짜·작업 상황을 주입해 '오늘 몇일?' 환각(22일 사건)을 봉쇄한다.
+    실패 시 None → 호출부가 정직한 고정 문구."""
+    import datetime as _dt
+    now = _dt.datetime.now()
+    weekday = "월화수목금토일"[now.weekday()]
     ctx = ""
-    for m in (recent_messages or [])[-4:]:
-        who = "사용자" if (m.get("sender") == "user") else "편집기"
-        txt = str(m.get("text") or "")[:80]
+    for m in (recent_messages or [])[-8:]:
+        who = "사용자" if (m.get("sender") == "user") else "CCUT"
+        txt = str(m.get("text") or "")[:160]
         if txt:
             ctx += f"{who}: {txt}\n"
+    n_src = len(source_ids or [])
+    # [실데이터 주입] 조각/원본 혼동 환각 봉쇄 ("조각 11개가 원본 영상입니다" 사건)
+    n_frag = 0
+    if source_ids:
+        try:
+            import sqlite3 as _sq
+            _con = _sq.connect(hub.DB_PATH, timeout=10)
+            n_frag = _con.execute(
+                "SELECT COUNT(*) FROM semantic_fragments WHERE source_id IN (%s)"
+                % ",".join("?" * len(source_ids)), list(source_ids)).fetchone()[0]
+            _con.close()
+        except Exception:
+            n_frag = 0
+    # 0개여도 항상 명시 — 빈 프로젝트에서 "조각 5개" 환각 방지 (모르면 지어내는 습성 봉쇄)
+    work_line = (f"[작업 상황] 이 프로젝트에는 원본 영상 {n_src}개가 올라와 있고, "
+                 f"거기서 나눈 조각(장면 단위)이 {n_frag}개다. 원본과 조각은 다른 개념이며, "
+                 "이 숫자 외의 작업 수치를 지어내지 마라.\n") if source_ids is not None else ""
+    facts = (f"[지금] {now.year}년 {now.month}월 {now.day}일 {weekday}요일 "
+             f"{now.strftime('%H:%M')}\n" + work_line
+             + "위 [지금]/[작업 상황] 수치는 실측값이다 — 날짜·조각·원본 질문은 이 값으로만 답하라.\n")
     prompt = (
-        "너는 영상 편집기의 접수 담당(종업원)이다. 사용자의 말을 아래 4가지 중 하나로 분류한다.\n"
-        "- run_proposal: 편집 조건이 담긴 실행 지시 (예: '물놀이 장면 위주로', '앞부분 위주로 짧게')\n"
-        "- revise_current: 현재 안에 대한 국소 수정 (예: '마지막 조각 빼줘', '두 번째만 바꿔')\n"
-        "- ask_clarification: 편집 의도는 있는데 조건이 모호 (예: '느낌있게 해줘')\n"
-        "- answer_only: 편집 지시가 아닌 질문/잡담\n"
-        "run_proposal이면 normalized_instruction에 실행 가능한 형태의 한국어 지시문을 만들어라.\n"
-        "reply는 공손한 한국어 한 문장(존댓말, 종업원 말투)으로.\n"
-        "JSON만 출력: {\"action\":\"...\",\"normalized_instruction\":\"...\",\"reply\":\"...\",\"confidence\":0.0~1.0}\n"
+        "너는 CCUT — 영상 편집 스튜디오의 다정한 동료다. 사용자와 자연스럽게 대화하고, "
+        "사용자의 말이 편집 지시일 때만 편집 접수로 처리한다.\n"
+        + facts
+        + "판단 기준:\n"
+        "- edit: 영상에서 무엇을 골라/빼/줄여/늘려/만들어 달라는 '기준'이 명확할 때만.\n"
+        "- confirm: 직전에 CCUT이 제안한 방향에 대한 승인(그대로 진행해 등).\n"
+        "- chat: 그 외 전부 — 일상 이야기·감정·질문·근황. 사람 이름이 나와도 이야기면 chat이다.\n"
+        "  예: '은한이가 자전거 탔어!' → chat / '은한이 나오는 장면만 넣어줬으면 좋겠어' → edit\n"
+        "- unclear: 편집 의도는 있는데 무엇을 고를지 기준이 없을 때 ('새로 편집해줘', '느낌있게').\n"
+        "instruction 규칙: edit일 때만 채운다. 반드시 '무엇을 고르는 기준'(예: '정은한 나오는 "
+        "장면만', '물놀이 위주로 길게')이어야 한다. 사용자에게 묻는 문장을 넣으면 절대 안 된다. "
+        "기준을 모르면 kind를 unclear로 하라.\n"
+        "reply 규칙: 반드시 한국어로만(중국어·영어 문장 금지). 모델명·제조사(Qwen 등) 언급 금지 — "
+        "너의 이름은 오직 CCUT이다. 날짜·시간·작업 상황 질문은 위 값으로 정확히 답하고, "
+        "날씨·뉴스 등 모르는 실시간 정보는 아는 척하지 않는다.\n"
+        'JSON만 출력: {"kind":"chat|edit|confirm|unclear","reply":"...",'
+        '"instruction":"edit일 때 선별 기준, 아니면 빈 문자열"}\n'
         + (f"최근 대화:\n{ctx}" if ctx else "")
-        + f"사용자: {input_text}\n"
-    )
+        + f"사용자: {input_text}\n")
     try:
-        out = hub._ollama_json(prompt, timeout=30)
-        action = str(out.get("action") or "").strip()
-        if action not in _ACTIONS:
-            return None
-        # [위생] 라우팅 답문도 중국어/모델 정체 유출 차단 — 걸리면 행동별 기본 문구
-        reply = _sanitize_talk(str(out.get("reply") or "").strip())
-        if not reply:
-            reply = ("무엇이든 편하게 물어보세요 — 편집은 '생일잔치 장면만'처럼 "
-                     "말씀하시면 바로 움직일게요." if action == "answer_only"
-                     else "네, 말씀하신 기준으로 진행할게요.")
-        return _resp(
-            action,
-            reply,
-            normalized=(str(out.get("normalized_instruction") or "").strip() or None),
-            confidence=out.get("confidence") or 0.6,
-            via="qwen",
-        )
+        out = hub._ollama_json(prompt, timeout=45)
     except Exception as e:
-        print(f"[INTENT-ROUTER] llm route 실패 ({e})")
+        print(f"[INTENT-ROUTER] llm understand 실패 ({e})")
         return None
+    kind = str(out.get("kind") or "").strip()
+    reply = _sanitize_talk(str(out.get("reply") or "").strip())
+    if kind == "edit":
+        instr = str(out.get("instruction") or "").strip() or input_text
+        # [지시문 오염 가드 2026-07-06] LLM이 instruction 칸에 되묻기 문장을 넣는 사고
+        # ("...알려주십시오"가 편집 기준으로 실행된 사건) — 질문꼴/과장 지시문은
+        # 실행하지 않고 되묻기로 강등한다.
+        if _re_mod.search(r"[?？]|주세요|주십시오|알려|말씀해|무엇을|어떤 (부분|장면)을|"
+                          r"싶으신지|시겠어요|해볼까요", instr) or len(instr) > 60:
+            kind = "unclear"
+        else:
+            # 애칭→풀네임 정규화·filters는 결정론 헬퍼 재사용 (LLM 분류 + 결정론 정규화 분업)
+            r_extra = {}
+            person = hub.resolve_person_name(instr, vocab=person_vocab)
+            if person:
+                instr = replace_name(instr, person["matched"], person["canonical"])
+                r_extra["filters"] = [{"type": "person", "value": person["canonical"],
+                                       "source": "alias" if person["matched"] != person["canonical"] else "name",
+                                       "matched": person["matched"]}]
+            r = _resp("run_proposal",
+                      reply or "네, 말씀하신 기준으로 골라볼게요.",
+                      normalized=instr, confidence=0.75, via="qwen",
+                      matched={"kind": "llm_edit"})
+            r.update(r_extra)
+            return r
+    if kind == "confirm":
+        return _resp("run_proposal",
+                     reply or "네, 지금 방향 그대로 진행하겠습니다.",
+                     normalized=input_text, confidence=0.7, via="qwen",
+                     matched={"kind": "llm_confirm"})
+    if kind == "unclear":
+        # 되묻기는 LLM 문장을 쓰지 않는다 — reply 칸에 예시 지시문을 넣는 사고가
+        # 관측됨("물놀이 장면 위주로 길게 편집해주세요"가 CCUT 말로 출력). 고정 템플릿.
+        return _resp("ask_clarification",
+                     "어떤 기준으로 고를까요? 예: '정은한 나오는 장면만', "
+                     "'물놀이 위주로', '실내만', '더 길게/짧게'.",
+                     confidence=0.6, via="qwen", matched={"kind": "llm_unclear"})
+    if kind == "chat":
+        # [대화 품질 2026-07-06] 분류(temp 0)와 대화(temp 0.7)를 분리 — 분류 초안 답 대신
+        # 대화 전용 프롬프트(화제 이탈 금지·실시간 정보 아는 척 금지)로 최종 답을 만든다.
+        talk = _llm_smalltalk(input_text, recent_messages, facts=facts)
+        return _resp("answer_only",
+                     talk or reply or "네, 듣고 있어요. 편하게 이야기해 주세요.",
+                     confidence=0.85, via="qwen", matched={"kind": "free_chat"})
+    return None
 
 
 def _sanitize_talk(reply):
@@ -150,26 +239,36 @@ def _sanitize_talk(reply):
     return reply
 
 
-def _llm_smalltalk(input_text, recent_messages=None):
-    """[SMALLTALK] 질문/잡담에 사람다운 답 — '나는 편집기라서'류 거절 금지 (국장:
-    거절은 사용자를 바보 취급하는 것). 실패 시 None → 호출부가 따뜻한 고정 문구."""
+def _llm_smalltalk(input_text, recent_messages=None, facts=""):
+    """[SMALLTALK/자유대화] 질문/잡담에 사람다운 답 — '나는 편집기라서'류 거절 금지
+    (국장: 거절은 사용자를 바보 취급하는 것). 실패 시 None → 호출부가 따뜻한 고정 문구.
+    [국장지시 2026-07-06] 편집 얘기가 아니어도 사용자의 화제를 진짜로 따라간다 —
+    매 답을 편집 제안으로 되돌리지 않는다. facts=실제 날짜·작업 상황 블록(환각 봉쇄)."""
     ctx = ""
-    for m in (recent_messages or [])[-4:]:
+    for m in (recent_messages or [])[-6:]:
         who = "사용자" if (m.get("sender") == "user") else "CCUT"
-        txt = str(m.get("text") or "")[:80]
+        txt = str(m.get("text") or "")[:120]
         if txt:
             ctx += f"{who}: {txt}\n"
     prompt = (
-        "너는 CCUT — 영상 편집을 돕는 다정한 동료다. 사용자의 질문/잡담에 짧고 따뜻한 "
-        "존댓말 한국어 1~2문장으로 '실제로' 대답한다. 절대 '저는 편집기라서'류의 거절을 "
-        "하지 않는다. 자연스러우면 끝에 편집 도움을 가볍게 제안해도 된다.\n"
-        "규칙: 답은 반드시 한국어로만 쓴다(중국어·영어 문장 금지). "
-        "너의 모델명·제조사(Qwen 등)는 절대 언급하지 않는다 — 너의 이름은 오직 CCUT이다.\n"
+        "너는 CCUT — 영상 편집을 돕는 다정한 동료다. 사용자의 말에 따뜻한 존댓말 "
+        "한국어 1~3문장으로 '실제로' 대답한다.\n"
+        + facts +
+        "대화 규칙 (어기면 실격):\n"
+        "1. 사용자의 마지막 말에 직접 반응한다. 화제를 네 맘대로 바꾸지 않는다 — "
+        "카페·취미 추천 같은 뻔한 스몰토크를 먼저 꺼내지 마라.\n"
+        "2. 날씨·뉴스·유행 같은 실시간 정보는 너는 모른다 — 아는 척 금지. "
+        "사용자가 알려주면 그 말을 믿고 따라가라.\n"
+        "3. 고민·감정을 말하면 가볍게 공감하고, 구체적으로 하나만 되물어라.\n"
+        "4. '저는 편집기라서'류 거절 금지. 매번 편집 얘기로 돌리지도 마라.\n"
+        "5. 반드시 한국어만(중국어·영어 문장 금지). 모델명·제조사(Qwen 등) 언급 금지 — "
+        "너의 이름은 오직 CCUT이다. 모르는 건 솔직히 모른다고 한다.\n"
         'JSON만 출력: {"reply":"..."}\n'
         + (f"최근 대화:\n{ctx}" if ctx else "")
         + f"사용자: {input_text}\n")
     try:
-        out = hub._ollama_json(prompt, timeout=20)
+        # temperature 0.7 — 대화는 결정성보다 자연스러움 (판사 경로와 분리)
+        out = hub._ollama_json(prompt, timeout=30, temperature=0.7)
         return _sanitize_talk(str(out.get("reply") or "").strip())
     except Exception as e:
         print(f"[INTENT-ROUTER] smalltalk 실패 ({e})")
@@ -272,6 +371,51 @@ def route_edit_intent(source_ids=None, input_text="", recent_messages=None,
             return r
         # 판단 불가(검색어 추출 실패 등) → 아래 사다리 계속
 
+    # ── 0.6 [실행 사칭 금지 국장승인 2026-07-06 B안] 프레임 단위 미세조정·복원 요청은
+    #    이 경로에 능력이 없다 — 재제안을 돌리며 "잘랐습니다"라고 사칭하던 사건
+    #    (B안 3조각→1조각 2초 파괴) 봉쇄. 실존 기능(정밀편집창·지난 제안 다시 열기)으로
+    #    정직하게 안내만 한다. 제안 실행 없음.
+    if _re.search(r"프레임", t) and _re.search(r"잘라|자르|빼|다듬|트림|제거", t):
+        return _resp("answer_only",
+                     "프레임 단위 정밀 조정은 채팅으로는 아직 못 해요 — 제가 자를 수 있는 "
+                     "단위가 아니라서, 한 것처럼 말씀드리지 않을게요. 조각을 클릭하면 열리는 "
+                     "정밀편집창에서 직접 프레임을 다듬으실 수 있어요. 지금 안은 그대로 둡니다.",
+                     confidence=0.95, matched={"kind": "honest_no_frame_trim"})
+    if _re.search(r"되돌려|원래대로|복원|원상복구", t) or \
+            _re.search(r"(원본|이전|아까|지난)\s*(조각|안|제안|버전).{0,8}(다시|가져와|돌려|살려)", t):
+        return _resp("answer_only",
+                     "새로 고르지 않고 그대로 되살리는 건 채팅 아래 '지난 제안 다시 열기'에서 "
+                     "할 수 있어요 — 원하시는 세대를 누르면 그 안이 그대로 돌아옵니다. "
+                     "지금 안은 건드리지 않을게요.",
+                     confidence=0.95, matched={"kind": "honest_restore_hint"})
+
+    # ── 0.8 정체성 질문 — 결정론 자기소개 최우선 (Qwen 자백 사건 봉쇄).
+    #    대화 게이트보다 먼저: 정체성은 LLM으로 새지 않고 고정 문구로 답한다.
+    if _re.search(r"(너|네|니)가?\s*누구|누군지|누구야|누구니|정체|이름이 뭐|뭐 ?하는 (ai|애|친구|프로그램)", t):
+        return _resp("answer_only",
+                     "저는 CCUT이에요 — 올려주신 영상을 조각으로 나눠 이해하고, "
+                     "말씀 한마디로 골라 편집해 드리는 편집 동료예요. "
+                     "'생일잔치 장면만'처럼 말씀하시면 바로 움직이고, "
+                     "궁금한 건 뭐든 물어보셔도 좋아요.",
+                     confidence=0.9, matched={"kind": "self_intro"})
+
+    # ── 0.9 [문맥 우선 국장지시 2026-07-06] 대화 신호가 있으면 정규식 사다리를
+    #    타지 않는다 — 종업원 LLM이 문맥(최근 대화·실제 날짜·작업 상황)을 보고
+    #    "이건 대화 / 이건 편집지시"를 스스로 판단한다.
+    #    ("응 지금 너를 만들고 잇는데" → '만들'·'진행' 정규식이 편집으로 납치하던 사건,
+    #     "오늘 몇일이지?" → 날짜 모른 채 22일 환각 사건 — 실데이터 주입으로 봉쇄)
+    #    짧은 승인어("좋아")는 제외 — 제안 확정 흐름은 기존 사다리가 처리.
+    if _CHAT_SIGNAL_RE.search(t) and not _AFFIRM_SHORT_RE.match(t):
+        if allow_llm:
+            und = _llm_understand(t, recent_messages, source_ids, person_vocab)
+            if und:
+                return und
+        # hub 미응답/비활성 — 편집 강요 없이 정직한 수신 확인
+        return _resp("answer_only",
+                     "네, 듣고 있어요. 편하게 이야기해 주세요 — 편집이 필요해지면 "
+                     "'생일잔치 장면만'처럼 말씀하시면 바로 움직일게요.",
+                     confidence=0.7, matched={"kind": "free_chat_fallback"})
+
     # ── 1. 인물/장소 filters 수집 (사람을 만나도 즉시 return 금지 — 복합 조건 유지) ──
     from engine import place_taxonomy as pt
     person = hub.resolve_person_name(t, vocab=person_vocab)
@@ -368,7 +512,11 @@ def route_edit_intent(source_ids=None, input_text="", recent_messages=None,
     if re.search(r"빠르게|느리게|짧게|길게|템포|속도|페이스", t):
         return _resp("run_proposal", "네, 흐름 속도를 조정해서 다시 골라볼게요.",
                      normalized=t, confidence=0.85, matched={"kind": "pace"})
-    if re.search(r"이대로|진행|확정|좋아|오케이|ok", t, re.IGNORECASE):
+    # [앵커링 2026-07-06] 확정은 짧은 순수 승인문만 — "잘 진행되고 있어" 같은
+    # 서술문 속 '진행'이 확정으로 오인되던 납치 봉쇄
+    if len(t) <= 12 and re.match(
+            r"^(이대로|그대로|지금 ?방향)?\s*(진행|확정|좋아|오케이|ok)\s*(해줘|해|하자|요)?[.!~\s]*$",
+            t, re.IGNORECASE):
         return _resp("run_proposal", "네, 지금 방향 그대로 진행하겠습니다.",
                      normalized=t, confidence=0.85, matched={"kind": "confirm"})
 
@@ -382,19 +530,9 @@ def route_edit_intent(source_ids=None, input_text="", recent_messages=None,
         except Exception:
             pass
 
-    # ── 5. 질문/잡담 — 거절하지 않고 대화한다 (국장: 거절 = "난 바보예요") ──
-    #    단, 편집 동사가 있으면("생일잔치만 편집해줄래?") 질문 꼴이어도 편집으로 —
-    #    아래 5.5 OPEN-EDIT가 처리하게 통과시킨다.
-    # 정체성 질문은 결정론 자기소개 — 물음표/의문사가 없어도("니가 누군지 말해줘.")
-    # LLM으로 새지 않게 q_re 바깥에서 최우선 처리 (Qwen 자백 사건 봉쇄)
-    if _re.search(r"(너|네|니)가?\s*누구|누군지|누구야|누구니|정체|이름이 뭐|뭐 ?하는 (ai|애|친구|프로그램)", t):
-        return _resp("answer_only",
-                     "저는 CCUT이에요 — 올려주신 영상을 조각으로 나눠 이해하고, "
-                     "말씀 한마디로 골라 편집해 드리는 편집 동료예요. "
-                     "'생일잔치 장면만'처럼 말씀하시면 바로 움직이고, "
-                     "궁금한 건 뭐든 물어보셔도 좋아요.",
-                     confidence=0.9, matched={"kind": "self_intro"})
-
+    # ── 5. 질문/잡담 2차 그물 — 게이트(0.9)를 지나쳤지만 의문형인 말.
+    #    편집 동사가 있으면("생일잔치만 편집해줄래?") 질문 꼴이어도 편집으로 —
+    #    아래 5.5 OPEN-EDIT가 처리하게 통과시킨다. (정체성 질문은 0.8에서 처리 완료)
     q_re, vague_re = _regexes()
     if q_re.search(t) and not _re.search(r"편집|나오게|남게|남겨|골라|만들|빼|줄여|늘려|위주|중심|모아|추려", t):
         if allow_llm:
@@ -409,7 +547,7 @@ def route_edit_intent(source_ids=None, input_text="", recent_messages=None,
                      confidence=0.8)
     if vague_re.search(t):
         if allow_llm:
-            llm = _llm_route(t, recent_messages)
+            llm = _llm_understand(t, recent_messages, source_ids, person_vocab)
             if llm:
                 return llm
         return _resp("ask_clarification",
@@ -435,10 +573,12 @@ def route_edit_intent(source_ids=None, input_text="", recent_messages=None,
 
     # ── 6. 결정론이 전부 놓친 말 → Qwen 종업원 ──
     if allow_llm:
-        llm = _llm_route(t, recent_messages)
+        llm = _llm_understand(t, recent_messages, source_ids, person_vocab)
         if llm:
             return llm
+    # [국장지시 2026-07-06] 못 알아들어도 편집 조건을 강요하지 않는다 — 대화도 정상 경로
     return _resp("ask_clarification",
-                 "말씀을 편집 조건으로 정확히 못 알아들었어요. '누가 나오는 장면만', "
-                 "'어떤 장소만', '몇 개로' 같은 형태로 다시 말씀해 주시겠어요?",
+                 "제가 정확히 못 알아들었어요. 편하게 다시 말씀해 주세요 — "
+                 "그냥 이야기하셔도 좋고, 편집은 '누가 나오는 장면만'처럼 "
+                 "말씀하시면 바로 움직여요.",
                  confidence=0.5)

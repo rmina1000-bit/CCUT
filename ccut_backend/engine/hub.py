@@ -62,14 +62,15 @@ def load_bundles(con, source_id, desc_max=240, tr_max=120):
 
 # ---------- 거점 호출 (format:json 강제) ----------
 
-def _ollama_json(prompt: str, timeout: int = 60) -> dict:
+def _ollama_json(prompt: str, timeout: int = 60, temperature: float = 0) -> dict:
+    # temperature 기본 0 — 판사(judge) 결정성 불변. 대화 계열만 명시적으로 올린다.
     body = json.dumps({
         "model": HUB_MODEL,
         "prompt": prompt,
         "stream": False,
         "format": "json",
         "keep_alive": "10m",
-        "options": {"temperature": 0, "num_predict": 1024},
+        "options": {"temperature": temperature, "num_predict": 1024},
     }).encode("utf-8")
     req = urllib.request.Request(
         OLLAMA_URL + "/api/generate", data=body,
