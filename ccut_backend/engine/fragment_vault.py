@@ -303,14 +303,30 @@ def source_fragment_history(source_id):
     src = con.execute("SELECT hash_value FROM sources WHERE source_id=?",
                       (source_id,)).fetchone()
     anchor = (src[0] if src and src[0] else source_id)
+    # [최종 수정 기준] 사용자가 정밀조정한 경계(edit_overlay)가 있으면 그것이
+    # 조각의 '현재 모습'이다 — 파노라마·뷰어는 이 기준으로 그린다.
+    overlays = {fid: (es, ee, bool(ex)) for fid, es, ee, ex in con.execute(
+        "SELECT fragment_id, effective_start_sec, effective_end_sec, excluded "
+        "FROM edit_overlay WHERE source_id=?", (source_id,))}
+    thumbs_dir = os.path.join(os.path.dirname(BACKEND_DIR), "storage", "thumbnails")
     frags = []
     for r in con.execute(
             """SELECT start_ds, end_ds, start, end, display_name, generations,
-                      people, transcript IS NOT NULL AND transcript != ''
+                      people, transcript IS NOT NULL AND transcript != '', fragment_id
                FROM fragment_vault WHERE anchor_hash=? ORDER BY start_ds""", (anchor,)):
+        fid = r[8]
+        ov = overlays.get(fid)
+        eff_start = ov[0] if ov and ov[0] is not None else r[2]
+        eff_end = ov[1] if ov and ov[1] is not None else r[3]
+        thumb = (f"/static/thumbnails/{fid}.jpg"
+                 if fid and os.path.exists(os.path.join(thumbs_dir, f"{fid}.jpg"))
+                 else None)
         frags.append({"start_ds": r[0], "end_ds": r[1], "start": r[2], "end": r[3],
                       "display_name": r[4], "generations": r[5],
                       "people": r[6], "has_transcript": bool(r[7]),
+                      "fragment_id": fid, "thumbnail_url": thumb,
+                      "eff_start": eff_start, "eff_end": eff_end,
+                      "excluded": bool(ov[2]) if ov else False,
                       "adopted": [], "edited": False, "exported": []})
     by_key = {(f["start_ds"], f["end_ds"]): f for f in frags}
     n_adopted = n_edited = n_exported = 0
