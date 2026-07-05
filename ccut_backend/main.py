@@ -3446,6 +3446,13 @@ async def admin_overview():
     return _adm.overview()
 
 
+@app.get("/admin/situation")
+async def admin_situation():
+    """[War Room v1] 상황실 — 글로벌 상태등·KPI·경보·작전 큐."""
+    from admin import service as _adm
+    return _adm.situation()
+
+
 @app.get("/admin/users")
 async def admin_users():
     from admin import service as _adm

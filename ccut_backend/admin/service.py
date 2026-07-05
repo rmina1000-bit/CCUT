@@ -250,6 +250,115 @@ def insights_query(query: str) -> dict:
     }
 
 
+# ═══════════════════════════════════════════════════════════════════
+#   [War Room v1] 상황실 — 글로벌 상태등·경보·작전 큐 (전부 실 DB 규칙 기반)
+# ═══════════════════════════════════════════════════════════════════
+
+def _situation_alerts(con) -> list:
+    """v1 경보 규칙 — 계약서(CONTRACT_V1 §2) 그대로. 전부 실 DB 조회."""
+    alerts = []
+
+    def _try(sql, params=()):
+        try:
+            return con.execute(sql, params).fetchone()[0]
+        except Exception:
+            return None
+
+    render_failed_7d = _try(
+        "SELECT COUNT(*) FROM export_results WHERE status='RENDER_FAILED'"
+        " AND created_at >= datetime('now','-7 day')")
+    if render_failed_7d is not None and render_failed_7d >= 3:
+        alerts.append({
+            "severity": "P1", "title": "렌더 실패 반복",
+            "reason": f"최근 7일 렌더 실패 {render_failed_7d}건",
+            "target_type": "export", "target_id": None,
+            "recommended_action": "최근 실패 export_results의 ffmpeg_stderr 확인",
+        })
+
+    source_lost = _try("SELECT COUNT(*) FROM fragment_vault WHERE source_alive = 0")
+    if source_lost:
+        alerts.append({
+            "severity": "P1", "title": "원본 유실 조각 존재",
+            "reason": f"fragment_vault source_alive=0 {source_lost}건",
+            "target_type": "vault", "target_id": None,
+            "recommended_action": "아카이브 원본 실존 여부와 vault 정합 점검",
+        })
+
+    sec_p0 = _try(
+        "SELECT COUNT(*) FROM admin_security_events WHERE status='open' AND severity='P0'")
+    sec_rest = _try(
+        "SELECT COUNT(*) FROM admin_security_events WHERE status='open' AND severity!='P0'")
+    if sec_p0:
+        alerts.append({
+            "severity": "P0", "title": "미처리 P0 보안 이벤트",
+            "reason": f"open P0 {sec_p0}건", "target_type": "security", "target_id": None,
+            "recommended_action": "보안 관제에서 즉시 triage",
+        })
+    if sec_rest:
+        alerts.append({
+            "severity": "P2", "title": "미처리 보안 이벤트",
+            "reason": f"open {sec_rest}건", "target_type": "security", "target_id": None,
+            "recommended_action": "보안 관제에서 상태 정리",
+        })
+
+    support_high = _try(
+        "SELECT COUNT(*) FROM admin_support_cases WHERE status='open' AND severity='high'")
+    if support_high:
+        alerts.append({
+            "severity": "P1", "title": "고심각 문의 대기",
+            "reason": f"open high {support_high}건",
+            "target_type": "support", "target_id": None,
+            "recommended_action": "지원/문의에서 우선 응대",
+        })
+
+    return alerts
+
+
+def situation() -> dict:
+    """상황실 홈 — 30초 안에 전군 파악. 원장 없는 항목은 null/빈 배열(하드코딩 금지)."""
+    con = _connect()
+    kpis = _service_counts(con)
+    kpis["storage_bytes"] = None        # 저장소 원장 미도입 — 정직 null
+    kpis["api_cost_estimate"] = None    # 비용 원장 미도입 — 정직 null
+
+    alerts = _situation_alerts(con)
+    severities = {a["severity"] for a in alerts}
+    if "P0" in severities:
+        level, reason = "critical", "P0 경보 존재"
+    elif "P1" in severities:
+        level, reason = "watch", "P1 경보 존재"
+    else:
+        level, reason = "normal", None
+
+    try:
+        action_queue = [
+            {"kind": r[0], "title": r[1], "priority": r[2], "target": r[3]}
+            for r in con.execute(
+                "SELECT kind, title, priority, target_id FROM admin_work_items"
+                " WHERE status != 'closed' ORDER BY priority, id DESC LIMIT 10")
+        ]
+    except Exception:
+        action_queue = []  # 작업큐 원장 도입 전 — 빈 배열 정직 반환
+
+    recent_audit = [
+        {"id": r[0], "action": r[1], "target_type": r[2], "target_id": r[3],
+         "note": r[4], "created_at": r[5]}
+        for r in con.execute(
+            "SELECT id, action, target_type, target_id, note, created_at"
+            " FROM admin_audit_log ORDER BY id DESC LIMIT 5")
+    ]
+    con.close()
+    return {
+        "status": "OK",
+        "generated_at": datetime.datetime.now().isoformat(),
+        "global_state": {"service_level": level, "reason": reason},
+        "kpis": kpis,
+        "alerts": alerts,
+        "action_queue": action_queue,
+        "recent_audit": recent_audit,
+    }
+
+
 def audit_logs(limit: int = 20, cursor: int = None) -> dict:
     limit = max(1, min(int(limit or 20), 100))
     con = _connect()

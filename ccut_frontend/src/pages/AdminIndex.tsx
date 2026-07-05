@@ -2,7 +2,7 @@ import React from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { AdminShell } from "@/components/admin/AdminShell";
 import { AdminTab } from "@/components/admin/AdminLeftNav";
-import { AdminOverviewPanel } from "@/components/admin/AdminOverviewPanel";
+import { AdminSituationPanel } from "@/components/admin/AdminSituationPanel";
 import { AdminUsersPanel } from "@/components/admin/AdminUsersPanel";
 import { AdminRevenuePanel } from "@/components/admin/AdminRevenuePanel";
 import { AdminInsightsPanel } from "@/components/admin/AdminInsightsPanel";
@@ -48,7 +48,7 @@ const AdminIndex: React.FC = () => {
 
   return (
     <AdminShell active={active} screenLabel={LABELS[active]} onNavigate={onNavigate}>
-      {active === "situation" && <AdminOverviewPanel />}
+      {active === "situation" && <AdminSituationPanel />}
       {active === "users" && <AdminUsersPanel />}
       {active === "support" && <PendingLedger label="지원/문의" step="STEP 4" />}
       {active === "revenue" && <AdminRevenuePanel />}
