@@ -28,7 +28,7 @@ import { useAnalysisFlow } from "@/hooks/useAnalysisFlow";
 import { useAppNavigation } from "@/hooks/useAppNavigation";
 import type { SourceEntry } from "@/types";
 
-import { assignShortDisplayIds, getUid, recalcDisplayIds, rangeDisplayName } from "@/lib/fragmentIdentity";
+import { assignShortDisplayIds, getUid, recalcDisplayIds, rangeDisplayName, registerSourceTitle } from "@/lib/fragmentIdentity";
 import { videoService } from "@/services/videoService";
 
 import { Direction, DirectionSnapshot, Proposal, StoryPlanPreview } from "@/proposal/proposalTypes";
@@ -216,6 +216,8 @@ const Index: React.FC = () => {
       const durationFrames = Math.max(1, endFrame - startFrame);
       const rawThumb = f.intelligence?.thumb_url || f.thumb || f.thumbnail_url;
       const fullThumbUrl = toFullUrl(rawThumb) ?? null;
+      // [DISPLAY-NAME] 제목부 레지스트리 등록 — 과거 스냅샷 출신 조각의 렌더 시점 자가치유용
+      registerSourceTitle(f.source_id || f.sourceId, f.display_name);
 
       // Populate global cache
       if (typeof window !== "undefined") {

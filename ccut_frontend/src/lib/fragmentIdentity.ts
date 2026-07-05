@@ -22,20 +22,34 @@ export function getDisplayId(f: Pick<Fragment, "display_id" | "fragment_id">): s
 }
 
 /**
+ * [DISPLAY-NAME] source_id → 제목부 레지스트리.
+ * 과거 스냅샷(저장된 제안 resolved_aliases·ui_state 편집상태)에서 복원된 조각은
+ * display_name이 없다. 백엔드 권위 이름을 소비하는 순간(mapFragments) 제목부를
+ * 등록해 두면 displayName()이 렌더 시점에 스스로 치유한다 — 경로별 땜빵 불필요.
+ */
+const sourceTitleRegistry = new Map<string, string>();
+export function registerSourceTitle(sourceId?: string, displayNameOrTitle?: string) {
+    if (!sourceId || !displayNameOrTitle) return;
+    const title = String(displayNameOrTitle).split(" · ")[0].trim();
+    if (title) sourceTitleRegistry.set(sourceId, title);
+}
+
+/**
  * [DISPLAY-NAME] 사용자용 조각 주이름 — 단일 진실원 읽기.
  * 백엔드(fragment_show.display_name)가 만든 "원본제목 · m:ss–m:ss"를 그대로 쓴다.
- * 폴백에서도 raw ID(SF_/SRC_)는 절대 반환하지 않는다 — 이름 권위 부재 시
- * 시간 구간만이라도 사람 말로 보여준다(프론트에서 이름을 새로 짓지 않는다).
+ * 없으면 레지스트리 제목부 + 실제 구간으로 조립(자가치유). 폴백에서도
+ * raw ID(SF_/SRC_)는 절대 반환하지 않는다 — 최후엔 시간 구간만 사람 말로.
  */
 export function displayName(
-    f: Pick<Fragment, "display_name" | "start_frame" | "end_frame">,
+    f: Pick<Fragment, "display_name" | "start_frame" | "end_frame"> & { source_id?: string },
 ): string {
     if (f.display_name) return f.display_name;
     const fmt = (fr?: number) => {
         const s = Math.max(0, Math.round((fr ?? 0) / 30));
         return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
     };
-    return `조각 · ${fmt(f.start_frame)}–${fmt(f.end_frame)}`;
+    const title = f.source_id ? sourceTitleRegistry.get(f.source_id) : undefined;
+    return `${title ?? "조각"} · ${fmt(f.start_frame)}–${fmt(f.end_frame)}`;
 }
 
 /**
