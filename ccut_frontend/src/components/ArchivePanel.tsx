@@ -141,7 +141,9 @@ export const ArchivePanel: React.FC<{
     }
   };
 
-  const [activeSubTab, setActiveSubTab] = useState<"sources" | "timeline" | "programs" | "proposals" | "exports">("sources");
+  // [국장지시 2026-07-05] 프로젝트/제안은 과정(process) — 사용자가 프로젝트를 지우면 함께 사라진다.
+  // 아카이브는 결과(원본·조각·내보낸 영상)만 남기는 곳이므로 "프로젝트 관리"/"AI 편집제안 이력" 탭은 폐지.
+  const [activeSubTab, setActiveSubTab] = useState<"sources" | "timeline" | "exports">("sources");
 
   // [exports] 첫 진입 필수 아님 — exports 탭 클릭 시에만 lazy 조회
   const [exports, setExports] = useState<ExportRecord[]>([]);
@@ -548,7 +550,7 @@ export const ArchivePanel: React.FC<{
       {/* Search & Tabs */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-card/15 p-3 rounded-xl border border-border/10">
         <div className="flex items-center gap-1.5 bg-secondary/30 rounded-lg p-0.5">
-          {(["sources", "timeline", "programs", "proposals", "exports"] as const).map(tab => (
+          {(["sources", "timeline", "exports"] as const).map(tab => (
             <button
               key={tab}
               onClick={() => setActiveSubTab(tab)}
@@ -556,7 +558,7 @@ export const ArchivePanel: React.FC<{
                 activeSubTab === tab ? "bg-primary/20 text-primary" : "text-muted-foreground/60 hover:text-foreground/80"
               }`}
             >
-              {tab === "sources" ? "원본 리스트" : tab === "timeline" ? "연대기" : tab === "programs" ? "프로젝트 관리" : tab === "proposals" ? "AI 편집제안 이력" : "내보낸 영상"}
+              {tab === "sources" ? "원본 리스트" : tab === "timeline" ? "연대기" : "내보낸 영상"}
             </button>
           ))}
         </div>
@@ -679,19 +681,6 @@ export const ArchivePanel: React.FC<{
             </>
           )}
 
-          {/* ── 프로젝트 관리 / AI 편집제안 이력 탭 — 이번 단계(sources-first) 범위 밖.
-              [국장지시] project/program read 구조는 후속 단계로 넘긴다. ── */}
-          {(activeSubTab === "programs" || activeSubTab === "proposals") && (
-            <div className="flex flex-col items-center justify-center h-64 gap-3 text-muted-foreground/30">
-              <Box size={36} strokeWidth={1} />
-              <p className="text-sm font-medium">
-                {activeSubTab === "programs" ? "프로젝트 관리" : "AI 편집제안 이력"} 조회는 다음 단계에서 제공됩니다
-              </p>
-              <p className="text-[11px] text-muted-foreground/40">
-                이번 단계는 sources 중심 read path 개편만 포함합니다 (아카이브 단계B)
-              </p>
-            </div>
-          )}
 
           {/* ── 내보낸 영상 탭 (exports 탭 클릭 시 lazy 조회) ── */}
           {activeSubTab === "exports" && (
