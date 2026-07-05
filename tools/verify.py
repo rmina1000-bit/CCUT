@@ -208,6 +208,15 @@ def run_l0():
     check("L0", "sanitize 정상 한국어 통과",
           ir._sanitize_talk("네, 편하게 말씀하세요!") == "네, 편하게 말씀하세요!", "통과")
 
+    # [서사층 v2.1] 촬영일 파싱 — 파일명이 곧 연대기 (DB 무접촉 순수함수)
+    from engine import narrative_ledger as nl
+    check("L0", "narrative 촬영일 파싱", nl.parse_shot_date("20150801_182415.mp4") == "2015-08-01",
+          nl.parse_shot_date("20150801_182415.mp4"))
+    check("L0", "narrative 무날짜 파일명→None(경로 없음)",
+          nl.parse_shot_date("IMG_2487.MOV") is None, "None")
+    check("L0", "narrative 오탐 날짜(99일) 거부",
+          nl.parse_shot_date("20151199_x.mp4") is None, "None")
+
     # [조사 교정] 단순 replace의 '정은한가' 문법 붕괴 수리 검증
     r = ir.route_edit_intent(input_text="은한이가 병원에 있는 장면만", allow_llm=False,
                              person_vocab=_pv, archive_lookup=_fake_proj)

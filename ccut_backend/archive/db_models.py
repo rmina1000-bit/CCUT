@@ -11,6 +11,8 @@ class SourceTable(Base):
     fps = Column(Float, default=30.0)
     hash_value = Column(String, index=True, nullable=True) # [STEP 1] Fingerprint
     created_at = Column(DateTime, default=datetime.datetime.now)
+    # [서사층 §2.2] 촬영일 — 원본은 '업로드된 순서'가 아니라 '살아진 날'에 속한다
+    shot_date = Column(String, nullable=True)
 
 class FragmentTable(Base):
     __tablename__ = "fragments"

@@ -174,6 +174,18 @@ def _run_db_migrations():
 
 _run_db_migrations()
 
+# [서사층 v2.1] 말의 원장·촬영일 스키마 보장 + 멱등 백필 (가볍게 — NULL만)
+try:
+    from engine import narrative_ledger as _nl
+    import sqlite3 as _sq3
+    _con0 = _sq3.connect(str(Path(__file__).parent / "ccut_app.db"))
+    _nl.ensure_schema(_con0)
+    _con0.close()
+    _nl.backfill_shot_dates()
+    _nl.backfill_intake_notes_from_timeline()
+except Exception as _nl_e:
+    print(f"[NARRATIVE] 초기화 실패 (non-blocking): {_nl_e}")
+
 def get_video_range_response(file_path: Path, request: Request):
     from fastapi.responses import StreamingResponse, FileResponse
     from fastapi import HTTPException
@@ -2976,6 +2988,21 @@ def _proposal_display_names(db) -> dict:
     return out
 
 
+@app.post("/narrative/notes")
+async def add_narrative_notes(payload: dict = None):
+    """[서사층 §2.1] 말의 원장 적재 — 사용자의 말은 최상급 자산.
+    body: {notes: [{target_kind, target_id, text, origin}]}"""
+    from engine import narrative_ledger as nl
+    n = nl.add_notes((payload or {}).get("notes") or [])
+    return {"status": "OK", "added": n}
+
+
+@app.get("/narrative/notes/{target_kind}/{target_id}")
+async def get_narrative_notes(target_kind: str, target_id: str):
+    from engine import narrative_ledger as nl
+    return {"status": "OK", "notes": nl.notes_for(target_kind, target_id)}
+
+
 @app.get("/archive/list")
 async def get_archive_list(db: Session = Depends(get_db)):
     """[Archive] Get list of historical projects and sources"""
@@ -3096,6 +3123,10 @@ async def get_archive_list(db: Session = Depends(get_db)):
     # [DISPLAY-NAME 국장지시] 제안서 사람 말 명칭 — 공용 권위 1개(_proposal_display_names)
     _prop_names = _proposal_display_names(db)
 
+    # [서사층] source_id → 사용자의 말 (목록 캡션용 첫 노트)
+    from engine import narrative_ledger as _nl2
+    _src_notes = _nl2.source_note_map()
+
     return {
         "sources": [{
             "source_id": s.source_id,
@@ -3105,6 +3136,9 @@ async def get_archive_list(db: Session = Depends(get_db)):
             "fps": s.fps,
             "hash_value": s.hash_value,
             "created_at": s.created_at.isoformat() if s.created_at else None,
+            # [서사층] 촬영일(연대기 축) + 사용자의 말(캡션은 기계 요약이 아니라 그 사람의 말)
+            "shot_date": getattr(s, "shot_date", None),
+            "note": _src_notes.get(s.source_id),
             "program_names": _names(s.source_id),
             "usage": source_usage_map.get(s.source_id, []),
             # [SOURCE] 원본 재생 URL (uploads에 있을 때만, 없으면 null = 원본 삭제됨)
