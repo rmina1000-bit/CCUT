@@ -3151,180 +3151,55 @@ async def get_narrative_notes(target_kind: str, target_id: str):
     return {"status": "OK", "notes": nl.notes_for(target_kind, target_id)}
 
 
-@app.get("/archive/list")
-async def get_archive_list(db: Session = Depends(get_db)):
-    """[Archive] Get list of historical projects and sources"""
-    import datetime as _dt
+def _archive_summary_payload(db: Session) -> dict:
+    """[Archive 단계B] 아카이브 최소 summary — 구형 대형 응답 해체(국장 판정: 즉시 축소).
+    목록/상세는 후속 read path(/archive/sources, /archive/source/{id})가 담당한다."""
     from sqlalchemy import func as _func
 
-    # [ARCHIVE-SORT 국장지시] 최신이 위 — 목록에서 찾기의 기본
-    sources = db.query(SourceTable).order_by(SourceTable.created_at.desc()).all()
-    proposals = db.query(ProposalTable).order_by(ProposalTable.created_at.desc()).all()
+    source_count = db.query(_func.count(SourceTable.source_id)).scalar() or 0
 
-    # program_id → source_count 맵
-    src_count_map = {
-        r.program_id: r.cnt
-        for r in db.query(ProjectSourceTable.program_id, _func.count().label("cnt"))
-                    .group_by(ProjectSourceTable.program_id).all()
-    }
+    # 프로그램 수: 기존 목록과 동일 기준 — schema_version=2 & 원본 1개 이상
+    src_count_rows = (
+        db.query(ProjectSourceTable.program_id, _func.count().label("cnt"))
+          .group_by(ProjectSourceTable.program_id).all()
+    )
+    valid_ids = {r.program_id for r in src_count_rows if r.cnt > 0}
+    program_count = (
+        db.query(_func.count(ProgramTable.program_id))
+          .filter(ProgramTable.schema_version == 2,
+                  ProgramTable.program_id.in_(valid_ids)).scalar() or 0
+    ) if valid_ids else 0
 
-    # source_count > 0 인 schema_version=2 프로젝트만 포함 (빈 auto-created 프로젝트 숨김)
-    valid_ids = {pid for pid, cnt in src_count_map.items() if cnt > 0}
-    programs = db.query(ProgramTable).filter(
-        ProgramTable.schema_version == 2,
-        ProgramTable.program_id.in_(valid_ids) if valid_ids else False,
-    ).all() if valid_ids else []
-
-    # program_id → name / 삭제상태 맵 (전체, 역추적용)
-    all_progs = db.query(ProgramTable).filter(ProgramTable.schema_version == 2).all()
-    prog_name_map = {p.program_id: p.name for p in all_progs}
-    prog_deleted_map = {
-        p.program_id: (p.deleted_at.isoformat() if p.deleted_at else None)
-        for p in all_progs
-    }
-
-    # program_id → 제안 수 / 내보내기 수
-    from archive.db_models import ExportResultTable
-    prop_count_map = {
-        r.program_id: r.cnt
-        for r in db.query(ProposalTable.program_id, _func.count().label("cnt"))
-                    .filter(ProposalTable.program_id.isnot(None))
-                    .group_by(ProposalTable.program_id).all()
-    }
-    exp_count_map = {
-        r.program_id: r.cnt
-        for r in db.query(ExportResultTable.program_id, _func.count().label("cnt"))
-                    .filter(ExportResultTable.program_id.isnot(None))
-                    .group_by(ExportResultTable.program_id).all()
-    }
-
-    # source_id → 사용 이력 맵 (ProjectSourceTable JOIN, 프로젝트별 사용 시각 포함)
-    ps_rows = (
-        db.query(
-            ProjectSourceTable.source_id,
-            ProjectSourceTable.program_id,
-            ProjectSourceTable.added_at,
-            ProjectSourceTable.display_order,
-            ProgramTable.name,
-            ProgramTable.last_updated_at,
-        )
-        .join(ProgramTable, ProjectSourceTable.program_id == ProgramTable.program_id)
-        .filter(ProgramTable.schema_version == 2)
-        .all()
+    latest_shot_date = (
+        db.query(_func.max(SourceTable.shot_date))
+          .filter(SourceTable.shot_date.isnot(None)).scalar()
     )
 
-    def _xl(n):  # 프로젝트 내 원본 라벨 (A..Z, AA..) — get_project_sources와 동일 규칙
-        s = ""
-        n = int(n or 0)
-        while True:
-            s = chr(65 + (n % 26)) + s
-            n = n // 26 - 1
-            if n < 0:
-                return s
-
-    source_usage_map: dict = {}
-    for sid, pid, added_at, disp_order, pname, lua in ps_rows:
-        source_usage_map.setdefault(sid, [])
-        if any(u["program_id"] == pid for u in source_usage_map[sid]):
-            continue
-        # 사용 시각: project_sources.added_at 우선, 없으면 프로젝트 last_updated_at
-        used_at = added_at or (lua.isoformat() if lua else None)
-        source_usage_map[sid].append({
-            "program_id": pid,
-            "name": pname,
-            "used_at": used_at,
-            # [국장지시] 프로젝트 안에서의 원본 라벨 — 배지에 "Vega-A"로 병기해
-            # 아카이브 원본과 프로젝트 원본맵을 잇는다
-            "label": _xl(disp_order),
-        })
-    # [국장지시] 배지는 최신 사용 프로젝트부터 — 지금 프로젝트가 "+N" 뒤에 숨지 않게
-    for _sid in source_usage_map:
-        source_usage_map[_sid].sort(key=lambda u: str(u["used_at"] or ""), reverse=True)
-
-    def _names(sid) -> list:
-        return [u["name"] for u in source_usage_map.get(sid, []) if u["name"]]
-
-    # [ARCHIVE-SORT 국장지시] 원본은 '최근 사용' 순 — 재사용된 옛 소스도 지금
-    # 프로젝트에 넣었으면 맨 위로 떠오른다 (created_at만으로는 가라앉아 못 찾음)
-    def _src_latest(s):
-        stamps = [str(u["used_at"] or "") for u in source_usage_map.get(s.source_id, [])]
-        stamps.append(s.created_at.isoformat() if s.created_at else "")
-        return max(stamps)
-    sources = sorted(sources, key=_src_latest, reverse=True)
-
-    # [ARCHIVE-SORT 국장지시] 프로젝트 관리도 최신(갱신) 순
-    import datetime as _dt0
-    programs = sorted(programs, key=lambda p: (p.last_updated_at or p.created_at
-                                               or _dt0.datetime.min), reverse=True)
-
-    # proposal: program_id null → source_id 역추적으로 프로그램 추론
-    def _infer_program(pr) -> tuple:
-        """(program_id, name, inferred: bool)"""
-        if pr.program_id:
-            return (pr.program_id, prog_name_map.get(pr.program_id), False)
-        # source_id 기반 역추적: 사용 이력 첫 프로젝트
-        usage = source_usage_map.get(pr.source_id, [])
-        if usage:
-            return (usage[0]["program_id"], usage[0]["name"], True)
-        return (None, None, False)
-
-    # [DISPLAY-NAME 국장지시] 제안서 사람 말 명칭 — 공용 권위 1개(_proposal_display_names)
-    _prop_names = _proposal_display_names(db)
-
-    # [서사층] source_id → 사용자의 말 (목록 캡션용 첫 노트)
-    from engine import narrative_ledger as _nl2
-    _src_notes = _nl2.source_note_map()
-
-    # [조각 이력] source_id → 조각·채택·편집·방송 요약 (목록 뱃지용, purge 면역)
-    from engine import fragment_vault as _fvh
-    _frag_hist = _fvh.source_history_summary()
+    recent_source_ids = [
+        r.source_id
+        for r in db.query(SourceTable.source_id)
+                    .order_by(SourceTable.created_at.desc()).limit(5).all()
+    ]
 
     return {
-        "sources": [{
-            "source_id": s.source_id,
-            "file_path": s.file_path,
-            "title": s.title,
-            "duration": s.duration,
-            "fps": s.fps,
-            "hash_value": s.hash_value,
-            "created_at": s.created_at.isoformat() if s.created_at else None,
-            # [서사층] 촬영일(연대기 축) + 사용자의 말(캡션은 기계 요약이 아니라 그 사람의 말)
-            "shot_date": getattr(s, "shot_date", None),
-            "note": _src_notes.get(s.source_id),
-            # [조각 이력] 이 원본의 조각 자산 요약 — 프로젝트 purge에 면역
-            "frag_history": _frag_hist.get(s.source_id),
-            "program_names": _names(s.source_id),
-            "usage": source_usage_map.get(s.source_id, []),
-            # [SOURCE] 원본 재생 URL (uploads에 있을 때만, 없으면 null = 원본 삭제됨)
-            "play_url": (
-                f"/static/uploads/{_url_quote(os.path.basename(s.file_path), safe='')}"
-                if s.file_path and os.path.exists(s.file_path) else None
-            ),
-        } for s in sources],
-        "programs": [{
-            "program_id": p.program_id,
-            "name": p.name,
-            "status": p.status,
-            "created_at": p.created_at.isoformat() if p.created_at else None,
-            "last_updated_at": p.last_updated_at.isoformat() if p.last_updated_at else None,
-            "source_count": src_count_map.get(p.program_id, 0),
-            "proposal_count": prop_count_map.get(p.program_id, 0),
-            "export_count": exp_count_map.get(p.program_id, 0),
-            "deleted_at": prog_deleted_map.get(p.program_id),
-        } for p in programs],
-        "proposals": [{
-            "proposal_id": pr.proposal_id,
-            "source_id": pr.source_id,
-            "display_name": _prop_names.get(pr.proposal_id),
-            "mode": pr.mode,
-            "duration": pr.duration,
-            "created_at": pr.created_at.isoformat() if pr.created_at else None,
-            "program_id": _infer_program(pr)[0],
-            "program_name": _infer_program(pr)[1],
-            "program_name_inferred": _infer_program(pr)[2],
-            "program_deleted": bool(prog_deleted_map.get(_infer_program(pr)[0])) if _infer_program(pr)[0] else False,
-        } for pr in proposals]
+        "source_count": source_count,
+        "program_count": program_count,
+        "latest_shot_date": latest_shot_date,
+        "recent_source_ids": recent_source_ids,
     }
+
+
+@app.get("/archive/list")
+async def get_archive_list(db: Session = Depends(get_db)):
+    """[Archive 단계B] 즉시 축소 — 구형 sources+programs+proposals 대형 응답 폐지.
+    summary 수준만 반환한다(제거 아님, 축소 — 국장 판정)."""
+    return _archive_summary_payload(db)
+
+
+@app.get("/archive/summary")
+async def get_archive_summary(db: Session = Depends(get_db)):
+    """[Archive 단계B] 아카이브 최소 summary — 첫 진입 경량 로드용."""
+    return _archive_summary_payload(db)
 
 
 @app.post("/export/final")
