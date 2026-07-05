@@ -2909,8 +2909,9 @@ async def get_archive_list(db: Session = Depends(get_db)):
     import datetime as _dt
     from sqlalchemy import func as _func
 
-    sources = db.query(SourceTable).all()
-    proposals = db.query(ProposalTable).all()
+    # [ARCHIVE-SORT 국장지시] 최신이 위 — 목록에서 찾기의 기본
+    sources = db.query(SourceTable).order_by(SourceTable.created_at.desc()).all()
+    proposals = db.query(ProposalTable).order_by(ProposalTable.created_at.desc()).all()
 
     # program_id → source_count 맵
     src_count_map = {
@@ -2989,6 +2990,31 @@ async def get_archive_list(db: Session = Depends(get_db)):
             return (usage[0]["program_id"], usage[0]["name"], True)
         return (None, None, False)
 
+    # [DISPLAY-NAME 국장지시] 제안서 사람 말 명칭 — "{프로젝트명} · {N}번째 제안 · {mode}안".
+    # 제안서는 오로지 프로젝트 소속이므로 프로젝트명이 앞. N = 프로젝트 내 세대 순번
+    # (생성시각 오름차순, 10분 넘게 벌어지면 새 세대 — A/B 쌍은 같은 실행이라 한 세대).
+    # 이 이름이 이후 SNS 업로드 명칭의 뿌리가 된다(raw PROP_ id는 표면 비노출).
+    _by_prog: dict = {}
+    for pr in proposals:
+        _by_prog.setdefault(_infer_program(pr)[0] or "_none", []).append(pr)
+    _prop_gen: dict = {}
+    for _pid, _rows in _by_prog.items():
+        _rows = sorted(_rows, key=lambda r: (r.created_at or _dt.datetime.min, r.proposal_id))
+        _gen, _prev = 0, None
+        for r in _rows:
+            if _prev is None or not r.created_at or (r.created_at - _prev).total_seconds() > 600:
+                _gen += 1
+            _prop_gen[r.proposal_id] = _gen
+            if r.created_at:
+                _prev = r.created_at
+
+    def _prop_display(pr) -> str:
+        _, pname, _inf = _infer_program(pr)
+        head = pname or "프로젝트 미상"
+        seq = _prop_gen.get(pr.proposal_id)
+        mode = f" · {pr.mode}안" if pr.mode in ("A", "B") else ""
+        return f"{head} · {seq}번째 제안{mode}" if seq else f"{head}{mode}"
+
     return {
         "sources": [{
             "source_id": s.source_id,
@@ -3020,6 +3046,7 @@ async def get_archive_list(db: Session = Depends(get_db)):
         "proposals": [{
             "proposal_id": pr.proposal_id,
             "source_id": pr.source_id,
+            "display_name": _prop_display(pr),
             "mode": pr.mode,
             "duration": pr.duration,
             "created_at": pr.created_at.isoformat() if pr.created_at else None,

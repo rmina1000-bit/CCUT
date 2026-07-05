@@ -40,6 +40,8 @@ interface Program {
 interface Proposal {
   proposal_id: string;
   source_id: string;
+  // [DISPLAY-NAME] 백엔드 권위: "{프로젝트명} · {N}번째 제안 · {mode}안"
+  display_name?: string;
   mode: string;
   duration: number;
   created_at: string | null;
@@ -209,6 +211,8 @@ export const ArchivePanel: React.FC<{
   ) || [];
 
   const filteredProposals = data?.proposals.filter(pr =>
+    (pr.display_name || "").toLowerCase().includes(searchQuery.toLowerCase()) ||
+    (pr.program_name || "").toLowerCase().includes(searchQuery.toLowerCase()) ||
     pr.proposal_id.toLowerCase().includes(searchQuery.toLowerCase()) ||
     pr.source_id.toLowerCase().includes(searchQuery.toLowerCase())
   ) || [];
@@ -480,8 +484,9 @@ export const ArchivePanel: React.FC<{
                             {!s.play_url && (
                               <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-red-500/10 text-red-400 border border-red-500/20 flex-shrink-0">원본 삭제됨</span>
                             )}
+                            {/* [국장지시] 프로젝트명이 찾기의 실마리 — 배지 확대 (9px→11px) */}
                             {s.program_names?.slice(0, 3).map(name => (
-                              <span key={name} className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-blue-500/10 text-blue-400 border border-blue-500/20 flex-shrink-0">{name}</span>
+                              <span key={name} className="px-2 py-0.5 rounded text-[11px] font-bold bg-blue-500/10 text-blue-400 border border-blue-500/20 flex-shrink-0">{name}</span>
                             ))}
                             {s.program_names && s.program_names.length > 3 && (
                               <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-blue-500/5 text-blue-400/70 flex-shrink-0">+{s.program_names.length - 3}</span>
@@ -750,7 +755,10 @@ export const ArchivePanel: React.FC<{
                         </div>
                         <div className="min-w-0">
                           <div className="flex items-center gap-2 flex-wrap">
-                            <h4 className="text-sm font-semibold text-foreground/90 truncate">제안서: {pr.proposal_id}</h4>
+                            {/* [DISPLAY-NAME] 주이름 = "{프로젝트명} · N번째 제안 · X안" — raw PROP_ id는 툴팁으로만 */}
+                            <h4 className="text-[15px] font-bold text-foreground/90 truncate" title={pr.proposal_id}>
+                              {pr.display_name || `${pr.program_name || "프로젝트 미상"} · ${pr.mode}안`}
+                            </h4>
                             {pr.program_name ? (
                               <span
                                 className={`px-1.5 py-0.5 rounded text-[9px] font-bold border flex-shrink-0 ${
