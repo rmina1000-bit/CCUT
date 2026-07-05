@@ -52,6 +52,23 @@ def ensure_schema():
             PRIMARY KEY (date_key, metric_key)
         )"""
     )
+    # [War Room v1] 지원/문의 접수 큐 — 문의·불만·아이디어·버그 단일 원장
+    con.execute(
+        """CREATE TABLE IF NOT EXISTS admin_support_cases (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            source TEXT NOT NULL,
+            user_id TEXT,
+            category TEXT,
+            severity TEXT NOT NULL,
+            status TEXT NOT NULL,
+            title TEXT NOT NULL,
+            body TEXT,
+            ai_summary TEXT,
+            ai_tags TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        )"""
+    )
     # [War Room v1] 운영 작업큐 — 삭제 API 금지, 닫기=status 전이(closed_at)
     con.execute(
         """CREATE TABLE IF NOT EXISTS admin_work_items (
@@ -451,6 +468,130 @@ def work_item_transition(item_id: int, status: str, note: str = None) -> dict:
                  target_id=str(item_id),
                  note=f"{row[0]} → {status}" + (f" | {note}" if note else ""))
     return {"status": "OK", "id": item_id, "from": row[0], "to": status}
+
+
+# ═══════════════════════════════════════════════════════════════════
+#   [War Room v1] 지원/문의 — admin_support_cases + 로컬 AI 분류
+# ═══════════════════════════════════════════════════════════════════
+
+def _log_ai_run(role, model_key, status, input_summary=None,
+                output_summary=None, error=None, duration_ms=None):
+    """AI 실행 로그 — admin_ai_runs 도입(STEP 8) 전엔 조용히 무시(원장 없음)."""
+    try:
+        con = _connect()
+        con.execute(
+            "INSERT INTO admin_ai_runs (role, model_key, status, input_summary,"
+            " output_summary, error, duration_ms, created_at) VALUES (?,?,?,?,?,?,?,?)",
+            (role, model_key, status,
+             (input_summary or "")[:300], (output_summary or "")[:300],
+             (str(error) if error else None), duration_ms,
+             datetime.datetime.now().isoformat()))
+        con.commit()
+        con.close()
+    except Exception:
+        pass
+
+
+def support_cases_list(status: str = "open", limit: int = 50) -> dict:
+    limit = max(1, min(int(limit or 50), 100))
+    con = _connect()
+    sql = ("SELECT id, source, user_id, category, severity, status, title, body,"
+           " ai_summary, ai_tags, created_at, updated_at FROM admin_support_cases")
+    params: tuple = ()
+    if status and status != "all":
+        sql += " WHERE status = ?"
+        params = (status,)
+    sql += " ORDER BY id DESC LIMIT ?"
+    rows = con.execute(sql, params + (limit,)).fetchall()
+    con.close()
+    cols = ["id", "source", "user_id", "category", "severity", "status", "title",
+            "body", "ai_summary", "ai_tags", "created_at", "updated_at"]
+    return {"cases": [dict(zip(cols, r)) for r in rows]}
+
+
+def support_case_create(payload: dict) -> dict:
+    title = (payload.get("title") or "").strip()
+    if not title:
+        return {"error": "title is required"}
+    severity = (payload.get("severity") or "normal").strip()
+    now = datetime.datetime.now().isoformat()
+    con = _connect()
+    cur = con.execute(
+        "INSERT INTO admin_support_cases (source, user_id, category, severity,"
+        " status, title, body, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?)",
+        ((payload.get("source") or "manual").strip(), payload.get("user_id"),
+         payload.get("category"), severity, "open", title,
+         payload.get("body"), now, now))
+    case_id = cur.lastrowid
+    con.commit()
+    con.close()
+    audit_append("support_case_create", target_type="support_case",
+                 target_id=str(case_id), note=f"[{severity}] {title}")
+    return {"status": "OK", "id": case_id}
+
+
+def support_case_note(case_id: int, note: str) -> dict:
+    con = _connect()
+    row = con.execute("SELECT id FROM admin_support_cases WHERE id=?",
+                      (case_id,)).fetchone()
+    con.close()
+    if not row:
+        return {"error": "case not found"}
+    audit_append("support_case_note", target_type="support_case",
+                 target_id=str(case_id), note=note)
+    return {"status": "OK", "id": case_id}
+
+
+def support_case_classify(case_id: int) -> dict:
+    """로컬 AI만 사용(지시서 §STEP4). 분류 결과는 case에 저장 + audit."""
+    import time as _time
+    con = _connect()
+    row = con.execute(
+        "SELECT title, body FROM admin_support_cases WHERE id=?",
+        (case_id,)).fetchone()
+    con.close()
+    if not row:
+        return {"error": "case not found"}
+    title, body = row
+    prompt = (
+        "너는 CCUT 서비스의 지원 문의 분류 담당이다.\n"
+        f"[문의 제목] {title}\n[문의 내용] {body or '(본문 없음)'}\n\n"
+        "이 문의를 분류하라. JSON만 출력:\n"
+        '{"category": "complaint|idea|bug|question|abuse",'
+        ' "severity": "low|normal|high",'
+        ' "summary": "한국어 1문장 요약",'
+        ' "tags": ["짧은 태그", ...]}'
+    )
+    t0 = _time.time()
+    try:
+        from engine.hub import _ollama_json, HUB_MODEL
+        res = _ollama_json(prompt, timeout=60)
+        if not res or not res.get("category"):
+            raise ValueError("empty classification")
+    except Exception as e:
+        _log_ai_run("support_classify", "local_hub", "failed",
+                    input_summary=title, error=e,
+                    duration_ms=int((_time.time() - t0) * 1000))
+        return {"error": "hub 응답 없음", "detail": str(e)}
+    duration = int((_time.time() - t0) * 1000)
+
+    import json as _json
+    tags = _json.dumps(res.get("tags") or [], ensure_ascii=False)
+    now = datetime.datetime.now().isoformat()
+    con = _connect()
+    con.execute(
+        "UPDATE admin_support_cases SET category=?, severity=?, ai_summary=?,"
+        " ai_tags=?, updated_at=? WHERE id=?",
+        (res.get("category"), res.get("severity") or "normal",
+         res.get("summary"), tags, now, case_id))
+    con.commit()
+    con.close()
+    _log_ai_run("support_classify", "local_hub", "ok", input_summary=title,
+                output_summary=res.get("summary"), duration_ms=duration)
+    audit_append("support_case_classify", target_type="support_case",
+                 target_id=str(case_id),
+                 note=f"{res.get('category')}/{res.get('severity')}: {res.get('summary')}")
+    return {"status": "OK", "id": case_id, **res}
 
 
 def audit_logs(limit: int = 20, cursor: int = None) -> dict:

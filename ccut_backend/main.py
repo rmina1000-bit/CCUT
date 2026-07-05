@@ -3514,6 +3514,33 @@ async def admin_work_item_transition(item_id: int, payload: dict = None):
     return _adm.work_item_transition(item_id, (p.get("status") or "").strip(), p.get("note"))
 
 
+@app.get("/admin/support/cases")
+async def admin_support_cases(status: str = "open", limit: int = 50):
+    from admin import service as _adm
+    return _adm.support_cases_list(status=status, limit=limit)
+
+
+@app.post("/admin/support/cases")
+async def admin_support_case_create(payload: dict = None):
+    from admin import service as _adm
+    return _adm.support_case_create(payload or {})
+
+
+@app.post("/admin/support/cases/{case_id}/note")
+async def admin_support_case_note(case_id: int, payload: dict = None):
+    from admin import service as _adm
+    note = ((payload or {}).get("note") or "").strip()
+    if not note:
+        raise HTTPException(status_code=400, detail="note is required")
+    return _adm.support_case_note(case_id, note)
+
+
+@app.post("/admin/support/cases/{case_id}/classify")
+async def admin_support_case_classify(case_id: int):
+    from admin import service as _adm
+    return _adm.support_case_classify(case_id)
+
+
 @app.post("/export/final")
 async def run_final_broadcast(project_id: str = "DEFAULT", db: Session = Depends(get_db)):
     """[CCUT 1.0.6 최종 송출] 편집본을 실제 .mp4 파일로 렌더링하고 DB 아카이브에 기록"""

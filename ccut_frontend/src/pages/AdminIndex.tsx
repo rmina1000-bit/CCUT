@@ -3,6 +3,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { AdminShell } from "@/components/admin/AdminShell";
 import { AdminTab } from "@/components/admin/AdminLeftNav";
 import { AdminSituationPanel } from "@/components/admin/AdminSituationPanel";
+import { AdminSupportPanel } from "@/components/admin/AdminSupportPanel";
 import { AdminUsersPanel } from "@/components/admin/AdminUsersPanel";
 import { AdminRevenuePanel } from "@/components/admin/AdminRevenuePanel";
 import { AdminInsightsPanel } from "@/components/admin/AdminInsightsPanel";
@@ -50,7 +51,7 @@ const AdminIndex: React.FC = () => {
     <AdminShell active={active} screenLabel={LABELS[active]} onNavigate={onNavigate}>
       {active === "situation" && <AdminSituationPanel />}
       {active === "users" && <AdminUsersPanel />}
-      {active === "support" && <PendingLedger label="지원/문의" step="STEP 4" />}
+      {active === "support" && <AdminSupportPanel />}
       {active === "revenue" && <AdminRevenuePanel />}
       {active === "analytics" && <PendingLedger label="행동 분석" step="후속 커밋" />}
       {active === "design" && <PendingLedger label="디자인 제어" step="STEP 7" />}
