@@ -158,6 +158,16 @@ export const useProposalState = (
     });
   }, [proposals]);
 
+  // [TIMELINE-PERSIST 2026-07-05] 저장된 제안 세대 일괄 복원 — 프로젝트 열기 시
+  // chat_state에서. 프로젝트 삭제 전까지 세대가 계속 쌓이는 영속 타임라인의 절반.
+  const hydrateProposalHistory = useCallback(
+    (entries: Array<{ id: string; ts: number; pair: Record<"A" | "B", Proposal> }>) => {
+      if (!entries?.length) return;
+      setProposalHistory(entries);
+      setActiveProposalEntryId(entries[entries.length - 1]?.id ?? null);
+      console.log(`[TIMELINE-PERSIST] proposal history 복원: ${entries.length}세대`);
+    }, []);
+
   const restoreProposalEntry = useCallback((id: string) => {
     setProposalHistory((prev) => {
       const entry = prev.find((h) => h.id === id);
@@ -933,6 +943,7 @@ export const useProposalState = (
     logProposalPair,
     proposalHistory,
     activeProposalEntryId,
-    restoreProposalEntry
+    restoreProposalEntry,
+    hydrateProposalHistory
   };
 };

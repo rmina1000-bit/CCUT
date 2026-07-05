@@ -133,7 +133,8 @@ const Index: React.FC = () => {
     logProposalPair,
     proposalHistory,
     activeProposalEntryId,
-    restoreProposalEntry
+    restoreProposalEntry,
+    hydrateProposalHistory
   } = useProposalState(
     sourceFragments,
     activeNavItem || "default_project",
@@ -989,6 +990,23 @@ const Index: React.FC = () => {
             // [B-5d] ui_state 스냅샷 복원 (단일 스냅샷 패턴)
             try {
               const stateRes = await videoService.getProjectState(activeNavItem);
+              // [TIMELINE-PERSIST 2026-07-05] 중앙창 타임라인 복원 — 대화(storyPlan)와
+              // 제안 세대(proposalHistory)가 프로젝트 삭제 전까지 쌓이는 영속 흐름.
+              // 저장은 아래 자동저장 effect(chat_state), 여기는 열 때 되살리는 절반.
+              if (stateRes && stateRes.chat_state && isMounted) {
+                try {
+                  const chat = JSON.parse(stateRes.chat_state);
+                  if (chat?.story_plan) {
+                    setStoryPlan(chat.story_plan);
+                    console.log(`[TIMELINE-PERSIST] 대화 복원: ${chat.story_plan?.messages?.length ?? 0}개 메시지`);
+                  }
+                  if (chat?.proposal_history?.length) {
+                    hydrateProposalHistory(chat.proposal_history);
+                  }
+                } catch (e) {
+                  console.warn("[TIMELINE-PERSIST] chat_state 파싱 실패 — 새 흐름으로 시작", e);
+                }
+              }
               if (stateRes && stateRes.ui_state && isMounted) {
                 const snap = JSON.parse(stateRes.ui_state);
                 if (snap.reservedFragments?.length) setReservedFragments(snap.reservedFragments);
@@ -1133,6 +1151,33 @@ const Index: React.FC = () => {
 
     setStoryPlan(newPlan);
   }, [appState, proposals, sourceEntries, storyPlan, setStoryPlan]);
+
+  // [TIMELINE-PERSIST 2026-07-05] 중앙창 타임라인 자동저장 — 대화·제안 세대가 바뀔
+  // 때마다 debounce 후 chat_state(기존 미사용 컬럼)에 통째 저장. 프로젝트 삭제 전까지
+  // 계속 쌓이는 영속 흐름의 나머지 절반 (복원은 hydration에서).
+  // 하이드레이션 중에는 저장 금지 — 초기화된 빈 상태로 저장분을 덮어쓰는 사고 방지.
+  const timelineSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    if (!activeNavItem || !activeNavItem.startsWith("proj_")) return;
+    if (isSwitchingProject) return;
+    const msgCount = (storyPlan as any)?.messages?.length ?? 0;
+    if (msgCount === 0 && proposalHistory.length === 0) return; // 빈 상태 저장 금지
+    if (timelineSaveTimerRef.current) clearTimeout(timelineSaveTimerRef.current);
+    timelineSaveTimerRef.current = setTimeout(() => {
+      videoService.saveProjectState(activeNavItem, {
+        chat_state: JSON.stringify({
+          v: 1,
+          story_plan: storyPlan,
+          proposal_history: proposalHistory,
+        }),
+      }).then(() => {
+        console.log(`[TIMELINE-PERSIST] saved msgs=${msgCount} generations=${proposalHistory.length}`);
+      }).catch((e) => console.warn("[TIMELINE-PERSIST] 저장 실패", e));
+    }, 1500);
+    return () => {
+      if (timelineSaveTimerRef.current) clearTimeout(timelineSaveTimerRef.current);
+    };
+  }, [activeNavItem, isSwitchingProject, storyPlan, proposalHistory]);
 
   // handleProposalPreview, handleProposalCommit moved to useProposalState
 
