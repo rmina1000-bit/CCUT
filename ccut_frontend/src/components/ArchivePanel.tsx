@@ -5,6 +5,7 @@ import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { videoService } from "@/services/videoService";
 import { sourceDisplayName } from "@/lib/fragmentIdentity";
+import { SingleFragmentEditor } from "@/components/SingleFragmentEditor";
 
 interface SourceUsage {
   program_id: string;
@@ -89,6 +90,23 @@ export const ArchivePanel: React.FC<{
   const [srcSort, setSrcSort] = useState<"recent" | "shot" | "name">("recent");
   // [조각 이력] 펼침 시 lazy 조회 (source_id → 조각 목록+사건)
   const [fragHistory, setFragHistory] = useState<Record<string, any>>({});
+  // [조각 뷰어] 파노라마 조각 클릭 → 정밀편집창 '보기 전용' (수정은 새 프로젝트에서)
+  const [viewerFrag, setViewerFrag] = useState<any | null>(null);
+  const [viewerOpen, setViewerOpen] = useState(false);
+  // [신규 프로젝트 생성] 이 원본으로 새 프로젝트 — 재업로드 없이 연결
+  const [creatingFor, setCreatingFor] = useState<string | null>(null);
+  const createProjectFromSource = async (sourceId: string) => {
+    if (creatingFor) return;
+    setCreatingFor(sourceId);
+    try {
+      const r = await videoService.createProject(undefined, [sourceId]);
+      if (r?.program_id) onNavigateToProject?.(r.program_id);
+    } catch (e) {
+      console.warn("[NEW-PROJECT] 생성 실패:", e);
+    } finally {
+      setCreatingFor(null);
+    }
+  };
   const loadFragHistory = async (sid: string) => {
     if (fragHistory[sid]) return;
     try {
@@ -547,6 +565,15 @@ export const ArchivePanel: React.FC<{
                             {(!s.usage || s.usage.length === 0) && (
                               <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-secondary/40 text-muted-foreground/40">미분류</span>
                             )}
+                            {/* [국장지시] 이 원본으로 새 프로젝트 — 재업로드 없이 즉시.
+                                아카이브 조각은 보기 전용이므로, 수정의 유일한 문 */}
+                            <button
+                              onClick={() => createProjectFromSource(s.source_id)}
+                              disabled={creatingFor === s.source_id}
+                              className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/25 hover:bg-emerald-500/25 transition-colors flex-shrink-0 disabled:opacity-50"
+                            >
+                              {creatingFor === s.source_id ? "생성 중…" : "+ 신규 프로젝트 생성"}
+                            </button>
                           </div>
                           <div className="flex items-center gap-2.5 text-[11px] text-muted-foreground/60 mt-1">
                             {/* [서사층] 촬영일이 첫 자리 — 원본은 '살아진 날'에 속한다 */}
@@ -650,33 +677,54 @@ export const ArchivePanel: React.FC<{
                         ))}
                       </div>
                     )}
-                    {/* [조각 이력] 이 원본에서 태어난 조각들 — 채택·편집·방송 경험까지.
-                        프로젝트를 지워도 이 목록은 변하지 않는다(스냅샷·자연키). */}
+                    {/* [조각 파노라마 국장지시] 조각은 명칭만으론 안 된다 — 보여야 한다.
+                        사용자가 가장 마지막으로 수정한 기준(eff 경계)으로 그린 스트립.
+                        클릭 = 정밀편집창 '보기 전용'. 프로젝트를 지워도 불변. */}
                     {isExpanded && fragHistory[s.source_id]?.fragments?.length > 0 && (
                       <div className="px-4 pb-4 pl-[68px]">
                         <p className="text-[10px] font-black tracking-widest uppercase text-muted-foreground/50 mb-1.5">
-                          조각 {fragHistory[s.source_id].fragment_count}개
+                          조각 파노라마 — 최종 수정 기준 · 클릭하면 크게 봅니다
                         </p>
-                        <div className="space-y-1">
+                        <div className="flex gap-1.5 overflow-x-auto pb-2">
                           {fragHistory[s.source_id].fragments.map((f: any) => (
-                            <div key={`${f.start_ds}_${f.end_ds}`}
-                              className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-secondary/15 text-[11px]">
-                              <span className="text-foreground/80 font-medium truncate max-w-[280px]">{f.display_name}</span>
-                              {f.people && <span className="text-primary/70 flex-shrink-0">{f.people}</span>}
-                              <span className="ml-auto flex items-center gap-1 flex-shrink-0">
-                                {(f.adopted?.length ?? 0) > 0 && (
-                                  <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-primary/10 text-primary border border-primary/20"
-                                    title={f.adopted.join(", ")}>채택 {f.adopted.length}</span>
+                            <button
+                              key={`${f.start_ds}_${f.end_ds}`}
+                              onClick={() => {
+                                setViewerFrag({
+                                  fragment_id: f.fragment_id,
+                                  fragment_uid: f.fragment_id,
+                                  source_id: s.source_id,
+                                  source_video: "",
+                                  display_name: f.display_name,
+                                  start_time: f.eff_start, end_time: f.eff_end,
+                                  start_frame: Math.round((f.eff_start ?? 0) * 30),
+                                  end_frame: Math.round((f.eff_end ?? 0) * 30),
+                                  duration: Math.max(1, Math.round(((f.eff_end ?? 0) - (f.eff_start ?? 0)) * 30)),
+                                  selection_state: "S", status: "committed",
+                                });
+                                setViewerOpen(true);
+                              }}
+                              title={`${f.display_name}${f.edited ? " · 편집됨" : ""}${f.adopted?.length ? ` · 채택 ${f.adopted.join(", ")}` : ""}`}
+                              className={`relative flex-shrink-0 w-[104px] rounded-lg overflow-hidden border transition-colors text-left group
+                                ${f.edited ? "border-amber-400/50" : "border-border/20"} hover:border-primary/60
+                                ${f.excluded ? "opacity-40" : ""}`}
+                            >
+                              <div className="aspect-video bg-black/50">
+                                {f.thumbnail_url ? (
+                                  <img src={f.thumbnail_url} className="w-full h-full object-cover" draggable={false} />
+                                ) : (
+                                  <div className="w-full h-full flex items-center justify-center text-[9px] text-muted-foreground/50">미리보기 없음</div>
                                 )}
-                                {f.edited && (
-                                  <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-500/10 text-amber-400 border border-amber-500/20">편집됨</span>
-                                )}
-                                {(f.exported?.length ?? 0) > 0 && (
-                                  <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
-                                    title={f.exported.join(", ")}>방송 {f.exported.length}</span>
-                                )}
-                              </span>
-                            </div>
+                              </div>
+                              <div className="px-1.5 py-1 bg-black/40">
+                                <p className="text-[9px] text-white/80 truncate">{f.display_name?.split(" · ")[1] ?? ""}</p>
+                                <div className="flex gap-0.5 mt-0.5">
+                                  {f.edited && <span className="px-1 rounded text-[8px] font-bold bg-amber-500/20 text-amber-300">편집됨</span>}
+                                  {(f.adopted?.length ?? 0) > 0 && <span className="px-1 rounded text-[8px] font-bold bg-primary/20 text-primary">채택 {f.adopted.length}</span>}
+                                  {(f.exported?.length ?? 0) > 0 && <span className="px-1 rounded text-[8px] font-bold bg-emerald-500/20 text-emerald-300">방송</span>}
+                                </div>
+                              </div>
+                            </button>
                           ))}
                         </div>
                       </div>
@@ -1035,6 +1083,15 @@ export const ArchivePanel: React.FC<{
           </div>
         </div>
       )}
+
+      {/* [조각 뷰어] 프로젝트의 정밀편집창과 동일 — 단 보기 전용 (수정은 새 프로젝트에서) */}
+      <SingleFragmentEditor
+        open={viewerOpen}
+        onOpenChange={setViewerOpen}
+        fragment={viewerFrag}
+        projectName="아카이브"
+        readOnly
+      />
     </div>
   );
 };

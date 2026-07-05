@@ -69,6 +69,9 @@ interface SingleFragmentEditorProps {
   fragment: Fragment | null;
   // [UI-⑩] 헤더 표기용 프로젝트명 — "{프로젝트명} · {A2} · 조각 정밀 편집"
   projectName?: string;
+  // [아카이브 보기전용] 수정 불가 모드 — 적용/초기화/경계조작/프레임삭제 봉인.
+  // 수정하려면 원본에서 '신규 프로젝트 생성'으로 가야 한다 (국장 지시)
+  readOnly?: boolean;
   onApply?: (payload: {
     fragmentUid: string;
     newStartSec: number;
@@ -85,6 +88,7 @@ export const SingleFragmentEditor: React.FC<SingleFragmentEditorProps> = ({
   onOpenChange,
   fragment,
   projectName,
+  readOnly = false,
   onApply,
 }) => {
   const [leftCut, setLeftCut] = useState(0);
@@ -706,10 +710,11 @@ export const SingleFragmentEditor: React.FC<SingleFragmentEditorProps> = ({
               <div className="overflow-x-auto pbe-rail-scroll">
               <div
                 ref={containerRef}
-                onMouseDown={handleRailMouseDown}
+                onMouseDown={readOnly ? undefined : handleRailMouseDown}
                 onContextMenu={(e) => {
-                  // [PBE-⑦] 프레임 우클릭 → 삭제/복원 메뉴
+                  // [PBE-⑦] 프레임 우클릭 → 삭제/복원 메뉴 (보기전용은 봉인)
                   e.preventDefault();
+                  if (readOnly) return;
                   if (!containerRef.current) return;
                   const rect = containerRef.current.getBoundingClientRect();
                   const pct = Math.max(0, Math.min(0.999, (e.clientX - rect.left) / rect.width));
@@ -770,8 +775,8 @@ export const SingleFragmentEditor: React.FC<SingleFragmentEditorProps> = ({
 
                 {/* Left Handle */}
                 <div
-                  onMouseDown={handleMouseDown("left")}
-                  className="absolute top-0 bottom-0 w-4 cursor-ew-resize flex items-center justify-center z-30"
+                  onMouseDown={readOnly ? undefined : handleMouseDown("left")}
+                  className={`absolute top-0 bottom-0 w-4 ${readOnly ? "cursor-default opacity-50" : "cursor-ew-resize"} flex items-center justify-center z-30`}
                   style={{
                     left: `calc(${leftCut * (100 / frameCount)}% - 8px)`,
                   }}
@@ -784,8 +789,8 @@ export const SingleFragmentEditor: React.FC<SingleFragmentEditorProps> = ({
 
                 {/* Right Handle */}
                 <div
-                  onMouseDown={handleMouseDown("right")}
-                  className="absolute top-0 bottom-0 w-4 cursor-ew-resize flex items-center justify-center z-30"
+                  onMouseDown={readOnly ? undefined : handleMouseDown("right")}
+                  className={`absolute top-0 bottom-0 w-4 ${readOnly ? "cursor-default opacity-50" : "cursor-ew-resize"} flex items-center justify-center z-30`}
                   style={{
                     left: `calc(${rightCut * (100 / frameCount)}% - 8px)`,
                   }}
@@ -829,22 +834,30 @@ export const SingleFragmentEditor: React.FC<SingleFragmentEditorProps> = ({
           >
             닫기
           </Button>
-          <Button
-            type="button"
-            variant="outline"
-          
-            onClick={handleReset}
-            className="text-xs h-8 text-foreground hover:bg-secondary/40"
-          >
-            초기화
-          </Button>
-          <Button
-            type="button"
-            onClick={handleApply}
-            className="text-xs h-8 bg-primary text-white hover:bg-primary/90"
-          >
-            적용
-          </Button>
+          {readOnly ? (
+            /* [보기전용] 수정 봉인 — 수정은 새 프로젝트에서 */
+            <span className="text-[11px] text-muted-foreground/70 self-center px-2">
+              보기 전용 — 수정하려면 원본에서 '신규 프로젝트 생성'
+            </span>
+          ) : (
+            <>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={handleReset}
+                className="text-xs h-8 text-foreground hover:bg-secondary/40"
+              >
+                초기화
+              </Button>
+              <Button
+                type="button"
+                onClick={handleApply}
+                className="text-xs h-8 bg-primary text-white hover:bg-primary/90"
+              >
+                적용
+              </Button>
+            </>
+          )}
         </DialogFooter>
 
         {/* [PBE-⑦] 프레임 우클릭 컨텍스트 메뉴 */}

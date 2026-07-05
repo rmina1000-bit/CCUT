@@ -225,10 +225,11 @@ export const videoService = {
     },
 
     // [B-5a] 프로젝트 생애주기 API (1급 독립체)
-    createProject: async (name?: string) => {
+    // sourceIds: 아카이브 '신규 프로젝트 생성' — 기존 원본을 재업로드 없이 연결
+    createProject: async (name?: string, sourceIds?: string[]) => {
         return await fetcher(`/projects`, {
             method: "POST",
-            body: JSON.stringify({ name: name ?? null }),
+            body: JSON.stringify({ name: name ?? null, source_ids: sourceIds ?? [] }),
         });
     },
     listProjects: async () => {
