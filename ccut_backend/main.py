@@ -3263,6 +3263,170 @@ async def get_archive_sources(
     }
 
 
+def _xl_label(n) -> str:
+    """프로젝트 내 원본 라벨 (A..Z, AA..) — get_project_sources와 동일 규칙."""
+    s = ""
+    n = int(n or 0)
+    while True:
+        s = chr(65 + (n % 26)) + s
+        n = n // 26 - 1
+        if n < 0:
+            return s
+
+
+@app.get("/archive/source/{source_id}")
+async def get_archive_source_detail(source_id: str, db: Session = Depends(get_db)):
+    """[Archive 단계B] source 상세 — 카드 클릭 시 lazy hydrate.
+    기본 메타 + 말의 원장(notes) + usage summary + export summary + 조각 이력."""
+    from engine import narrative_ledger as _nl
+    from engine import fragment_vault as _fv
+
+    s = db.query(SourceTable).filter(SourceTable.source_id == source_id).first()
+    if not s:
+        return {"status": "ERROR", "message": "source not found"}
+
+    ps_rows = (
+        db.query(ProjectSourceTable.program_id, ProjectSourceTable.added_at,
+                  ProjectSourceTable.display_order, ProgramTable.name,
+                  ProgramTable.last_updated_at, ProgramTable.deleted_at)
+          .join(ProgramTable, ProjectSourceTable.program_id == ProgramTable.program_id)
+          .filter(ProjectSourceTable.source_id == source_id,
+                  ProgramTable.schema_version == 2)
+          .all()
+    )
+    usage = []
+    for pid, added_at, disp_order, pname, lua, deleted_at in ps_rows:
+        used_at = added_at or (lua.isoformat() if lua else None)
+        usage.append({
+            "program_id": pid, "name": pname, "used_at": used_at,
+            "label": _xl_label(disp_order),
+            "deleted_at": deleted_at.isoformat() if deleted_at else None,
+        })
+    usage.sort(key=lambda u: str(u["used_at"] or ""), reverse=True)
+
+    from archive.db_models import ExportResultTable
+    exp_rows = (
+        db.query(ExportResultTable)
+          .filter(ExportResultTable.source_id == source_id)
+          .order_by(ExportResultTable.created_at.desc()).limit(20).all()
+    )
+    export_summary = [{
+        "id": e.id, "program_id": e.program_id,
+        "display_name": e.display_name or e.program_title,
+        "output_url": e.output_url, "status": e.status,
+        "created_at": e.created_at.isoformat() if e.created_at else None,
+    } for e in exp_rows]
+
+    hist = _fv.source_fragment_history(source_id)
+
+    return {
+        "status": "OK",
+        "source_id": s.source_id,
+        "title": s.title,
+        "duration": s.duration,
+        "fps": s.fps,
+        "hash_value": s.hash_value,
+        "created_at": s.created_at.isoformat() if s.created_at else None,
+        "shot_date": s.shot_date,
+        "shot_date_fallback": s.shot_date is None,
+        "play_url": (
+            f"/static/uploads/{_url_quote(os.path.basename(s.file_path), safe='')}"
+            if s.file_path and os.path.exists(s.file_path) else None
+        ),
+        "notes": _nl.notes_for("source", source_id),
+        "usage": usage,
+        "exports": export_summary,
+        "fragment_count": hist.get("fragment_count", 0),
+        "adopted_events": hist.get("adopted_events", 0),
+        "edited_events": hist.get("edited_events", 0),
+        "exported_events": hist.get("exported_events", 0),
+        "fragments": hist.get("fragments", []),
+    }
+
+
+@app.get("/archive/timeline/days")
+async def get_archive_timeline_days(before: str = None, limit: int = 20, db: Session = Depends(get_db)):
+    """[Archive 단계B] 연대기 홈 — 날짜별 source 묶음(cursor 페이징).
+    date_key = shot_date 우선, 없으면 created_at 앞 10자(YYYY-MM-DD) fallback."""
+    from sqlalchemy import text as _text
+    from engine import fragment_vault as _fv
+
+    limit = max(1, min(int(limit or 20), 50))
+    params: dict = {"limit": limit + 1}
+    where = ""
+    if before:
+        where = "WHERE date_key < :before"
+        params["before"] = before
+
+    rows = db.execute(_text(f"""
+        SELECT date_key, cnt, fallback_cnt FROM (
+            SELECT COALESCE(shot_date, substr(created_at, 1, 10)) AS date_key,
+                   COUNT(*) AS cnt,
+                   SUM(CASE WHEN shot_date IS NULL THEN 1 ELSE 0 END) AS fallback_cnt
+            FROM sources
+            GROUP BY date_key
+        )
+        {where}
+        ORDER BY date_key DESC
+        LIMIT :limit
+    """), params).fetchall()
+
+    has_more = len(rows) > limit
+    page_rows = rows[:limit]
+
+    days = []
+    for date_key, cnt, fallback_cnt in page_rows:
+        rep = db.execute(_text(
+            "SELECT source_id FROM sources "
+            "WHERE COALESCE(shot_date, substr(created_at, 1, 10)) = :dk "
+            "ORDER BY created_at DESC LIMIT 1"), {"dk": date_key}).fetchone()
+        thumb = None
+        if rep:
+            hist = _fv.source_fragment_history(rep[0])
+            frags = hist.get("fragments") or []
+            thumb = frags[0]["thumbnail_url"] if frags else None
+        days.append({
+            "date_key": date_key,
+            "source_count": cnt,
+            "thumbnail_url": thumb,
+            "has_fallback": bool(fallback_cnt),
+        })
+
+    return {
+        "days": days,
+        "next_cursor": page_rows[-1][0] if (has_more and page_rows) else None,
+    }
+
+
+@app.get("/archive/timeline/day/{date_key}")
+async def get_archive_timeline_day(date_key: str, db: Session = Depends(get_db)):
+    """[Archive 단계B] 연대기 day 상세 — 해당 날짜(또는 fallback)의 source 목록."""
+    from sqlalchemy import text as _text
+    from engine import fragment_vault as _fv
+
+    rows = db.execute(_text(
+        "SELECT source_id, title, shot_date, created_at, duration FROM sources "
+        "WHERE COALESCE(shot_date, substr(created_at, 1, 10)) = :dk "
+        "ORDER BY created_at DESC"), {"dk": date_key}).fetchall()
+
+    def _card(r):
+        sid, title, shot_date, created_at, duration = r
+        hist = _fv.source_fragment_history(sid)
+        frags = hist.get("fragments") or []
+        return {
+            "source_id": sid,
+            "title": title,
+            "shot_date": shot_date,
+            "shot_date_fallback": shot_date is None,
+            "created_at": created_at,
+            "duration": duration,
+            "thumbnail_url": frags[0]["thumbnail_url"] if frags else None,
+            "fragment_count": hist.get("fragment_count", 0),
+        }
+
+    return {"date_key": date_key, "sources": [_card(r) for r in rows]}
+
+
 @app.post("/export/final")
 async def run_final_broadcast(project_id: str = "DEFAULT", db: Session = Depends(get_db)):
     """[CCUT 1.0.6 최종 송출] 편집본을 실제 .mp4 파일로 렌더링하고 DB 아카이브에 기록"""
