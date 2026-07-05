@@ -170,6 +170,15 @@ def run_l0():
                              person_vocab=_pv, search_lookup=_fake_show)
     check("L0", "router 조회+편집동사→편집 우선", r["action"] == "run_proposal", r["action"])
 
+    # [BARE-REDO] 새 조건 없는 "다시해줘"는 옛 지시 무단 재사용 금지 — 되묻기 (물놀이 사건)
+    r = ir.route_edit_intent(input_text="편집을 다시해줘.", allow_llm=False,
+                             recent_messages=[{"sender": "user", "text": "물놀이 위주로 편집해줘"},
+                                              {"sender": "ai", "text": "네"}])
+    check("L0", "router 맨몸 다시해줘→되묻기(이전지시 인용)",
+          r["action"] == "ask_clarification" and "물놀이" in (r.get("reply") or ""), r.get("reply"))
+    r = ir.route_edit_intent(input_text="은한이만 다시 편집해줘", allow_llm=False, person_vocab=_pv)
+    check("L0", "router 조건있는 다시→정상 편집", r["action"] == "run_proposal", r["action"])
+
     # [조사 교정] 단순 replace의 '정은한가' 문법 붕괴 수리 검증
     r = ir.route_edit_intent(input_text="은한이가 병원에 있는 장면만", allow_llm=False,
                              person_vocab=_pv, archive_lookup=_fake_proj)

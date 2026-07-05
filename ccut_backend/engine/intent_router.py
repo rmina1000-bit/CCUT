@@ -174,6 +174,26 @@ def route_edit_intent(source_ids=None, input_text="", recent_messages=None,
                 return rr
             return r0  # 그새 프로젝트에 생겼으면 그 결과 그대로
 
+    # ── 0.7 맨몸 재편집 [BARE-REDO] — "편집을 다시해줘"처럼 새 조건이 없는 재요청은
+    #    옛 지시를 무단 재사용하지 않고 되묻는다 (국장 지적 2026-07-05: LLM 폴백이
+    #    직전 '물놀이' 지시를 그대로 다시 실행해버린 사건). 조건이 붙어 있으면
+    #    ("은한이만 다시") 아래 사다리가 정상 처리.
+    if len(t) <= 15 and _re.match(
+            r"^(편집|제안|영상)?\s*(을|를)?\s*(다시|재)\s*(편집)?\s*"
+            r"(해\s*줘|해줘|해\s*봐|해봐|부탁해?|만들어\s*줘|만들어줘|하자|할래)?[.!~?\s]*$", t):
+        _prev = None
+        for m in reversed(recent_messages or []):
+            txt = str(m.get("text") or "").strip()
+            if m.get("sender") == "user" and txt and len(txt) > 3 \
+                    and not _re.match(r"^(편집|제안|영상)?\s*(을|를)?\s*(다시|재)", txt):
+                _prev = txt[:40]
+                break
+        reply = (f"다시 하기 전에 기준을 여쭤볼게요 — 이전처럼 \"{_prev}\" 그대로 갈까요, "
+                 "아니면 다른 방향으로 바꿀까요?" if _prev
+                 else "어떤 방향으로 다시 할까요? 예: '사람 중심으로', '더 짧게', '실내만'.")
+        return _resp("ask_clarification", reply, confidence=0.9, via="deterministic",
+                     matched={"kind": "bare_redo", "prev": _prev})
+
     # ── 0.5 조회/열람 [SHOW] — "보여줘/있나/찾아줘"는 편집이 아니라 보여주기다.
     #    편집 동사가 함께 있으면(예: "찾아서 편집해줘") 편집 사다리가 우선.
     #    결과 카드는 자체완결(제목·시간·썸네일·재생 URL) — 흐름에 남고 클릭=재생.
