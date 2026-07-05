@@ -60,6 +60,8 @@ interface ArchiveData {
 interface ExportRecord {
   id: string;
   program_id: string | null;
+  // [DISPLAY-NAME] 그 제안의 이름 상속: "{프로젝트명} · 첫 번째 제안 · A안"
+  display_name?: string | null;
   program_title: string | null;
   proposal_id: string;
   output_url: string;
@@ -202,7 +204,9 @@ export const ArchivePanel: React.FC<{
 
   const filteredSources = data?.sources.filter(s =>
     s.title?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    s.source_id.toLowerCase().includes(searchQuery.toLowerCase())
+    s.source_id.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    // [국장지시] 프로젝트명으로도 원본을 찾는다 ("Dahlia" 검색 → 그 프로젝트 소스들)
+    s.program_names?.some(n => n.toLowerCase().includes(searchQuery.toLowerCase()))
   ) || [];
 
   const filteredPrograms = data?.programs.filter(p =>
@@ -391,7 +395,8 @@ export const ArchivePanel: React.FC<{
                           title="클릭하여 이름 변경"
                           className="text-[15px] font-bold text-foreground/90 truncate max-w-full text-left hover:text-primary transition-colors"
                         >
-                          {ex.program_title || ex.program_id || "프로젝트"}
+                          {/* [DISPLAY-NAME] 제안 이름 상속 — 어느 제안에서 나온 영상인지 즉시 인식 */}
+                          {ex.display_name || ex.program_title || "내보낸 영상"}
                         </button>
                       )}
                       <div className="flex items-center gap-3 mt-1 text-[11px] text-muted-foreground/50">

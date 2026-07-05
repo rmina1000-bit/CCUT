@@ -2536,9 +2536,16 @@ async def get_render_result(export_input_id: str):
     return result
 
 @app.get("/exports/list")
-async def get_exports_list():
+async def get_exports_list(db: Session = Depends(get_db)):
     """내보낸 영상 전체 목록 (아카이브/SNS 패널용)"""
-    return {"exports": bams.get_all_exports()}
+    exports = bams.get_all_exports()
+    # [DISPLAY-NAME 국장지시] 내보낸 영상 이름 = 그 제안의 이름 그대로 상속
+    # ("어느 제안에서 나온 영상인지" — 같은 권위 함수 1개)
+    names = _proposal_display_names(db)
+    for e in exports or []:
+        if isinstance(e, dict):
+            e["display_name"] = names.get(e.get("proposal_id"))
+    return {"exports": exports}
 
 @app.patch("/programs/{program_id}/name")
 async def rename_program(program_id: str, payload: dict = None, db: Session = Depends(get_db)):
@@ -2903,6 +2910,54 @@ async def get_published_list(db: Session = Depends(get_db)):
     } for a in assets]
 
 
+_KO_ORD = ["첫", "두", "세", "네", "다섯", "여섯", "일곱", "여덟", "아홉", "열"]
+
+
+def _ko_ordinal(n: int) -> str:
+    return f"{_KO_ORD[n - 1]} 번째" if 1 <= n <= len(_KO_ORD) else f"{n}번째"
+
+
+def _proposal_display_names(db) -> dict:
+    """[DISPLAY-NAME] proposal_id → 사람 말 명칭 "{프로젝트명} · 첫 번째 제안 · A안".
+    아카이브 목록·내보낸 영상이 같은 함수를 쓴다(이름을 두 번 만들지 않는다).
+    N = 프로젝트 내 세대 순번(생성시각 오름차순, 10분 넘게 벌어지면 새 세대 —
+    A/B 쌍은 같은 실행이라 한 세대). 이후 SNS 업로드 명칭의 뿌리."""
+    import datetime as _dt
+    proposals = db.query(ProposalTable).all()
+    prog_name = {p.program_id: p.name
+                 for p in db.query(ProgramTable).filter(ProgramTable.schema_version == 2).all()}
+    src_prog: dict = {}
+    for sid, pid in db.query(ProjectSourceTable.source_id, ProjectSourceTable.program_id) \
+                      .order_by(ProjectSourceTable.added_at).all():
+        src_prog.setdefault(sid, pid)
+
+    def _pid(pr):
+        return pr.program_id or src_prog.get(pr.source_id)
+
+    by_prog: dict = {}
+    for pr in proposals:
+        by_prog.setdefault(_pid(pr) or "_none", []).append(pr)
+    gen_of: dict = {}
+    for _p, rows in by_prog.items():
+        rows = sorted(rows, key=lambda r: (r.created_at or _dt.datetime.min, r.proposal_id))
+        gen, prev = 0, None
+        for r in rows:
+            if prev is None or not r.created_at or (r.created_at - prev).total_seconds() > 600:
+                gen += 1
+            gen_of[r.proposal_id] = gen
+            if r.created_at:
+                prev = r.created_at
+
+    out: dict = {}
+    for pr in proposals:
+        pname = prog_name.get(_pid(pr)) or "프로젝트 미상"
+        mode = f" · {pr.mode}안" if pr.mode in ("A", "B") else ""
+        seq = gen_of.get(pr.proposal_id)
+        out[pr.proposal_id] = (f"{pname} · {_ko_ordinal(seq)} 제안{mode}"
+                               if seq else f"{pname}{mode}")
+    return out
+
+
 @app.get("/archive/list")
 async def get_archive_list(db: Session = Depends(get_db)):
     """[Archive] Get list of historical projects and sources"""
@@ -2979,6 +3034,19 @@ async def get_archive_list(db: Session = Depends(get_db)):
     def _names(sid) -> list:
         return [u["name"] for u in source_usage_map.get(sid, []) if u["name"]]
 
+    # [ARCHIVE-SORT 국장지시] 원본은 '최근 사용' 순 — 재사용된 옛 소스도 지금
+    # 프로젝트에 넣었으면 맨 위로 떠오른다 (created_at만으로는 가라앉아 못 찾음)
+    def _src_latest(s):
+        stamps = [str(u["used_at"] or "") for u in source_usage_map.get(s.source_id, [])]
+        stamps.append(s.created_at.isoformat() if s.created_at else "")
+        return max(stamps)
+    sources = sorted(sources, key=_src_latest, reverse=True)
+
+    # [ARCHIVE-SORT 국장지시] 프로젝트 관리도 최신(갱신) 순
+    import datetime as _dt0
+    programs = sorted(programs, key=lambda p: (p.last_updated_at or p.created_at
+                                               or _dt0.datetime.min), reverse=True)
+
     # proposal: program_id null → source_id 역추적으로 프로그램 추론
     def _infer_program(pr) -> tuple:
         """(program_id, name, inferred: bool)"""
@@ -2990,30 +3058,8 @@ async def get_archive_list(db: Session = Depends(get_db)):
             return (usage[0]["program_id"], usage[0]["name"], True)
         return (None, None, False)
 
-    # [DISPLAY-NAME 국장지시] 제안서 사람 말 명칭 — "{프로젝트명} · {N}번째 제안 · {mode}안".
-    # 제안서는 오로지 프로젝트 소속이므로 프로젝트명이 앞. N = 프로젝트 내 세대 순번
-    # (생성시각 오름차순, 10분 넘게 벌어지면 새 세대 — A/B 쌍은 같은 실행이라 한 세대).
-    # 이 이름이 이후 SNS 업로드 명칭의 뿌리가 된다(raw PROP_ id는 표면 비노출).
-    _by_prog: dict = {}
-    for pr in proposals:
-        _by_prog.setdefault(_infer_program(pr)[0] or "_none", []).append(pr)
-    _prop_gen: dict = {}
-    for _pid, _rows in _by_prog.items():
-        _rows = sorted(_rows, key=lambda r: (r.created_at or _dt.datetime.min, r.proposal_id))
-        _gen, _prev = 0, None
-        for r in _rows:
-            if _prev is None or not r.created_at or (r.created_at - _prev).total_seconds() > 600:
-                _gen += 1
-            _prop_gen[r.proposal_id] = _gen
-            if r.created_at:
-                _prev = r.created_at
-
-    def _prop_display(pr) -> str:
-        _, pname, _inf = _infer_program(pr)
-        head = pname or "프로젝트 미상"
-        seq = _prop_gen.get(pr.proposal_id)
-        mode = f" · {pr.mode}안" if pr.mode in ("A", "B") else ""
-        return f"{head} · {seq}번째 제안{mode}" if seq else f"{head}{mode}"
+    # [DISPLAY-NAME 국장지시] 제안서 사람 말 명칭 — 공용 권위 1개(_proposal_display_names)
+    _prop_names = _proposal_display_names(db)
 
     return {
         "sources": [{
@@ -3046,7 +3092,7 @@ async def get_archive_list(db: Session = Depends(get_db)):
         "proposals": [{
             "proposal_id": pr.proposal_id,
             "source_id": pr.source_id,
-            "display_name": _prop_display(pr),
+            "display_name": _prop_names.get(pr.proposal_id),
             "mode": pr.mode,
             "duration": pr.duration,
             "created_at": pr.created_at.isoformat() if pr.created_at else None,
