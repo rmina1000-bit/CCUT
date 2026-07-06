@@ -53,6 +53,9 @@ const Index: React.FC = () => {
     setNavCollapsed,
     projects,
     setProjects,
+    navWidth,
+    isNavDragging,
+    setIsNavDragging,
     centerWidth,
     isDragging,
     setIsDragging,
@@ -2313,7 +2316,7 @@ const Index: React.FC = () => {
       className="flex h-screen w-full overflow-hidden bg-background"
       onClick={handleBackgroundClick}
     >
-      <div className="relative flex-shrink-0" style={{ width: navCollapsed ? 48 : 320 }}>
+      <div className="relative flex-shrink-0" style={{ width: navCollapsed ? 48 : navWidth }}>
         <LeftNav
           activeItem={activeNavItem}
           onItemClick={onNavItemClick}
@@ -2326,6 +2329,25 @@ const Index: React.FC = () => {
           onNewProject={onNavNewProject}
         />
       </div>
+
+      {/* [LAYOUT] 좌측 사이드바 리사이즈 핸들 — 모든 화면에서 폭 조절 가능 */}
+      {!navCollapsed && (
+        <div
+          className={`flex-shrink-0 flex items-center justify-center cursor-col-resize group transition-colors ${isNavDragging ? "bg-primary/15" : "hover:bg-primary/8"}`}
+          style={{ width: 6 }}
+          onMouseDown={(e) => {
+            e.preventDefault();
+            setIsNavDragging(true);
+          }}
+        >
+          <div
+            className={`w-[2px] h-10 rounded-full transition-all duration-150 ${isNavDragging
+              ? "bg-primary/60 h-16"
+              : "bg-border/40 group-hover:bg-primary/40 group-hover:h-14"
+              }`}
+          />
+        </div>
+      )}
 
       <div style={!(activeNavItem === "archive" || activeNavItem === "upload" || activeNavItem === "account" || activeNavItem === "settings" || activeNavItem === "trash") ? { width: centerWidth, flexShrink: 0 } : { flex: 1, minWidth: 0 }} className="h-full">
         {activeNavItem === "settings" ? (
