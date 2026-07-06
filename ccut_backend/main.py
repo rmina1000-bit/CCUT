@@ -358,6 +358,15 @@ app.add_middleware(
 from routers.health import router as health_router  # [REFACTOR] 저위험 health/debug 분리
 app.include_router(health_router)
 
+# [아카이브 채팅 MVP] read-only 자연어 조회 라우터 — proposal_engine/route-edit와 완전 분리
+from archive_chat_router import router as archive_chat_router, ensure_schema as _archive_chat_ensure_schema
+app.include_router(archive_chat_router)
+try:
+    _archive_chat_ensure_schema()
+    print("[ARCHIVE-CHAT] archive_result_sets 테이블 보장")
+except Exception as _ac_e:
+    print(f"[ARCHIVE-CHAT] 스키마 보장 실패 (non-blocking): {_ac_e}")
+
 # ═══════════════════════════════════════════════════════════════════
 #   업로드 / 조각 생성 상태 레지스트리
 # ═══════════════════════════════════════════════════════════════════
