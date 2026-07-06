@@ -72,18 +72,41 @@ def _strip_request_verbs(text: str) -> str:
 
 
 def _match_person(con, query: str):
+    """반환: (person_id, name, matched) — matched는 query에서 실제로 걸린 표기(애칭 포함)."""
     rows = con.execute(
         "SELECT person_id, name, aliases FROM persons WHERE name IS NOT NULL AND name != ''"
     ).fetchall()
     for r in rows:
         name = (r["name"] or "").strip()
         if name and name in query:
-            return r["person_id"], name
+            return r["person_id"], name, name
         for alias in (r["aliases"] or "").split(","):
             alias = alias.strip()
             if alias and alias in query:
-                return r["person_id"], name
-    return None, None
+                return r["person_id"], name, alias
+    return None, None, None
+
+
+# 인물+키워드에서 keyword로 쓰지 않는 일반어 (이게 남으면 인물 단독으로 폴백)
+_KW_STOPWORDS = {
+    "장면", "영상", "조각", "컷", "부분", "것", "거", "나온", "나오는", "나와",
+    "있는", "있", "보여", "찾아", "모아", "이", "가", "은", "는", "을", "를",
+    "에", "에서", "의", "만", "좀", "그", "저", "그거", "여기", "거기",
+}
+
+
+def _keyword_after_person(query: str, matched: str):
+    """인물 표기·요청동사·조사를 걷어낸 남은 내용어(예: '마술'). 없으면 None → 인물 단독."""
+    q = _strip_request_verbs(query.replace(matched or "", " "))
+    import re as _re
+    # 어절 끝 조사/연결어미 정리 (마술하는 → 마술, 병원에서 → 병원)
+    q = _re.sub(r"(하는|하고|한|해서|에서|이랑|랑|으로|로)\b", " ", q)
+    toks = []
+    for t in q.replace(",", " ").split():
+        t = t.strip("가이은는을를에의만")
+        if len(t) >= 2 and t not in _KW_STOPWORDS:
+            toks.append(t)
+    return toks[0] if toks else None
 
 
 def _match_place(con, query: str):
@@ -138,6 +161,53 @@ def _search_scene(con, scene_type):
     return [(r["fragment_id"], {"matched": "scene", "scene_type": scene_type}) for r in rows]
 
 
+# ── 복합(교집합) — 인물+장소 / 인물+장면 ("정은한이 병원에" 같은 복합조건, RED 수리) ──
+
+def _search_person_place(con, person_id, person_name, place_label):
+    pfx = {r["fragment_id"] for r in con.execute(
+        "SELECT fragment_id FROM person_faces WHERE person_id=?", (person_id,))}
+    out = []
+    for r in con.execute(
+        "SELECT fragment_id, evidence_json FROM fragment_places "
+        "WHERE place_label=? AND status='active'", (place_label,)):
+        if r["fragment_id"] in pfx:
+            try:
+                ev = json.loads(r["evidence_json"]) if r["evidence_json"] else {}
+            except Exception:
+                ev = {}
+            ev.update({"matched": "person_place", "person_name": person_name, "place_label": place_label})
+            out.append((r["fragment_id"], ev))
+    return out
+
+
+def _search_person_scene(con, person_id, person_name, scene_type):
+    pfx = {r["fragment_id"] for r in con.execute(
+        "SELECT fragment_id FROM person_faces WHERE person_id=?", (person_id,))}
+    out = []
+    for r in con.execute(
+        "SELECT fragment_id FROM fragment_vault WHERE scene_type=?", (scene_type,)):
+        if r["fragment_id"] in pfx:
+            out.append((r["fragment_id"], {"matched": "person_scene", "person_name": person_name, "scene_type": scene_type}))
+    return out
+
+
+def _search_person_keyword(con, person_id, person_name, keyword):
+    """인물 ∩ 키워드(전사/시각묘사/검색텍스트) — '은한이가 마술하는' 같은 인물+행동 복합."""
+    pfx = {r["fragment_id"] for r in con.execute(
+        "SELECT fragment_id FROM person_faces WHERE person_id=?", (person_id,))}
+    like = f"%{keyword}%"
+    out = []
+    for r in con.execute(
+        "SELECT fragment_id, search_text, visual_desc, transcript FROM fragment_vault "
+        "WHERE search_text LIKE ? OR visual_desc LIKE ? OR transcript LIKE ?",
+        (like, like, like)):
+        if r["fragment_id"] in pfx:
+            snippet = r["search_text"] or r["visual_desc"] or r["transcript"] or ""
+            out.append((r["fragment_id"], {"matched": "person_keyword", "person_name": person_name,
+                                           "keyword": keyword, "snippet": snippet[:120]}))
+    return out
+
+
 def _search_keyword(con, keyword):
     if not keyword:
         return []
@@ -160,16 +230,28 @@ def _search_keyword(con, keyword):
 
 
 def _run_deterministic_search(con, query: str):
-    """① 결정론 파싱 + ② DB 검색. 매칭 실패 시 (None, []) 반환 — LLM 폴백 신호."""
-    person_id, person_name = _match_person(con, query)
-    if person_id:
-        return "person", _search_person(con, person_id, person_name)
-
+    """① 결정론 파싱 + ② DB 검색. 매칭 실패 시 (None, []) 반환 — LLM 폴백 신호.
+    [복합 우선] 인물+장소·인물+장면은 교집합으로 좁힌다 ('정은한이 병원에' → 병원 무시 사건 수리).
+    교집합이 0건이면 인물 단독으로 폴백(정직: '병원 조각은 없고 정은한 전체는…')하지 않고
+    빈 person_place로 반환해 '없다'를 정직하게 알린다."""
+    person_id, person_name, person_matched = _match_person(con, query)
     place_label = _match_place(con, query)
+    scene_type = _match_scene(query)
+
+    # 복합(교집합) — 조건이 둘이면 둘 다 만족하는 조각만
+    if person_id and place_label:
+        return "person_place", _search_person_place(con, person_id, person_name, place_label)
+    if person_id and scene_type:
+        return "person_scene", _search_person_scene(con, person_id, person_name, scene_type)
+
+    if person_id:
+        # 인물+키워드('은한이가 마술하는') — 남은 내용어가 있으면 교집합, 없으면 인물 단독
+        kw = _keyword_after_person(query, person_matched)
+        if kw:
+            return "person_keyword", _search_person_keyword(con, person_id, person_name, kw)
+        return "person", _search_person(con, person_id, person_name)
     if place_label:
         return "place", _search_place(con, place_label)
-
-    scene_type = _match_scene(query)
     if scene_type:
         return "scene", _search_scene(con, scene_type)
 
@@ -203,7 +285,7 @@ def _llm_fallback_search(con, query: str):
         return "unmatched", []
 
     if kind == "person":
-        person_id, person_name = _match_person(con, value)
+        person_id, person_name, _pm = _match_person(con, value)
         if person_id:
             return "person", _search_person(con, person_id, person_name)
         return "unmatched", []

@@ -367,6 +367,10 @@ try:
 except Exception as _ac_e:
     print(f"[ARCHIVE-CHAT] 스키마 보장 실패 (non-blocking): {_ac_e}")
 
+# [아카이브 바구니 내보내기 MVP] 바구니 조각 → 표준 MP4 클립 export (파일 쓰기, proposal 무관)
+from archive_export_router import router as archive_export_router
+app.include_router(archive_export_router)
+
 # ═══════════════════════════════════════════════════════════════════
 #   업로드 / 조각 생성 상태 레지스트리
 # ═══════════════════════════════════════════════════════════════════
