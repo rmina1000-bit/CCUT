@@ -6,9 +6,7 @@ import { Input } from "@/components/ui/input";
 import { videoService } from "@/services/videoService";
 import { sourceDisplayName } from "@/lib/fragmentIdentity";
 import { SingleFragmentEditor } from "@/components/SingleFragmentEditor";
-import { ArchiveChatPanel } from "@/components/ArchiveChatPanel";
 import { ArchiveWorkbench } from "@/components/ArchiveWorkbench";
-import { MessageCircle } from "lucide-react";
 
 // [Archive 단계B] hydrate 분리 — /archive/list 대형 응답 폐지.
 // summary(경량) + sources(페이징) + source 상세(lazy) + timeline(day 페이징)로 분리.
@@ -115,7 +113,6 @@ export const ArchivePanel: React.FC<{
 
   const [viewerFrag, setViewerFrag] = useState<any | null>(null);
   const [viewerOpen, setViewerOpen] = useState(false);
-  const [chatOpen, setChatOpen] = useState(false);
   const [creatingFor, setCreatingFor] = useState<string | null>(null);
   const createProjectFromSource = async (sourceId: string) => {
     if (creatingFor) return;
@@ -147,7 +144,8 @@ export const ArchivePanel: React.FC<{
 
   // [국장지시 2026-07-05] 프로젝트/제안은 과정(process) — 사용자가 프로젝트를 지우면 함께 사라진다.
   // 아카이브는 결과(원본·조각·내보낸 영상)만 남기는 곳이므로 "프로젝트 관리"/"AI 편집제안 이력" 탭은 폐지.
-  const [activeSubTab, setActiveSubTab] = useState<"sources" | "timeline" | "exports" | "workbench">("sources");
+  // [국장지시 2026-07-06] 작업대가 아카이브 기본 경험 — 진입 즉시 작업대.
+  const [activeSubTab, setActiveSubTab] = useState<"workbench" | "sources" | "timeline" | "exports">("workbench");
 
   // [exports] 첫 진입 필수 아님 — exports 탭 클릭 시에만 lazy 조회
   const [exports, setExports] = useState<ExportRecord[]>([]);
@@ -499,71 +497,35 @@ export const ArchivePanel: React.FC<{
     );
   };
 
+  // [국장지시 2026-07-06] 작업대는 아카이브 작업공간 — 통계 카드·제목·원본검색을 걷어내고
+  // 얇은 헤더 1줄 + 본문 최대. 다른 탭(원본리스트/연대기/내보낸영상)은 기존 경험 유지.
+  const isWb = activeSubTab === "workbench";
+
   return (
-    <div className="flex flex-col h-full bg-[hsl(228_10%_9%)] p-6 space-y-6 overflow-y-auto">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold bg-gradient-to-r from-blue-400 to-primary bg-clip-text text-transparent">
-            CCUT 미디어 아카이브
-          </h1>
-          <p className="text-[12px] text-muted-foreground/60 mt-1">
-            분석이 완료된 비디오 소스 및 이전 제안 이력을 관리합니다.
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => setChatOpen(true)}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary/15 hover:bg-primary/25 text-xs text-primary transition-colors border border-primary/20"
-          >
-            <MessageCircle size={12} />
-            대화로 찾기
-          </button>
-          <button
-            onClick={() => { fetchSummary(); fetchSourcesPage(true); }}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-secondary/80 hover:bg-secondary text-xs text-foreground/80 transition-colors border border-border/20"
-          >
-            <RotateCcw size={12} />
-            새로고침
-          </button>
-        </div>
+    <div className={`flex flex-col h-full bg-[hsl(228_10%_9%)] px-4 pt-3 pb-2 gap-2 ${isWb ? "overflow-hidden" : "overflow-y-auto"}`}>
+      {/* Header — 모든 탭 공통 compact 1줄 (국장지시 2026-07-06: 상단 일관성) */}
+      <div className="flex items-center justify-between flex-shrink-0">
+        <p className="text-[13px] text-foreground/75">
+          <span className="font-bold text-primary">CCUT 아카이브</span>
+          <span className="text-muted-foreground/50">
+            {" · "}원본 {summary?.source_count ?? 0} · 프로젝트 {summary?.program_count ?? 0} · 최근 촬영 {summary?.latest_shot_date ?? "—"}
+          </span>
+        </p>
+        <button
+          onClick={() => { fetchSummary(); fetchSourcesPage(true); }}
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-secondary/80 hover:bg-secondary text-xs text-foreground/80 transition-colors border border-border/20 flex-shrink-0"
+        >
+          <RotateCcw size={12} />
+          새로고침
+        </button>
       </div>
 
-      {/* Stats Board — /archive/summary 경량 지표 */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <Card className="bg-card/30 border-border/20">
-          <CardHeader className="p-4 flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-xs font-semibold text-muted-foreground/60">분석된 원본 영상</CardTitle>
-            <Film size={14} className="text-primary" />
-          </CardHeader>
-          <CardContent className="p-4 pt-0">
-            <div className="text-xl font-bold text-foreground/90">{summary?.source_count ?? 0}개</div>
-          </CardContent>
-        </Card>
-        <Card className="bg-card/30 border-border/20">
-          <CardHeader className="p-4 flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-xs font-semibold text-muted-foreground/60">생성된 프로그램 프로젝트</CardTitle>
-            <Box size={14} className="text-primary" />
-          </CardHeader>
-          <CardContent className="p-4 pt-0">
-            <div className="text-xl font-bold text-foreground/90">{summary?.program_count ?? 0}개</div>
-          </CardContent>
-        </Card>
-        <Card className="bg-card/30 border-border/20">
-          <CardHeader className="p-4 flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-xs font-semibold text-muted-foreground/60">최근 촬영일</CardTitle>
-            <Calendar size={14} className="text-primary" />
-          </CardHeader>
-          <CardContent className="p-4 pt-0">
-            <div className="text-xl font-bold text-foreground/90">{summary?.latest_shot_date ?? "—"}</div>
-          </CardContent>
-        </Card>
-      </div>
+      {/* [국장지시 2026-07-06] 통계 카드 3개 제거 — 필요한 숫자는 compact 헤더 1줄로 충분 */}
 
-      {/* Search & Tabs */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-card/15 p-3 rounded-xl border border-border/10">
+      {/* Tabs (+ 검색 — 작업대에선 숨김) */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-card/15 p-3 rounded-xl border border-border/10 flex-shrink-0">
         <div className="flex items-center gap-1.5 bg-secondary/30 rounded-lg p-0.5">
-          {(["sources", "timeline", "exports", "workbench"] as const).map(tab => (
+          {(["workbench", "sources", "timeline", "exports"] as const).map(tab => (
             <button
               key={tab}
               onClick={() => setActiveSubTab(tab)}
@@ -571,24 +533,26 @@ export const ArchivePanel: React.FC<{
                 activeSubTab === tab ? "bg-primary/20 text-primary" : "text-muted-foreground/60 hover:text-foreground/80"
               }`}
             >
-              {tab === "sources" ? "원본 리스트" : tab === "timeline" ? "연대기" : tab === "exports" ? "내보낸 영상" : "작업대"}
+              {tab === "workbench" ? "작업대" : tab === "sources" ? "원본 리스트" : tab === "timeline" ? "연대기" : "내보낸 영상"}
             </button>
           ))}
         </div>
+        {!isWb && (
         <div className="relative w-full md:w-72">
           <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground/40" />
           <Input
-            placeholder="원본 제목 검색..."
+            placeholder="검색"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="pl-9 h-8 bg-secondary/30 border-border/10 text-xs focus-visible:ring-primary/40 rounded-lg"
           />
         </div>
+        )}
       </div>
 
-      {/* Content Area */}
-      <div className="flex-1 min-h-[300px]">
-        <div className="space-y-3">
+      {/* Content Area — 작업대일 때 남은 높이 전체 사용, 그 외엔 기존 스크롤 */}
+      <div className={isWb ? "flex-1 min-h-0" : "flex-1 min-h-[300px]"}>
+        <div className={isWb ? "h-full" : "space-y-3"}>
 
           {/* ── 원본 리스트 탭 (hydrate 분리: summary + sources 페이징) ── */}
           {activeSubTab === "sources" && (
@@ -852,9 +816,6 @@ export const ArchivePanel: React.FC<{
         projectName="아카이브"
         readOnly
       />
-
-      {/* [아카이브 채팅 MVP] read-only 자연어 조회 진입점 */}
-      <ArchiveChatPanel open={chatOpen} onOpenChange={setChatOpen} />
     </div>
   );
 };
