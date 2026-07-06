@@ -6,6 +6,9 @@ import { Input } from "@/components/ui/input";
 import { videoService } from "@/services/videoService";
 import { sourceDisplayName } from "@/lib/fragmentIdentity";
 import { SingleFragmentEditor } from "@/components/SingleFragmentEditor";
+import { ArchiveChatPanel } from "@/components/ArchiveChatPanel";
+import { ArchiveWorkbench } from "@/components/ArchiveWorkbench";
+import { MessageCircle } from "lucide-react";
 
 // [Archive 단계B] hydrate 분리 — /archive/list 대형 응답 폐지.
 // summary(경량) + sources(페이징) + source 상세(lazy) + timeline(day 페이징)로 분리.
@@ -112,6 +115,7 @@ export const ArchivePanel: React.FC<{
 
   const [viewerFrag, setViewerFrag] = useState<any | null>(null);
   const [viewerOpen, setViewerOpen] = useState(false);
+  const [chatOpen, setChatOpen] = useState(false);
   const [creatingFor, setCreatingFor] = useState<string | null>(null);
   const createProjectFromSource = async (sourceId: string) => {
     if (creatingFor) return;
@@ -143,7 +147,7 @@ export const ArchivePanel: React.FC<{
 
   // [국장지시 2026-07-05] 프로젝트/제안은 과정(process) — 사용자가 프로젝트를 지우면 함께 사라진다.
   // 아카이브는 결과(원본·조각·내보낸 영상)만 남기는 곳이므로 "프로젝트 관리"/"AI 편집제안 이력" 탭은 폐지.
-  const [activeSubTab, setActiveSubTab] = useState<"sources" | "timeline" | "exports">("sources");
+  const [activeSubTab, setActiveSubTab] = useState<"sources" | "timeline" | "exports" | "workbench">("sources");
 
   // [exports] 첫 진입 필수 아님 — exports 탭 클릭 시에만 lazy 조회
   const [exports, setExports] = useState<ExportRecord[]>([]);
@@ -507,13 +511,22 @@ export const ArchivePanel: React.FC<{
             분석이 완료된 비디오 소스 및 이전 제안 이력을 관리합니다.
           </p>
         </div>
-        <button
-          onClick={() => { fetchSummary(); fetchSourcesPage(true); }}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-secondary/80 hover:bg-secondary text-xs text-foreground/80 transition-colors border border-border/20"
-        >
-          <RotateCcw size={12} />
-          새로고침
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setChatOpen(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary/15 hover:bg-primary/25 text-xs text-primary transition-colors border border-primary/20"
+          >
+            <MessageCircle size={12} />
+            대화로 찾기
+          </button>
+          <button
+            onClick={() => { fetchSummary(); fetchSourcesPage(true); }}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-secondary/80 hover:bg-secondary text-xs text-foreground/80 transition-colors border border-border/20"
+          >
+            <RotateCcw size={12} />
+            새로고침
+          </button>
+        </div>
       </div>
 
       {/* Stats Board — /archive/summary 경량 지표 */}
@@ -550,7 +563,7 @@ export const ArchivePanel: React.FC<{
       {/* Search & Tabs */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-card/15 p-3 rounded-xl border border-border/10">
         <div className="flex items-center gap-1.5 bg-secondary/30 rounded-lg p-0.5">
-          {(["sources", "timeline", "exports"] as const).map(tab => (
+          {(["sources", "timeline", "exports", "workbench"] as const).map(tab => (
             <button
               key={tab}
               onClick={() => setActiveSubTab(tab)}
@@ -558,7 +571,7 @@ export const ArchivePanel: React.FC<{
                 activeSubTab === tab ? "bg-primary/20 text-primary" : "text-muted-foreground/60 hover:text-foreground/80"
               }`}
             >
-              {tab === "sources" ? "원본 리스트" : tab === "timeline" ? "연대기" : "내보낸 영상"}
+              {tab === "sources" ? "원본 리스트" : tab === "timeline" ? "연대기" : tab === "exports" ? "내보낸 영상" : "작업대"}
             </button>
           ))}
         </div>
@@ -683,6 +696,9 @@ export const ArchivePanel: React.FC<{
 
 
           {/* ── 내보낸 영상 탭 (exports 탭 클릭 시 lazy 조회) ── */}
+          {/* ── 작업대 탭 (조각 조회·수집 — read-only, project_sources 무변경) ── */}
+          {activeSubTab === "workbench" && <ArchiveWorkbench />}
+
           {activeSubTab === "exports" && (
             exportsLoading ? (
               <div className="flex flex-col items-center justify-center h-64 text-muted-foreground/40 text-xs gap-2">
@@ -836,6 +852,9 @@ export const ArchivePanel: React.FC<{
         projectName="아카이브"
         readOnly
       />
+
+      {/* [아카이브 채팅 MVP] read-only 자연어 조회 진입점 */}
+      <ArchiveChatPanel open={chatOpen} onOpenChange={setChatOpen} />
     </div>
   );
 };
