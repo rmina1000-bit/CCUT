@@ -310,6 +310,13 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
 
   const [activePlayer, setActivePlayer] = useState<"A" | "B" | null>(null);
   const activePlayerRef = useRef<"A" | "B" | null>(null);
+
+  // [LAYOUT] A/B 편집제안 세로 아코디언 — 기본 둘 다 접힘, 클릭 시 하나만 펼침
+  const [expandedProposal, setExpandedProposal] = useState<"A" | "B" | null>(null);
+  // [지난 제안] 인라인 '그 자리' 재생 — { entryId, A|B }. 무대 이동/스크롤 점프 없음.
+  const [inlinePlay, setInlinePlay] = useState<{ id: string; key: "A" | "B" } | null>(null);
+  // toggleProposal / playProposal / 기본 B 펼침 효과는 재생 의존성(previewUrl·startSeq 등)
+  // 정의 이후(하단)에 배치한다. (여기서 참조하면 TDZ)
   const [consultationInput, setConsultationInput] = useState("");
   // [FLOW-STAGE] 무대가 이식될 타임라인 내 슬롯 (활성 제안 카드 위치)
   const [stageSlot, setStageSlot] = useState<HTMLDivElement | null>(null);
@@ -1141,6 +1148,53 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
     [committedProposalId, handleProposalPreview, onCommitProposal]
   );
 
+  // [A/B 제안] 펼친 제안을 항상 '재생'(토글 아님). preview mp4 또는 fragment seq.
+  const playProposal = useCallback((key: "A" | "B") => {
+    const isA = key === "A";
+    const v = (isA ? videoRefA : videoRefB).current;
+    if (!v) return;
+    const previewUrl = isA ? previewUrlA : previewUrlB;
+    stopOtherPlayer(key);
+    setActivePlayerSafe(key);
+    if (previewUrl) {
+      (isA ? seqEndARef : seqEndBRef).current = -1;
+      (isA ? isSeqARef : isSeqBRef).current = false;
+      (isA ? seqIdxARef : seqIdxBRef).current = 0;
+      if (!sameVideoSource(v.currentSrc || v.src, previewUrl)) { v.src = previewUrl; v.load(); }
+      v.currentTime = 0;
+      v.play().catch(() => {});
+    } else {
+      startSeq(key);
+    }
+    handleProposalPreview(key);
+  }, [previewUrlA, previewUrlB, startSeq, stopOtherPlayer, setActivePlayerSafe, handleProposalPreview]);
+
+  // [A/B 제안] 헤더 클릭 → 그 제안을 크게 펼치고 재생, 다른 하나는 접고 정지. (항상 하나 열림)
+  const toggleProposal = useCallback((key: "A" | "B") => {
+    setExpandedProposal(key);
+    if (key !== "A") videoRefA.current?.pause();
+    if (key !== "B") videoRefB.current?.pause();
+    playProposal(key); // 직접 클릭(제스처)이라 브라우저가 재생 허용
+  }, [playProposal]);
+
+  // [A/B 제안] 한 제안 pair의 대표 썸네일(첫 조각) — 지난 제안 카드에도 사용.
+  const getPairPoster = useCallback((pair: any, key: "A" | "B") => {
+    const p = pair?.[key];
+    const firstFragId = p?.key_fragments?.[0] ?? p?.sequence?.[0]?.fragment_id ?? p?.sequence?.[0] ?? p?.resolved_aliases?.[0]?.source_fragment_id;
+    const fromFrag = firstFragId ? allSourceFragments.find((f: any) => f.fragment_id === firstFragId) : null;
+    return fromFrag?.thumbnail?.thumbnail_url ?? (fromFrag as any)?.thumbnail_url ?? p?.resolved_aliases?.[0]?.thumbnail_url ?? undefined;
+  }, [allSourceFragments]);
+
+  // [A/B 제안] 최신 제안(새 proposal_id)이 오면 항상 B를 먼저 크게 펼친다.
+  const lastProposalIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    const pid = (proposals as any)?.B?.proposal_id ?? (proposals as any)?.A?.proposal_id ?? null;
+    if (proposals && pid && pid !== lastProposalIdRef.current) {
+      lastProposalIdRef.current = pid;
+      setExpandedProposal("B");
+    }
+  }, [proposals]);
+
   const handleExportClick = async () => {
     // [STEP 10-I.2] Export 전 유효성 검사 강화 (Physical EDL 정합성 확인)
     if (!committedProposalId || !validateExportClips(exportClips)) {
@@ -1364,16 +1418,45 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
                     <div className="flex flex-col gap-1.5 items-start">
                       <div className="px-5 py-3.5 rounded-2xl rounded-tl-none bg-secondary/10 border border-border/5 flex flex-col gap-2 min-w-[260px]">
                         <span className="text-[10px] font-black tracking-widest uppercase text-muted-foreground/60">지난 제안</span>
-                        <div className="flex flex-col gap-0.5 text-[12px] text-foreground/80">
-                          <span>A · {item.entry.pair?.A?.title ?? "시장형 편집"}</span>
-                          <span>B · {item.entry.pair?.B?.title ?? "사용자친화형 편집"}</span>
+                        <div className="flex flex-col gap-1.5">
+                          {(["A", "B"] as const).map((k) => {
+                            const thumb = getPairPoster(item.entry.pair, k);
+                            const open = inlinePlay?.id === item.entry.id && inlinePlay?.key === k;
+                            const rawPreview = (item.entry.pair?.[k] as any)?.preview_url;
+                            const previewSrc = rawPreview ? normalizeMediaUrl(rawPreview) : null;
+                            return (
+                              <div key={k} className="flex flex-col gap-1.5">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    videoRefA.current?.pause();
+                                    videoRefB.current?.pause();
+                                    setInlinePlay(open ? null : { id: item.entry.id, key: k });
+                                  }}
+                                  className={`flex items-center gap-2 rounded-lg px-1.5 py-1 -mx-1.5 text-left transition-colors ${open ? "bg-white/[0.05]" : "hover:bg-white/[0.03]"}`}
+                                  title="여기서 크게 재생"
+                                >
+                                  <span className="relative w-12 h-8 flex-shrink-0 rounded overflow-hidden bg-black/30 flex items-center justify-center group/pt">
+                                    {thumb ? <img src={thumb} className="w-full h-full object-cover" draggable={false} /> : <Play size={12} className="text-white/40" />}
+                                    <span className={`absolute top-0 left-0 px-1 rounded-br text-[9px] font-black leading-tight ${k === "A" ? "bg-primary/70 text-primary-foreground" : "bg-ccut-indigo/80 text-white"}`}>{k}</span>
+                                    <span className="absolute inset-0 flex items-center justify-center bg-black/35 opacity-0 group-hover/pt:opacity-100 transition-opacity"><Play size={12} className="text-white" /></span>
+                                  </span>
+                                  <span className="min-w-0 flex-1 text-[12px] text-foreground/80 truncate">{item.entry.pair?.[k]?.title ?? (k === "A" ? "시장형 편집" : "사용자친화형 편집")}</span>
+                                  <ChevronDown size={13} className={`flex-shrink-0 text-muted-foreground/50 transition-transform ${open ? "rotate-180" : ""}`} />
+                                </button>
+                                {open && (
+                                  previewSrc ? (
+                                    <video src={previewSrc} controls autoPlay className="w-full rounded-xl bg-black border border-white/8" style={{ maxHeight: 360 }} />
+                                  ) : (
+                                    <div className="w-full rounded-xl bg-black/40 border border-white/8 py-6 text-center text-[11px] text-muted-foreground/60">
+                                      이 지난 제안은 미리보기 영상이 없습니다. 아래 '이 제안 다시 열기'로 무대에서 재생하세요.
+                                    </div>
+                                  )
+                                )}
+                              </div>
+                            );
+                          })}
                         </div>
-                        <button
-                          onClick={() => onRestoreProposalEntry?.(item.entry.id)}
-                          className="self-start mt-1 px-3 py-1.5 rounded-full text-[11px] font-bold bg-primary/15 text-primary hover:bg-primary hover:text-primary-foreground transition-all"
-                        >
-                          이 제안 다시 열기
-                        </button>
                       </div>
                       <span className="text-[10px] text-muted-foreground/40 px-1">{new Date(item.entry.ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
                     </div>
@@ -1440,7 +1523,18 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
         {(storyPlan?.consultation_status === "confirmed" || !!proposals) && (
           <>
           {renderSelfCheckNotice(proposals)}
-          <div className="grid grid-cols-2 gap-4 w-full">
+          <div className="flex flex-col gap-3 w-full">
+          {/* [LAYOUT] A안 아코디언 */}
+          <div className="w-full rounded-2xl border border-white/8 bg-white/[0.02] overflow-hidden">
+          <button type="button" onClick={() => toggleProposal("A")} className="w-full flex items-center gap-2 px-3 py-2.5 hover:bg-white/[0.04] transition-colors">
+            <span className="relative w-12 h-8 flex-shrink-0 rounded overflow-hidden bg-black/30 flex items-center justify-center">
+              {getProposalPoster("A") ? <img src={getProposalPoster("A")} className="w-full h-full object-cover" draggable={false} /> : <Play size={12} className="text-white/40" />}
+              <span className="absolute top-0 left-0 px-1 rounded-br text-[9px] font-black leading-tight bg-primary/70 text-primary-foreground">A</span>
+            </span>
+            <span className="min-w-0 flex-1 text-left text-[13px] font-bold text-foreground/85">시장형 편집 <span className="text-primary">(A)</span></span>
+            <ChevronDown size={15} className={`flex-shrink-0 text-muted-foreground/50 transition-transform ${expandedProposal === "A" ? "rotate-180" : ""}`} />
+          </button>
+          <div className={expandedProposal === "A" ? "px-3 pb-3" : "hidden"}>
           <div className="flex flex-col items-center space-y-4">
             <div
               className="relative w-full aspect-[16/8] rounded-2xl bg-black overflow-hidden border border-white/8 cursor-pointer group/player"
@@ -1652,15 +1746,9 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
                 </div>
               )}
 
-              <div className="absolute top-4 left-6 pointer-events-none">
-                <span className="text-[10px] font-black tracking-widest text-primary/60 uppercase">
-                  Draft A
-                </span>
-                {renderSelfCheckPill(proposals?.A)}
-              </div>
 
               <div 
-                className="absolute bottom-0 left-0 right-0 h-6 z-40 flex items-end px-2 pb-1"
+                className="absolute bottom-0 left-0 right-0 h-6 z-40 flex items-end px-2 pb-1 opacity-0 group-hover/player:opacity-100 transition-opacity duration-200"
                 onClick={(e) => e.stopPropagation()}
               >
                 <input
@@ -1713,7 +1801,20 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
               />
             </button>
           </div>
+          </div>
+          </div>
 
+          {/* [LAYOUT] B안 아코디언 */}
+          <div className="w-full rounded-2xl border border-white/8 bg-white/[0.02] overflow-hidden">
+          <button type="button" onClick={() => toggleProposal("B")} className="w-full flex items-center gap-2 px-3 py-2.5 hover:bg-white/[0.04] transition-colors">
+            <span className="relative w-12 h-8 flex-shrink-0 rounded overflow-hidden bg-black/30 flex items-center justify-center">
+              {getProposalPoster("B") ? <img src={getProposalPoster("B")} className="w-full h-full object-cover" draggable={false} /> : <Play size={12} className="text-white/40" />}
+              <span className="absolute top-0 left-0 px-1 rounded-br text-[9px] font-black leading-tight bg-ccut-indigo/80 text-white">B</span>
+            </span>
+            <span className="min-w-0 flex-1 text-left text-[13px] font-bold text-foreground/85">사용자친화형 편집 <span className="text-ccut-indigo">(B)</span></span>
+            <ChevronDown size={15} className={`flex-shrink-0 text-muted-foreground/50 transition-transform ${expandedProposal === "B" ? "rotate-180" : ""}`} />
+          </button>
+          <div className={expandedProposal === "B" ? "px-3 pb-3" : "hidden"}>
           <div className="flex flex-col items-center space-y-4">
             <div
               className="relative w-full aspect-[16/8] rounded-2xl bg-black overflow-hidden border border-white/8 cursor-pointer group/player"
@@ -1953,15 +2054,9 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
                 </div>
               )}
 
-              <div className="absolute top-4 left-6 pointer-events-none">
-                <span className="text-[10px] font-black tracking-widest text-ccut-indigo/60 uppercase">
-                  Draft B
-                </span>
-                {renderSelfCheckPill(proposals?.B)}
-              </div>
 
               <div 
-                className="absolute bottom-0 left-0 right-0 h-6 z-40 flex items-end px-2 pb-1"
+                className="absolute bottom-0 left-0 right-0 h-6 z-40 flex items-end px-2 pb-1 opacity-0 group-hover/player:opacity-100 transition-opacity duration-200"
                 onClick={(e) => e.stopPropagation()}
               >
                 <input
@@ -2013,6 +2108,8 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
                   }`}
               />
             </button>
+          </div>
+          </div>
           </div>
         </div>
       </>
