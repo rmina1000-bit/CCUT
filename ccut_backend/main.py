@@ -4438,9 +4438,13 @@ async def delete_project(program_id: str, db: Session = Depends(get_db)):
     pg = db.query(ProgramTable).filter_by(program_id=program_id).first()
     if not pg:
         return {"status": "NOT_FOUND", "program_id": program_id}
-    pg.status = "DELETED"
-    pg.deleted_at = _dtd.datetime.now()
-    db.commit()
+    try:
+        pg.status = "DELETED"
+        pg.deleted_at = _dtd.datetime.now()
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"프로젝트 소프트삭제 실패: {e}")
     purge_at = pg.deleted_at + _dtd.timedelta(days=30)
     return {
         "status": "SOFT_DELETED",
@@ -4456,9 +4460,13 @@ async def restore_project(program_id: str, db: Session = Depends(get_db)):
     pg = db.query(ProgramTable).filter_by(program_id=program_id).first()
     if not pg:
         return {"status": "NOT_FOUND", "program_id": program_id}
-    pg.deleted_at = None
-    pg.status = "DRAFT"
-    db.commit()
+    try:
+        pg.deleted_at = None
+        pg.status = "DRAFT"
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"프로젝트 복원 실패: {e}")
     return {"status": "RESTORED", "program_id": program_id, "name": pg.name}
 
 
@@ -4551,8 +4559,12 @@ async def delete_source(source_id: str, mode: str = "source_only", db: Session =
         return {"status": "DELETED_FULL", "source_id": source_id, "file_removed": file_removed}
     else:
         # source_only: 파일만 제거, 레코드는 원본 부재 표시
-        s.file_path = None
-        db.commit()
+        try:
+            s.file_path = None
+            db.commit()
+        except Exception as e:
+            db.rollback()
+            raise HTTPException(status_code=500, detail=f"원본 삭제 실패: {e}")
         try:
             from engine import fragment_vault as _fv3
             _fv3.mark_source_alive()
