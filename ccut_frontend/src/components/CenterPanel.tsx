@@ -13,6 +13,7 @@ import { EmptyProjectView } from "@/components/views/EmptyProjectView";
 import { AnalysisLoadingView } from "@/components/views/AnalysisLoadingView";
 import { ExportPanelSection } from "@/components/views/ExportPanelSection";
 import { FragSearchPanel } from "@/components/views/FragSearchPanel";
+import { ComposerSection } from "@/components/views/ComposerSection";
 
 import type { AppState, SourceEntry } from "@/types";
 
@@ -100,12 +101,12 @@ function parseDirectionFromText(text: string): Direction | null {
   return Object.keys(direction).length > 0 ? direction : null;
 }
 
-const formatMB = (bytes?: number) => {
+export const formatMB = (bytes?: number) => {
   if (!bytes) return "0MB";
   return `${(bytes / (1024 * 1024)).toFixed(1)}MB`;
 };
 
-const formatDuration = (seconds?: number) => {
+export const formatDuration = (seconds?: number) => {
   if (!seconds) return "0초";
   const mins = Math.floor(seconds / 60);
   const secs = Math.floor(seconds % 60);
@@ -173,7 +174,7 @@ const renderSelfCheckNotice = (proposals: any) => {
 /**
  * [STEP 10-I.5.27-E6-R5] Robust Fragment Source ID Extraction Fallback
  */
-function extractSourceIdFromAny(value: any): string {
+export function extractSourceIdFromAny(value: any): string {
   if (!value) return "";
 
   // If input is string, directly match SRC_...
@@ -2142,137 +2143,6 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
                     {p.desc}
                   </p>
 
-                  {/* [STEP 10-I.5.25-A] Story & Explanation UI */}
-                  {(p.proposal_story || p.proposal_explanation) && (
-                    <div className="mt-4 pt-4 border-t border-white/5 space-y-4 animate-in fade-in duration-500">
-                      {/* 1. 편집 스토리 (Summary) */}
-                      {p.proposal_story && (
-                        <div className="space-y-1">
-                          <div className="flex items-center gap-1.5 opacity-80">
-                            <BookOpen size={10} className="text-primary" />
-                            <span className="text-[10px] font-bold uppercase tracking-wider">편집 스토리</span>
-                          </div>
-                          <p className="text-[11px] text-foreground/75 leading-relaxed">
-                            {p.proposal_story.story_summary}
-                          </p>
-                        </div>
-                      )}
-
-                      {/* 2. 스토리라인 (Steps) - Collapsible */}
-                      {p.proposal_explanation?.storyline && (
-                        <details className="group/details">
-                          <summary className="flex items-center justify-between cursor-pointer list-none opacity-70 hover:opacity-100 transition-all">
-                            <div className="flex items-center gap-1.5">
-                              <List size={10} className="text-primary" />
-                              <span className="text-[10px] font-bold uppercase tracking-wider">전개 과정</span>
-                            </div>
-                            <ChevronDown size={10} className="group-open/details:rotate-180 transition-transform" />
-                          </summary>
-                          <div className="mt-2 space-y-2 border-l border-white/5 pl-3 py-1">
-                            {p.proposal_explanation.storyline.map((step: any) => (
-                              <div key={step.step} className="space-y-0.5">
-                                <div className="flex items-center gap-2">
-                                  <span className="text-[9px] font-black text-primary/70">0{step.step}</span>
-                                  <span className="text-[10px] font-bold text-foreground/80">{step.role.toUpperCase()}</span>
-                                </div>
-                                <p className="text-[10px] text-foreground/60 leading-snug">
-                                  {step.description}
-                                </p>
-                              </div>
-                            ))}
-                          </div>
-                        </details>
-                      )}
-
-                      {/* 3. 소스별 요약 - Collapsible */}
-                      {p.proposal_explanation?.source_summaries && (
-                        <details className="group/details">
-                          <summary className="flex items-center justify-between cursor-pointer list-none opacity-70 hover:opacity-100 transition-all">
-                            <div className="flex items-center gap-1.5">
-                              <Package size={10} className="text-primary" />
-                              <span className="text-[10px] font-bold uppercase tracking-wider text-foreground/80">영상별 분석</span>
-                            </div>
-                            <ChevronDown size={10} className="group-open/details:rotate-180 transition-transform" />
-                          </summary>
-                          <div className="mt-2 grid grid-cols-1 gap-2 border-l border-white/5 pl-3 py-1">
-                            {(() => {
-                              const selectedCountBySourceId = new Map<string, number>();
-                              const proposalFragments =
-                                p.sequence ||
-                                p.fragments ||
-                                p.key_fragments ||
-                                p.resolved_fragments ||
-                                [];
-
-                              proposalFragments.forEach((f: any) => {
-                                const sid = extractSourceIdFromAny(f);
-                                if (sid) selectedCountBySourceId.set(sid, (selectedCountBySourceId.get(sid) || 0) + 1);
-                              });
-
-                              // Diagnostic log (One-time check per render loop)
-                              const totalFound = Array.from(selectedCountBySourceId.values()).reduce((a, b) => a + b, 0);
-                              if (proposalFragments.length > 0 && totalFound === 0) {
-                                console.warn("[proposal-usage-count] all usage counts are zero", {
-                                  proposalKeys: Object.keys(p || {}),
-                                  sampleSequence: proposalFragments.slice(0, 5),
-                                  sourceEntries: sourceEntries?.slice(0, 5),
-                                });
-                              }
-
-                              return p.proposal_explanation.source_summaries
-                                .filter((src: any) => sourceLabelMap[src.source_id])
-                                .map((src: any, idx: number) => {
-                                  const entry = sourceEntries?.find(e => e.source_id === src.source_id);
-                                  const sidKey = extractSourceIdFromAny(src.source_id) || src.source_id;
-                                  const realProposedCount = selectedCountBySourceId.get(sidKey) || selectedCountBySourceId.get(src.source_id) || 0;
-
-                                  return (
-                                    <div key={`${src.source_id}-${idx}`} className="flex flex-col">
-                                      <div className="flex items-center gap-2">
-                                        <span className="text-[10px] font-bold text-foreground/80">
-                                          영상 {sourceLabelMap[src.source_id] || src.source_label || labels[idx] || `S${idx + 1}`}
-                                        </span>
-                                        <span className="text-[9px] text-foreground/50 font-medium">
-                                          · {formatMB(entry?.file_size_bytes)} · {formatDuration(entry?.duration_sec)}
-                                        </span>
-                                        <span className="text-[9px] px-1.5 py-0.5 bg-white/5 rounded text-foreground/60 ml-auto">{src.dominant_topic}</span>
-                                      </div>
-                                      <div className="flex items-center gap-2 mt-0.5">
-                                        <p className="text-[9px] text-foreground/60">
-                                          {src.visual_character}
-                                        </p>
-                                        <div className="flex gap-2 text-[9px] font-medium">
-                                          <span className="text-foreground/50">분석된 의미 조각: {src.fragment_count}개</span>
-                                          <span className="text-primary/70">제안 사용 조각: {realProposedCount}개</span>
-                                        </div>
-                                      </div>
-                                    </div>
-                                  );
-                                });
-                            })()}
-                          </div>
-                        </details>
-                      )}
-
-                      {/* 4. 품질 경고 (Quality Warnings) */}
-                      {p.proposal_explanation?.quality_warnings?.length > 0 && (
-                        <div className="pt-2">
-                          <div className="flex items-center gap-1.5 opacity-80 mb-1.5">
-                            <AlertCircle size={10} className="text-amber-500" />
-                            <span className="text-[10px] font-bold uppercase tracking-wider text-amber-500">데이터 품질 안내</span>
-                          </div>
-                          <ul className="space-y-1 list-none">
-                            {p.proposal_explanation.quality_warnings.map((warn: string, i: number) => (
-                              <li key={i} className="text-[9px] text-amber-200/70 leading-relaxed flex gap-1.5 items-start">
-                                <span className="mt-1 w-1 h-1 rounded-full bg-amber-500/40 shrink-0" />
-                                {warn}
-                              </li>
-                            ))}
-                          </ul>
-                        </div>
-                      )}
-                    </div>
-                  )}
                 </div>
               </div>
             ))
@@ -2301,101 +2171,21 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
     <div className="flex flex-col h-full w-full bg-[#0a0a0b] items-center overflow-hidden relative">
       {renderContent()}
 
-      {/* [STEP 10-I.5.28-E9-R2-R3-R2] ChatGPT-style auto-grow Composer */}
-      {/* [UI-⑩⑪] 중앙창과 같은 배경색으로 통일, 과한 라운드 축소 */}
-      {storyPlan && (
-        <div
-          className="sticky bottom-0 z-20 w-full bg-[#0a0a0b] px-5 py-4"
-          onDragOver={(e) => { e.preventDefault(); }}
-          onDrop={(e) => {
-            // [UI-⑧] 채팅창에 영상 드래그 → 프로젝트에 추가
-            e.preventDefault();
-            const files = Array.from(e.dataTransfer?.files ?? []).filter((f) => f.type.startsWith("video/"));
-            if (files.length > 0) onAddVideoFiles?.(files);
-          }}
-        >
-          <div className="mx-auto flex w-full max-w-3xl items-end gap-3 rounded-lg border border-white/10 bg-[#161618] px-4 py-3 shadow-sm">
-            {/* [UI-⑧] 영상 추가 — 컴포저 맨 앞 + */}
-            <button
-              type="button"
-              title="영상 추가"
-              onClick={() => (onRequestAddVideos ? onRequestAddVideos() : handleUpload())}
-              className="flex h-9 w-9 shrink-0 items-center justify-center text-zinc-400 hover:text-white transition-colors"
-            >
-              <Plus size={18} />
-            </button>
-            <textarea
-              ref={consultationTextareaRef}
-              value={consultationInput}
-              rows={1}
-              placeholder="편하게 말씀해 주세요. 예: 사람 중심으로 / 더 빠르게 / 풍경 줄여"
-              disabled={appState === "analyzing"}
-              onChange={(e) => {
-                setConsultationInput(e.target.value);
-                resizeConsultationTextarea(e.currentTarget);
-              }}
-              onKeyDown={(e) => {
-                if (e.nativeEvent.isComposing) return;
-                if (e.key === "Enter" && !e.shiftKey) {
-                  e.preventDefault();
-                  handleSubmitConsultation();
-                }
-              }}
-              className="min-h-[44px] max-h-[160px] flex-1 resize-none overflow-y-auto bg-transparent py-2 text-sm leading-relaxed text-zinc-100 outline-none placeholder:text-zinc-500 whitespace-pre-wrap break-words disabled:opacity-40"
-            />
-            {/* [UI-⑫] 원형 배경 제거, 위로 향한 화살표만 글자색으로 */}
-            <button
-              type="button"
-              onClick={handleSubmitConsultation}
-              disabled={!consultationInput.trim() || appState === "analyzing"}
-              className="flex h-9 w-9 shrink-0 items-center justify-center text-zinc-100 hover:text-white disabled:opacity-30 transition-opacity"
-              aria-label="의견 보내기"
-            >
-              <ArrowUp size={18} />
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* [UI-이전디자인 삭제] 비컨설팅 상태 채팅바 — 새 컴포저와 동일 디자인으로 통일 */}
-      {!storyPlan && (
-        <div className="sticky bottom-0 z-20 w-full bg-[#0a0a0b] px-5 py-4">
-          <div className="mx-auto flex w-full max-w-3xl items-center gap-3 rounded-lg border border-white/10 bg-[#161618] px-4 py-3 shadow-sm">
-            {/* [UI-⑧] 영상 추가 — 컴포저 맨 앞 + */}
-            <button
-              type="button"
-              title="영상 추가"
-              onClick={() => (onRequestAddVideos ? onRequestAddVideos() : handleUpload())}
-              className="flex h-9 w-9 shrink-0 items-center justify-center text-zinc-400 hover:text-white transition-colors"
-            >
-              <Plus size={18} />
-            </button>
-            <input
-              type="text"
-              value={chatValue}
-              onChange={(e) => setChatValue(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") handleSendFull();
-              }}
-              disabled={appState === "analyzing"}
-              placeholder={
-                appState === "analyzing"
-                  ? "분석 중에는 잠시만 기다려 주세요..."
-                  : "편하게 말씀해 주세요. 예: 사람 중심으로 / 더 빠르게 / 풍경 줄여"
-              }
-              className={`flex-1 bg-transparent py-2 text-sm leading-relaxed text-zinc-100 outline-none placeholder:text-zinc-500 ${appState === "analyzing" ? "opacity-40" : ""}`}
-            />
-            <button
-              onClick={handleSendFull}
-              disabled={!chatValue.trim() || appState === "analyzing"}
-              className="flex h-9 w-9 shrink-0 items-center justify-center text-zinc-100 hover:text-white disabled:opacity-30 transition-opacity"
-              aria-label="보내기"
-            >
-              <ArrowUp size={18} />
-            </button>
-          </div>
-        </div>
-      )}
+      <ComposerSection
+        storyPlan={storyPlan}
+        appState={appState}
+        onAddVideoFiles={onAddVideoFiles}
+        onRequestAddVideos={onRequestAddVideos}
+        handleUpload={handleUpload}
+        consultationTextareaRef={consultationTextareaRef}
+        consultationInput={consultationInput}
+        setConsultationInput={setConsultationInput}
+        resizeConsultationTextarea={resizeConsultationTextarea}
+        handleSubmitConsultation={handleSubmitConsultation}
+        chatValue={chatValue}
+        setChatValue={setChatValue}
+        handleSendFull={handleSendFull}
+      />
     </div>
   );
 };
