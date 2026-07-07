@@ -753,8 +753,10 @@ class SemanticFragmentGenerator:
 
     def build_fragments(self, source_id, evidences, boundaries):
         """[STEP 10-I.5.3] Global boundaries 기반으로 조각 생성 (30s 경계 무관)"""
+        import json as _json
         final_fragments = []
-        
+        raw_vf_fragments = self.bams.get_fragments_by_source(source_id)
+
         # boundaries는 이미 0.0부터 total_duration까지 정렬되어 있음
         for i in range(len(boundaries)-1):
             start, end = round(boundaries[i], 2), round(boundaries[i+1], 2)
@@ -773,10 +775,24 @@ class SemanticFragmentGenerator:
             
             # 첫 번째 Evidence를 기본 정보로 사용 (Summary 등)
             primary_ev = overlapping_evs[0]
-            
+
             # 여러 evidence의 텍스트 병합
             combined_text = " ".join([e.get("text", "") for e in overlapping_evs if e.get("text")]).strip()
-            
+
+            # raw VF 조각 intelligence(silence_ratio/motion_blur) 시간 중첩 매칭
+            overlapping_vfs = [
+                vf for vf in raw_vf_fragments
+                if not (vf.get("end_time", 0) <= start or vf.get("start_time", 0) >= end)
+            ]
+            primary_vf_intel = overlapping_vfs[0].get("intelligence") if overlapping_vfs else {}
+            if isinstance(primary_vf_intel, str):
+                try:
+                    primary_vf_intel = _json.loads(primary_vf_intel)
+                except Exception:
+                    primary_vf_intel = {}
+            if not isinstance(primary_vf_intel, dict):
+                primary_vf_intel = {}
+
             sf_id = f"SF_{uuid.uuid4().hex[:6].upper()}_{source_id}"
             final_fragments.append({
                 "fragment_id": sf_id,
@@ -793,7 +809,9 @@ class SemanticFragmentGenerator:
                     "role": "context",
                     "edit_value": 0.5,
                     "market_value": 0.5,
-                    "duration": duration
+                    "duration": duration,
+                    "silence_ratio": primary_vf_intel.get("silence_ratio", 0.0),
+                    "motion_blur": primary_vf_intel.get("motion_blur", 1.0)
                 },
                 "continuity": {},
                 "confidence": max([e.get("confidence", 0.5) for e in overlapping_evs])
@@ -1197,8 +1215,23 @@ class SemanticFragmentGenerator:
             elif duration > 120:
                 r_cost -= 0.10
 
+        # Quality-cost: 무음비율/카메라흔들림 비용
+        quality_cost = 0.0
+        _silence = fragment.get("structural", {}).get("silence_ratio", None)
+        if _silence is not None:
+            if _silence >= 0.3:
+                quality_cost += 0.08
+            elif _silence < 0.05:
+                quality_cost -= 0.05
+        _blur = fragment.get("structural", {}).get("motion_blur", None)
+        if _blur is not None:
+            if _blur < 0.3:
+                quality_cost -= 0.12
+            elif _blur >= 0.7:
+                quality_cost += 0.05
+
         # 4. 종합 및 Clamp (User 전용 점수 갱신)
-        final_value = base_user_value + must_keep_bonus + avoid_penalty + tone_bonus + r_cost
+        final_value = base_user_value + must_keep_bonus + avoid_penalty + tone_bonus + r_cost + quality_cost
         fragment["structural"]["edit_value"] = max(0.0, min(1.0, final_value))
         
         return fragment

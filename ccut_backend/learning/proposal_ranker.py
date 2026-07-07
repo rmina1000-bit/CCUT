@@ -32,40 +32,46 @@ class ProposalRanker:
                 transition_penalty = 1.0
                 
                 # 1. Weak Label Scoring Heuristics
-                for f in seq:
-                    fid = f.get("fragment_id")
-                    # Query weak labels for this fragment
-                    w_labels = db.query(WeakLabelTable).filter_by(fragment_id=fid).all()
-                    for wl in w_labels:
-                        if wl.label_name in ["hook_candidate", "reaction_hold_good"]:
-                            # Reward good patterns
-                            weak_label_bonus *= (1.0 + (0.05 * wl.confidence))
-                        elif wl.label_name in ["boredom_risk", "cognitive_overload_risk", "audio_cut_bad"]:
-                            # Penalize poor visual/audio transitions
-                            weak_label_bonus *= (1.0 - (0.08 * wl.confidence))
-                
+                try:
+                    for f in seq:
+                        fid = f.get("fragment_id")
+                        # Query weak labels for this fragment
+                        w_labels = db.query(WeakLabelTable).filter_by(fragment_id=fid).all()
+                        for wl in w_labels:
+                            if wl.label_name in ["hook_candidate", "reaction_hold_good"]:
+                                # Reward good patterns
+                                weak_label_bonus *= (1.0 + (0.05 * wl.confidence))
+                            elif wl.label_name in ["boredom_risk", "cognitive_overload_risk", "audio_cut_bad"]:
+                                # Penalize poor visual/audio transitions
+                                weak_label_bonus *= (1.0 - (0.08 * wl.confidence))
+                except Exception:
+                    weak_label_bonus = 1.0
+
                 # 2. PBE Delta Shift Penalty/Reward
                 # Check if this project or source has PBE edits
-                pbe_edits = db.query(UserEditDecisionTable).filter_by(decision_type="PBE_EDIT").all()
-                for edit in pbe_edits:
-                    d_log = edit.delta_log or {}
-                    match_fid = d_log.get("fragment_id")
-                    
-                    # If this fragment is included in the sequence
-                    match_clip = next((c for c in seq if c.get("fragment_id") == match_fid), None)
-                    if match_clip:
-                        # Check if the sequence respects the adjusted boundary
-                        c_start = float(match_clip.get("start", match_clip.get("start_time", 0.0)))
-                        c_end = float(match_clip.get("end", match_clip.get("end_time", 0.0)))
-                        target_start = float(d_log.get("after_start", 0.0))
-                        target_end = float(d_log.get("after_end", 0.0))
-                        
-                        # If the proposal matches the PBE correction, give it a reward
-                        if abs(c_start - target_start) < 0.1 and abs(c_end - target_end) < 0.1:
-                            boundary_penalty *= 1.20
-                        else:
-                            # If it uses the old uncorrected boundary, penalize it slightly
-                            boundary_penalty *= 0.90
+                try:
+                    pbe_edits = db.query(UserEditDecisionTable).filter_by(decision_type="PBE_EDIT").all()
+                    for edit in pbe_edits:
+                        d_log = edit.delta_log or {}
+                        match_fid = d_log.get("fragment_id")
+
+                        # If this fragment is included in the sequence
+                        match_clip = next((c for c in seq if c.get("fragment_id") == match_fid), None)
+                        if match_clip:
+                            # Check if the sequence respects the adjusted boundary
+                            c_start = float(match_clip.get("start", match_clip.get("start_time", 0.0)))
+                            c_end = float(match_clip.get("end", match_clip.get("end_time", 0.0)))
+                            target_start = float(d_log.get("after_start", 0.0))
+                            target_end = float(d_log.get("after_end", 0.0))
+
+                            # If the proposal matches the PBE correction, give it a reward
+                            if abs(c_start - target_start) < 0.1 and abs(c_end - target_end) < 0.1:
+                                boundary_penalty *= 1.20
+                            else:
+                                # If it uses the old uncorrected boundary, penalize it slightly
+                                boundary_penalty *= 0.90
+                except Exception:
+                    boundary_penalty = 1.0
                             
                 # 3. Pattern Memory Multipliers
                 role_counts = {}
@@ -88,8 +94,23 @@ class ProposalRanker:
                 if role_counts.get("scenery", 0) > 2:
                     pattern_bonus *= PatternMemory.get_pattern_multiplier("scenery_bridge")
 
+                # Quality-factor: 무음비율/카메라흔들림 시퀀스 평균 반영
+                quality_factor = 1.0
+                _blur_list = [f.get("structural", {}).get("motion_blur") for f in seq if f.get("structural", {}).get("motion_blur") is not None]
+                _silence_list = [f.get("structural", {}).get("silence_ratio") for f in seq if f.get("structural", {}).get("silence_ratio") is not None]
+                if _blur_list:
+                    avg_blur = sum(_blur_list) / len(_blur_list)
+                    if avg_blur < 0.3:
+                        quality_factor *= 0.88
+                    elif avg_blur >= 0.7:
+                        quality_factor *= 1.05
+                if _silence_list:
+                    avg_silence = sum(_silence_list) / len(_silence_list)
+                    if avg_silence < 0.05:
+                        quality_factor *= 0.95
+
                 # Combine scores into a final Reranked Score
-                rerank_score = round(base_hrs * pattern_bonus * weak_label_bonus * boundary_penalty * transition_penalty, 4)
+                rerank_score = round(base_hrs * pattern_bonus * weak_label_bonus * boundary_penalty * transition_penalty * quality_factor, 4)
                 
                 p["rerank_score"] = rerank_score
                 p["rerank_details"] = {
