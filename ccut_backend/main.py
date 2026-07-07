@@ -209,6 +209,13 @@ try:
 except Exception as _admin_e:
     print(f"[ADMIN] schema ensure 실패 (non-blocking): {_admin_e}")
 
+try:
+    from learning.learning_models import init_learning_db
+    init_learning_db()
+    print("[LEARNING] learning tables ensured (weak_labels/user_edit_decisions 등 6종)")
+except Exception as _learning_e:
+    print(f"[LEARNING] schema ensure 실패 (non-blocking): {_learning_e}")
+
 # [기초층 §8] DB 자동 순환 백업 — 최소 백업 단위는 DB 1파일(말의 원장·편성일지·
 # 계보 전부 포함, MB급). 시작 시 sqlite backup API로 backups/에 7개 순환.
 # 수동 .bak 난립(실측 39개)의 제도적 대체. 실패 비차단.
