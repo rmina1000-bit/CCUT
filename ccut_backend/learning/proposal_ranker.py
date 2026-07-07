@@ -29,6 +29,7 @@ class ProposalRanker:
                 pattern_bonus = 1.0
                 weak_label_bonus = 1.0
                 boundary_penalty = 1.0
+                transition_penalty = 1.0
                 
                 # 1. Weak Label Scoring Heuristics
                 for f in seq:
@@ -68,17 +69,27 @@ class ProposalRanker:
                             
                 # 3. Pattern Memory Multipliers
                 role_counts = {}
-                for f in seq:
+                for i, f in enumerate(seq):
                     r = f.get("structural", {}).get("role", "main")
                     role_counts[r] = role_counts.get(r, 0) + 1
-                    
+
+                    # T·O-cost: 전환·오버랩 비용
+                    if i > 0:
+                        prev = seq[i-1]
+                        if prev.get("end", prev.get("end_time", 0)) > f.get("start", f.get("start_time", 0)):
+                            transition_penalty *= 0.85
+                        prev_scene = prev.get("semantic", {}).get("topic")
+                        f_scene = f.get("semantic", {}).get("topic")
+                        if prev_scene == f_scene and prev_scene not in (None, "", "unknown"):
+                            transition_penalty *= 0.92
+
                 if role_counts.get("reaction", 0) > 2:
                     pattern_bonus *= PatternMemory.get_pattern_multiplier("reaction_hold")
                 if role_counts.get("scenery", 0) > 2:
                     pattern_bonus *= PatternMemory.get_pattern_multiplier("scenery_bridge")
-                    
+
                 # Combine scores into a final Reranked Score
-                rerank_score = round(base_hrs * pattern_bonus * weak_label_bonus * boundary_penalty, 4)
+                rerank_score = round(base_hrs * pattern_bonus * weak_label_bonus * boundary_penalty * transition_penalty, 4)
                 
                 p["rerank_score"] = rerank_score
                 p["rerank_details"] = {

@@ -1184,10 +1184,21 @@ class SemanticFragmentGenerator:
         # 3. Tone Match (Placeholder)
         tone_bonus = 0.0
         if user_intent.get("tone") and user_intent["tone"] != "general":
-             tone_bonus = 0.05 
+             tone_bonus = 0.05
+
+        # R-cost: 리듬 비용
+        r_cost = 0.0
+        duration = fragment.get("structural", {}).get("duration", 0)
+        if duration > 0:
+            if duration < 3:
+                r_cost -= 0.15
+            elif 8 <= duration <= 45:
+                r_cost += 0.10
+            elif duration > 120:
+                r_cost -= 0.10
 
         # 4. 종합 및 Clamp (User 전용 점수 갱신)
-        final_value = base_user_value + must_keep_bonus + avoid_penalty + tone_bonus
+        final_value = base_user_value + must_keep_bonus + avoid_penalty + tone_bonus + r_cost
         fragment["structural"]["edit_value"] = max(0.0, min(1.0, final_value))
         
         return fragment
