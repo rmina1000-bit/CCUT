@@ -93,6 +93,33 @@ def _snapshot_db_before_destructive(reason: str = "destructive") -> str:
         return ""
 
 
+def get_silence_ratio(audio_path, start, end, threshold_db=-40.0):
+    """무음 구간 비율 — 컷 포인트 적합성 신호"""
+    try:
+        import librosa, numpy as np
+        y, sr = librosa.load(audio_path, sr=None, offset=start, duration=max(end-start,0.1))
+        if len(y)==0: return 0.0
+        rms = librosa.feature.rms(y=y)[0]
+        rms_db = librosa.amplitude_to_db(rms, ref=np.max)
+        silence_frames = np.sum(rms_db < threshold_db)
+        return round(float(silence_frames)/max(len(rms_db),1), 4)
+    except Exception:
+        return 0.0
+
+
+def get_motion_blur_score(keyframe_path):
+    """카메라 흔들림 정도 — 조각 품질 신호(낮을수록 흐림)"""
+    try:
+        import cv2
+        img = cv2.imread(str(keyframe_path))
+        if img is None: return 1.0
+        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+        score = cv2.Laplacian(gray, cv2.CV_64F).var()
+        return round(min(float(score)/100.0, 1.0), 4)
+    except Exception:
+        return 1.0
+
+
 def _resolve_static_path(path: str):
     """STORAGE_DIR과 BACKEND_DIR/storage 양쪽에서 파일을 찾는다. 경로탈출 방지."""
     for base in _STATIC_BASES:
@@ -861,6 +888,7 @@ def _background_whisper_impl(source_id: str, video_path: str, fragments: list):
                 "role":       role,
                 "words":      fragment_words.get(frag_id, []),
             }
+            frag["intelligence"]["silence_ratio"] = get_silence_ratio(video_path, frag["start_time"], frag["end_time"])
 
             print(f"[ASR BG] {frag_id} | hook={hook_score:.3f} | role={role} | transcript={transcript[:20]!r}")
 
@@ -1035,6 +1063,7 @@ def _background_vl_perception(source_id: str, fragments: list, max_fragments: in
                 if not isinstance(existing_intelligence, dict):
                     existing_intelligence = {}
                 existing_intelligence["perception"] = result
+                existing_intelligence["motion_blur"] = get_motion_blur_score(thumb_path)
 
                 if hasattr(bams, "update_fragment_intelligence"):
                     bams.update_fragment_intelligence(frag_id, existing_intelligence)
