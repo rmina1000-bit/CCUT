@@ -584,6 +584,20 @@ export const useProposalState = (
         matched: route.matched
       }, null, 2));
 
+      const b21Legacy = Object.entries(route.matched ?? {})
+        .filter(([key, value]) => key !== "kind" && value !== null && value !== undefined && value !== "")
+        .map(([key, value]) => ({ [key]: value }));
+      void narrativeService.interpretIntent(text)
+        .then((res: any) => {
+          const mirrorEvents = Array.isArray(res?.mirror?.mentioned_events)
+            ? res.mirror.mentioned_events.map((item: any) => item?.event ?? item)
+            : null;
+          console.log(`[B2-1] INPUT{text=${JSON.stringify(text)}} -> OUTPUT{legacy=${JSON.stringify(b21Legacy)}, mirror=${JSON.stringify(mirrorEvents)}, used="legacy"}`);
+        })
+        .catch(() => {
+          console.log(`[B2-1] INPUT{text=${JSON.stringify(text)}} -> OUTPUT{legacy=${JSON.stringify(b21Legacy)}, mirror=null, used="legacy"}`);
+        });
+
       // [SHOW 2026-07-05] 조회/열람 — 편집이 아니라 보여주기. 결과 카드를 흐름 속
       // 메시지로 남긴다(타임라인 diff-sync가 자동 영속 → F5에도 유지, 클릭=재생).
       if (route.action === "show_fragments") {

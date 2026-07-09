@@ -16,6 +16,7 @@ export interface NarrativeIntentResponse {
   response_json_ok?: boolean;
   contract_valid?: boolean;
   error?: string;
+  mirror?: Record<string, any> | null;
 }
 
 export const narrativeService = {
