@@ -2022,6 +2022,7 @@ async def post_narrative_intent(req: NarrativeIntentRequest):
             "status": result.status,
             "patch": vars(result.patch) if result.patch else None,
             "latency_ms": result.latency_ms,
+            "mirror": result.mirror,
             "error": result.error_message
         }
     except Exception as e:

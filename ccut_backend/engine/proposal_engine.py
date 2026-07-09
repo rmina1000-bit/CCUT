@@ -239,7 +239,7 @@ class ProposalEngine:
     # [DIRECTOR_LAYER_V0] config 플래그 — False면 기존 배치(hard_guard 글로벌정렬) 유지
     ARRANGE_ENABLED = True
 
-    def arrange_fragments(self, sequence):
+    def arrange_fragments(self, sequence, recommended_order=None):
         """[DIRECTOR_LAYER_V0] 선택된 조각의 '순서만' 재배치 (selection 불변).
         - Source-Lock: 같은 source_id 조각을 한 블록으로 묶고 블록 내부는 원본 시간순
           → '같은 영상이 떠났다 다시 나오는'(왔다갔다=소스 재등장)을 구조적으로 차단.
@@ -247,6 +247,13 @@ class ProposalEngine:
         motion_score는 상위 HRS 단계에서 각 조각에 부착됨(없으면 기본 0.5).
         검증: 격리 블라인드 4/4 + Scorecard before/after.
         """
+        # [STORY-CONNECT] recommended_order 우선, 없으면 기존 motion 로직(fallback)
+        if recommended_order:
+            order_index = {fid: i for i, fid in enumerate(recommended_order)}
+            known = [f for f in sequence if f.get("fragment_id") in order_index]
+            unknown = [f for f in sequence if f.get("fragment_id") not in order_index]
+            known.sort(key=lambda f: order_index[f["fragment_id"]])
+            return known + unknown
         if not sequence or len(sequence) <= 1:
             return sequence
 

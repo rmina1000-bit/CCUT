@@ -42,6 +42,7 @@ class NarrativeLLMResult:
     raw_response: str = ""
     thinking: str = ""
     error_message: str = ""
+    mirror: Optional[Dict[str, Any]] = None
     metadata: Dict[str, Any] = field(default_factory=dict)
 
 def validate_narrative_contract(text: str) -> bool:

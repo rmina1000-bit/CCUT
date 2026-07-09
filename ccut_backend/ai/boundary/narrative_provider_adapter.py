@@ -18,6 +18,17 @@ class NarrativeProviderAdapter:
         self.keep_alive = "10m"
 
     def get_story_intent_patch(self, user_message: str) -> NarrativeLLMResult:
+        self._mirror_cache = None
+        # [MIRROR-CONNECT] MIRROR_ENABLED면 미러로 스토리 의도 복원(첨부만, 기존 로직 무변경)
+        try:
+            import os as _os
+            if _os.getenv("MIRROR_ENABLED") and user_message:
+                from . import mirror_intent as _mi
+                _m = _mi.extract(user_message)
+                if _m and (_m.get("mentioned_events") or _m.get("request_type")):
+                    self._mirror_cache = _m
+        except Exception:
+            pass
         url = f"{self.base_url}/api/generate"
         
         system_prompt = (
@@ -79,37 +90,41 @@ class NarrativeProviderAdapter:
                 if validate_narrative_contract(raw_res):
                     # Production OK: Valid JSON in response field
                     data = json.loads(self._clean_json(raw_res))
-                    return NarrativeLLMResult(
+                    return self._with_mirror(NarrativeLLMResult(
                         status=NarrativeLLMStatus.OK,
                         patch=StoryIntentPatch.from_dict(data),
                         latency_ms=latency,
                         raw_response=raw_res,
                         thinking=thinking
-                    )
+                    ))
                 elif validate_narrative_contract(thinking):
                     # Reject thinking-only JSON for production consistency
-                    return NarrativeLLMResult(
+                    return self._with_mirror(NarrativeLLMResult(
                         status=NarrativeLLMStatus.THINKING_JSON_ONLY,
                         latency_ms=latency,
                         raw_response=raw_res,
                         thinking=thinking,
                         error_message="JSON found in thinking field, but response is empty."
-                    )
+                    ))
                 else:
-                    return NarrativeLLMResult(
+                    return self._with_mirror(NarrativeLLMResult(
                         status=NarrativeLLMStatus.JSON_PARSE_FAILED,
                         latency_ms=latency,
                         raw_response=raw_res,
                         thinking=thinking,
                         error_message="Could not parse valid StoryIntentPatch from LLM output."
-                    )
+                    ))
 
         except urllib.error.URLError as e:
             if "timed out" in str(e).lower():
-                return NarrativeLLMResult(status=NarrativeLLMStatus.MODEL_CALL_TIMEOUT, error_message=str(e))
-            return NarrativeLLMResult(status=NarrativeLLMStatus.OLLAMA_NOT_RUNNING, error_message=str(e))
+                return self._with_mirror(NarrativeLLMResult(status=NarrativeLLMStatus.MODEL_CALL_TIMEOUT, error_message=str(e)))
+            return self._with_mirror(NarrativeLLMResult(status=NarrativeLLMStatus.OLLAMA_NOT_RUNNING, error_message=str(e)))
         except Exception as e:
-            return NarrativeLLMResult(status=NarrativeLLMStatus.MODEL_CALL_FAILED, error_message=str(e))
+            return self._with_mirror(NarrativeLLMResult(status=NarrativeLLMStatus.MODEL_CALL_FAILED, error_message=str(e)))
+
+    def _with_mirror(self, result: NarrativeLLMResult) -> NarrativeLLMResult:
+        result.mirror = getattr(self, "_mirror_cache", None)
+        return result
 
     def _clean_json(self, text: str) -> str:
         text = text.strip()
