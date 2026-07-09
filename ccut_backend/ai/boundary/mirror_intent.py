@@ -9,12 +9,16 @@ MODEL = "qwen2.5:7b-instruct"
 
 EVENT_KW = {
     "도착/시작":   ["도착","시작","출발","처음","오프닝","나섰","집 나"],
-    "먹방/식사":   ["먹","밥","국밥","식당","카페","음식","식사","맛집","맛있"],
+    "먹방/식사":   ["먹방","먹","밥","국밥","식당","카페","음식","식사","맛집","맛있"],
     "이동/구경":   ["이동","구경","걷","시장","거리","관광","돌아다","산책"],
     "야경/마무리": ["야경","밤","마무리","마지막","불빛","노을","저녁","끝"],
     "바다/해안":   ["바다","해안","해안가","해변","백사장","파도"],
     "물놀이":      ["물놀이","수영","물장난","계곡","워터파크"],
     "여행":        ["여행","가족여행","나들이","소풍","관광"],
+    "방/실내":     ["방","실내"],
+    "갯벌/조간대": ["갯벌","조간대"],
+    "동굴":        ["동굴"],
+    "아이/어린이": ["아이들","아이","어린이"],
 }
 CONTENT_HINT = {
     "travel": ["여행","가족여행","나들이","소풍","관광","시장","거리","바다","해안"],
@@ -25,13 +29,43 @@ REQUEST_TYPE_KW = {
     "story_composition": ["스토리 구성","스토리를 구성","이야기 구성","스토리로","서사","흐름"],
 }
 
+COMPOUND_GUARD_KW = ["방학", "방문", "방금", "방송", "주방", "난방", "가방", "해방"]
+
+def _find_ranges(text, keyword):
+    ranges = []
+    start = 0
+    while keyword:
+        idx = text.find(keyword, start)
+        if idx < 0:
+            break
+        end = idx + len(keyword)
+        ranges.append((idx, end))
+        start = idx + 1
+    return ranges
+
+def _overlaps(a_start, a_end, ranges):
+    return any(a_start < b_end and b_start < a_end for b_start, b_end in ranges)
+
 def detect_events(text):
     found = []
+    consumed = []
+    for guard in COMPOUND_GUARD_KW:
+        consumed.extend(_find_ranges(text, guard))
+
+    candidates = []
     for ev, kws in EVENT_KW.items():
-        idxs = [text.find(k) for k in kws if k in text]
-        if idxs:
-            found.append((min(idxs), ev))
-    found.sort()
+        for k in kws:
+            for start, end in _find_ranges(text, k):
+                candidates.append((-(end - start), start, end, ev))
+
+    first_pos = {}
+    for _, start, end, ev in sorted(candidates):
+        if _overlaps(start, end, consumed):
+            continue
+        consumed.append((start, end))
+        first_pos[ev] = min(start, first_pos.get(ev, start))
+
+    found = sorted((pos, ev) for ev, pos in first_pos.items())
     return [ev for _, ev in found]
 
 def detect_content_type(text):
