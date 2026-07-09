@@ -794,15 +794,25 @@ export const useProposalState = (
         user_intent: userIntent
       }, null, 2));
 
-      // [UI-④] 재편집 착수 보고 — 무엇을 얼마나 보는지, 시간은 얼마나 걸릴지
-      const _poolSize = (sourceFragments ?? []).length;
-      const _estMin = Math.max(1, Math.ceil(((_poolSize / 8) * 7 + 45) / 60));
+      // [UI-④] 재편집 착수 보고 — 현재 화면의 조각 수와 문구 숫자를 맞춘다.
+      const _fragmentPoolSize = (sourceFragments ?? []).length;
+      const _selectedMode = selectedProposalId === "A" || selectedProposalId === "B" ? selectedProposalId : null;
+      const _visibleProposal = _selectedMode ? proposals?.[_selectedMode] : (proposals?.B ?? proposals?.A);
+      const _visibleFragmentIds = Array.isArray(_visibleProposal?.key_fragments)
+        ? _visibleProposal.key_fragments
+        : (sourceFragments ?? [])
+            .map((f: any) => f?.fragment_id || f?.proposal_fragment_id || f?.id)
+            .filter(Boolean);
+      const _visibleFragmentCount = _visibleFragmentIds.length;
+      const _estMin = Math.max(1, Math.ceil(((_fragmentPoolSize / 8) * 7 + 45) / 60));
+      const _workingText = `조각 ${_visibleFragmentCount}개를 "${inputText}" 기준으로 다시 고르고 있어요. 판단과 미리보기 렌더까지 약 ${_estMin}분 예상 — 끝나면 알려드릴게요.`;
+      console.log(`[B2-0] INPUT{source_ids=${JSON.stringify(effectiveSourceIds)}, pool=${_fragmentPoolSize}, selected=${JSON.stringify(_visibleFragmentIds)}} -> OUTPUT{status_text=${JSON.stringify(_workingText)}, N=${_visibleFragmentCount}}`);
       setStoryPlan((prev: any) => prev ? {
         ...prev,
         messages: [...(prev.messages ?? []), {
           id: `ai_working_${Date.now()}`,
           sender: "ai",
-          text: `조각 ${_poolSize}개를 "${inputText}" 기준으로 다시 고르고 있어요. 판단과 미리보기 렌더까지 약 ${_estMin}분 예상 — 끝나면 알려드릴게요.`,
+          text: _workingText,
           timestamp: Date.now(),
         }],
       } : prev);
@@ -858,6 +868,11 @@ export const useProposalState = (
             }
           });
 
+          const _b20FragmentsA = generatedProposals.A?.key_fragments ?? [];
+          const _b20FragmentsB = generatedProposals.B?.key_fragments ?? [];
+          console.log(`[B2-0] INPUT{proposal_id=${JSON.stringify(generatedProposals.A?.proposal_id ?? null)}, frags=${JSON.stringify(_b20FragmentsA)}} -> OUTPUT{ui_count=${_b20FragmentsA.length}}`);
+          console.log(`[B2-0] INPUT{proposal_id=${JSON.stringify(generatedProposals.B?.proposal_id ?? null)}, frags=${JSON.stringify(_b20FragmentsB)}} -> OUTPUT{ui_count=${_b20FragmentsB.length}}`);
+
           // [CONSULTATION_PROJECT_RESULT] Console Log
           console.log("[CONSULTATION_PROJECT_RESULT]\n" + JSON.stringify({
             proposal_id: {
@@ -865,8 +880,8 @@ export const useProposalState = (
               B: generatedProposals.B?.proposal_id
             },
             sequenceLength: {
-              A: generatedProposals.A?.key_fragments?.length || 0,
-              B: generatedProposals.B?.key_fragments?.length || 0
+              A: _b20FragmentsA.length,
+              B: _b20FragmentsB.length
             },
             previewUrlExists: {
               A: !!generatedProposals.A?.preview_url,
