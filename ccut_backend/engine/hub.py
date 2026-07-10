@@ -267,6 +267,85 @@ def _deterministic_intent(t):
             "theme_found": theme is not None}
 
 
+# ---------- [C1] 복합 intent: 절 단위 극성 파서 (env CCUT_COMPOUND_INTENT, 기본 OFF) ----------
+# 근거: outputs/compound_intent_deep (201케이스) — 문장 전체 극성+next() 1테마 방식은
+# useful 14.9%/극성오류 98건, 절 단위 v3는 useful 98.0%/극성오류 4건.
+# 사전 확장분은 이 파서 전용(legacy _THEME_VOCAB 무변). 매칭은 longest-match consume.
+_COMPOUND_VOCAB_EXTRA = [
+    "가족여행", "가족 여행", "여행", "셀카", "셀피", "먹방", "마술", "침대",
+    "갯벌", "바닷가", "해안가", "파도", "경치", "나들이",
+    "방송", "먹는", "먹기", "식사", "얼굴",  # 부분매칭 방어용('방송'의 '방', '먹방'의 '방' 등)
+]
+_CLAUSE_MARKS = ("제외하고", "빼고", "말고", "없이", "남기고", "그리고", "하고",
+                 ",", ".", "+", "/", "랑", "와", "과", "인데", "지만", "보다")
+
+
+def _split_clauses(t):
+    """극성 경계('빼고','남기고' 등)와 접속 기호에서 문장을 절로 분리."""
+    parts = re.split("(" + "|".join(re.escape(m) for m in _CLAUSE_MARKS) + ")", t)
+    clauses, buf = [], ""
+    for part in parts:
+        if not part:
+            continue
+        buf += part
+        if part in _CLAUSE_MARKS:
+            clauses.append(buf.strip())
+            buf = ""
+    if buf.strip():
+        clauses.append(buf.strip())
+    return [c for c in clauses if c]
+
+
+def _clause_term_hits(clause, vocab):
+    """절 안에서 non-overlapping longest-match 어휘 히트('먹방' 안의 '방' 오탐 방지)."""
+    raw = []
+    for term in vocab:
+        start = 0
+        while True:
+            pos = clause.find(term, start)
+            if pos < 0:
+                break
+            raw.append((pos, pos + len(term), term))
+            start = pos + 1
+    raw.sort(key=lambda h: (-(h[1] - h[0]), h[0], h[2]))
+    occupied = [False] * max(len(clause), 1)
+    hits = []
+    for pos, end, term in raw:
+        if any(occupied[i] for i in range(pos, end)):
+            continue
+        for i in range(pos, end):
+            occupied[i] = True
+        hits.append((pos, term))
+    return [term for pos, term in sorted(hits)]
+
+
+def parse_compound_intent(t, vocab=None):
+    """한 문장 안의 keep/exclude 를 절 단위로 분리 판정.
+    반환: {keep_terms:[], exclude_terms:[], keep_clauses:[], count, found}
+    아무 어휘도 못 잡으면 found=False → 호출측은 legacy 경로 그대로."""
+    t = t or ""
+    if vocab is None:
+        # 인물 이름/애칭도 절 단위 극성 대상("정은한는 빼고 한미숙 위주로")
+        vocab = sorted(set(_THEME_VOCAB) | set(_COMPOUND_VOCAB_EXTRA) | set(_named_persons()),
+                       key=len, reverse=True)
+    keep_terms, exclude_terms, keep_clauses = [], [], []
+    for clause in _split_clauses(t):
+        hits = _clause_term_hits(clause, vocab)
+        if not hits:
+            continue
+        # 'A보다' = A를 뒤로 미룸(감점) → exclude 취급 (sim v3와 동일)
+        local_excl = any(m in clause for m in _EXCLUDE_MARK) or clause.endswith("보다")
+        target = exclude_terms if local_excl else keep_terms
+        for h in hits:
+            if h not in target:
+                target.append(h)
+        if not local_excl:
+            keep_clauses.append(clause)
+    return {"keep_terms": keep_terms, "exclude_terms": exclude_terms,
+            "keep_clauses": keep_clauses, "count": _det_count(t),
+            "found": bool(keep_terms or exclude_terms)}
+
+
 _THEME_ALIASES = {
     "실내": ("실내", "indoor", "interior", "inside", "room", "bedroom", "hallway", "corridor", "closet", "bed", "pillow", "wardrobe", "couch", "sofa", "복도", "走廊", "室内", "방", "침실", "체육관", "subway", "train", "bus", "carriage", "지하철", "기차", "버스"),
     "실외": ("실외", "야외", "외부", "밖", "outdoor", "outside", "exterior", "schoolyard", "playground", "street", "road", "park"),
@@ -914,6 +993,21 @@ def plan_edit(source_ids, instruction_text, batch=8, verbose=True,
         print(f"[QWEN_ROUTE] route=hub_plan model={HUB_MODEL}")
         print(f"[HUB-PLAN] intent={intent}")
 
+    # [C1] 복합 intent 게이트: 절 단위 keep/exclude 로 극성 교정 (기본 OFF, 가역)
+    _compound = None
+    if os.getenv("CCUT_COMPOUND_INTENT") in ("1", "true", "True"):
+        _c = parse_compound_intent(instruction_text or "")
+        if _c["found"]:
+            _compound = _c
+            intent = {**intent,
+                      "keep": (_c["keep_terms"][0] if _c["keep_terms"] else None),
+                      "exclude": (_c["exclude_terms"][0] if _c["exclude_terms"] else None),
+                      "keep_terms": _c["keep_terms"],
+                      "exclude_terms": _c["exclude_terms"]}
+            if verbose:
+                print(f"[C1-COMPOUND] keep={_c['keep_terms']} exclude={_c['exclude_terms']} "
+                      f"keep_clauses={json.dumps(_c['keep_clauses'], ensure_ascii=False)}")
+
     theme = intent["keep"] or intent["exclude"]
     is_exclude = intent["exclude"] is not None and intent["keep"] is None
 
@@ -944,7 +1038,11 @@ def plan_edit(source_ids, instruction_text, batch=8, verbose=True,
                 "reason": f"no content filter, keep all {len(keep)}"}
 
     _ledger_enabled = os.getenv("CCUT_LEDGER_KEEP") in ("1", "true", "True")
-    _ledger_text = instruction_text or ""
+    # [C1] 복합 파서가 켜져 있으면 B0 ledger는 keep 절만 읽음 —
+    # "셀카는 빼고 가족여행만" 에서 exclude 절의 단어가 노트 매칭되는 것 방지.
+    _ledger_text = (" ".join(_compound["keep_clauses"])
+                    if _compound and _compound["keep_clauses"]
+                    else (instruction_text or ""))
     _ledger_person = None
     _ledger_tokens = {}
     _ledger_sig = None
@@ -983,7 +1081,11 @@ def plan_edit(source_ids, instruction_text, batch=8, verbose=True,
         ).hexdigest()[:16]
         _plan_key = (tuple(source_ids), theme, is_exclude, intent.get("count"),
                      _pool_sig, HUB_MODEL, _golden_state_sig(),
-                     ("ledger", _ledger_sig) if _ledger_enabled else None)
+                     ("ledger", _ledger_sig,
+                      hashlib.sha256(_ledger_text.encode("utf-8")).hexdigest()[:12])
+                     if _ledger_enabled else None,
+                     ("compound", tuple(_compound["keep_terms"]), tuple(_compound["exclude_terms"]))
+                     if _compound else None)
         _hit = _PLAN_CACHE.get(_plan_key)
         if _hit is not None:
             if verbose:
