@@ -4220,7 +4220,7 @@ async def settings_gates():
     """검증 게이트 현재 상태 (읽기 전용)."""
     keys = ["CCUT_HUB_PLAN", "CCUT_AUTO_REINDEX", "CCUT_SINGLE_CACHE",
             "CCUT_LEGACY_NARRATIVE", "CCUT_REVISION", "CCUT_QUALITY_LOG",
-            "CCUT_PERSON_REQUERY"]
+            "CCUT_PERSON_REQUERY", "CCUT_LEDGER_KEEP", "MIRROR_ENABLED"]
     return {"status": "OK", "gates": {k: os.getenv(k) or "" for k in keys}}
 
 
