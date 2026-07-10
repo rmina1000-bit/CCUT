@@ -593,6 +593,19 @@ export const useProposalState = (
             ? res.mirror.mentioned_events.map((item: any) => item?.event ?? item)
             : null;
           console.log(`[B2-1] INPUT{text=${JSON.stringify(text)}} -> OUTPUT{legacy=${JSON.stringify(b21Legacy)}, mirror=${JSON.stringify(mirrorEvents)}, used="legacy"}`);
+          if (mirrorEvents && mirrorEvents.length > 0) {
+            const requestLabel = res?.mirror?.request_type === "story_composition" ? " (스토리 구성 요청)" : "";
+            const auxText = `제가 이해한 조건: ${mirrorEvents.join(", ")}${requestLabel}`;
+            setStoryPlan((prev: any) => prev ? {
+              ...prev,
+              messages: [...(prev.messages ?? []), {
+                id: `mirror_aux_${Date.now()}`,
+                sender: "ai" as const,
+                text: auxText,
+                timestamp: Date.now() + 2,
+              }],
+            } : prev);
+          }
         })
         .catch(() => {
           console.log(`[B2-1] INPUT{text=${JSON.stringify(text)}} -> OUTPUT{legacy=${JSON.stringify(b21Legacy)}, mirror=null, used="legacy"}`);
