@@ -111,6 +111,38 @@ def source_note_map():
     return out
 
 
+def source_note_tokens(source_ids) -> dict[str, set[str]]:
+    """source_id → 전체 source 노트 토큰 집합. 선별 보조용 read-only 리더."""
+    ids = []
+    for sid in source_ids or []:
+        sid = (sid or "").strip()
+        if sid and sid not in ids:
+            ids.append(sid)
+    if not ids:
+        return {}
+
+    out = {sid: set() for sid in ids}
+    placeholders = ",".join("?" for _ in ids)
+    con = sqlite3.connect(DB_PATH, timeout=30)
+    con.execute("PRAGMA busy_timeout=30000")
+    try:
+        rows = con.execute(
+            f"SELECT target_id, text FROM narrative_notes "
+            f"WHERE target_kind='source' AND target_id IN ({placeholders})",
+            ids,
+        )
+        stopwords = {"영상"}
+        for sid, text in rows:
+            tokens = out.setdefault(sid, set())
+            for tok in re.split(r"[\s,，、]+", text or ""):
+                tok = tok.strip()
+                if len(tok) >= 2 and tok not in stopwords:
+                    tokens.add(tok)
+    finally:
+        con.close()
+    return {sid: toks for sid, toks in out.items() if toks}
+
+
 def backfill_shot_dates():
     """[연대기] sources.shot_date 멱등 백필 — NULL인 행만. 채운 수 반환."""
     con = _connect()

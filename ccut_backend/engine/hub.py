@@ -920,8 +920,14 @@ def plan_edit(source_ids, instruction_text, batch=8, verbose=True,
     # 조각풀은 두 분기 모두 필요 → 먼저 적재 (plan 캐시 키의 pool hash에도 사용)
     con = sqlite3.connect(DB_PATH)
     bundles = []
+    fid_to_source = {}
     for sid in source_ids:
-        bundles.extend(load_bundles(con, sid))
+        _loaded = load_bundles(con, sid)
+        bundles.extend(_loaded)
+        for _b in _loaded:
+            _fid = _b.get("fid")
+            if _fid:
+                fid_to_source[_fid] = sid
     con.close()
     if candidate_fragment_ids:
         _cand = set(candidate_fragment_ids)
@@ -937,6 +943,34 @@ def plan_edit(source_ids, instruction_text, batch=8, verbose=True,
         return {"keep": keep, "count": intent["count"], "intent": intent,
                 "reason": f"no content filter, keep all {len(keep)}"}
 
+    _ledger_enabled = os.getenv("CCUT_LEDGER_KEEP") in ("1", "true", "True")
+    _ledger_text = instruction_text or ""
+    _ledger_person = None
+    _ledger_tokens = {}
+    _ledger_sig = None
+    if _ledger_enabled:
+        if is_exclude:
+            _ledger_sig = "exclude-skip"
+        else:
+            _ledger_person = resolve_person_name(_ledger_text)
+            if _ledger_person:
+                _ledger_sig = "person-skip"
+            else:
+                try:
+                    from engine.narrative_ledger import source_note_tokens as _source_note_tokens
+                    _ledger_tokens = _source_note_tokens(source_ids)
+                    _ledger_sig_src = json.dumps(
+                        {sid: sorted(list(toks)) for sid, toks in _ledger_tokens.items()},
+                        ensure_ascii=False,
+                        sort_keys=True,
+                    )
+                    _ledger_sig = hashlib.sha256(_ledger_sig_src.encode("utf-8")).hexdigest()[:16]
+                except Exception as _ledger_err:
+                    _ledger_tokens = {}
+                    _ledger_sig = "error"
+                    if verbose:
+                        print(f"[B0-LEDGER][WARN] token read failed ({_ledger_err})")
+
     # [R2-A 후속] 같은 요청 안에서 A안·B안이 plan_edit를 각각 호출 → batch judge 2배.
     # 판(plan) 수준 인메모리 캐시: 명령+소스+조각풀(sensor)+모델이 같으면 재계산 금지.
     # 단일판정 캐시와 동일하게 CCUT_SINGLE_CACHE로 가역, 실패/예외 결과는 저장하지 않음.
@@ -947,7 +981,8 @@ def plan_edit(source_ids, instruction_text, batch=8, verbose=True,
             "|".join(sorted(f'{b["fid"]}:{_scene_sensor_hash(b.get("scene"))}' for b in bundles)).encode("utf-8")
         ).hexdigest()[:16]
         _plan_key = (tuple(source_ids), theme, is_exclude, intent.get("count"),
-                     _pool_sig, HUB_MODEL, _golden_state_sig())
+                     _pool_sig, HUB_MODEL, _golden_state_sig(),
+                     ("ledger", _ledger_sig) if _ledger_enabled else None)
         _hit = _PLAN_CACHE.get(_plan_key)
         if _hit is not None:
             if verbose:
@@ -970,6 +1005,42 @@ def plan_edit(source_ids, instruction_text, batch=8, verbose=True,
         _confirm_keep_candidates_single(theme, judged, bundles)
         kept = [j for j in judged if j["is_theme"]]
         tag = f"keep '{theme}'"
+    if _ledger_enabled:
+        if is_exclude:
+            if verbose:
+                print(
+                    f"[B0-LEDGER] INPUT{{text={json.dumps(_ledger_text, ensure_ascii=False)}, "
+                    f"sources={json.dumps(list(source_ids), ensure_ascii=False)}}} "
+                    f"-> OUTPUT{{hit=[], judge_kept={len(kept)}, ledger_kept=0, total={len(kept)}}}"
+                )
+        elif _ledger_person:
+            _person_label = _ledger_person.get("matched") or _ledger_person.get("canonical") or ""
+            if verbose:
+                print(f"[B0-LEDGER] SKIP person={_person_label} text={json.dumps(_ledger_text, ensure_ascii=False)}")
+        else:
+            hit_sources = sorted(
+                sid for sid, toks in _ledger_tokens.items()
+                if any(tok in _ledger_text for tok in toks)
+            )
+            hit_set = set(hit_sources)
+            kept_fids = {j.get("fid") for j in kept}
+            ledger_kept = [
+                j for j in judged
+                if fid_to_source.get(j.get("fid")) in hit_set
+                and j.get("fid") not in kept_fids
+                and not j.get("batch_is_theme")
+            ]
+            for j in ledger_kept:
+                if not j.get("reason"):
+                    j["reason"] = "ledger_note_match"
+            kept = kept + ledger_kept
+            if verbose:
+                print(
+                    f"[B0-LEDGER] INPUT{{text={json.dumps(_ledger_text, ensure_ascii=False)}, "
+                    f"sources={json.dumps(list(source_ids), ensure_ascii=False)}}} "
+                    f"-> OUTPUT{{hit={json.dumps(hit_sources, ensure_ascii=False)}, "
+                    f"judge_kept={len(kept_fids)}, ledger_kept={len(ledger_kept)}, total={len(kept)}}}"
+                )
     keep = [{"fid": j["fid"], "time": j["time"], "scene": j["scene"],
              "why": j.get("reason")} for j in kept]
     self_check = self_check_selection(
