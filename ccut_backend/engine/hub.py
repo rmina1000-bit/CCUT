@@ -948,6 +948,7 @@ def plan_edit(source_ids, instruction_text, batch=8, verbose=True,
     _ledger_person = None
     _ledger_tokens = {}
     _ledger_sig = None
+    _ledger_meta = None
     if _ledger_enabled:
         if is_exclude:
             _ledger_sig = "exclude-skip"
@@ -1007,6 +1008,7 @@ def plan_edit(source_ids, instruction_text, batch=8, verbose=True,
         tag = f"keep '{theme}'"
     if _ledger_enabled:
         if is_exclude:
+            _ledger_meta = {"hit": [], "matched_tokens": [], "kept": 0, "skip": "exclude"}
             if verbose:
                 print(
                     f"[B0-LEDGER] INPUT{{text={json.dumps(_ledger_text, ensure_ascii=False)}, "
@@ -1015,6 +1017,7 @@ def plan_edit(source_ids, instruction_text, batch=8, verbose=True,
                 )
         elif _ledger_person:
             _person_label = _ledger_person.get("matched") or _ledger_person.get("canonical") or ""
+            _ledger_meta = {"hit": [], "matched_tokens": [], "kept": 0, "skip": "person"}
             if verbose:
                 print(f"[B0-LEDGER] SKIP person={_person_label} text={json.dumps(_ledger_text, ensure_ascii=False)}")
         else:
@@ -1022,6 +1025,12 @@ def plan_edit(source_ids, instruction_text, batch=8, verbose=True,
                 sid for sid, toks in _ledger_tokens.items()
                 if any(tok in _ledger_text for tok in toks)
             )
+            matched_tokens = sorted({
+                tok
+                for sid in hit_sources
+                for tok in (_ledger_tokens.get(sid) or set())
+                if tok in _ledger_text
+            }, key=lambda x: (-len(x), x))
             hit_set = set(hit_sources)
             kept_fids = {j.get("fid") for j in kept}
             ledger_kept = [
@@ -1034,6 +1043,11 @@ def plan_edit(source_ids, instruction_text, batch=8, verbose=True,
                 if not j.get("reason"):
                     j["reason"] = "ledger_note_match"
             kept = kept + ledger_kept
+            _ledger_meta = {
+                "hit": hit_sources,
+                "matched_tokens": matched_tokens,
+                "kept": len(ledger_kept),
+            }
             if verbose:
                 print(
                     f"[B0-LEDGER] INPUT{{text={json.dumps(_ledger_text, ensure_ascii=False)}, "
@@ -1050,6 +1064,8 @@ def plan_edit(source_ids, instruction_text, batch=8, verbose=True,
     _plan = {"keep": keep, "count": intent["count"], "intent": intent,
              "reason": f"{tag}: {len(keep)}/{len(judged)}",
              "self_check": self_check}
+    if _ledger_meta is not None:
+        _plan["ledger"] = _ledger_meta
     if _plan_cache_on and _plan_key is not None:
         import copy as _copy
         if len(_PLAN_CACHE) >= 32:  # [AUDIT-⑽] 무제한 증식 방지 (FIFO)

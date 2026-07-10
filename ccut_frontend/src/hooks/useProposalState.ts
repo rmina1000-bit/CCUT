@@ -346,6 +346,7 @@ export const useProposalState = (
               desc: p.proposal_reason?.mode_reason || "백엔드 분석 기반 추천 편집안입니다.",
               score: String(Math.round(p.confidence * 100)) + "%",
               key_fragments: p.sequence.map((s: any) => s.fragment_id),
+              proposal_reason: p.proposal_reason ?? null,
               proposal_story: p.proposal_story,
               proposal_explanation: p.proposal_explanation,
               self_check: p.self_check ?? p.proposal_reason?.self_check ?? null,
@@ -871,6 +872,7 @@ export const useProposalState = (
               desc: p.proposal_reason?.mode_reason || "백엔드 분석 기반 추천 편집안입니다.",
               score: String(Math.round(p.confidence * 100)) + "%",
               key_fragments: p.sequence.map((s: any) => s.fragment_id),
+              proposal_reason: p.proposal_reason ?? null,
               proposal_story: p.proposal_story,
               proposal_explanation: p.proposal_explanation,
               self_check: p.self_check ?? p.proposal_reason?.self_check ?? null,
@@ -934,12 +936,21 @@ export const useProposalState = (
           // [UI-⑤] 편집 완료 보고 — 과하지 않게, 결과 요약 한 줄
           if (!emptyA || !emptyB) {
             const _fmt = (p: any) => `${p?.key_fragments?.length ?? 0}조각 ${Math.round(p?.preview_duration ?? 0)}초`;
+            const _ledger = generatedProposals.B?.proposal_reason?.ledger ?? generatedProposals.A?.proposal_reason?.ledger ?? null;
+            const _ledgerHits = Array.isArray(_ledger?.hit) ? _ledger.hit : [];
+            const _ledgerTokens = Array.isArray(_ledger?.matched_tokens)
+              ? _ledger.matched_tokens.filter((tok: any) => typeof tok === "string" && tok.trim())
+              : [];
+            const _ledgerToken = _ledgerTokens[0];
+            const _ledgerLine = _ledgerHits.length > 0 && _ledgerToken
+              ? ` 말씀하신 '${_ledgerToken}'이 적힌 영상 ${_ledgerHits.length}개에서 골랐어요.`
+              : "";
             setStoryPlan((prev: any) => prev ? {
               ...prev,
               messages: [...(prev.messages ?? []), {
                 id: `ai_done_${Date.now()}`,
                 sender: "ai",
-                text: `다 골랐습니다 — A안 ${_fmt(generatedProposals.A)} · B안 ${_fmt(generatedProposals.B)}. 아래 무대에서 재생해 보시고, 방향이 다르면 조건을 바꿔 말씀해 주세요.`,
+                text: `다 골랐습니다 — A안 ${_fmt(generatedProposals.A)} · B안 ${_fmt(generatedProposals.B)}.${_ledgerLine} 아래 무대에서 재생해 보시고, 방향이 다르면 조건을 바꿔 말씀해 주세요.`,
                 timestamp: Date.now(),
               }],
             } : prev);

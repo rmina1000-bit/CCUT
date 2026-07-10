@@ -80,6 +80,7 @@ class ProposalEngine:
         # 게이트 조건은 B안 hub plan_edit 실행 조건(CCUT_HUB_PLAN + source_ids + intent_text)과 동일.
         # 명령이 없는 일반 생성은 keep 전달 자체가 없어 기존 전체 pool 경로 그대로(무변).
         _market_keep_ids = None
+        _market_ledger = None
         _a_intent_text = ((intent.get("instruction_text") or "") if intent else "").strip()
         if os.getenv("CCUT_HUB_PLAN") in ("1", "true", "True") and source_ids and _a_intent_text:
             try:
@@ -87,6 +88,7 @@ class ProposalEngine:
                 _plan_a = _hub.plan_edit(
                     list(source_ids), _a_intent_text,
                     candidate_fragment_ids=(intent or {}).get("candidate_fragment_ids"))
+                _market_ledger = _plan_a.get("ledger")
                 # keep=0(honest-empty)도 그대로 전달 — 명령이 있는데 keep 밖 조각이
                 # A안에 혼입되면 안 되므로 빈 집합이면 A안도 빈 시퀀스가 된다.
                 _market_keep_ids = {k.get("fid") for k in (_plan_a.get("keep") or []) if k.get("fid")}
@@ -95,7 +97,8 @@ class ProposalEngine:
 
         # 1. Mode A (Market) 생성
         print("[PROPOSAL ENGINE] Creating Market Proposal (A)...")
-        p_a = self._create_market_proposal(project_id, fragments, target_len, source_ids, hub_keep_ids=_market_keep_ids)
+        p_a = self._create_market_proposal(project_id, fragments, target_len, source_ids,
+                                           hub_keep_ids=_market_keep_ids, hub_ledger=_market_ledger)
         
         # 2. Mode B (User) 생성
         print("[PROPOSAL ENGINE] Creating User Proposal (B)...")
@@ -324,7 +327,8 @@ class ProposalEngine:
                 if _os.path.exists(_os.path.join(thumbs_dir, f"{fid}.jpg")):
                     f["thumbnail_url"] = f"/static/thumbnails/{fid}.jpg"
 
-    def _create_market_proposal(self, source_id, fragments, target_len, source_ids=None, overlap_ids=None, hub_keep_ids=None):
+    def _create_market_proposal(self, source_id, fragments, target_len, source_ids=None, overlap_ids=None,
+                                hub_keep_ids=None, hub_ledger=None):
         """A: Market Mode (대중적 호속력)"""
         # [R2-A] 사용자 명령이 있을 때만 hub keep 집합으로 pool을 좁힌 뒤 market_score 정렬.
         # hub_keep_ids=None(명령 없음/hub off)이면 기존 전체 pool 경로 그대로.
@@ -414,6 +418,8 @@ class ProposalEngine:
             "sequence_reason": "optimized_market_flow",
             "bridge": bridge_details if bridge_details else None
         }
+        if hub_ledger:
+            reason_data["ledger"] = hub_ledger
 
         story_data = self._generate_story("A", selected)
         story_data["proposal_id"] = f"PROP_A_{uuid.uuid4().hex[:6].upper()}_{source_id}"
@@ -575,6 +581,7 @@ class ProposalEngine:
         _hub_self_check_context = None
         _hub_empty_keep = False
         _hub_keep_ids = None
+        _hub_ledger = None
 
         # [P3b] 라이브 채팅 → 거점(hub) 편집계획 우회. env 가역(기본 off=옛 R2 경로).
         # CCUT_HUB_PLAN=1이면 hub.plan_edit가 명령+조각풀로 keep/count를 직접 산출 →
@@ -587,6 +594,7 @@ class ProposalEngine:
                 _plan = _hub.plan_edit(
                     list(source_ids), intent_text,
                     candidate_fragment_ids=(intent or {}).get("candidate_fragment_ids"))
+                _hub_ledger = _plan.get("ledger")
                 _keep_ids = {k.get("fid") for k in (_plan.get("keep") or []) if k.get("fid")}
                 if _keep_ids:
                     _before = len(fragments)
@@ -1209,6 +1217,8 @@ class ProposalEngine:
             "bridge": bridge_details if bridge_details else None,
             "self_check": proposal_self_check
         }
+        if _hub_ledger:
+            reason_data["ledger"] = _hub_ledger
 
         story_data = self._generate_story("B", selected)
         story_data["proposal_id"] = f"PROP_B_{uuid.uuid4().hex[:6].upper()}_{source_id}"
