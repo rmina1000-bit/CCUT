@@ -396,6 +396,10 @@ app.include_router(health_router)
 from edit_contract.api import router as edit_contract_router
 app.include_router(edit_contract_router)
 
+# [LEDGER-1] Text Ledger R0 — 스토리 원고 read API (읽기 전용, DB 무변)
+from ledger_r0 import router as ledger_router
+app.include_router(ledger_router)
+
 # [아카이브 채팅 MVP] read-only 자연어 조회 라우터 — proposal_engine/route-edit와 완전 분리
 from archive_chat_router import router as archive_chat_router, ensure_schema as _archive_chat_ensure_schema
 app.include_router(archive_chat_router)

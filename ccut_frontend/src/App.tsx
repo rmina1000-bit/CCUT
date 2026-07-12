@@ -1,5 +1,6 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Route, Routes } from "react-router-dom";
+import LedgerPage from "./pages/LedgerPage";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -25,6 +26,8 @@ const App = () => (
         <Routes>
           <Route path="/" element={<Index />} />
           <Route path="/trash" element={<TrashPortal />} />
+          {/* [LEDGER-1] 원고 — MASTER CONCEPT ①원고 (R0 읽기 전용) */}
+          <Route path="/ledger" element={<LedgerPage />} />
           {/* [Admin v0] 관리자 셸 — 사용자 작업실과 분리된 독립 라우트 */}
           <Route path="/admin/*" element={<AdminIndex />} />
           {/* [바구니 새창 C] 작업대 바구니 전용창 — BroadcastChannel 동기화 */}
