@@ -238,7 +238,7 @@ def mark_source_alive():
 # 이름은 조인이 아니라 스냅샷으로 박는다(제2조) — 죽은 참조에 면역.
 # ═══════════════════════════════════════════════════════════════════
 
-_EVENT_KINDS = ("adopted", "edited", "exported")
+_EVENT_KINDS = ("adopted", "edited", "exported", "edit_command")  # [EDIT-CONTRACT-B0] v0.4 §7
 
 
 def ensure_events_schema(con):

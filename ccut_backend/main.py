@@ -392,6 +392,10 @@ app.add_middleware(
 from routers.health import router as health_router  # [REFACTOR] 저위험 health/debug 분리
 app.include_router(health_router)
 
+# [EDIT-CONTRACT-B0 IMPL-2] 공통 편집 계약 API — EDIT_CONTRACT_V2 게이트 OFF 시 쓰기 완전 0
+from edit_contract.api import router as edit_contract_router
+app.include_router(edit_contract_router)
+
 # [아카이브 채팅 MVP] read-only 자연어 조회 라우터 — proposal_engine/route-edit와 완전 분리
 from archive_chat_router import router as archive_chat_router, ensure_schema as _archive_chat_ensure_schema
 app.include_router(archive_chat_router)
@@ -4221,7 +4225,7 @@ async def settings_gates():
     keys = ["CCUT_HUB_PLAN", "CCUT_AUTO_REINDEX", "CCUT_SINGLE_CACHE",
             "CCUT_LEGACY_NARRATIVE", "CCUT_REVISION", "CCUT_QUALITY_LOG",
             "CCUT_PERSON_REQUERY", "CCUT_LEDGER_KEEP", "MIRROR_ENABLED",
-            "CCUT_COMPOUND_INTENT"]
+            "CCUT_COMPOUND_INTENT", "EDIT_CONTRACT_V2"]
     return {"status": "OK", "gates": {k: os.getenv(k) or "" for k in keys}}
 
 
