@@ -28,7 +28,8 @@ interface ScriptData {
   items?: ScriptItem[];
 }
 
-const SERIF = `"Noto Serif KR","Nanum Myeongjo","AppleMyungjo","Batang",serif`;
+// 채팅(Claude) 화면과 동일한 시스템 산세리프 — 폰트 1종
+const SANS = `-apple-system,"Segoe UI","Malgun Gothic","Apple SD Gothic Neo",system-ui,sans-serif`;
 
 const fmtClock = (ms?: number) => {
   if (!ms || ms < 0) return "0:00";
@@ -121,13 +122,13 @@ const LedgerPage: React.FC = () => {
   let sceneNo = 0;
 
   return (
-    <div className="min-h-screen" style={{ background: "hsl(230, 12%, 9%)", color: "hsl(40, 20%, 88%)" }}>
+    <div className="min-h-screen" style={{ background: "hsl(228, 12%, 10%)", color: "hsl(220, 9%, 87%)" }}>
       {/* 머리 — 제목과 러닝타임 한 줄 */}
-      <header className="max-w-2xl mx-auto px-6 pt-5 pb-1 flex items-baseline" style={{ fontFamily: SERIF }}>
+      <header className="max-w-2xl mx-auto px-6 pt-5 pb-1 flex items-baseline" style={{ fontFamily: SANS }}>
         <select
           aria-label="프로젝트"
-          className="bg-transparent text-lg font-semibold outline-none cursor-pointer appearance-none pr-2 hover:opacity-70 transition-opacity"
-          style={{ fontFamily: SERIF, color: "inherit" }}
+          className="bg-transparent text-[17px] font-semibold outline-none cursor-pointer appearance-none pr-2 hover:opacity-70 transition-opacity"
+          style={{ color: "inherit" }}
           value={programId} onChange={(e) => setProgramId(e.target.value)}
         >
           <option value="" style={{ color: "#111" }}>대본 고르기…</option>
@@ -141,7 +142,7 @@ const LedgerPage: React.FC = () => {
       </header>
 
       {/* 본문 — 씬당 흐르는 문단 하나. 지문(이탤릭)과 대사가 같은 줄에 이어진다. */}
-      <main className="max-w-2xl mx-auto px-6 pb-28" style={{ fontFamily: SERIF }}>
+      <main className="max-w-2xl mx-auto px-6 pb-28" style={{ fontFamily: SANS }}>
         {!programId && (
           <p className="pt-20 text-center text-sm opacity-50">위의 제목을 눌러 대본을 고르세요.</p>
         )}
@@ -150,10 +151,10 @@ const LedgerPage: React.FC = () => {
           sceneNo += 1;
           return (
             <section key={sceneNo} className="mt-6">
-              <h2 className="mb-1.5 text-[12px] tracking-[0.18em] select-none" style={{ color: "hsl(40,12%,50%)" }}>
+              <h2 className="mb-1 text-[15px] font-semibold select-none opacity-70">
                 S#{sceneNo}.{sc.heading ? ` ${sc.heading}` : ""}
               </h2>
-              <p className="text-[15.5px] leading-[1.65]">
+              <p className="text-[15px] leading-[1.6]">
                 {sc.items.map((it) => {
                   const isActive = activeItem === it.timeline_item_id;
                   const dimmed = playerOpen && !isActive;
@@ -170,8 +171,8 @@ const LedgerPage: React.FC = () => {
                         textDecorationColor: "hsl(40,20%,45%)",
                       }}
                     >
-                      {stage && <em style={{ color: "hsl(40,12%,58%)" }}>{stage} </em>}
-                      {!stage && hallu && <em style={{ color: "hsl(40,10%,46%)" }}>(장면이 이어진다.) </em>}
+                      {stage && <span>{stage} </span>}
+                      {!stage && hallu && <span>(장면이 이어진다.) </span>}
                       {hallu && (
                         <button
                           type="button"
@@ -190,7 +191,7 @@ const LedgerPage: React.FC = () => {
                       )}
                       {it.dialogue && <span>{it.dialogue} </span>}
                       {!it.dialogue && !stage && !hallu && (
-                        <em style={{ color: "hsl(40,8%,42%)" }}>(조용한 장면.) </em>
+                        <span>(조용한 장면.) </span>
                       )}
                     </span>
                   );
