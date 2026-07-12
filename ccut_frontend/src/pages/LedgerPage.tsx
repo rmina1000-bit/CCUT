@@ -262,8 +262,15 @@ const LedgerPage: React.FC = () => {
           playerOpen ? "opacity-100 translate-y-0" : "opacity-0 translate-y-3 pointer-events-none"
         }`}
       >
-        <div className="rounded-xl overflow-hidden shadow-2xl" style={{ background: "#000", width: "300px" }}>
-          <video ref={videoRef} onTimeUpdate={onTimeUpdate} controls className="w-full block" />
+        <div className="rounded-xl overflow-hidden shadow-2xl inline-block" style={{ background: "#000" }}>
+          {/* 가로·세로 동시 상한 — 세로영상은 높이 기준(화면 절반 이하), 가로영상은 폭 기준 */}
+          <video
+            ref={videoRef}
+            onTimeUpdate={onTimeUpdate}
+            controls
+            className="block"
+            style={{ maxWidth: "min(360px, 40vw)", maxHeight: "48vh", width: "auto", height: "auto" }}
+          />
         </div>
         <button
           type="button"
