@@ -38,6 +38,17 @@ import {
 } from "@/proposal/directionSnapshot";
 import { generateProposals } from "@/proposal/proposalOrchestrator";
 import { collectFragmentAliases, resolveProposalFragments } from "@/utils/proposalFragmentResolver";
+// [EDIT-CONTRACT-B0 IMPL-2b] 공통 편집 계약 클라이언트 — 게이트 OFF면 어디서도 호출되지 않는다
+import {
+  applyStatesToFragments,
+  fetchEditStates,
+  fetchGateEnabled,
+  postEditState,
+  segmentsToExcludedMs,
+  timelineItemIdFor,
+  type EditStateRow,
+} from "@/utils/editContractClient";
+import { toMs } from "@/utils/editContract";
 import { buildExportClipsFromResolvedFragments } from "@/utils/exportClipBuilder";
 
 // Layout constants moved to useWorkspaceLayout.ts
@@ -1345,6 +1356,30 @@ const Index: React.FC = () => {
     }
   }, [activeNavItem, activeSource]);
 
+  // [EDIT-CONTRACT-B0 IMPL-2b] EDIT_CONTRACT_V2 게이트 — OFF면 아래 전 분기 기존 경로 그대로 (쓰기 0)
+  const [editContractV2, setEditContractV2] = useState(false);
+  const [editStatesList, setEditStatesList] = useState<EditStateRow[]>([]);
+  const editStatesRef = useRef<Map<string, EditStateRow>>(new Map());
+  const editCtxRef = useRef<{ enabled: boolean; programId: string | null }>({ enabled: false, programId: null });
+  useEffect(() => { fetchGateEnabled().then(setEditContractV2); }, []);
+  useEffect(() => { editCtxRef.current = { enabled: editContractV2, programId: activeNavItem }; }, [editContractV2, activeNavItem]);
+  const refreshEditStates = useCallback(async (): Promise<EditStateRow[]> => {
+    const ctx = editCtxRef.current;
+    if (!ctx.enabled || !ctx.programId || !ctx.programId.startsWith("proj_")) return [];
+    const states = await fetchEditStates(ctx.programId);
+    editStatesRef.current = new Map(states.map((s) => [s.timeline_item_id, s]));
+    setEditStatesList(states);
+    return states;
+  }, []);
+  const refreshEditStatesRef = useRef(refreshEditStates);
+  refreshEditStatesRef.current = refreshEditStates;
+  // [EDIT-CONTRACT-B0] PBE 재진입용 — 선택 조각의 현재 Edit State (게이트 ON에서만 사용)
+  const sfeContractState = useMemo(() => {
+    if (!editContractV2 || !singleEditTarget) return null;
+    const fid = String((singleEditTarget as any).root_fragment_uid ?? (singleEditTarget as any).fragment_id ?? "");
+    return editStatesList.find((s) => s.parent_fragment_id === fid) ?? null;
+  }, [editContractV2, singleEditTarget, editStatesList]);
+
   const handleSingleFragmentApply = useCallback(
     (payload: {
       fragmentUid: string;
@@ -1393,7 +1428,40 @@ const Index: React.FC = () => {
       });
       setEditFragments(next);
 
-      // [F-2a-FIX] 편집 영속: 적용된 조각을 edit_overlay에 저장 (분할이면 세그먼트별)
+      if (editCtxRef.current.enabled) {
+        // [EDIT-CONTRACT-B0] 신 계약 단일 권위 — edit_overlay 대신 edit-state upsert 1건 (Edit State = 승인된 편집)
+        try {
+          const orig: any = editFragments.find((fr) => getUid(fr) === fragmentUid);
+          const programId = editCtxRef.current.programId;
+          const rootFid = String(orig?.root_fragment_uid ?? orig?.fragment_id ?? fragmentUid);
+          if (orig?.source_id && programId) {
+            const segs = isSplit ? segments! : [{ startSec: newStartSec, endSec: newEndSec }];
+            const { trim, excluded } = segmentsToExcludedMs(segs);
+            const itemId = timelineItemIdFor(programId, String(committedProposalId ?? "NA"), rootFid, 0);
+            const known = editStatesRef.current.get(itemId);
+            postEditState({
+              program_id: programId,
+              timeline_item_id: itemId,
+              source_id: orig.source_id,
+              anchor_start_ms: toMs(Number(orig?.orig_start_sec ?? origStart)),
+              anchor_end_ms: toMs(Number(orig?.orig_end_sec ?? origEnd)),
+              trim_start_ms: trim[0],
+              trim_end_ms: trim[1],
+              excluded_ranges: excluded,
+              revision: known?.revision,
+              parent_fragment_id: rootFid,
+              command_type: isSplit ? "EXCLUDE_RANGE" : "TRIM",
+              origin: "PBE",
+            }).then((r: any) => {
+              if (r?.ok) refreshEditStatesRef.current();
+              else console.error("[EC-V2] edit-state 거부:", r);
+            }).catch((err) => console.error("[EC-V2] edit-state save error:", err));
+          }
+        } catch (err) {
+          console.error("[EC-V2] edit-state save error:", err);
+        }
+      } else {
+      // [F-2a-FIX] 편집 영속: edit_overlay 저장 — 레거시 경로 (게이트 OFF, 바이트 동일 행동)
       try {
         const editedList = next.filter((fr: any) =>
           getUid(fr) === fragmentUid || (isSplit && String(getUid(fr)).startsWith(`${fragmentUid}_c`))
@@ -1412,6 +1480,7 @@ const Index: React.FC = () => {
         }
       } catch (err) {
         console.error("edit-overlay save error:", err);
+      }
       }
 
       if (committedProposalId && proposals) {
@@ -1812,6 +1881,18 @@ const Index: React.FC = () => {
         const snapSourceId = currentSourceId;
         if (snapSourceId) {
           (async () => {
+            if (editCtxRef.current.enabled) {
+              // [EDIT-CONTRACT-B0] ui_state로 복원된 customEditFragments를 덮어쓰지 않는다 — edit-state 권위
+              const states = await refreshEditStatesRef.current();
+              const rebuilt = states.length ? (applyStatesToFragments(initialFrags as any[], states) as any[]) : initialFrags;
+              setEditFragments(rebuilt as any);
+              setProposals((prev) => {
+                if (!prev || !prev[target]) return prev;
+                const existing = (prev[target] as any).customEditFragments;
+                return { ...prev, [target]: { ...prev[target], customEditFragments: existing?.length ? existing : rebuilt } };
+              });
+              return;
+            }
             try {
               const res = await videoService.getEditOverlay(snapSourceId);
               const overlays: any[] = Array.isArray(res) ? res : [];
@@ -1877,7 +1958,7 @@ const Index: React.FC = () => {
       return { resolvedFragments: [], diagnostics: null };
     }
     const proposal = proposals[displayProposalId as "A" | "B"];
-    const result = resolveProposalFragments(proposal, editFragments);
+    const result = resolveProposalFragments(proposal, editFragments, { expandAll: editContractV2 });
     
     // [STEP 10-I.5.12] Diagnostic Logging
     debugFragmentMap("[fragmentmap-debug] committedProposalId:", committedProposalId);
@@ -1898,7 +1979,7 @@ const Index: React.FC = () => {
     });
 
     return result;
-  }, [displayProposalId, committedProposalId, selectedProposalId, editFragments, proposals, appState, debugFragmentMap]);
+  }, [displayProposalId, committedProposalId, selectedProposalId, editFragments, proposals, appState, debugFragmentMap, editContractV2]);
 
   const isPreviewingSelectedProposal = !!displayProposalId && displayProposalId === selectedProposalId && !committedProposalId;
   const resolvedFragments = useMemo(() => {
@@ -2126,6 +2207,12 @@ const Index: React.FC = () => {
   useEffect(() => {
     if (!currentSourceId) return;
     (async () => {
+      if (editCtxRef.current.enabled) {
+        // [EDIT-CONTRACT-B0] 게이트 ON — edit-state 컴파일 재구성이 유일 권위 (fid 일치 병합 폐기)
+        const states = await refreshEditStatesRef.current();
+        if (states.length) setEditFragments((prev) => applyStatesToFragments(prev as any[], states) as any);
+        return;
+      }
       try {
         const res = await videoService.getEditOverlay(currentSourceId);
         const overlays: any[] = Array.isArray(res) ? res : [];
@@ -2542,6 +2629,7 @@ const Index: React.FC = () => {
         onOpenChange={setSingleEditOpen}
         fragment={singleEditTarget}
         projectName={projects.find(p => p.id === activeNavItem)?.name}
+        contractState={sfeContractState}
         onApply={handleSingleFragmentApply}
       />
     </div>

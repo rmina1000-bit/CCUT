@@ -72,6 +72,12 @@ interface SingleFragmentEditorProps {
   // [아카이브 보기전용] 수정 불가 모드 — 적용/초기화/경계조작/프레임삭제 봉인.
   // 수정하려면 원본에서 '신규 프로젝트 생성'으로 가야 한다 (국장 지시)
   readOnly?: boolean;
+  // [EDIT-CONTRACT-B0 IMPL-2b] 게이트 ON 재진입 — Edit State로 프레임 상태 복원 (단일 창 역산 대체)
+  contractState?: {
+    anchor_start_ms: number; anchor_end_ms: number;
+    trim_start_ms: number; trim_end_ms: number;
+    excluded_ranges: Array<[number, number]>; removed: boolean;
+  } | null;
   onApply?: (payload: {
     fragmentUid: string;
     newStartSec: number;
@@ -89,6 +95,7 @@ export const SingleFragmentEditor: React.FC<SingleFragmentEditorProps> = ({
   fragment,
   projectName,
   readOnly = false,
+  contractState = null,
   onApply,
 }) => {
   const [leftCut, setLeftCut] = useState(0);
@@ -402,6 +409,29 @@ export const SingleFragmentEditor: React.FC<SingleFragmentEditorProps> = ({
       return false;
     });
   };
+
+  // [EDIT-CONTRACT-B0] 재진입 복원 — contractState가 있으면 기본(단일 창) 역산을 덮어쓴다.
+  // 선언 순서상 열기 effect보다 나중에 실행. DEBT: 밀도 d≠12 재진입은 12칸 기준 근사 — 후속 정제.
+  useEffect(() => {
+    if (!open || !fragment || !contractState) return;
+    const aMs = contractState.anchor_start_ms;
+    const durMs = contractState.anchor_end_ms - contractState.anchor_start_ms;
+    if (durMs <= 0) return;
+    const toIdx = (ms: number) => Math.round(((ms - aMs) / durMs) * 12);
+    let lc = Math.max(0, Math.min(12, toIdx(contractState.trim_start_ms)));
+    let rc = Math.max(0, Math.min(12, toIdx(contractState.trim_end_ms)));
+    if (rc <= lc) rc = Math.min(12, lc + 1);
+    setLeftCut(lc);
+    setRightCut(rc);
+    const del = new Set<number>();
+    for (const [s, e] of contractState.excluded_ranges) {
+      for (let i = 0; i < 12; i++) {
+        const midMs = aMs + ((i + 0.5) / 12) * durMs;
+        if (midMs >= s && midMs < e) del.add(i);
+      }
+    }
+    setDeletedFrames(del);
+  }, [open, fragment, contractState]);
 
   const handleApply = () => {
     if (!fragment) return;

@@ -91,7 +91,9 @@ export const dedupeResolvedFragments = (resolved: ResolvedFragment[]): ResolvedF
  */
 export const resolveProposalFragments = (
   proposal: Proposal | null,
-  editFragments: Fragment[]
+  editFragments: Fragment[],
+  // [EDIT-CONTRACT-B0 IMPL-2b] expandAll: 원본 fid 1개 → 사용본 span 0..N 전개 (게이트 ON 전용)
+  opts?: { expandAll?: boolean }
 ): ResolverResult => {
   const diagnostics: ResolverDiagnostics = {
     proposalCount: 0,
@@ -117,6 +119,32 @@ export const resolveProposalFragments = (
   proposalFragIds.forEach((id: string, idx: number) => {
     const alias = aliases.find((a: any) => a.proposal_fragment_id === id || a.source_fragment_id === id);
     
+    // [EDIT-CONTRACT-B0 IMPL-2b] 게이트 ON: find 첫 매칭 대신 전 매칭 전개 (Render Span 0..N 소비)
+    if (opts?.expandAll) {
+      const matches = editFragments.filter((f) => collectFragmentAliases(f).includes(id));
+      diagnostics.matchedCount++;
+      if (matches.length > 0) diagnostics.exactMatched++;
+      // 매칭 0 = REMOVE로 소거된 사용본 가능 — missing으로 취급하지 않는다.
+      // DEBT: fid 진짜 소실과 REMOVE 소거를 여기서 구분 못 함 — removed 상태 전달로 후속 정제.
+      matches.forEach((m, k) => {
+        const range = getFragmentTimeRange(m);
+        const hasValidFrames = typeof m.start_frame === "number" && typeof m.end_frame === "number";
+        const sF = hasValidFrames ? m.start_frame : Math.round(range.start * 30);
+        const eF = hasValidFrames ? m.end_frame : Math.round(range.end * 30);
+        resolvedFragments.push({
+          ...m,
+          display_id: m.display_id,
+          start_time: range.start,
+          end_time: range.end,
+          start_frame: sF,
+          end_frame: eF,
+          duration: eF - sF,
+          stable_key: makeStableFragmentKey(proposalId, idx * 100 + k, m),
+        });
+      });
+      return;
+    }
+
     // 1. Exact ID match
     let found = editFragments.find((f) => {
       const fAliases = collectFragmentAliases(f);
