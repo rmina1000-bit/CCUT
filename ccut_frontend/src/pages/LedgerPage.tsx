@@ -1,51 +1,42 @@
 /**
- * [SCRIPT-1] 대본 — MASTER CONCEPT ①원고 / 헌장 v1.1 "대본(시나리오) 편집실".
- * 대본 = 대사(정체) + 지문(이탤릭). 지문 = AI가 장면 태그를 사람의 문장으로 번역한 본문.
- * 둘 다 Story Item: hover·클릭 재생 동등. 카드 나열 금지 — 워드/대본처럼 이어진 문서.
- * 환각 자막 구간은 대사 대신 지문으로 대체 표기(원문은 '원문 보기'에 보존).
- * 파일명·시간·ID·confidence는 본문에 들어오지 않는다(정보 은닉 — 필요 시 메타 줄에만).
+ * [DESIGN-1] 대본 v3 — 경쟁 조사 기반 재설계 (docs/CCUT_COMPETITIVE_EDGE_2026-07.md 6조).
+ *  1 씬 헤딩 S#n(장소 변화 시만)  2 지문 단독 문단(무발화)  3 포커스 리딩(iA Writer)
+ *  4 떠 있는 미니 플레이어(비디오가 화면을 지배하지 않음)  5 타임코드·ID·셀 추방
+ *  6 즉답(스피너 없는 첫 페인트)
+ * 원칙: 화면에 보이는 모든 픽셀은 사용자의 눈(읽기)과 손(클릭 한 번)을 위해서만 존재한다.
  */
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { videoService } from "@/services/videoService";
 
 interface ScriptItem {
   fragment_id: string;
   timeline_item_id: string;
-  ledger_span_id?: string;
   source_id?: string;
-  source_title?: string;
   anchor_start_ms?: number;
   anchor_end_ms?: number;
   dialogue?: string | null;
   stage_direction?: string | null;
+  place?: string | null;
   original_text?: string | null;
-  no_subtitle_source?: boolean;
   warnings?: string[];
-  scene_note_source?: string | null;
   video_url?: string;
   missing?: { coords?: boolean };
 }
 
 interface ScriptData {
   ok: boolean;
-  program_id: string;
   program_name?: string;
-  mode?: string;
   running_ms?: number;
   items?: ScriptItem[];
 }
+
+const SERIF = `"Noto Serif KR","Nanum Myeongjo","AppleMyungjo","Batang",serif`;
 
 const fmtClock = (ms?: number) => {
   if (!ms || ms < 0) return "0:00";
   const s = Math.round(ms / 1000);
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
 };
-
-const PlayIcon = () => (
-  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-    <circle cx="12" cy="12" r="9" /><path d="M10 8.5l6 3.5-6 3.5v-7z" fill="currentColor" stroke="none" />
-  </svg>
-);
 
 const LedgerPage: React.FC = () => {
   const [programs, setPrograms] = useState<Array<{ program_id: string; name: string }>>([]);
@@ -54,7 +45,8 @@ const LedgerPage: React.FC = () => {
   );
   const [data, setData] = useState<ScriptData | null>(null);
   const [activeItem, setActiveItem] = useState<string | null>(null);
-  const [showOriginal, setShowOriginal] = useState<Set<string>>(new Set());
+  const [playerOpen, setPlayerOpen] = useState(false);
+  const [showOriginal, setShowOriginal] = useState<string | null>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const rangeRef = useRef<{ endSec: number } | null>(null);
 
@@ -71,9 +63,32 @@ const LedgerPage: React.FC = () => {
       .then((r) => r.json()).then(setData).catch(() => setData(null));
   }, [programId]);
 
+  // 씬 묶기: 장소가 바뀌는 지점마다 S#n 헤딩 (조사 결정 1)
+  const scenes = useMemo(() => {
+    const out: Array<{ heading: string | null; items: ScriptItem[] }> = [];
+    let lastPlace: string | null | undefined = undefined;
+    for (const it of data?.items ?? []) {
+      if (it.missing?.coords) continue; // 좌표 잃은 조각은 대본 흐름에서 제외 (말미 각주로)
+      const p = it.place ?? null;
+      if (out.length === 0 || (p && p !== lastPlace)) {
+        out.push({ heading: p, items: [it] });
+        lastPlace = p ?? lastPlace ?? null;
+      } else {
+        out[out.length - 1].items.push(it);
+      }
+    }
+    return out;
+  }, [data]);
+
+  const lostCount = useMemo(
+    () => (data?.items ?? []).filter((it) => it.missing?.coords).length,
+    [data]
+  );
+
   const playItem = useCallback((it: ScriptItem) => {
     if (!it.video_url || it.anchor_start_ms === undefined) return;
     setActiveItem(it.timeline_item_id);
+    setPlayerOpen(true);
     const v = videoRef.current;
     if (!v) return;
     const startSec = (it.anchor_start_ms ?? 0) / 1000;
@@ -89,125 +104,174 @@ const LedgerPage: React.FC = () => {
     if (v && r && v.currentTime >= r.endSec) v.pause();
   }, []);
 
-  const toggleOriginal = useCallback((id: string) => {
-    setShowOriginal((prev) => {
-      const n = new Set(prev);
-      n.has(id) ? n.delete(id) : n.add(id);
-      return n;
-    });
+  const closePlayer = useCallback(() => {
+    videoRef.current?.pause();
+    setPlayerOpen(false);
+    setActiveItem(null);
   }, []);
 
+  // 씬 헤딩이 이미 말한 장소를 지문이 반복하지 않도록 (군더더기 제거)
+  const stripPlace = (stage: string | null | undefined, heading: string | null) => {
+    if (!stage) return null;
+    if (!heading) return stage;
+    const prefix = `(${heading}.`;
+    if (!stage.startsWith(prefix)) return stage;
+    const rest = stage.slice(prefix.length).replace(/^\s+/, "");
+    return rest === ")" ? null : `(${rest}`;
+  };
+
+  let sceneNo = 0;
+
   return (
-    <div className="min-h-screen bg-[hsl(228,14%,7%)] text-foreground">
-      {/* 상단 바 — 브레드크럼 + 러닝타임 (문단별 시간은 숨김) */}
-      <header className="sticky top-0 z-20 bg-[hsl(228,14%,7%)]/95 backdrop-blur border-b border-border/10">
-        <div className="max-w-3xl mx-auto px-6 h-14 flex items-center gap-3">
-          <span className="font-bold tracking-tight">CCUT</span>
-          <span className="text-muted-foreground/50">·</span>
-          <select
-            className="bg-transparent text-sm rounded px-1 py-0.5 outline-none hover:bg-secondary/40"
-            value={programId} onChange={(e) => setProgramId(e.target.value)}
-          >
-            <option value="">프로젝트 선택…</option>
-            {programs.map((p) => <option key={p.program_id} value={p.program_id}>{p.name}</option>)}
-          </select>
-          <span className="text-muted-foreground/40">›</span>
-          <span className="text-sm text-primary font-medium">대본</span>
-          <div className="ml-auto text-xs text-muted-foreground tabular-nums">
-            {data?.ok && <>현재 <span className="text-foreground">{fmtClock(data.running_ms)}</span> <span className="opacity-40">/ 목표 —</span></>}
-          </div>
-        </div>
+    <div className="min-h-screen" style={{ background: "hsl(230, 12%, 9%)", color: "hsl(40, 20%, 88%)" }}>
+      {/* 머리 — 프로그램 이름과 러닝타임 한 줄뿐 (조사 결정 5) */}
+      <header className="max-w-2xl mx-auto px-6 pt-10 pb-2 flex items-baseline">
+        <select
+          aria-label="프로젝트"
+          className="bg-transparent text-lg font-semibold outline-none cursor-pointer appearance-none pr-2 hover:opacity-70 transition-opacity"
+          style={{ fontFamily: SERIF, color: "inherit" }}
+          value={programId} onChange={(e) => setProgramId(e.target.value)}
+        >
+          <option value="" style={{ color: "#111" }}>대본 고르기…</option>
+          {programs.map((p) => (
+            <option key={p.program_id} value={p.program_id} style={{ color: "#111" }}>{p.name}</option>
+          ))}
+        </select>
+        {data?.ok && (
+          <span className="ml-auto text-xs tabular-nums" style={{ color: "hsl(40,10%,45%)" }}>
+            {fmtClock(data.running_ms)}
+          </span>
+        )}
       </header>
 
-      <div className="max-w-3xl mx-auto px-6 py-5">
-        {/* 재생창 — 대사/지문 어느 줄을 눌러도 그 장면 */}
-        <div className="sticky top-14 z-10 bg-[hsl(228,14%,7%)] pb-3 -mx-1">
-          <video ref={videoRef} onTimeUpdate={onTimeUpdate} controls className="w-full max-h-60 bg-black rounded-lg" />
-        </div>
-
-        {!data?.ok && programId && <p className="text-sm text-muted-foreground py-8 text-center">대본을 불러오는 중…</p>}
-        {!programId && <p className="text-sm text-muted-foreground py-8 text-center">위에서 프로젝트를 선택하세요.</p>}
-
-        {/* 대본 본문 — 지문(이탤릭) + 대사(정체)가 이어진 문서 */}
-        <article className="space-y-5 pt-2">
-          {(data?.items ?? []).map((it) => {
-            const isActive = activeItem === it.timeline_item_id;
-            const showOrig = showOriginal.has(it.timeline_item_id);
-            const hasDialogue = !!it.dialogue;
-            const hasStage = !!it.stage_direction;
-            return (
-              <section
-                key={it.timeline_item_id}
-                onClick={() => playItem(it)}
-                className={`group relative cursor-pointer rounded-lg pl-4 pr-12 py-2.5 -ml-4 border-l-2 transition-colors ${
-                  isActive ? "border-primary bg-secondary/40" : "border-transparent hover:bg-secondary/25"
-                }`}
-              >
-                {/* 지문 (이탤릭, 은은한 톤) */}
-                {hasStage && (
-                  <p className="italic text-[14.5px] leading-relaxed text-muted-foreground/85">
-                    {it.stage_direction}
-                    {it.scene_note_source === "transcript" && (
-                      <span className="ml-1.5 not-italic text-[10px] text-muted-foreground/40">(대사 기반 추정)</span>
-                    )}
-                  </p>
-                )}
-
-                {/* 대사 (정체) */}
-                {hasDialogue && (
-                  <p className={`text-[16px] leading-relaxed whitespace-pre-wrap ${hasStage ? "mt-1" : ""}`}>
-                    {it.dialogue}
-                  </p>
-                )}
-
-                {/* 환각 자막 → 지문으로 대체, 원문은 접어서 보존 */}
-                {it.warnings?.includes("non_korean") && (
-                  <div className="mt-1">
-                    <button
-                      type="button"
-                      onClick={(e) => { e.stopPropagation(); toggleOriginal(it.timeline_item_id); }}
-                      className="text-[11px] text-amber-500/80 hover:text-amber-400"
-                    >
-                      ⚠ 자막 인식 불안정 — {showOrig ? "원문 숨기기" : "원문 보기"}
-                    </button>
-                    {showOrig && (
-                      <p className="mt-1 text-[11px] text-muted-foreground/50 break-all font-mono">{it.original_text}</p>
-                    )}
-                  </div>
-                )}
-
-                {/* 대사도 지문도 없음 — 정직 표기 */}
-                {!hasDialogue && !hasStage && !it.missing?.coords && (
-                  <p className="italic text-[14px] text-muted-foreground/40">
-                    {it.no_subtitle_source ? "(말 없는 장면 — 장면 설명 준비 중)" : "(조용한 장면)"}
-                  </p>
-                )}
-                {it.missing?.coords && (
-                  <p className="italic text-[13px] text-muted-foreground/40">(좌표를 찾지 못한 조각)</p>
-                )}
-
-                {/* 우측 재생/메뉴 — hover 시 (이미지의 ▶ / ⋮ 어포던스) */}
-                <div className="absolute right-3 top-2.5 flex items-center gap-1 opacity-40 group-hover:opacity-100 transition-opacity">
-                  <button
-                    type="button"
-                    onClick={(e) => { e.stopPropagation(); playItem(it); }}
-                    className="p-1 rounded-full hover:bg-secondary/60 text-muted-foreground hover:text-primary"
-                    title="이 장면 재생"
-                  >
-                    <PlayIcon />
-                  </button>
-                  <span className="px-1 text-muted-foreground/30 select-none">⋮</span>
-                </div>
-              </section>
-            );
-          })}
-        </article>
-
-        {data?.ok && (
-          <p className="text-[11px] text-muted-foreground/30 text-center pt-8 pb-4">
-            — 대본 끝 · {data.items?.length ?? 0}개 장면 —
+      {/* 본문 — 대본만 존재한다 */}
+      <main className="max-w-2xl mx-auto px-6 pb-40" style={{ fontFamily: SERIF }}>
+        {!programId && (
+          <p className="pt-24 text-center text-sm" style={{ color: "hsl(40,10%,40%)" }}>
+            위의 제목을 눌러 대본을 고르세요.
           </p>
         )}
+
+        {scenes.map((sc) => {
+          sceneNo += 1;
+          return (
+            <section key={sceneNo}>
+              {/* 씬 헤딩 — 방송대본 S# 문법 */}
+              <h2
+                className="mt-14 mb-6 text-[13px] tracking-[0.18em] select-none"
+                style={{ color: "hsl(40,12%,52%)" }}
+              >
+                S#{sceneNo}.{sc.heading ? ` ${sc.heading}` : ""}
+                <span className="block h-px mt-2" style={{ background: "hsl(40,10%,22%)" }} />
+              </h2>
+
+              {sc.items.map((it) => {
+                const isActive = activeItem === it.timeline_item_id;
+                const dimmed = playerOpen && !isActive;
+                const stage = stripPlace(it.stage_direction, sc.heading);
+                return (
+                  <div
+                    key={it.timeline_item_id}
+                    onClick={() => playItem(it)}
+                    className="group relative cursor-pointer rounded-md -mx-3 px-3 py-2.5 mb-3 transition-all duration-300"
+                    style={{
+                      opacity: dimmed ? 0.42 : 1,               // 포커스 리딩 (조사 결정 3)
+                      background: isActive ? "hsl(230,14%,13%)" : undefined,
+                    }}
+                    onMouseEnter={(e) => { if (dimmed) e.currentTarget.style.opacity = "0.85"; }}
+                    onMouseLeave={(e) => { if (dimmed) e.currentTarget.style.opacity = "0.42"; }}
+                  >
+                    {/* 재생 표식 — 여백에서만, hover 시 잉크처럼 */}
+                    <span
+                      className="absolute -left-6 top-3 text-[15px] opacity-0 group-hover:opacity-60 transition-opacity select-none"
+                      style={{ color: "hsl(40,30%,70%)" }}
+                    >▶</span>
+
+                    {/* 지문 (이탤릭 · 들여쓰기) */}
+                    {stage && (
+                      <p className="italic text-[15px] leading-[1.9] pl-5" style={{ color: "hsl(40,12%,58%)" }}>
+                        {stage}
+                        {it.warnings?.includes("non_korean") && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setShowOriginal(showOriginal === it.timeline_item_id ? null : it.timeline_item_id);
+                            }}
+                            className="not-italic ml-2 text-[10px] align-middle opacity-30 hover:opacity-80 transition-opacity"
+                            title="자막 인식이 불안정해 지문으로 표기했습니다"
+                          >※원문</button>
+                        )}
+                      </p>
+                    )}
+                    {!stage && it.warnings?.includes("non_korean") && (
+                      <p className="italic text-[14px] pl-5" style={{ color: "hsl(40,8%,44%)" }}>
+                        (같은 장면이 이어진다.)
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setShowOriginal(showOriginal === it.timeline_item_id ? null : it.timeline_item_id);
+                          }}
+                          className="not-italic ml-2 text-[10px] align-middle opacity-30 hover:opacity-80 transition-opacity"
+                          title="자막 인식이 불안정해 지문으로 표기했습니다"
+                        >※원문</button>
+                      </p>
+                    )}
+                    {showOriginal === it.timeline_item_id && (
+                      <p className="pl-5 mt-1 text-[10.5px] break-all opacity-40" style={{ fontFamily: "monospace" }}>
+                        {it.original_text}
+                      </p>
+                    )}
+
+                    {/* 대사 (정체 · 크게) */}
+                    {it.dialogue && (
+                      <p className={`text-[17.5px] leading-[1.95] ${stage ? "mt-1.5" : ""}`}>
+                        {it.dialogue}
+                      </p>
+                    )}
+
+                    {/* 무발화·무지문 — 조용한 장면 */}
+                    {!it.dialogue && !stage && !it.warnings?.includes("non_korean") && (
+                      <p className="italic text-[14px] pl-5" style={{ color: "hsl(40,8%,40%)" }}>
+                        (조용한 장면)
+                      </p>
+                    )}
+                  </div>
+                );
+              })}
+            </section>
+          );
+        })}
+
+        {data?.ok && (
+          <p className="mt-20 text-center text-[12px] tracking-[0.3em] select-none" style={{ color: "hsl(40,10%,35%)" }}>
+            끝
+          </p>
+        )}
+        {lostCount > 0 && (
+          <p className="mt-4 text-center text-[10.5px]" style={{ color: "hsl(40,8%,32%)" }}>
+            원본을 찾는 중인 장면 {lostCount}개는 잠시 접어두었습니다
+          </p>
+        )}
+      </main>
+
+      {/* 떠 있는 미니 플레이어 — 눈은 대본에 머문다 (조사 결정 4) */}
+      <div
+        className={`fixed bottom-5 right-5 z-30 transition-all duration-300 ${
+          playerOpen ? "opacity-100 translate-y-0" : "opacity-0 translate-y-3 pointer-events-none"
+        }`}
+      >
+        <div className="rounded-xl overflow-hidden shadow-2xl" style={{ background: "#000", width: "300px" }}>
+          <video ref={videoRef} onTimeUpdate={onTimeUpdate} controls className="w-full block" />
+        </div>
+        <button
+          type="button"
+          onClick={closePlayer}
+          className="absolute -top-2.5 -right-2.5 w-6 h-6 rounded-full text-[11px] leading-none shadow-md hover:scale-110 transition-transform"
+          style={{ background: "hsl(230,10%,25%)", color: "hsl(40,20%,85%)" }}
+          title="닫기"
+        >✕</button>
       </div>
     </div>
   );

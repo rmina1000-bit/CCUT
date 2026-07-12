@@ -58,6 +58,17 @@ def _josa(word, with_jong, without_jong):
     return with_jong if (word and _has_jong(word[-1])) else without_jong
 
 
+def place_of(visual_desc):
+    """씬 헤딩용 장소 (S#n. 장소) — 장소 라벨이 있을 때만. 없으면 None (추정 금지)."""
+    if not visual_desc:
+        return None
+    m = re.search(r"\(장소:([^)]+)\)", visual_desc)
+    if not m:
+        return None
+    p = m.group(1).strip()
+    return _PLACE.get(p, p)
+
+
 def stage_direction(visual_desc):
     """visual_desc → 한국어 지문 문장('(...)') 또는 None."""
     if not visual_desc:

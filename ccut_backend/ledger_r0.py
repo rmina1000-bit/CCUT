@@ -17,6 +17,7 @@ import sqlite3
 
 from fastapi import APIRouter
 
+from scenario_text import place_of as _place
 from scenario_text import stage_direction as _stage
 
 BACKEND_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -191,6 +192,7 @@ async def get_ledger(program_id: str):
                 "anchor_end_ms": e_ms,
                 "dialogue": dialogue,               # 대사 (정체) — None이면 지문만
                 "stage_direction": stage,           # 지문 (이탤릭) — 장면 번역
+                "place": _place(scene),             # 씬 헤딩용 장소 (S#n) — 라벨 있을 때만
                 "original_text": original_text,     # 환각 원문 (상세 보기 보존)
                 "no_subtitle_source": no_sub,       # 소스 자체에 자막 없음 (11개 소스 케이스)
                 "warnings": warns,                  # non_korean / low_probability
