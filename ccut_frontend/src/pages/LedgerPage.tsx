@@ -10,6 +10,8 @@ import { videoService } from "@/services/videoService";
 interface ScriptItem {
   fragment_id: string;
   timeline_item_id: string;
+  source_id?: string;
+  revision?: number | null;
   anchor_start_ms?: number;
   anchor_end_ms?: number;
   dialogue?: string | null;
@@ -25,6 +27,8 @@ interface ScriptData {
   ok: boolean;
   program_name?: string;
   running_ms?: number;
+  excluded_count?: number;
+  excluded_items?: ScriptItem[];
   items?: ScriptItem[];
 }
 
@@ -56,11 +60,12 @@ const LedgerPage: React.FC = () => {
     }).catch(() => setPrograms([]));
   }, []);
 
-  useEffect(() => {
+  const reload = useCallback(() => {
     if (!programId) { setData(null); return; }
     fetch(`/api/ledger/${encodeURIComponent(programId)}`)
       .then((r) => r.json()).then(setData).catch(() => setData(null));
   }, [programId]);
+  useEffect(() => { reload(); }, [reload]);
 
   // 장소가 바뀌는 지점마다 씬 (S#n)
   const scenes = useMemo(() => {
@@ -108,6 +113,67 @@ const LedgerPage: React.FC = () => {
     setPlayerOpen(false);
     setActiveItem(null);
   }, []);
+
+  // [SCRIPT-2] 문장 삭제 = 영상 구간 제외 (Edit State REMOVE — 승인된 편집만 저장)
+  const [undoInfo, setUndoInfo] = useState<{
+    item: ScriptItem; revision: number; savedSec: number;
+  } | null>(null);
+  const undoTimer = useRef<number | null>(null);
+
+  const postState = useCallback(async (it: ScriptItem, removed: boolean, revision?: number) => {
+    const res = await fetch("/api/edit-state", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        program_id: programId,
+        timeline_item_id: it.timeline_item_id,
+        source_id: it.source_id,
+        anchor_start_ms: it.anchor_start_ms,
+        anchor_end_ms: it.anchor_end_ms,
+        trim_start_ms: it.anchor_start_ms,
+        trim_end_ms: it.anchor_end_ms,
+        excluded_ranges: [],
+        removed,
+        revision,
+        parent_fragment_id: it.fragment_id,
+        command_type: removed ? "REMOVE" : "RESTORE",
+        origin: "TEXT_EDITOR",
+      }),
+    });
+    return res.json();
+  }, [programId]);
+
+  const removeItem = useCallback(async (it: ScriptItem) => {
+    if (activeItem === it.timeline_item_id) closePlayer();
+    const r = await postState(it, true, it.revision ?? undefined);
+    if (!r?.ok) { console.error("[대본] 제외 실패:", r); return; }
+    const savedSec = ((it.anchor_end_ms ?? 0) - (it.anchor_start_ms ?? 0)) / 1000;
+    setUndoInfo({ item: it, revision: r.revision, savedSec });
+    if (undoTimer.current) window.clearTimeout(undoTimer.current);
+    undoTimer.current = window.setTimeout(() => setUndoInfo(null), 8000);
+    reload();
+  }, [activeItem, closePlayer, postState, reload]);
+
+  const undoRemove = useCallback(async () => {
+    if (!undoInfo) return;
+    const r = await postState(undoInfo.item, false, undoInfo.revision);
+    if (r?.ok) { setUndoInfo(null); reload(); }
+    else console.error("[대본] 되돌리기 실패:", r);
+  }, [undoInfo, postState, reload]);
+
+  // Delete 키 = 선택(재생 중) 문장 제외
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Delete" && e.key !== "Backspace") return;
+      const t = e.target as HTMLElement;
+      if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable)) return;
+      if (!activeItem || !data?.items) return;
+      const it = data.items.find((x) => x.timeline_item_id === activeItem);
+      if (it) { e.preventDefault(); removeItem(it); }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [activeItem, data, removeItem]);
 
   // 씬 헤딩이 말한 장소를 지문이 반복하지 않는다
   const stripPlace = (stage: string | null | undefined, heading: string | null) => {
@@ -164,7 +230,7 @@ const LedgerPage: React.FC = () => {
                     <span
                       key={it.timeline_item_id}
                       onClick={() => playItem(it)}
-                      className="cursor-pointer transition-all duration-200 underline-offset-4 decoration-1 hover:underline"
+                      className="group/span cursor-pointer transition-all duration-200 underline-offset-4 decoration-1 hover:underline"
                       style={{
                         opacity: dimmed ? 0.4 : 1,
                         background: isActive ? "hsl(230,14%,16%)" : undefined,
@@ -193,6 +259,12 @@ const LedgerPage: React.FC = () => {
                       {!it.dialogue && !stage && !hallu && (
                         <span>(조용한 장면.) </span>
                       )}
+                      <button
+                        type="button"
+                        onClick={(e) => { e.stopPropagation(); removeItem(it); }}
+                        className="text-[11px] align-super opacity-0 group-hover/span:opacity-40 hover:!opacity-90 transition-opacity px-0.5"
+                        title="이 장면을 대본에서 뺍니다 (영상에서도 빠집니다)"
+                      >✕</button>
                     </span>
                   );
                 })}
@@ -204,12 +276,44 @@ const LedgerPage: React.FC = () => {
         {data?.ok && (
           <p className="mt-10 text-center text-[12px] tracking-[0.3em] select-none opacity-40">끝</p>
         )}
+        {(data?.excluded_count ?? 0) > 0 && (
+          <p className="mt-2 text-center text-[10.5px] opacity-40">
+            대본에서 뺀 장면 {data?.excluded_count}개
+            <button
+              type="button"
+              onClick={async () => {
+                for (const ex of data?.excluded_items ?? []) {
+                  await postState(ex, false, ex.revision ?? undefined);
+                }
+                reload();
+              }}
+              className="ml-2 underline underline-offset-2 opacity-70 hover:opacity-100"
+            >모두 되돌리기</button>
+          </p>
+        )}
         {lostCount > 0 && (
           <p className="mt-2 text-center text-[10.5px] opacity-30">
             원본을 찾는 중인 장면 {lostCount}개는 잠시 접어두었습니다
           </p>
         )}
       </main>
+
+      {/* 수정 확인 한 줄 — 헌장 5조 (은은한 확인 + 되돌리기) */}
+      <div
+        className={`fixed bottom-5 left-1/2 -translate-x-1/2 z-40 transition-all duration-300 ${
+          undoInfo ? "opacity-100 translate-y-0" : "opacity-0 translate-y-2 pointer-events-none"
+        }`}
+      >
+        <div
+          className="px-4 py-2 rounded-full text-[13px] shadow-lg flex items-center gap-3"
+          style={{ background: "hsl(228,12%,17%)", fontFamily: SANS }}
+        >
+          <span>장면 1개 제외 — 영상이 {undoInfo?.savedSec.toFixed(1)}초 짧아졌습니다</span>
+          <button type="button" onClick={undoRemove} className="underline underline-offset-2 opacity-80 hover:opacity-100">
+            되돌리기
+          </button>
+        </div>
+      </div>
 
       {/* 플로팅 플레이어 — 양축 상한 (국장 확인 완료 크기 유지) */}
       <div

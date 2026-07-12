@@ -106,6 +106,18 @@ async def get_ledger(program_id: str):
             except Exception:
                 pass
 
+        # [SCRIPT-2] 승인된 편집(Edit State) 반영 — REMOVE된 사용본은 대본에서 뺀다.
+        removed_items = {}
+        state_rev = {}
+        try:
+            for r in con.execute(
+                "SELECT timeline_item_id, removed, revision FROM fragment_edit_state WHERE program_id=?",
+                (program_id,)):
+                removed_items[r["timeline_item_id"]] = bool(r["removed"])
+                state_rev[r["timeline_item_id"]] = r["revision"]
+        except sqlite3.OperationalError:
+            pass  # Cutover 전 운영 DB — 테이블 부재면 편집 없음
+
         srcs = {r["source_id"]: r for r in con.execute("SELECT source_id, title, file_path FROM sources")}
         subs_cache = {}
 
@@ -141,9 +153,12 @@ async def get_ledger(program_id: str):
         items = []
         running_ms = 0
         occ_seen = {}
+        excluded_count = 0
+        excluded_items = []
         for fid in fids:
             occ = occ_seen.get(fid, 0)
             occ_seen[fid] = occ + 1
+            item_id = f"ITEM_{_hash6(program_id)}_{mode}_{fid}_{occ}"
             sf = con.execute(
                 'SELECT source_id, start, "end" FROM semantic_fragments WHERE fragment_id=?', (fid,)
             ).fetchone()
@@ -160,10 +175,19 @@ async def get_ledger(program_id: str):
                 coord_source = "ui_state_snapshot"
             if sf is None:
                 items.append({"fragment_id": fid, "missing": {"coords": True},
-                              "timeline_item_id": f"ITEM_{_hash6(program_id)}_{mode}_{fid}_{occ}"})
+                              "timeline_item_id": item_id})
                 continue
             sid = sf["source_id"]
             s_ms, e_ms = _to_ms(sf["start"]), _to_ms(sf["end"])
+            if removed_items.get(item_id):
+                # [SCRIPT-2] 제외된 장면 — 대본 밖이지만 되돌릴 길은 항상 열어둔다
+                excluded_count += 1
+                excluded_items.append({
+                    "timeline_item_id": item_id, "fragment_id": fid, "source_id": sid,
+                    "anchor_start_ms": s_ms, "anchor_end_ms": e_ms,
+                    "revision": state_rev.get(item_id),
+                })
+                continue
             src = srcs.get(sid)
             segs = segments_for(sid)
             if segs is None:
@@ -184,7 +208,8 @@ async def get_ledger(program_id: str):
                 running_ms += dur
             items.append({
                 "fragment_id": fid,
-                "timeline_item_id": f"ITEM_{_hash6(program_id)}_{mode}_{fid}_{occ}",
+                "timeline_item_id": item_id,
+                "revision": state_rev.get(item_id),  # 낙관적 잠금용 (없으면 신규)
                 "ledger_span_id": _ledger_span_id(sid, s_ms, e_ms),
                 "source_id": sid,
                 "source_title": (src["title"] if src else sid),
@@ -202,6 +227,8 @@ async def get_ledger(program_id: str):
             })
         return {"ok": True, "program_id": program_id, "program_name": prow["name"],
                 "mode": mode, "sequence_count": len(fids), "items": items,
-                "running_ms": running_ms}  # [SCRIPT-5] 상단 러닝타임(현재)
+                "running_ms": running_ms,  # [SCRIPT-5] 상단 러닝타임(현재)
+                "excluded_count": excluded_count,  # [SCRIPT-2] 제외된 장면 수
+                "excluded_items": excluded_items}  # 복원용 최소 정보
     finally:
         con.close()
