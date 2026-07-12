@@ -1,13 +1,14 @@
 /**
- * [LEDGER-1] 원고 — MASTER CONCEPT ①원고의 첫 구현 (R0, 읽기 전용).
- * 카드 나열 금지: 워드 문서처럼 이어진 연속 원고. 문장을 클릭하면 해당 원본 구간이 재생된다.
- * 원문 접기/펼치기 = CSS 줄 접기만 (DB 원문 무변, AI 요약 0 — v1.1 패치 5).
- * 환각 의심(비한국어·저확률)은 제거하지 않고 경고 배지만 단다 (신호등 원칙).
+ * [SCRIPT-1] 대본 — MASTER CONCEPT ①원고 / 헌장 v1.1 "대본(시나리오) 편집실".
+ * 대본 = 대사(정체) + 지문(이탤릭). 지문 = AI가 장면 태그를 사람의 문장으로 번역한 본문.
+ * 둘 다 Story Item: hover·클릭 재생 동등. 카드 나열 금지 — 워드/대본처럼 이어진 문서.
+ * 환각 자막 구간은 대사 대신 지문으로 대체 표기(원문은 '원문 보기'에 보존).
+ * 파일명·시간·ID·confidence는 본문에 들어오지 않는다(정보 은닉 — 필요 시 메타 줄에만).
  */
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { videoService } from "@/services/videoService";
 
-interface LedgerItem {
+interface ScriptItem {
   fragment_id: string;
   timeline_item_id: string;
   ledger_span_id?: string;
@@ -15,43 +16,45 @@ interface LedgerItem {
   source_title?: string;
   anchor_start_ms?: number;
   anchor_end_ms?: number;
-  text?: string | null;
+  dialogue?: string | null;
+  stage_direction?: string | null;
+  original_text?: string | null;
   no_subtitle_source?: boolean;
   warnings?: string[];
-  scene_note?: string | null;
   scene_note_source?: string | null;
   video_url?: string;
   missing?: { coords?: boolean };
 }
 
-interface LedgerData {
+interface ScriptData {
   ok: boolean;
   program_id: string;
   program_name?: string;
   mode?: string;
-  sequence_count?: number;
-  items?: LedgerItem[];
+  running_ms?: number;
+  items?: ScriptItem[];
 }
 
-const fmtMs = (ms?: number) => {
-  if (ms === undefined || ms === null) return "?";
+const fmtClock = (ms?: number) => {
+  if (!ms || ms < 0) return "0:00";
   const s = Math.round(ms / 1000);
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
 };
 
-const WARN_LABEL: Record<string, string> = {
-  non_korean: "비한국어 반복 의심",
-  low_probability: "저확률 구간",
-};
+const PlayIcon = () => (
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+    <circle cx="12" cy="12" r="9" /><path d="M10 8.5l6 3.5-6 3.5v-7z" fill="currentColor" stroke="none" />
+  </svg>
+);
 
 const LedgerPage: React.FC = () => {
   const [programs, setPrograms] = useState<Array<{ program_id: string; name: string }>>([]);
   const [programId, setProgramId] = useState<string>(() =>
     new URLSearchParams(window.location.search).get("program") || ""
   );
-  const [data, setData] = useState<LedgerData | null>(null);
-  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const [data, setData] = useState<ScriptData | null>(null);
   const [activeItem, setActiveItem] = useState<string | null>(null);
+  const [showOriginal, setShowOriginal] = useState<Set<string>>(new Set());
   const videoRef = useRef<HTMLVideoElement>(null);
   const rangeRef = useRef<{ endSec: number } | null>(null);
 
@@ -65,12 +68,10 @@ const LedgerPage: React.FC = () => {
   useEffect(() => {
     if (!programId) { setData(null); return; }
     fetch(`/api/ledger/${encodeURIComponent(programId)}`)
-      .then((r) => r.json())
-      .then(setData)
-      .catch(() => setData(null));
+      .then((r) => r.json()).then(setData).catch(() => setData(null));
   }, [programId]);
 
-  const playItem = useCallback((it: LedgerItem) => {
+  const playItem = useCallback((it: ScriptItem) => {
     if (!it.video_url || it.anchor_start_ms === undefined) return;
     setActiveItem(it.timeline_item_id);
     const v = videoRef.current;
@@ -78,111 +79,135 @@ const LedgerPage: React.FC = () => {
     const startSec = (it.anchor_start_ms ?? 0) / 1000;
     rangeRef.current = { endSec: (it.anchor_end_ms ?? 0) / 1000 };
     const url = it.video_url.startsWith("/") ? `/api${it.video_url.replace(/^\/api/, "")}` : it.video_url;
-    if (!v.src.endsWith(url) || v.readyState === 0 || v.error) { v.src = url; v.load(); } // 이전 로드 실패 회복
+    if (!v.src.endsWith(url) || v.readyState === 0 || v.error) { v.src = url; v.load(); }
     const seek = () => { v.currentTime = startSec; v.play().catch(() => {}); };
     if (v.readyState >= 1) seek(); else v.onloadedmetadata = seek;
   }, []);
 
   const onTimeUpdate = useCallback(() => {
-    const v = videoRef.current;
-    const r = rangeRef.current;
+    const v = videoRef.current, r = rangeRef.current;
     if (v && r && v.currentTime >= r.endSec) v.pause();
   }, []);
 
-  const toggleExpand = useCallback((id: string) => {
-    setExpanded((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id); else next.add(id);
-      return next;
+  const toggleOriginal = useCallback((id: string) => {
+    setShowOriginal((prev) => {
+      const n = new Set(prev);
+      n.has(id) ? n.delete(id) : n.add(id);
+      return n;
     });
   }, []);
 
   return (
-    <div className="min-h-screen bg-background text-foreground">
-      <div className="max-w-3xl mx-auto px-6 py-6">
-        <div className="flex items-center gap-3 mb-4">
-          <h1 className="text-xl font-bold">원고</h1>
+    <div className="min-h-screen bg-[hsl(228,14%,7%)] text-foreground">
+      {/* 상단 바 — 브레드크럼 + 러닝타임 (문단별 시간은 숨김) */}
+      <header className="sticky top-0 z-20 bg-[hsl(228,14%,7%)]/95 backdrop-blur border-b border-border/10">
+        <div className="max-w-3xl mx-auto px-6 h-14 flex items-center gap-3">
+          <span className="font-bold tracking-tight">CCUT</span>
+          <span className="text-muted-foreground/50">·</span>
           <select
-            className="bg-secondary text-sm rounded px-2 py-1 border border-border/30"
-            value={programId}
-            onChange={(e) => setProgramId(e.target.value)}
+            className="bg-transparent text-sm rounded px-1 py-0.5 outline-none hover:bg-secondary/40"
+            value={programId} onChange={(e) => setProgramId(e.target.value)}
           >
-            <option value="">프로그램 선택…</option>
-            {programs.map((p) => (
-              <option key={p.program_id} value={p.program_id}>{p.name}</option>
-            ))}
+            <option value="">프로젝트 선택…</option>
+            {programs.map((p) => <option key={p.program_id} value={p.program_id}>{p.name}</option>)}
           </select>
-          {data?.ok && (
-            <span className="text-xs text-muted-foreground">
-              {data.program_name} · {data.mode}안 · 항목 {data.items?.length ?? 0}
-            </span>
-          )}
+          <span className="text-muted-foreground/40">›</span>
+          <span className="text-sm text-primary font-medium">대본</span>
+          <div className="ml-auto text-xs text-muted-foreground tabular-nums">
+            {data?.ok && <>현재 <span className="text-foreground">{fmtClock(data.running_ms)}</span> <span className="opacity-40">/ 목표 —</span></>}
+          </div>
+        </div>
+      </header>
+
+      <div className="max-w-3xl mx-auto px-6 py-5">
+        {/* 재생창 — 대사/지문 어느 줄을 눌러도 그 장면 */}
+        <div className="sticky top-14 z-10 bg-[hsl(228,14%,7%)] pb-3 -mx-1">
+          <video ref={videoRef} onTimeUpdate={onTimeUpdate} controls className="w-full max-h-60 bg-black rounded-lg" />
         </div>
 
-        {/* 재생창 — 문장을 클릭하면 해당 원본 구간 */}
-        <div className="sticky top-0 z-10 bg-background pb-3">
-          <video
-            ref={videoRef}
-            onTimeUpdate={onTimeUpdate}
-            controls
-            className="w-full max-h-64 bg-black rounded-md"
-          />
-        </div>
+        {!data?.ok && programId && <p className="text-sm text-muted-foreground py-8 text-center">대본을 불러오는 중…</p>}
+        {!programId && <p className="text-sm text-muted-foreground py-8 text-center">위에서 프로젝트를 선택하세요.</p>}
 
-        {/* 연속 원고 — 카드 나열이 아니라 이어진 문서 */}
-        {!data?.ok && programId && <p className="text-sm text-muted-foreground">원고를 불러오는 중…</p>}
-        <article className="space-y-4 leading-relaxed">
+        {/* 대본 본문 — 지문(이탤릭) + 대사(정체)가 이어진 문서 */}
+        <article className="space-y-5 pt-2">
           {(data?.items ?? []).map((it) => {
             const isActive = activeItem === it.timeline_item_id;
-            const isOpen = expanded.has(it.timeline_item_id);
+            const showOrig = showOriginal.has(it.timeline_item_id);
+            const hasDialogue = !!it.dialogue;
+            const hasStage = !!it.stage_direction;
             return (
               <section
                 key={it.timeline_item_id}
                 onClick={() => playItem(it)}
-                className={`group cursor-pointer rounded-md px-3 py-2 transition-colors border-l-2 ${
-                  isActive ? "border-primary bg-secondary/50" : "border-transparent hover:bg-secondary/30"
+                className={`group relative cursor-pointer rounded-lg pl-4 pr-12 py-2.5 -ml-4 border-l-2 transition-colors ${
+                  isActive ? "border-primary bg-secondary/40" : "border-transparent hover:bg-secondary/25"
                 }`}
               >
-                <div className="text-[11px] text-muted-foreground mb-1">
-                  {it.source_title ?? it.source_id} · {fmtMs(it.anchor_start_ms)}–{fmtMs(it.anchor_end_ms)}
-                  {(it.warnings ?? []).map((w) => (
-                    <span key={w} className="ml-2 px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-500">
-                      ⚠ {WARN_LABEL[w] ?? w}
-                    </span>
-                  ))}
-                </div>
-                {it.missing?.coords ? (
-                  <p className="text-sm text-muted-foreground italic">[좌표를 찾지 못한 조각: {it.fragment_id}]</p>
-                ) : it.text ? (
-                  <>
-                    <p className={`text-[15px] whitespace-pre-wrap ${isOpen ? "" : "line-clamp-2"}`}>{it.text}</p>
-                    {it.text.length > 80 && (
-                      <button
-                        type="button"
-                        onClick={(e) => { e.stopPropagation(); toggleExpand(it.timeline_item_id); }}
-                        className="text-[11px] text-primary/80 hover:text-primary mt-0.5"
-                      >
-                        {isOpen ? "접기" : "펼치기"}
-                      </button>
+                {/* 지문 (이탤릭, 은은한 톤) */}
+                {hasStage && (
+                  <p className="italic text-[14.5px] leading-relaxed text-muted-foreground/85">
+                    {it.stage_direction}
+                    {it.scene_note_source === "transcript" && (
+                      <span className="ml-1.5 not-italic text-[10px] text-muted-foreground/40">(대사 기반 추정)</span>
                     )}
-                  </>
-                ) : (
-                  <p className="text-sm text-muted-foreground italic">
-                    {it.no_subtitle_source ? "[자막 없음]" : "[이 구간과 겹치는 발화 없음]"}
                   </p>
                 )}
-                {it.scene_note ? (
-                  <p className="text-[12.5px] italic text-muted-foreground mt-1">
-                    {it.scene_note_source === "transcript" ? "🏷 (대사 파생 태그) " : "👁 "}
-                    {it.scene_note}
+
+                {/* 대사 (정체) */}
+                {hasDialogue && (
+                  <p className={`text-[16px] leading-relaxed whitespace-pre-wrap ${hasStage ? "mt-1" : ""}`}>
+                    {it.dialogue}
                   </p>
-                ) : (
-                  !it.missing?.coords && <p className="text-[11px] text-muted-foreground/60 mt-1">[장면설명 없음]</p>
                 )}
+
+                {/* 환각 자막 → 지문으로 대체, 원문은 접어서 보존 */}
+                {it.warnings?.includes("non_korean") && (
+                  <div className="mt-1">
+                    <button
+                      type="button"
+                      onClick={(e) => { e.stopPropagation(); toggleOriginal(it.timeline_item_id); }}
+                      className="text-[11px] text-amber-500/80 hover:text-amber-400"
+                    >
+                      ⚠ 자막 인식 불안정 — {showOrig ? "원문 숨기기" : "원문 보기"}
+                    </button>
+                    {showOrig && (
+                      <p className="mt-1 text-[11px] text-muted-foreground/50 break-all font-mono">{it.original_text}</p>
+                    )}
+                  </div>
+                )}
+
+                {/* 대사도 지문도 없음 — 정직 표기 */}
+                {!hasDialogue && !hasStage && !it.missing?.coords && (
+                  <p className="italic text-[14px] text-muted-foreground/40">
+                    {it.no_subtitle_source ? "(말 없는 장면 — 장면 설명 준비 중)" : "(조용한 장면)"}
+                  </p>
+                )}
+                {it.missing?.coords && (
+                  <p className="italic text-[13px] text-muted-foreground/40">(좌표를 찾지 못한 조각)</p>
+                )}
+
+                {/* 우측 재생/메뉴 — hover 시 (이미지의 ▶ / ⋮ 어포던스) */}
+                <div className="absolute right-3 top-2.5 flex items-center gap-1 opacity-40 group-hover:opacity-100 transition-opacity">
+                  <button
+                    type="button"
+                    onClick={(e) => { e.stopPropagation(); playItem(it); }}
+                    className="p-1 rounded-full hover:bg-secondary/60 text-muted-foreground hover:text-primary"
+                    title="이 장면 재생"
+                  >
+                    <PlayIcon />
+                  </button>
+                  <span className="px-1 text-muted-foreground/30 select-none">⋮</span>
+                </div>
               </section>
             );
           })}
         </article>
+
+        {data?.ok && (
+          <p className="text-[11px] text-muted-foreground/30 text-center pt-8 pb-4">
+            — 대본 끝 · {data.items?.length ?? 0}개 장면 —
+          </p>
+        )}
       </div>
     </div>
   );

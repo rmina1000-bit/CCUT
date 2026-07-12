@@ -17,6 +17,8 @@ import sqlite3
 
 from fastapi import APIRouter
 
+from scenario_text import stage_direction as _stage
+
 BACKEND_DIR = os.path.dirname(os.path.abspath(__file__))
 DB_PATH = os.path.join(BACKEND_DIR, "ccut_app.db")
 
@@ -106,6 +108,27 @@ async def get_ledger(program_id: str):
         srcs = {r["source_id"]: r for r in con.execute("SELECT source_id, title, file_path FROM sources")}
         subs_cache = {}
 
+        # [SCRIPT-1] visual_desc를 좌표로 찾기 위한 소스별 색인 (D8: fid 재발급으로
+        # ui_state의 fid가 fragment_index와 안 맞음 → PBE 감사의 좌표 재매칭 교훈 적용).
+        fi_by_source = {}
+        for r in con.execute(
+            'SELECT source_id, start, "end", visual_desc, desc_source FROM fragment_index '
+            'WHERE visual_desc IS NOT NULL AND visual_desc<>""'):
+            fi_by_source.setdefault(r["source_id"], []).append(
+                (_to_ms(r["start"]), _to_ms(r["end"]), r["visual_desc"], r["desc_source"]))
+
+        def visual_for(fid, sid, s_ms, e_ms, tol=120):
+            row = con.execute(
+                "SELECT visual_desc, desc_source FROM fragment_index WHERE fragment_id=?", (fid,)).fetchone()
+            if row and row["visual_desc"]:
+                return row["visual_desc"], row["desc_source"]
+            best, bestd = None, tol + 1
+            for a, b, vd, ds in fi_by_source.get(sid, []):
+                d = abs(a - s_ms) + abs(b - e_ms)
+                if d < bestd:
+                    best, bestd = (vd, ds), d
+            return best if best else (None, None)
+
         def segments_for(sid):
             if sid not in subs_cache:
                 row = con.execute("SELECT segments FROM subtitles WHERE source_id=?", (sid,)).fetchone()
@@ -115,6 +138,7 @@ async def get_ledger(program_id: str):
         from engine import fragment_show as _fs  # 실파일 URL resolver 재사용 (L2)
 
         items = []
+        running_ms = 0
         occ_seen = {}
         for fid in fids:
             occ = occ_seen.get(fid, 0)
@@ -146,10 +170,17 @@ async def get_ledger(program_id: str):
             else:
                 text, warns = _asr_overlap(segs, sf["start"], sf["end"])
                 no_sub = False
-            fi = con.execute(
-                "SELECT visual_desc, desc_source FROM fragment_index WHERE fragment_id=?", (fid,)
-            ).fetchone()
-            scene = fi["visual_desc"] if fi and fi["visual_desc"] else None
+            scene, scene_src = visual_for(fid, sid, s_ms, e_ms)
+            # [SCRIPT-1] 지문 = 장면 태그를 사람 문장으로 번역 (결정론 템플릿)
+            stage = _stage(scene)
+            # [SCRIPT-1] 대본 = 대사(정체) + 지문(이탤릭). 환각 자막 구간은 대사 대신 지문으로
+            # 대체 표기하고 원문은 상세 보기에 보존 (정직 원칙).
+            is_hallucination = "non_korean" in warns
+            dialogue = None if is_hallucination else text
+            original_text = text if is_hallucination else None
+            dur = e_ms - s_ms
+            if dur > 0:
+                running_ms += dur
             items.append({
                 "fragment_id": fid,
                 "timeline_item_id": f"ITEM_{_hash6(program_id)}_{mode}_{fid}_{occ}",
@@ -158,15 +189,17 @@ async def get_ledger(program_id: str):
                 "source_title": (src["title"] if src else sid),
                 "anchor_start_ms": s_ms,
                 "anchor_end_ms": e_ms,
-                "text": text,                       # None = [자막 없음]/[겹침 없음] — 프론트 정직 표기
+                "dialogue": dialogue,               # 대사 (정체) — None이면 지문만
+                "stage_direction": stage,           # 지문 (이탤릭) — 장면 번역
+                "original_text": original_text,     # 환각 원문 (상세 보기 보존)
                 "no_subtitle_source": no_sub,       # 소스 자체에 자막 없음 (11개 소스 케이스)
-                "warnings": warns,                  # non_korean / low_probability — 제거 아님
-                "scene_note": scene,
-                "scene_note_source": (fi["desc_source"] if fi else None),  # 'transcript'=대사 파생 태그
-                "coord_source": coord_source,  # db | ui_state_snapshot (D8 폴백 정직 표기)
+                "warnings": warns,                  # non_korean / low_probability
+                "scene_note_source": scene_src,  # 'transcript'=대사 파생 태그
+                "coord_source": coord_source,       # db | ui_state_snapshot (D8 폴백 정직 표기)
                 "video_url": _fs._video_url(src["file_path"] if src else None, sid),
             })
         return {"ok": True, "program_id": program_id, "program_name": prow["name"],
-                "mode": mode, "sequence_count": len(fids), "items": items}
+                "mode": mode, "sequence_count": len(fids), "items": items,
+                "running_ms": running_ms}  # [SCRIPT-5] 상단 러닝타임(현재)
     finally:
         con.close()
