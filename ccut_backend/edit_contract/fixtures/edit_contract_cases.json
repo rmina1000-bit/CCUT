@@ -1,0 +1,162 @@
+{
+  "meta": {
+    "contract": "EDIT-CONTRACT-B0 v0.4",
+    "anchors": {
+      "SF_64A25F_SRC_85654349": "PBE-AUDIT-01 실측: anchor [39950,44720], 중간 제외 [43130,43925] -> DB SPLIT 2행 [[39950,43130],[43925,44720]]",
+      "SF_830924_SRC_2BA99A0D": "PBE-AUDIT-01 실측: anchor [27580,39000], DB SPLIT 2행 [[28532,30435],[35193,38048]] = canonical trim[28532,38048]+excluded[[30435,35193]]"
+    },
+    "note": "TS(ccut_frontend/src/utils/editContract.ts)와 Py(ccut_backend/edit_contract/)가 이 파일 하나로 동등성 증명"
+  },
+  "to_ms_cases": [
+    { "seconds": 28.531666666666666, "expect_ms": 28532 },
+    { "seconds": 43.13, "expect_ms": 43130 },
+    { "seconds": 43.925, "expect_ms": 43925 },
+    { "seconds": 39.95, "expect_ms": 39950 },
+    { "seconds": 38.04833333333333, "expect_ms": 38048 }
+  ],
+  "normalize_cases": [
+    {
+      "id": "C1",
+      "desc": "TRIM만 -> span 1",
+      "edit_state_id": "ES_C1",
+      "input": { "anchor_start_ms": 10000, "anchor_end_ms": 20000, "trim_start_ms": 12000, "trim_end_ms": 18000, "excluded_ranges": [], "removed": false },
+      "expect": {
+        "canonical": { "anchor_start_ms": 10000, "anchor_end_ms": 20000, "trim_start_ms": 12000, "trim_end_ms": 18000, "excluded_ranges": [], "removed": false },
+        "receipt": [],
+        "spans": [[12000, 18000]],
+        "ed_ids": ["ES_C1_k1"]
+      }
+    },
+    {
+      "id": "C2",
+      "desc": "중간 제외 1 -> span 2 (SF_64A25F 실측 좌표 고정)",
+      "edit_state_id": "ES_C2",
+      "input": { "anchor_start_ms": 39950, "anchor_end_ms": 44720, "trim_start_ms": 39950, "trim_end_ms": 44720, "excluded_ranges": [[43130, 43925]], "removed": false },
+      "expect": {
+        "canonical": { "anchor_start_ms": 39950, "anchor_end_ms": 44720, "trim_start_ms": 39950, "trim_end_ms": 44720, "excluded_ranges": [[43130, 43925]], "removed": false },
+        "receipt": [],
+        "spans": [[39950, 43130], [43925, 44720]],
+        "ed_ids": ["ES_C2_k1", "ES_C2_k2"]
+      }
+    },
+    {
+      "id": "C3",
+      "desc": "중간 제외 2+ -> span N+1, 시간순 (입력은 비정렬)",
+      "edit_state_id": "ES_C3",
+      "input": { "anchor_start_ms": 0, "anchor_end_ms": 100000, "trim_start_ms": 10000, "trim_end_ms": 90000, "excluded_ranges": [[60000, 70000], [30000, 40000]], "removed": false },
+      "expect": {
+        "canonical": { "anchor_start_ms": 0, "anchor_end_ms": 100000, "trim_start_ms": 10000, "trim_end_ms": 90000, "excluded_ranges": [[30000, 40000], [60000, 70000]], "removed": false },
+        "receipt": [{ "rule": "sorted" }],
+        "spans": [[10000, 30000], [40000, 60000], [70000, 90000]],
+        "ed_ids": ["ES_C3_k1", "ES_C3_k2", "ES_C3_k3"]
+      }
+    },
+    {
+      "id": "C4A",
+      "desc": "앞 경계에 닿는 제외 -> canonical trim으로 흡수",
+      "edit_state_id": "ES_C4A",
+      "input": { "anchor_start_ms": 39950, "anchor_end_ms": 44720, "trim_start_ms": 39950, "trim_end_ms": 44720, "excluded_ranges": [[39950, 41000]], "removed": false },
+      "expect": {
+        "canonical": { "anchor_start_ms": 39950, "anchor_end_ms": 44720, "trim_start_ms": 41000, "trim_end_ms": 44720, "excluded_ranges": [], "removed": false },
+        "receipt": [{ "rule": "absorbed_start", "range": [39950, 41000], "trim_start_ms": 41000 }],
+        "spans": [[41000, 44720]],
+        "ed_ids": ["ES_C4A_k1"]
+      }
+    },
+    {
+      "id": "C4B",
+      "desc": "양 경계 흡수 + 중간 제외 (SF_830924 실측 좌표 고정)",
+      "edit_state_id": "ES_C4B",
+      "input": { "anchor_start_ms": 27580, "anchor_end_ms": 39000, "trim_start_ms": 27580, "trim_end_ms": 39000, "excluded_ranges": [[27580, 28532], [30435, 35193], [38048, 39000]], "removed": false },
+      "expect": {
+        "canonical": { "anchor_start_ms": 27580, "anchor_end_ms": 39000, "trim_start_ms": 28532, "trim_end_ms": 38048, "excluded_ranges": [[30435, 35193]], "removed": false },
+        "receipt": [
+          { "rule": "absorbed_start", "range": [27580, 28532], "trim_start_ms": 28532 },
+          { "rule": "absorbed_end", "range": [38048, 39000], "trim_end_ms": 38048 }
+        ],
+        "spans": [[28532, 30435], [35193, 38048]],
+        "ed_ids": ["ES_C4B_k1", "ES_C4B_k2"]
+      }
+    },
+    {
+      "id": "C4C",
+      "desc": "창 완전 밖 제외 -> 무시(no-op) + Receipt",
+      "edit_state_id": "ES_C4C",
+      "input": { "anchor_start_ms": 0, "anchor_end_ms": 30000, "trim_start_ms": 10000, "trim_end_ms": 20000, "excluded_ranges": [[0, 5000]], "removed": false },
+      "expect": {
+        "canonical": { "anchor_start_ms": 0, "anchor_end_ms": 30000, "trim_start_ms": 10000, "trim_end_ms": 20000, "excluded_ranges": [], "removed": false },
+        "receipt": [{ "rule": "ignored_outside", "range": [0, 5000] }],
+        "spans": [[10000, 20000]],
+        "ed_ids": ["ES_C4C_k1"]
+      }
+    },
+    {
+      "id": "C4D",
+      "desc": "창 경계에 걸친 제외 -> 절단 후 흡수",
+      "edit_state_id": "ES_C4D",
+      "input": { "anchor_start_ms": 0, "anchor_end_ms": 30000, "trim_start_ms": 10000, "trim_end_ms": 20000, "excluded_ranges": [[8000, 12000]], "removed": false },
+      "expect": {
+        "canonical": { "anchor_start_ms": 0, "anchor_end_ms": 30000, "trim_start_ms": 12000, "trim_end_ms": 20000, "excluded_ranges": [], "removed": false },
+        "receipt": [
+          { "rule": "clamped", "from": [8000, 12000], "to": [10000, 12000] },
+          { "rule": "absorbed_start", "range": [10000, 12000], "trim_start_ms": 12000 }
+        ],
+        "spans": [[12000, 20000]],
+        "ed_ids": ["ES_C4D_k1"]
+      }
+    },
+    {
+      "id": "C5",
+      "desc": "REMOVE -> span 0 (removed 시 excluded 정리 = 표현 유일성)",
+      "edit_state_id": "ES_C5",
+      "input": { "anchor_start_ms": 10000, "anchor_end_ms": 20000, "trim_start_ms": 10000, "trim_end_ms": 20000, "excluded_ranges": [[12000, 13000]], "removed": true },
+      "expect": {
+        "canonical": { "anchor_start_ms": 10000, "anchor_end_ms": 20000, "trim_start_ms": 10000, "trim_end_ms": 20000, "excluded_ranges": [], "removed": true },
+        "receipt": [{ "rule": "removed_input_clears_excluded" }],
+        "spans": [],
+        "ed_ids": []
+      }
+    },
+    {
+      "id": "C6",
+      "desc": "전체 제외 -> removed=true로 정규화",
+      "edit_state_id": "ES_C6",
+      "input": { "anchor_start_ms": 10000, "anchor_end_ms": 20000, "trim_start_ms": 10000, "trim_end_ms": 20000, "excluded_ranges": [[10000, 20000]], "removed": false },
+      "expect": {
+        "canonical": { "anchor_start_ms": 10000, "anchor_end_ms": 20000, "trim_start_ms": 10000, "trim_end_ms": 20000, "excluded_ranges": [], "removed": true },
+        "receipt": [{ "rule": "fully_excluded_to_removed" }],
+        "spans": [],
+        "ed_ids": []
+      }
+    },
+    {
+      "id": "C7",
+      "desc": "맞닿은 제외 -> 명시적 병합 + Receipt (문서 예시 좌표)",
+      "edit_state_id": "ES_C7",
+      "input": { "anchor_start_ms": 39950, "anchor_end_ms": 44720, "trim_start_ms": 39950, "trim_end_ms": 44720, "excluded_ranges": [[43130, 43500], [43500, 43925]], "removed": false },
+      "expect": {
+        "canonical": { "anchor_start_ms": 39950, "anchor_end_ms": 44720, "trim_start_ms": 39950, "trim_end_ms": 44720, "excluded_ranges": [[43130, 43925]], "removed": false },
+        "receipt": [{ "rule": "merged", "from": [[43130, 43500], [43500, 43925]], "to": [43130, 43925] }],
+        "spans": [[39950, 43130], [43925, 44720]],
+        "ed_ids": ["ES_C7_k1", "ES_C7_k2"]
+      }
+    },
+    {
+      "id": "C7B",
+      "desc": "겹치는 제외 -> 병합 (같은 곳 두 번 지우기는 정상 행동)",
+      "edit_state_id": "ES_C7B",
+      "input": { "anchor_start_ms": 39950, "anchor_end_ms": 44720, "trim_start_ms": 39950, "trim_end_ms": 44720, "excluded_ranges": [[43130, 43700], [43400, 43925]], "removed": false },
+      "expect": {
+        "canonical": { "anchor_start_ms": 39950, "anchor_end_ms": 44720, "trim_start_ms": 39950, "trim_end_ms": 44720, "excluded_ranges": [[43130, 43925]], "removed": false },
+        "receipt": [{ "rule": "merged", "from": [[43130, 43700], [43400, 43925]], "to": [43130, 43925] }],
+        "spans": [[39950, 43130], [43925, 44720]],
+        "ed_ids": ["ES_C7B_k1", "ES_C7B_k2"]
+      }
+    }
+  ],
+  "rematch_cases": [
+    { "id": "C8A", "desc": "±10ms 내 후보 -> 첫 매칭", "anchor": [39950, 44720], "tol_ms": 10, "candidates": [[39947, 44725], [39000, 44000]], "expect_index": 0 },
+    { "id": "C8B", "desc": "11ms 이탈 -> 매칭 없음 (anchor 불변)", "anchor": [39950, 44720], "tol_ms": 10, "candidates": [[39939, 44720]], "expect_index": null },
+    { "id": "C8C", "desc": "정확히 10ms = 경계 포함", "anchor": [39950, 44720], "tol_ms": 10, "candidates": [[39960, 44710]], "expect_index": 0 }
+  ]
+}
