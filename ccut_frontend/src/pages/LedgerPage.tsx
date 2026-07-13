@@ -139,28 +139,38 @@ const LedgerPage: React.FC = () => {
 
   const playItem = useCallback((it: ScriptItem) => loadItem(it, true), [loadItem]);
 
-  // 시간 기반 구간 재생: 현재 시간이 제외 구간이면 다음 살아있는 구간으로 점프, 전부 지나면 정지.
-  const onTimeUpdate = useCallback(() => {
+  // 구간 재생 감시 — requestAnimationFrame(60fps)로 제외 구간 경계를 촘촘히 자른다.
+  // (timeupdate는 ~250ms 간격이라 짧은 단어의 끝을 넘겨버림)
+  const rafRef = useRef<number | null>(null);
+  const rafTick = useCallback(() => {
     const v = videoRef.current, st = playRef.current;
-    if (!v || !st) return;
+    if (!v || !st || v.paused || v.ended) { rafRef.current = null; return; }
     const t = v.currentTime * 1000;
-    const cur = st.spans.find(([, e]) => t < e - 20);   // 아직 안 끝난 첫 구간
-    if (!cur) { v.pause(); return; }
-    if (t < cur[0] - 20) v.currentTime = cur[0] / 1000;  // 제외 구간 → 다음 구간 시작으로 스킵
+    const cur = st.spans.find(([, e]) => t < e - 5);
+    if (!cur) { v.pause(); rafRef.current = null; return; }
+    if (t < cur[0] - 5) v.currentTime = cur[0] / 1000;   // 제외 구간 → 다음 구간으로 즉시 스킵
+    rafRef.current = requestAnimationFrame(rafTick);
+  }, []);
+  const startRaf = useCallback(() => {
+    if (rafRef.current == null) rafRef.current = requestAnimationFrame(rafTick);
+  }, [rafTick]);
+  const stopRaf = useCallback(() => {
+    if (rafRef.current != null) { cancelAnimationFrame(rafRef.current); rafRef.current = null; }
   }, []);
 
-  // 사용자가 재생 버튼을 다시 눌렀는데 끝까지 온 상태면 처음부터 (멈춤 버그 방지)
+  // 재생 시작 시: 끝까지 온 상태면 처음부터(멈춤 버그 방지) + 감시 시작
   const onPlay = useCallback(() => {
     const v = videoRef.current, st = playRef.current;
-    if (!v || !st || st.spans.length === 0) return;
-    const t = v.currentTime * 1000;
-    const last = st.spans[st.spans.length - 1][1];
-    if (t >= last - 20) v.currentTime = st.spans[0][0] / 1000;
-  }, []);
+    if (v && st && st.spans.length) {
+      const t = v.currentTime * 1000, last = st.spans[st.spans.length - 1][1];
+      if (t >= last - 20) v.currentTime = st.spans[0][0] / 1000;
+    }
+    startRaf();
+  }, [startRaf]);
 
   const closePlayer = useCallback(() => {
-    videoRef.current?.pause(); playRef.current = null; setPlayerOpen(false); setActiveItem(null);
-  }, []);
+    stopRaf(); videoRef.current?.pause(); playRef.current = null; setPlayerOpen(false); setActiveItem(null);
+  }, [stopRaf]);
 
   // 저장 (EXCLUDE_RANGE / REMOVE / RESTORE 공통)
   const postEdit = useCallback(async (it: ScriptItem, body: Record<string, unknown>) => {
@@ -461,7 +471,7 @@ const LedgerPage: React.FC = () => {
       {/* 플로팅 플레이어 — 양축 상한 */}
       <div className={`fixed bottom-5 right-5 z-30 transition-all duration-300 ${playerOpen ? "opacity-100 translate-y-0" : "opacity-0 translate-y-3 pointer-events-none"}`}>
         <div className="rounded-xl overflow-hidden shadow-2xl inline-block" style={{ background: "#000" }}>
-          <video ref={videoRef} onTimeUpdate={onTimeUpdate} onPlay={onPlay} controls className="block"
+          <video ref={videoRef} onPlay={onPlay} onPause={stopRaf} onEnded={stopRaf} controls className="block"
             style={{ maxWidth: "min(360px, 40vw)", maxHeight: "48vh", width: "auto", height: "auto" }} />
         </div>
         <button type="button" onClick={closePlayer}
