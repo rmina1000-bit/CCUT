@@ -108,15 +108,21 @@ const LedgerPage: React.FC = () => {
   const lostCount = useMemo(
     () => (data?.items ?? []).filter((it) => it.missing?.coords).length, [data]);
 
-  const renderSpansOf = (it: ScriptItem): MsRange[] => {
+  // 현재 재생/편집 상태를 반영한 Render Span. 편집 중인 문장이면 로컬 회색(inactive)을 즉시 반영.
+  const editingRef = useRef<Editing | null>(null);
+  const renderSpansOf = useCallback((it: ScriptItem): MsRange[] => {
     const a0 = it.anchor_start_ms ?? 0, a1 = it.anchor_end_ms ?? a0;
-    return compileSpans({
-      anchor_start_ms: a0, anchor_end_ms: a1, trim_start_ms: a0, trim_end_ms: a1,
-      excluded_ranges: (it.excluded_ranges ?? []) as MsRange[], removed: false,
-    });
-  };
+    let excluded = (it.excluded_ranges ?? []) as MsRange[];
+    const ed = editingRef.current;
+    if (ed && ed.itemId === it.timeline_item_id) {
+      excluded = [];
+      ed.inactive.forEach((i) => { const c = ed.chars[i]; if (c.s_ms != null) excluded.push([c.s_ms, c.e_ms!]); });
+    }
+    return compileSpans({ anchor_start_ms: a0, anchor_end_ms: a1, trim_start_ms: a0, trim_end_ms: a1, excluded_ranges: excluded, removed: false });
+  }, []);
 
-  const playItem = useCallback((it: ScriptItem) => {
+  // 미니 플레이어에 항목을 로드. autoplay=false면 미리듣기 대기(편집 중).
+  const loadItem = useCallback((it: ScriptItem, autoplay: boolean) => {
     if (!it.video_url || it.anchor_start_ms === undefined) return;
     const spans = renderSpansOf(it);
     if (spans.length === 0) return;
@@ -127,18 +133,29 @@ const LedgerPage: React.FC = () => {
     playRef.current = { spans, idx: 0 };
     const url = it.video_url.startsWith("/") ? `/api${it.video_url.replace(/^\/api/, "")}` : it.video_url;
     if (!v.src.endsWith(url) || v.readyState === 0 || v.error) { v.src = url; v.load(); }
-    const seek = () => { v.currentTime = spans[0][0] / 1000; v.play().catch(() => {}); };
+    const seek = () => { v.currentTime = spans[0][0] / 1000; if (autoplay) v.play().catch(() => {}); };
     if (v.readyState >= 1) seek(); else v.onloadedmetadata = seek;
-  }, []);
+  }, [renderSpansOf]);
 
+  const playItem = useCallback((it: ScriptItem) => loadItem(it, true), [loadItem]);
+
+  // 시간 기반 구간 재생: 현재 시간이 제외 구간이면 다음 살아있는 구간으로 점프, 전부 지나면 정지.
   const onTimeUpdate = useCallback(() => {
     const v = videoRef.current, st = playRef.current;
     if (!v || !st) return;
-    const end = st.spans[st.idx][1] / 1000;
-    if (v.currentTime >= end - 0.02) {
-      if (st.idx < st.spans.length - 1) { st.idx += 1; v.currentTime = st.spans[st.idx][0] / 1000; }
-      else v.pause();
-    }
+    const t = v.currentTime * 1000;
+    const cur = st.spans.find(([, e]) => t < e - 20);   // 아직 안 끝난 첫 구간
+    if (!cur) { v.pause(); return; }
+    if (t < cur[0] - 20) v.currentTime = cur[0] / 1000;  // 제외 구간 → 다음 구간 시작으로 스킵
+  }, []);
+
+  // 사용자가 재생 버튼을 다시 눌렀는데 끝까지 온 상태면 처음부터 (멈춤 버그 방지)
+  const onPlay = useCallback(() => {
+    const v = videoRef.current, st = playRef.current;
+    if (!v || !st || st.spans.length === 0) return;
+    const t = v.currentTime * 1000;
+    const last = st.spans[st.spans.length - 1][1];
+    if (t >= last - 20) v.currentTime = st.spans[0][0] / 1000;
   }, []);
 
   const closePlayer = useCallback(() => {
@@ -186,9 +203,20 @@ const LedgerPage: React.FC = () => {
     (it.excluded_ranges ?? []).forEach(([s, e]) => {
       chars.forEach((c, i) => { if (c.s_ms != null && c.s_ms < e && (c.e_ms ?? 0) > s) inactive.add(i); });
     });
-    setEditing({ itemId: it.timeline_item_id, chars, inactive, caret });
+    const ed = { itemId: it.timeline_item_id, chars, inactive, caret };
+    editingRef.current = ed;
+    setEditing(ed);
+    loadItem(it, false);  // 미리듣기 준비 — 편집하며 재생 버튼으로 확인
     setTimeout(() => hiddenRef.current?.focus({ preventScroll: true }), 0);
-  }, []);
+  }, [loadItem]);
+
+  // 편집 상태 변화를 즉시 재생 구간에 반영 (회색 바꾸면 재생도 따라감)
+  useEffect(() => {
+    editingRef.current = editing;
+    if (!editing || !data?.items || !playRef.current) return;
+    const it = data.items.find((x) => x.timeline_item_id === editing.itemId);
+    if (it) playRef.current.spans = renderSpansOf(it);
+  }, [editing, data, renderSpansOf]);
 
   const commitEdit = useCallback(async () => {
     setEditing((cur) => {
@@ -433,7 +461,7 @@ const LedgerPage: React.FC = () => {
       {/* 플로팅 플레이어 — 양축 상한 */}
       <div className={`fixed bottom-5 right-5 z-30 transition-all duration-300 ${playerOpen ? "opacity-100 translate-y-0" : "opacity-0 translate-y-3 pointer-events-none"}`}>
         <div className="rounded-xl overflow-hidden shadow-2xl inline-block" style={{ background: "#000" }}>
-          <video ref={videoRef} onTimeUpdate={onTimeUpdate} controls className="block"
+          <video ref={videoRef} onTimeUpdate={onTimeUpdate} onPlay={onPlay} controls className="block"
             style={{ maxWidth: "min(360px, 40vw)", maxHeight: "48vh", width: "auto", height: "auto" }} />
         </div>
         <button type="button" onClick={closePlayer}
