@@ -6,6 +6,7 @@
  */
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { videoService } from "@/services/videoService";
+import { compileSpans, type MsRange } from "@/utils/editContract";
 
 interface WordTok {
   w: string;
@@ -61,7 +62,20 @@ const LedgerPage: React.FC = () => {
   const [playerOpen, setPlayerOpen] = useState(false);
   const [showOriginal, setShowOriginal] = useState<string | null>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
-  const rangeRef = useRef<{ endSec: number } | null>(null);
+  // [SCRIPT-2c] 제외 구간을 건너뛰며 재생 — Render Span 순차재생
+  const playRef = useRef<{ spans: MsRange[]; idx: number } | null>(null);
+
+  // 항목의 현재 재생 구간들 = compile(anchor, excluded) = Render Span (계약 그대로)
+  const renderSpansOf = (it: ScriptItem): MsRange[] => {
+    const a0 = it.anchor_start_ms ?? 0;
+    const a1 = it.anchor_end_ms ?? a0;
+    return compileSpans({
+      anchor_start_ms: a0, anchor_end_ms: a1,
+      trim_start_ms: a0, trim_end_ms: a1,
+      excluded_ranges: (it.excluded_ranges ?? []) as MsRange[],
+      removed: false,
+    });
+  };
 
   useEffect(() => {
     videoService.listProjects?.().then((res: any) => {
@@ -101,25 +115,37 @@ const LedgerPage: React.FC = () => {
 
   const playItem = useCallback((it: ScriptItem) => {
     if (!it.video_url || it.anchor_start_ms === undefined) return;
+    const spans = renderSpansOf(it);
+    if (spans.length === 0) return;  // 통째 제외된 장면은 재생할 게 없다
     setActiveItem(it.timeline_item_id);
     setPlayerOpen(true);
     const v = videoRef.current;
     if (!v) return;
-    const startSec = (it.anchor_start_ms ?? 0) / 1000;
-    rangeRef.current = { endSec: (it.anchor_end_ms ?? 0) / 1000 };
+    playRef.current = { spans, idx: 0 };
     const url = it.video_url.startsWith("/") ? `/api${it.video_url.replace(/^\/api/, "")}` : it.video_url;
     if (!v.src.endsWith(url) || v.readyState === 0 || v.error) { v.src = url; v.load(); }
-    const seek = () => { v.currentTime = startSec; v.play().catch(() => {}); };
+    const seek = () => { v.currentTime = spans[0][0] / 1000; v.play().catch(() => {}); };
     if (v.readyState >= 1) seek(); else v.onloadedmetadata = seek;
   }, []);
 
+  // 현재 span 끝에 닿으면 다음 span으로 점프(제외 구간 스킵), 마지막이면 정지
   const onTimeUpdate = useCallback(() => {
-    const v = videoRef.current, r = rangeRef.current;
-    if (v && r && v.currentTime >= r.endSec) v.pause();
+    const v = videoRef.current, st = playRef.current;
+    if (!v || !st) return;
+    const end = st.spans[st.idx][1] / 1000;
+    if (v.currentTime >= end - 0.02) {
+      if (st.idx < st.spans.length - 1) {
+        st.idx += 1;
+        v.currentTime = st.spans[st.idx][0] / 1000;
+      } else {
+        v.pause();
+      }
+    }
   }, []);
 
   const closePlayer = useCallback(() => {
     videoRef.current?.pause();
+    playRef.current = null;
     setPlayerOpen(false);
     setActiveItem(null);
   }, []);

@@ -263,3 +263,64 @@ async def get_ledger(program_id: str):
                 "excluded_items": excluded_items}  # 복원용 최소 정보
     finally:
         con.close()
+
+
+@router.get("/ledger/{program_id}/edl")
+async def get_render_edl(program_id: str):
+    """[SCRIPT-2d] 대본 편집을 반영한 최종 클립 목록(EDL) — '편집(export)에 넘기는 것'.
+
+    각 사용본의 Edit State를 compile_spans(계약 순수함수)로 Render Span으로 펼쳐
+    대본 순서대로 (source_id, start_sec, end_sec) 물리 클립을 만든다.
+    REMOVE된 사용본은 빠지고, EXCLUDE_RANGE는 여러 클립으로 쪼개진다.
+    이 EDL이 곧 export_engine/render 파이프라인의 입력(physical clip 목록)과 같은 형태다.
+    저장하지 않는 계산 결과(Render Span) — Preview/Export만 소비 (MASTER CONCEPT).
+    """
+    from edit_contract.edit_state import compile_spans
+
+    d = await get_ledger(program_id)
+    if not d.get("ok"):
+        return d
+    con = _connect()
+    try:
+        state = {}
+        try:
+            for r in con.execute(
+                "SELECT timeline_item_id, trim_start_ms, trim_end_ms, excluded_ranges_json, removed "
+                "FROM fragment_edit_state WHERE program_id=?", (program_id,)):
+                state[r["timeline_item_id"]] = r
+        except sqlite3.OperationalError:
+            pass
+
+        clips = []
+        order = 0
+        total_ms = 0
+        for it in d["items"]:
+            if it.get("missing"):
+                continue
+            a0, a1 = it["anchor_start_ms"], it["anchor_end_ms"]
+            st = state.get(it["timeline_item_id"])
+            if st:
+                canon = {
+                    "trim_start_ms": st["trim_start_ms"], "trim_end_ms": st["trim_end_ms"],
+                    "excluded_ranges": json.loads(st["excluded_ranges_json"] or "[]"),
+                    "removed": bool(st["removed"]),
+                }
+            else:
+                canon = {"trim_start_ms": a0, "trim_end_ms": a1, "excluded_ranges": [], "removed": False}
+            for k, (cs, ce) in enumerate(compile_spans(canon)):
+                clips.append({
+                    "order": order,
+                    "source_id": it["source_id"],
+                    "start_sec": round(cs / 1000.0, 3),
+                    "end_sec": round(ce / 1000.0, 3),
+                    "duration_sec": round((ce - cs) / 1000.0, 3),
+                    "fragment_id": it["fragment_id"],
+                    "clip_of": (f"{it['fragment_id']}#k{k + 1}" if len(compile_spans(canon)) > 1 else it["fragment_id"]),
+                    "video_url": it.get("video_url"),
+                })
+                order += 1
+                total_ms += (ce - cs)
+        return {"ok": True, "program_id": program_id, "program_name": d.get("program_name"),
+                "clip_count": len(clips), "total_ms": total_ms, "clips": clips}
+    finally:
+        con.close()
