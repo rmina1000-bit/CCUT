@@ -7,11 +7,21 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { videoService } from "@/services/videoService";
 
+interface WordTok {
+  w: string;
+  s_ms: number;
+  e_ms: number;
+  p?: number | null;
+  excluded?: boolean;
+}
+
 interface ScriptItem {
   fragment_id: string;
   timeline_item_id: string;
   source_id?: string;
   revision?: number | null;
+  words?: WordTok[];
+  excluded_ranges?: number[][];
   anchor_start_ms?: number;
   anchor_end_ms?: number;
   dialogue?: string | null;
@@ -175,6 +185,76 @@ const LedgerPage: React.FC = () => {
     return () => window.removeEventListener("keydown", onKey);
   }, [activeItem, data, removeItem]);
 
+  // [SCRIPT-2] 문장 안 한 단어(구간)만 빼기 = EXCLUDE_RANGE
+  const [wordPopover, setWordPopover] = useState<
+    { itemId: string; text: string; s_ms: number; e_ms: number; x: number; y: number } | null
+  >(null);
+
+  const postEditRange = useCallback(
+    async (it: ScriptItem, ranges: number[][], revision?: number) => {
+      const res = await fetch("/api/edit-state", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          program_id: programId,
+          timeline_item_id: it.timeline_item_id,
+          source_id: it.source_id,
+          anchor_start_ms: it.anchor_start_ms,
+          anchor_end_ms: it.anchor_end_ms,
+          trim_start_ms: it.anchor_start_ms,
+          trim_end_ms: it.anchor_end_ms,
+          excluded_ranges: ranges,
+          removed: false,
+          revision,
+          parent_fragment_id: it.fragment_id,
+          command_type: "EXCLUDE_RANGE",
+          origin: "TEXT_EDITOR",
+        }),
+      });
+      return res.json();
+    },
+    [programId]
+  );
+
+  const excludeSelection = useCallback(async () => {
+    if (!wordPopover || !data?.items) return;
+    const it = data.items.find((x) => x.timeline_item_id === wordPopover.itemId);
+    if (!it) return;
+    const merged = [...(it.excluded_ranges ?? []), [wordPopover.s_ms, wordPopover.e_ms]];
+    const r = await postEditRange(it, merged, it.revision ?? undefined);
+    setWordPopover(null);
+    window.getSelection()?.removeAllRanges();
+    if (r?.ok) reload();
+    else console.error("[대본] 단어 빼기 실패:", r);
+  }, [wordPopover, data, postEditRange, reload]);
+
+  const clearExclusions = useCallback(
+    async (it: ScriptItem) => {
+      const r = await postEditRange(it, [], it.revision ?? undefined);
+      if (r?.ok) reload();
+    },
+    [postEditRange, reload]
+  );
+
+  // 드래그로 대사 일부를 선택하면 그 단어들의 시간 범위를 잡아 팝오버
+  const handleSelect = useCallback(() => {
+    const sel = window.getSelection();
+    if (!sel || sel.isCollapsed || sel.rangeCount === 0) { setWordPopover(null); return; }
+    const range = sel.getRangeAt(0);
+    const root = document.querySelector("main");
+    if (!root) return;
+    const chosen = Array.from(root.querySelectorAll<HTMLElement>("[data-ws]"))
+      .filter((sp) => range.intersectsNode(sp));
+    if (!chosen.length) { setWordPopover(null); return; }
+    const itemId = chosen[0].dataset.item!;
+    const same = chosen.filter((sp) => sp.dataset.item === itemId);
+    const s_ms = Math.min(...same.map((sp) => +sp.dataset.ws!));
+    const e_ms = Math.max(...same.map((sp) => +sp.dataset.we!));
+    const text = same.map((sp) => sp.textContent).join("").trim();
+    const rect = range.getBoundingClientRect();
+    setWordPopover({ itemId, text, s_ms, e_ms, x: rect.left + rect.width / 2, y: rect.top });
+  }, []);
+
   // 씬 헤딩이 말한 장소를 지문이 반복하지 않는다
   const stripPlace = (stage: string | null | undefined, heading: string | null) => {
     if (!stage) return null;
@@ -220,16 +300,17 @@ const LedgerPage: React.FC = () => {
               <h2 className="mb-1 text-[15px] font-semibold select-none opacity-70">
                 S#{sceneNo}.{sc.heading ? ` ${sc.heading}` : ""}
               </h2>
-              <p className="text-[15px] leading-[1.6]">
+              <p className="text-[15px] leading-[1.6]" onMouseUp={handleSelect}>
                 {sc.items.map((it) => {
                   const isActive = activeItem === it.timeline_item_id;
                   const dimmed = playerOpen && !isActive;
                   const stage = stripPlace(it.stage_direction, sc.heading);
                   const hallu = it.warnings?.includes("non_korean");
+                  const hasExcl = (it.excluded_ranges?.length ?? 0) > 0;
                   return (
                     <span
                       key={it.timeline_item_id}
-                      onClick={() => playItem(it)}
+                      onClick={() => { if (window.getSelection()?.isCollapsed !== false) playItem(it); }}
                       className="group/span cursor-pointer transition-all duration-200 underline-offset-4 decoration-1 hover:underline"
                       style={{
                         opacity: dimmed ? 0.4 : 1,
@@ -255,9 +336,29 @@ const LedgerPage: React.FC = () => {
                           {" "}[{it.original_text}]{" "}
                         </span>
                       )}
-                      {it.dialogue && <span>{it.dialogue} </span>}
+                      {it.dialogue && (
+                        it.words && it.words.length > 0 ? (
+                          it.words.map((w, wi) => (
+                            <span
+                              key={wi}
+                              data-ws={w.s_ms}
+                              data-we={w.e_ms}
+                              data-item={it.timeline_item_id}
+                              style={w.excluded ? { textDecoration: "line-through", opacity: 0.35 } : undefined}
+                            >{w.w}{" "}</span>
+                          ))
+                        ) : <span>{it.dialogue} </span>
+                      )}
                       {!it.dialogue && !stage && !hallu && (
                         <span>(조용한 장면.) </span>
+                      )}
+                      {hasExcl && (
+                        <button
+                          type="button"
+                          onClick={(e) => { e.stopPropagation(); clearExclusions(it); }}
+                          className="text-[10px] align-super opacity-40 hover:opacity-90 transition-opacity px-0.5"
+                          title="이 문장의 뺀 부분을 되살립니다"
+                        >↩</button>
                       )}
                       <button
                         type="button"
@@ -297,6 +398,24 @@ const LedgerPage: React.FC = () => {
           </p>
         )}
       </main>
+
+      {/* [SCRIPT-2] 단어 선택 팝오버 — 「말」 빼기 */}
+      {wordPopover && (
+        <div
+          className="fixed z-50 -translate-x-1/2 -translate-y-full"
+          style={{ left: wordPopover.x, top: wordPopover.y - 8 }}
+        >
+          <button
+            type="button"
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={excludeSelection}
+            className="px-3 py-1.5 rounded-lg text-[13px] shadow-xl hover:brightness-110 transition-all"
+            style={{ background: "hsl(228,12%,20%)", color: "hsl(220,9%,90%)", fontFamily: SANS }}
+          >
+            「{wordPopover.text.length > 12 ? wordPopover.text.slice(0, 12) + "…" : wordPopover.text}」 빼기
+          </button>
+        </div>
+      )}
 
       {/* 수정 확인 한 줄 — 헌장 5조 (은은한 확인 + 되돌리기) */}
       <div

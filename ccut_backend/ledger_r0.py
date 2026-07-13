@@ -60,11 +60,12 @@ def _parse_segments(raw):
 
 
 def _asr_overlap(segments, start_sec, end_sec):
-    """조각 시간창과 겹치는 세그먼트 원문 + 환각 신호 (제거 금지 — 경고만)."""
+    """조각 시간창과 겹치는 세그먼트 원문 + 환각 신호 + 단어별 타임스탬프.
+    [SCRIPT-2] words = 문장 안 한 단어만 빼기(EXCLUDE_RANGE)의 재료 — 조각 창으로 클램프."""
     hits = [s for s in segments
             if isinstance(s, dict) and s.get("end", 0) > start_sec and s.get("start", 0) < end_sec]
     if not hits:
-        return None, []
+        return None, [], []
     text = " ".join((s.get("text") or "").strip() for s in hits).strip()
     warnings = []
     if text and not _HANGUL.search(text):
@@ -73,7 +74,24 @@ def _asr_overlap(segments, start_sec, end_sec):
              if isinstance(w, dict) and isinstance(w.get("probability"), (int, float))]
     if probs and sum(probs) / len(probs) < 0.3:
         warnings.append("low_probability")  # 저확률 구간
-    return text or None, warnings
+    words = []
+    for s in hits:
+        for w in (s.get("words") or []):
+            if not isinstance(w, dict):
+                continue
+            wt = (w.get("word") or "").strip()
+            ws, we = w.get("start"), w.get("end")
+            if not wt or not isinstance(ws, (int, float)) or not isinstance(we, (int, float)):
+                continue
+            if we <= start_sec or ws >= end_sec:
+                continue  # 조각 창 밖
+            words.append({
+                "w": wt,
+                "s_ms": _to_ms(max(ws, start_sec)),
+                "e_ms": _to_ms(min(we, end_sec)),
+                "p": round(w.get("probability", 1.0), 3) if isinstance(w.get("probability"), (int, float)) else None,
+            })
+    return text or None, warnings, words
 
 
 @router.get("/ledger/{program_id}")
@@ -109,12 +127,19 @@ async def get_ledger(program_id: str):
         # [SCRIPT-2] 승인된 편집(Edit State) 반영 — REMOVE된 사용본은 대본에서 뺀다.
         removed_items = {}
         state_rev = {}
+        excluded_by_item = {}  # [SCRIPT-2] timeline_item_id -> [[s_ms,e_ms], ...]
         try:
             for r in con.execute(
-                "SELECT timeline_item_id, removed, revision FROM fragment_edit_state WHERE program_id=?",
-                (program_id,)):
+                "SELECT timeline_item_id, removed, revision, excluded_ranges_json "
+                "FROM fragment_edit_state WHERE program_id=?", (program_id,)):
                 removed_items[r["timeline_item_id"]] = bool(r["removed"])
                 state_rev[r["timeline_item_id"]] = r["revision"]
+                try:
+                    rngs = json.loads(r["excluded_ranges_json"] or "[]")
+                    if rngs:
+                        excluded_by_item[r["timeline_item_id"]] = rngs
+                except Exception:
+                    pass
         except sqlite3.OperationalError:
             pass  # Cutover 전 운영 DB — 테이블 부재면 편집 없음
 
@@ -191,10 +216,14 @@ async def get_ledger(program_id: str):
             src = srcs.get(sid)
             segs = segments_for(sid)
             if segs is None:
-                text, warns, no_sub = None, [], True
+                text, warns, words, no_sub = None, [], [], True
             else:
-                text, warns = _asr_overlap(segs, sf["start"], sf["end"])
+                text, warns, words = _asr_overlap(segs, sf["start"], sf["end"])
                 no_sub = False
+            # [SCRIPT-2] 이미 저장된 EXCLUDE_RANGE로 제외된 단어에 취소선 플래그
+            item_excl = excluded_by_item.get(item_id) or []
+            for w in words:
+                w["excluded"] = any(er[0] < w["e_ms"] and er[1] > w["s_ms"] for er in item_excl)
             scene, scene_src = visual_for(fid, sid, s_ms, e_ms)
             # [SCRIPT-1] 지문 = 장면 태그를 사람 문장으로 번역 (결정론 템플릿)
             stage = _stage(scene)
@@ -216,6 +245,8 @@ async def get_ledger(program_id: str):
                 "anchor_start_ms": s_ms,
                 "anchor_end_ms": e_ms,
                 "dialogue": dialogue,               # 대사 (정체) — None이면 지문만
+                "words": (words if dialogue else []),  # [SCRIPT-2] 단어별 타임스탬프 (문장 안 편집)
+                "excluded_ranges": item_excl,       # [SCRIPT-2] 현재 제외 구간 (병합용)
                 "stage_direction": stage,           # 지문 (이탤릭) — 장면 번역
                 "place": _place(scene),             # 씬 헤딩용 장소 (S#n) — 라벨 있을 때만
                 "original_text": original_text,     # 환각 원문 (상세 보기 보존)
