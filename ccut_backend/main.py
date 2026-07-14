@@ -2125,6 +2125,9 @@ class ProjectProposalRequest(BaseModel):
     target_length: float = 60.0
     user_intent: Optional[dict] = None
     template_id: Optional[str] = None
+    # [STORY-GATE P1] 렌더 분리 — False면 preview 렌더를 건너뛰고 sequence만 반환한다.
+    # 기본 True = 현행 동작 무변 (STORY_GATE_CONTRACT_V1 I-4).
+    render_preview: bool = True
 
 
 
@@ -2324,9 +2327,13 @@ async def post_generate_project_proposals(req: ProjectProposalRequest):
                 source_usage[sid] = source_usage.get(sid, 0) + 1
 
         # [PROPOSAL_PREVIEW_INJECT] preview_url 주입 (렌더도 executor — 루프 비점유)
+        # [STORY-GATE P1] render_preview=False면 렌더를 건너뛴다 — sequence는 그대로.
         _pv_t0 = time.time()
-        proposals = await _loop.run_in_executor(None, inject_proposal_previews, proposals)
-        print(f"[TIMING] preview_render={time.time() - _pv_t0:.1f}s")
+        if req.render_preview:
+            proposals = await _loop.run_in_executor(None, inject_proposal_previews, proposals)
+            print(f"[TIMING] preview_render={time.time() - _pv_t0:.1f}s")
+        else:
+            print("[STORY-GATE] render_preview=False -> preview 렌더 생략 (sequence만 반환)")
 
         # [STEP 14-D] Proposal Ranker integration
         try:
@@ -2404,9 +2411,12 @@ async def post_generate_project_proposals(req: ProjectProposalRequest):
 
 
 @app.post("/proposals/{source_id}")
-async def post_generate_proposals(source_id: str):
+async def post_generate_proposals(source_id: str, render_preview: bool = True):
     """
     [STEP 6] Proposal 생성 트리거 (v3.2.1 정밀 진단 버전)
+
+    [STORY-GATE P1] render_preview=False면 preview 렌더를 건너뛰고 sequence만 반환.
+    기본 True = 현행 동작 무변.
     """
     import traceback
     from engine.proposal_engine import ProposalEngine
@@ -2444,9 +2454,13 @@ async def post_generate_proposals(source_id: str):
                 p["sequence"] = inject_semantic_thumbnails(p["sequence"])
         
         # [PROPOSAL_PREVIEW_INJECT] preview_url 주입
+        # [STORY-GATE P1] render_preview=False면 렌더를 건너뛴다 — sequence는 그대로.
         _pv_t0 = time.time()
-        proposals = inject_proposal_previews(proposals)
-        print(f"[TIMING] preview_render={time.time() - _pv_t0:.1f}s")
+        if render_preview:
+            proposals = inject_proposal_previews(proposals)
+            print(f"[TIMING] preview_render={time.time() - _pv_t0:.1f}s")
+        else:
+            print("[STORY-GATE] render_preview=False -> preview 렌더 생략 (sequence만 반환)")
 
         # [STEP 14-D] Proposal Ranker integration
         try:
