@@ -55,6 +55,7 @@ interface CenterPanelProps {
   programId?: string | null;
   programTitle?: string | null;
   onExportDone?: () => void;
+  onStoryEditStateChanged?: () => void;
   // [FLOW] 제안 세대 기록 — 타임라인에 흘려보내고 옛 제안을 무대로 복원
   proposalHistory?: Array<{ id: string; ts: number; pair: any }>;
   activeProposalEntryId?: string | null;
@@ -299,6 +300,7 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
   programId,
   programTitle,
   onExportDone,
+  onStoryEditStateChanged,
   proposalHistory = [],
   activeProposalEntryId = null,
   onRestoreProposalEntry,
@@ -329,7 +331,7 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
   const [storyViewKey, setStoryViewKey] = useState(0);       // '반영하기' 누를 때만 원고 재로드 (S5)
   const [storyApproveError, setStoryApproveError] = useState<string | null>(null);
   // 승인 전에는 편집 UI(무대 A/B·Export·지난 제안)를 일절 내지 않는다 (S2)
-  const hideEditUI = storyGate.enabled && storyGate.awaitingApproval;
+  const hideEditUI = storyGate.loading || (storyGate.enabled && !storyGate.approved);
   // [UI-①] 업로드 스테이징 (null=비활성)
   const [stagedFiles, setStagedFiles] = useState<StagedMeta[] | null>(null);
   // [PERSON-PALETTE] 이름을 물어볼 얼굴 군집 + 방금 저장한 이름 안내
@@ -2189,7 +2191,7 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
               </div>
             )}
             {(storyGate.story?.item_count ?? 0) > 0 ? (
-              <LedgerPage key={storyViewKey} programId={programId ?? undefined} embedded />
+              <LedgerPage key={storyViewKey} programId={programId ?? undefined} embedded onEditStateChanged={onStoryEditStateChanged} />
             ) : (
               <p className="px-6 py-10 text-center text-[13px] text-foreground/45">
                 이야기를 엮고 있습니다…

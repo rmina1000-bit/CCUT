@@ -65,9 +65,9 @@ const wordsToChars = (words: WordTok[]): Char[] => {
 
 /** [STORY-GATE P3] 워크스페이스 안에 끼워 넣을 수 있게 props 수용.
  *  embedded=true면 자기 배경·프로젝트 선택기(페이지 껍데기)를 접고 본문만 낸다. */
-interface LedgerPageProps { programId?: string; embedded?: boolean; }
+interface LedgerPageProps { programId?: string; embedded?: boolean; onEditStateChanged?: () => void; }
 
-const LedgerPage: React.FC<LedgerPageProps> = ({ programId: propProgramId, embedded }) => {
+const LedgerPage: React.FC<LedgerPageProps> = ({ programId: propProgramId, embedded, onEditStateChanged }) => {
   const [programs, setPrograms] = useState<Array<{ program_id: string; name: string }>>([]);
   const [programId, setProgramId] = useState<string>(() =>
     propProgramId || new URLSearchParams(window.location.search).get("program") || ""
@@ -225,16 +225,17 @@ const LedgerPage: React.FC<LedgerPageProps> = ({ programId: propProgramId, embed
     if (activeItem === it.timeline_item_id) closePlayer();
     const r = await postEdit(it, { excluded_ranges: [], removed: true, command_type: "REMOVE" });
     if (!r?.ok) return;
+    onEditStateChanged?.();
     setUndoInfo({ item: { ...it, revision: r.revision }, savedSec: ((it.anchor_end_ms ?? 0) - (it.anchor_start_ms ?? 0)) / 1000 });
     if (undoTimer.current) window.clearTimeout(undoTimer.current);
     undoTimer.current = window.setTimeout(() => setUndoInfo(null), 8000);
     reload();
-  }, [activeItem, closePlayer, postEdit, reload]);
+  }, [activeItem, closePlayer, postEdit, reload, onEditStateChanged]);
   const undoRemove = useCallback(async () => {
     if (!undoInfo) return;
     const r = await postEdit(undoInfo.item, { excluded_ranges: [], removed: false, command_type: "RESTORE" });
-    if (r?.ok) { setUndoInfo(null); reload(); }
-  }, [undoInfo, postEdit, reload]);
+    if (r?.ok) { onEditStateChanged?.(); setUndoInfo(null); reload(); }
+  }, [undoInfo, postEdit, reload, onEditStateChanged]);
 
   // ── 워드식 글자 편집 ──────────────────────────────────────────────
   const enterEdit = useCallback((it: ScriptItem, caret = 0) => {
@@ -267,11 +268,11 @@ const LedgerPage: React.FC<LedgerPageProps> = ({ programId: propProgramId, embed
         const ranges: number[][] = [];
         cur.inactive.forEach((i) => { const c = cur.chars[i]; if (c.s_ms != null) ranges.push([c.s_ms, c.e_ms!]); });
         postEdit(it, { excluded_ranges: ranges, removed: false, command_type: "EXCLUDE_RANGE" })
-          .then((r) => { if (r?.ok) reload(); });
+          .then((r) => { if (r?.ok) { onEditStateChanged?.(); reload(); } });
       }
       return null;
     });
-  }, [data, postEdit, reload]);
+  }, [data, postEdit, reload, onEditStateChanged]);
 
   const moveCaret = (from: number, dir: -1 | 1, chars: Char[]) => Math.max(0, Math.min(chars.length, from + dir));
 
@@ -445,7 +446,7 @@ const LedgerPage: React.FC<LedgerPageProps> = ({ programId: propProgramId, embed
 
                       {hasExcl && !isEditing && (
                         <button type="button"
-                          onClick={(e) => { e.stopPropagation(); postEdit(it, { excluded_ranges: [], removed: false, command_type: "EXCLUDE_RANGE" }).then((r) => r?.ok && reload()); }}
+                          onClick={(e) => { e.stopPropagation(); postEdit(it, { excluded_ranges: [], removed: false, command_type: "EXCLUDE_RANGE" }).then((r) => { if (r?.ok) { onEditStateChanged?.(); reload(); } }); }}
                           className="text-[10px] align-super opacity-40 hover:opacity-90 transition-opacity px-0.5"
                           title="이 문장의 뺀 부분을 되살립니다">↩</button>
                       )}
@@ -468,7 +469,7 @@ const LedgerPage: React.FC<LedgerPageProps> = ({ programId: propProgramId, embed
           <p className="mt-2 text-center text-[10.5px] opacity-40">
             대본에서 뺀 장면 {data?.excluded_count}개
             <button type="button"
-              onClick={async () => { for (const ex of data?.excluded_items ?? []) await postEdit(ex, { excluded_ranges: [], removed: false, command_type: "RESTORE" }); reload(); }}
+              onClick={async () => { let changed = false; for (const ex of data?.excluded_items ?? []) { const r = await postEdit(ex, { excluded_ranges: [], removed: false, command_type: "RESTORE" }); changed = changed || !!r?.ok; } if (changed) onEditStateChanged?.(); reload(); }}
               className="ml-2 underline underline-offset-2 opacity-70 hover:opacity-100">모두 되돌리기</button>
           </p>
         )}

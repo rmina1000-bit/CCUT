@@ -2075,14 +2075,18 @@ const Index: React.FC = () => {
         .filter(Boolean);
     }
 
-    if (!isPreviewingSelectedProposal) return nextFragments;
-    return nextFragments.map((fragment) => ({
+    const editAppliedFragments = editContractV2 && editStatesList.length
+      ? (applyStatesToFragments(nextFragments as any[], editStatesList) as typeof nextFragments)
+      : nextFragments;
+
+    if (!isPreviewingSelectedProposal) return editAppliedFragments;
+    return editAppliedFragments.map((fragment) => ({
       ...fragment,
       excluded: false,
       selection_state: "S" as SelectionState,
       status: "committed" as FragmentStatus,
     }));
-  }, [resolverResult, displayProposalId, proposals, sourceEntries, toFullUrl, isPreviewingSelectedProposal]);
+  }, [resolverResult, displayProposalId, proposals, sourceEntries, toFullUrl, isPreviewingSelectedProposal, editContractV2, editStatesList]);
 
   const physicalClips = useMemo(() => {
     return buildExportClipsFromResolvedFragments(resolvedFragments);
@@ -2515,6 +2519,7 @@ const Index: React.FC = () => {
             exportClips={physicalClips}
             storyPlan={storyPlan}
             onStoryPlanConfirm={setStoryPlan}
+            onStoryEditStateChanged={() => { refreshEditStatesRef.current(); }}
             sourceEntries={sourceEntries}
             programId={activeNavItem}
             programTitle={projects.find(p => p.id === activeNavItem)?.name ?? undefined}

@@ -51,17 +51,26 @@ export const approveStory = (programId: string, sequenceHash: string) =>
  */
 export function useStoryGate(programId?: string | null, active = true) {
   const [enabled, setEnabled] = useState(false);
+  const [gateReady, setGateReady] = useState(false);
   const [story, setStory] = useState<StoryInfo | null>(null);
+  const [storyReady, setStoryReady] = useState(false);
   // 사용자가 지금 보고 있는 원고의 지문 — 서버 해시가 이것과 달라지면 "새 결과 있음"
   const viewingHashRef = useRef<string | null>(null);
   const [staleHash, setStaleHash] = useState<string | null>(null);
 
-  useEffect(() => { storyGateEnabled().then(setEnabled); }, []);
+  useEffect(() => {
+    let dead = false;
+    storyGateEnabled()
+      .then((v) => { if (!dead) setEnabled(v); })
+      .finally(() => { if (!dead) setGateReady(true); });
+    return () => { dead = true; };
+  }, []);
 
   const reload = useCallback(async () => {
-    if (!programId) { setStory(null); return null; }
+    if (!programId) { setStory(null); setStoryReady(true); return null; }
     const s = await fetchStory(programId);
     setStory(s);
+    setStoryReady(true);
     return s;
   }, [programId]);
 
@@ -69,12 +78,20 @@ export function useStoryGate(programId?: string | null, active = true) {
   useEffect(() => { viewingHashRef.current = null; setStaleHash(null); }, [programId]);
 
   useEffect(() => {
-    if (!enabled || !programId || !active) return;
+    if (!gateReady) return;
+    setStoryReady(false);
+    if (!enabled || !programId || !active) {
+      setStory(null);
+      setStoryReady(true);
+      return;
+    }
     let dead = false;
     const tick = async () => {
       const s = await fetchStory(programId);
-      if (dead || !s) return;
+      if (dead) return;
       setStory(s);
+      setStoryReady(true);
+      if (!s) return;
       // [STORY-GATE P3 / S5] 원고를 자동으로 갈아치우지 않는다.
       // 2차 집중분석이 끝나 서버 원고가 바뀌어도 화면은 그대로 두고, 알림만 띄운다.
       if (viewingHashRef.current === null) viewingHashRef.current = s.sequence_hash;
@@ -83,7 +100,7 @@ export function useStoryGate(programId?: string | null, active = true) {
     tick();
     const id = window.setInterval(tick, 10000);
     return () => { dead = true; window.clearInterval(id); };
-  }, [enabled, programId, active]);
+  }, [gateReady, enabled, programId, active]);
 
   // 사용자가 "반영하기"를 눌렀을 때만 보고 있는 원고를 최신으로 승격
   const adoptLatest = useCallback(() => {
@@ -98,6 +115,8 @@ export function useStoryGate(programId?: string | null, active = true) {
   }, [programId, story, reload]);
 
   return {
+    ready: gateReady && storyReady,
+    loading: active && (!gateReady || (enabled && !storyReady)),
     enabled,
     story,
     /** 승인 전인가 = 편집 UI를 숨겨야 하는가 (게이트 ON일 때만 의미) */
