@@ -50,25 +50,67 @@ def compute_hash(mode, fragment_ids) -> str:
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()[:16]
 
 
+def resolve_sequence(con, program_id):
+    """원고의 (mode, fragment_ids, source). 원고를 만드는 단 하나의 규칙 — ledger_r0도 이걸 쓴다.
+
+    1순위 ui_state (프론트가 저장한 화면 진실).
+    2순위 proposals 테이블 폴백 — **분석 직후에는 ui_state가 아직 NULL이다**(실측: Anemone).
+      그때도 원고는 떠야 한다. 사용자가 아무것도 누르기 전이 바로 원고를 보여줄 시점이니까.
+      추천안은 B(프론트 기본 선택과 동일), 없으면 A.
+    """
+    row = con.execute("SELECT ui_state FROM programs WHERE program_id=?", (program_id,)).fetchone()
+    if row is None:
+        raise StoryGateError("program_not_found", f"program {program_id} 없음", http_status=404)
+
+    mode, fids = None, []
+    if row["ui_state"]:
+        try:
+            ui = json.loads(row["ui_state"])
+            while isinstance(ui, str):
+                ui = json.loads(ui)
+            mode = ui.get("committedProposalId") or ui.get("selectedProposalId")
+            fids = (ui.get("proposalsKeyFragments") or {}).get(mode) or []
+        except Exception:
+            pass
+    if fids:
+        return mode, list(fids), "ui_state"
+
+    try:
+        rows = con.execute(
+            "SELECT mode, sequence FROM proposals WHERE program_id=?", (program_id,)).fetchall()
+    except sqlite3.OperationalError:
+        return mode, [], "none"
+    by_mode = {}
+    for r in rows:
+        seq = r["sequence"]
+        if isinstance(seq, str):
+            try:
+                seq = json.loads(seq)
+            except Exception:
+                seq = []
+        by_mode[(r["mode"] or "").upper()] = seq or []
+    pick = mode if mode in by_mode else ("B" if "B" in by_mode else ("A" if "A" in by_mode else None))
+    if not pick:
+        return mode, [], "none"
+    fids = [s.get("fragment_id") for s in by_mode[pick]
+            if isinstance(s, dict) and s.get("fragment_id")]
+    return pick, fids, ("proposals" if fids else "none")
+
+
 def current_story(program_id):
-    """지금 화면에 뜨는 원고의 (mode, fragment_ids, sequence_hash). ledger_r0와 같은 규칙."""
+    """지금 화면에 뜨는 원고의 (mode, fragment_ids, sequence_hash)."""
     con = _connect()
     try:
-        row = con.execute(
-            "SELECT ui_state FROM programs WHERE program_id=?", (program_id,)).fetchone()
-        if row is None:
-            raise StoryGateError("program_not_found", f"program {program_id} 없음", http_status=404)
-        mode, fids = None, []
-        if row["ui_state"]:
-            try:
-                ui = json.loads(row["ui_state"])
-                while isinstance(ui, str):
-                    ui = json.loads(ui)
-                mode = ui.get("committedProposalId") or ui.get("selectedProposalId")
-                fids = (ui.get("proposalsKeyFragments") or {}).get(mode) or []
-            except Exception:
-                pass
+        mode, fids, _src = resolve_sequence(con, program_id)
         return mode, list(fids), compute_hash(mode, fids)
+    finally:
+        con.close()
+
+
+def sequence_source(program_id):
+    con = _connect()
+    try:
+        return resolve_sequence(con, program_id)[2]
     finally:
         con.close()
 
@@ -104,6 +146,7 @@ def story_state(program_id):
         "sequence_hash": h,
         "mode": mode,
         "item_count": len(fids),
+        "sequence_source": sequence_source(program_id),  # ui_state | proposals | none (정직 표기)
         "approved": ({
             "approval_id": appr["approval_id"],
             "sequence_hash": appr["sequence_hash"],

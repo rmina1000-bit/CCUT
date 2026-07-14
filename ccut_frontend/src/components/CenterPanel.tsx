@@ -14,6 +14,9 @@ import { AnalysisLoadingView } from "@/components/views/AnalysisLoadingView";
 import { ExportPanelSection } from "@/components/views/ExportPanelSection";
 import { FragSearchPanel } from "@/components/views/FragSearchPanel";
 import { ComposerSection } from "@/components/views/ComposerSection";
+// [STORY-GATE P3] 승인 전에는 편집 결과물 대신 '원고'를 무대에 세운다.
+import LedgerPage from "@/pages/LedgerPage";
+import { useStoryGate } from "@/hooks/useStoryGate";
 
 import type { AppState, SourceEntry } from "@/types";
 
@@ -321,6 +324,12 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
   const [consultationInput, setConsultationInput] = useState("");
   // [FLOW-STAGE] 무대가 이식될 타임라인 내 슬롯 (활성 제안 카드 위치)
   const [stageSlot, setStageSlot] = useState<HTMLDivElement | null>(null);
+  // [STORY-GATE P3] 승인 관문 — 게이트 OFF면 enabled=false로 아무것도 바뀌지 않는다 (I-4)
+  const storyGate = useStoryGate(programId, appState === "complete");
+  const [storyViewKey, setStoryViewKey] = useState(0);       // '반영하기' 누를 때만 원고 재로드 (S5)
+  const [storyApproveError, setStoryApproveError] = useState<string | null>(null);
+  // 승인 전에는 편집 UI(무대 A/B·Export·지난 제안)를 일절 내지 않는다 (S2)
+  const hideEditUI = storyGate.enabled && storyGate.awaitingApproval;
   // [UI-①] 업로드 스테이징 (null=비활성)
   const [stagedFiles, setStagedFiles] = useState<StagedMeta[] | null>(null);
   // [PERSON-PALETTE] 이름을 물어볼 얼굴 군집 + 방금 저장한 이름 안내
@@ -1410,6 +1419,10 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
                 ) : item.entry.id === activeProposalEntryId ? (
                 // [FLOW-STAGE] 활성 제안 = 무대 슬롯. 무대(플레이어+내보내기)가 portal로 이 자리에 선다.
                 <div key={`stage_${item.entry.id}`} ref={setStageSlot} className="w-full flex flex-col items-center space-y-4" />
+                ) : hideEditUI ? (
+                // [STORY-GATE P3 / S2] 승인 전에는 '지난 제안'(이전 세대 A/B 편집물)도 내지 않는다.
+                // 렌더된 결과를 보여주는 순간 "승인 전 편집 없음"이 깨진다.
+                null
                 ) : (
                 <div key={`pair_${item.entry.id}`} className="flex justify-start animate-in fade-in duration-500">
                   <div className="flex gap-4 max-w-[85%]">
@@ -2158,7 +2171,57 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
         />
           </>
         );
-        return stageSlot ? createPortal(stageContent, stageSlot) : stageContent; })()}
+
+        // [STORY-GATE P3] 승인 전에는 무대(편집 결과물 A/B·Export)를 내지 않고 '원고'를 낸다.
+        //   게이트 OFF면 showStory=false → stageContent 그대로 (현행 바이트 동일, I-4).
+        const showStory = hideEditUI && !!programId
+          && (!!proposals || (storyGate.story?.item_count ?? 0) > 0);
+        const storyContent = (
+          <div className="w-full max-w-[800px] rounded-2xl border border-white/8 bg-white/[0.02] overflow-hidden">
+            {/* [S5] 2차 집중분석이 끝나도 원고를 자동으로 갈아치우지 않는다 — 알림만. */}
+            {storyGate.hasNewerStory && (
+              <div className="flex items-center gap-3 px-4 py-2.5 text-[12px] border-b border-white/8 bg-primary/5">
+                <span className="text-foreground/70">새 분석 결과가 있습니다.</span>
+                <button type="button"
+                  onClick={() => { storyGate.adoptLatest(); setStoryViewKey((k) => k + 1); }}
+                  className="underline underline-offset-2 text-primary hover:opacity-80">반영하기</button>
+                <span className="ml-auto text-foreground/40">지금 보고 계신 원고는 그대로 둡니다.</span>
+              </div>
+            )}
+            {(storyGate.story?.item_count ?? 0) > 0 ? (
+              <LedgerPage key={storyViewKey} programId={programId ?? undefined} embedded />
+            ) : (
+              <p className="px-6 py-10 text-center text-[13px] text-foreground/45">
+                이야기를 엮고 있습니다…
+              </p>
+            )}
+            {(storyGate.story?.item_count ?? 0) > 0 && (
+              <div className="flex items-center gap-3 px-4 py-3 border-t border-white/8">
+                <span className="text-[12px] text-foreground/50">
+                  이대로 괜찮으시면 편집으로 넘어갑니다. 고치고 싶은 곳은 아래에 말씀해 주세요.
+                </span>
+                <button type="button"
+                  onClick={async () => {
+                    const r = await storyGate.approve();
+                    if (!r.ok) setStoryApproveError(
+                      r.status === 409 ? "그새 원고가 바뀌었습니다. 다시 보고 승인해 주세요."
+                      : r.status === 503 ? "승인 원장(story_approval)이 아직 이 DB에 없습니다 — Cutover 필요."
+                      : "승인하지 못했습니다.");
+                    else setStoryApproveError(null);
+                  }}
+                  className="ml-auto shrink-0 px-3 py-1.5 rounded-lg text-[12px] font-semibold bg-primary/80 text-primary-foreground hover:bg-primary transition-colors">
+                  이 이야기로 갑니다
+                </button>
+              </div>
+            )}
+            {storyApproveError && (
+              <p className="px-4 pb-3 text-[12px] text-destructive">{storyApproveError}</p>
+            )}
+          </div>
+        );
+
+        const finalContent = showStory ? storyContent : stageContent;
+        return stageSlot ? createPortal(finalContent, stageSlot) : finalContent; })()}
 
         {/* [FLOW] 자동 스크롤 목적지 — 흐름의 최신 지점 */}
         <div ref={chatEndRef} />

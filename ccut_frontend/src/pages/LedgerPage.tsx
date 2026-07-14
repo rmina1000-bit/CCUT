@@ -63,11 +63,20 @@ const wordsToChars = (words: WordTok[]): Char[] => {
   return chars;
 };
 
-const LedgerPage: React.FC = () => {
+/** [STORY-GATE P3] 워크스페이스 안에 끼워 넣을 수 있게 props 수용.
+ *  embedded=true면 자기 배경·프로젝트 선택기(페이지 껍데기)를 접고 본문만 낸다. */
+interface LedgerPageProps { programId?: string; embedded?: boolean; }
+
+const LedgerPage: React.FC<LedgerPageProps> = ({ programId: propProgramId, embedded }) => {
   const [programs, setPrograms] = useState<Array<{ program_id: string; name: string }>>([]);
   const [programId, setProgramId] = useState<string>(() =>
-    new URLSearchParams(window.location.search).get("program") || ""
+    propProgramId || new URLSearchParams(window.location.search).get("program") || ""
   );
+  // 부모(워크스페이스)가 프로젝트를 바꾸면 따라간다
+  useEffect(() => {
+    if (propProgramId && propProgramId !== programId) setProgramId(propProgramId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [propProgramId]);
   const [data, setData] = useState<ScriptData | null>(null);
   const [activeItem, setActiveItem] = useState<string | null>(null);
   const [playerOpen, setPlayerOpen] = useState(false);
@@ -78,11 +87,12 @@ const LedgerPage: React.FC = () => {
   const playRef = useRef<{ spans: MsRange[]; idx: number } | null>(null);
 
   useEffect(() => {
+    if (embedded) return;  // 워크스페이스 안에서는 프로젝트 선택기가 없다 (부모가 정한다)
     videoService.listProjects?.().then((res: any) => {
       const list = Array.isArray(res) ? res : res?.projects || res?.programs || [];
       setPrograms(list.map((p: any) => ({ program_id: p.program_id ?? p.id, name: p.name ?? p.program_id })));
     }).catch(() => setPrograms([]));
-  }, []);
+  }, [embedded]);
 
   const reload = useCallback(() => {
     if (!programId) { setData(null); return; }
@@ -333,24 +343,31 @@ const LedgerPage: React.FC = () => {
   let sceneNo = 0;
 
   return (
-    <div className="min-h-screen" style={{ background: "hsl(228, 12%, 10%)", color: "hsl(220, 9%, 87%)" }}>
+    <div className={embedded ? "" : "min-h-screen"}
+      style={embedded ? { color: "hsl(220, 9%, 87%)" }
+                      : { background: "hsl(228, 12%, 10%)", color: "hsl(220, 9%, 87%)" }}>
       <style>{`@keyframes ccutBlink{50%{opacity:0}}`}</style>
 
       <header className="max-w-2xl mx-auto px-6 pt-5 pb-1 flex items-baseline" style={{ fontFamily: SANS }}>
-        <select
-          aria-label="프로젝트"
-          className="bg-transparent text-[17px] font-semibold outline-none cursor-pointer appearance-none pr-2 hover:opacity-70 transition-opacity"
-          style={{ color: "inherit" }}
-          value={programId} onChange={(e) => setProgramId(e.target.value)}
-        >
-          <option value="" style={{ color: "#111" }}>대본 고르기…</option>
-          {programs.map((p) => <option key={p.program_id} value={p.program_id} style={{ color: "#111" }}>{p.name}</option>)}
-        </select>
+        {embedded ? (
+          <span className="text-[17px] font-semibold">{data?.program_name ?? ""}</span>
+        ) : (
+          <select
+            aria-label="프로젝트"
+            className="bg-transparent text-[17px] font-semibold outline-none cursor-pointer appearance-none pr-2 hover:opacity-70 transition-opacity"
+            style={{ color: "inherit" }}
+            value={programId} onChange={(e) => setProgramId(e.target.value)}
+          >
+            <option value="" style={{ color: "#111" }}>대본 고르기…</option>
+            {programs.map((p) => <option key={p.program_id} value={p.program_id} style={{ color: "#111" }}>{p.name}</option>)}
+          </select>
+        )}
         {data?.ok && <span className="ml-auto text-xs tabular-nums opacity-50">{fmtClock(data.running_ms)}</span>}
       </header>
 
-      <main className="max-w-2xl mx-auto px-6 pb-28" style={{ fontFamily: SANS }}>
-        {!programId && <p className="pt-20 text-center text-sm opacity-50">위의 제목을 눌러 대본을 고르세요.</p>}
+      <main className={embedded ? "max-w-2xl mx-auto px-6 pb-8" : "max-w-2xl mx-auto px-6 pb-28"}
+        style={{ fontFamily: SANS }}>
+        {!programId && !embedded && <p className="pt-20 text-center text-sm opacity-50">위의 제목을 눌러 대본을 고르세요.</p>}
 
         {scenes.map((sc) => {
           sceneNo += 1;

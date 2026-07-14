@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
+import { createPortal } from "react-dom";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { X } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -257,28 +258,6 @@ export const SingleFragmentEditor: React.FC<SingleFragmentEditorProps> = ({
       ? Math.max(0, endSec - startSec)
       : undefined;
 
-  useEffect(() => {
-    if (!isPlaying) return;
-
-    const frameDuration = durationSec && durationSec > 0
-      ? (durationSec / frameCount) * 1000
-      : 200;
-
-    const interval = setInterval(() => {
-      setCurrentIndex((prev) => {
-        let next = prev + 1;
-        while (next < frameCount && deletedFrames.has(next)) next++; // [PBE-⑦] 삭제 프레임 건너뜀
-        if (next >= frameCount) {
-          setIsPlaying(false);
-          return prev;
-        }
-        return next;
-      });
-    }, frameDuration);
-
-    return () => clearInterval(interval);
-  }, [isPlaying, durationSec, frameCount, deletedFrames]);
-
   // [PBE-RESIZE] 브라우저 창 크기가 줄어들면 모달 크기/위치를 뷰포트 안으로 다시 가둔다.
   useEffect(() => {
     const clampToViewport = () => {
@@ -303,7 +282,6 @@ export const SingleFragmentEditor: React.FC<SingleFragmentEditorProps> = ({
     return () => window.removeEventListener("resize", clampToViewport);
   }, []);
 
-  if (!fragment) return null;
 
   const formatSec = (value: number | undefined) =>
     typeof value === "number" ? `${value.toFixed(1)}s` : "—";
@@ -400,10 +378,47 @@ export const SingleFragmentEditor: React.FC<SingleFragmentEditorProps> = ({
     return segs;
   })();
 
+  const findKeptFrameAtOrAfter = (index: number) => {
+    for (const seg of keptSegments) {
+      if (index < seg.from) return seg.from;
+      if (index >= seg.from && index < seg.to) return index;
+    }
+    return null;
+  };
+
+  const isKeptFrame = (index: number) =>
+    keptSegments.some((seg) => index >= seg.from && index < seg.to);
+
+  useEffect(() => {
+    if (!isPlaying) return;
+
+    const frameDuration = durationSec && durationSec > 0
+      ? (durationSec / frameCount) * 1000
+      : 200;
+
+    const interval = setInterval(() => {
+      setCurrentIndex((prev) => {
+        const next = findKeptFrameAtOrAfter(prev + 1);
+        if (next === null) {
+          setIsPlaying(false);
+          return prev;
+        }
+        return next;
+      });
+    }, frameDuration);
+
+    return () => clearInterval(interval);
+  }, [isPlaying, durationSec, frameCount, keptSegments]);
+
   const handlePlayToggle = () => {
     setIsPlaying((prev) => {
       if (!prev) {
-        setCurrentIndex((curr) => (curr >= frameCount - 1 ? 0 : curr));
+        const firstKept = keptSegments[0]?.from;
+        if (firstKept === undefined) return false;
+        setCurrentIndex((curr) => {
+          const hasNextKept = findKeptFrameAtOrAfter(curr + 1) !== null;
+          return isKeptFrame(curr) && hasNextKept ? curr : firstKept;
+        });
         return true;
       }
       return false;
@@ -432,6 +447,8 @@ export const SingleFragmentEditor: React.FC<SingleFragmentEditorProps> = ({
     }
     setDeletedFrames(del);
   }, [open, fragment, contractState]);
+
+  if (!fragment) return null;
 
   const handleApply = () => {
     if (!fragment) return;
@@ -916,7 +933,7 @@ export const SingleFragmentEditor: React.FC<SingleFragmentEditorProps> = ({
         </DialogFooter>
 
         {/* [PBE-⑦] 프레임 우클릭 컨텍스트 메뉴 */}
-        {ctxMenu && (
+        {ctxMenu && createPortal(
           <>
             <div className="fixed inset-0 z-[90]" onClick={() => setCtxMenu(null)} onContextMenu={(e) => { e.preventDefault(); setCtxMenu(null); }} />
             <div
@@ -940,7 +957,8 @@ export const SingleFragmentEditor: React.FC<SingleFragmentEditorProps> = ({
                 {deletedFrames.has(ctxMenu.index) ? "복원" : "삭제"}
               </button>
             </div>
-          </>
+          </>,
+          document.body
         )}
 
         {/* [PBE-RESIZE] 우하단 리사이즈 핸들 */}

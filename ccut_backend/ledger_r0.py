@@ -103,15 +103,16 @@ async def get_ledger(program_id: str):
         ).fetchone()
         if prow is None:
             return {"ok": False, "error": "program_not_found", "program_id": program_id}
-        mode, fids = None, []
+        # [STORY-GATE P3] 원고 순서를 만드는 규칙은 하나뿐 — story_gate.service.resolve_sequence.
+        # ui_state 우선, 분석 직후처럼 ui_state가 아직 NULL이면 proposals 폴백(B 우선).
+        from story_gate.service import resolve_sequence as _resolve_seq
+        mode, fids, _seq_src = _resolve_seq(con, program_id)
         snapshot_coords = {}
         if prow["ui_state"]:
             try:
                 ui = json.loads(prow["ui_state"])
                 while isinstance(ui, str):
                     ui = json.loads(ui)
-                mode = ui.get("committedProposalId") or ui.get("selectedProposalId")
-                fids = (ui.get("proposalsKeyFragments") or {}).get(mode) or []
                 # [D8 대응] fid 재발급으로 DB에서 좌표를 잃은 조각의 폴백 —
                 # ui_state 스냅샷(proposalsCustomFragments)의 좌표 (PHASE A: 좌표가 진실)
                 for cf in (ui.get("proposalsCustomFragments") or {}).get(mode) or []:

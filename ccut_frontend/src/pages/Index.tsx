@@ -6,6 +6,7 @@ import FragmentMap from "@/components/FragmentMap";
 import ReservedFragments from "@/components/ReservedFragments";
 import { useWorkspaceLayout } from "@/hooks/useWorkspaceLayout";
 import { useProposalState } from "@/hooks/useProposalState";
+import { useStoryGate } from "@/hooks/useStoryGate";
 import { ArchivePanel } from "@/components/ArchivePanel";
 import { SnsUploadPanel } from "@/components/SnsUploadPanel";
 import { AccountPanel } from "@/components/AccountPanel";
@@ -51,6 +52,13 @@ import {
 import { toMs } from "@/utils/editContract";
 import { buildExportClipsFromResolvedFragments } from "@/utils/exportClipBuilder";
 
+type PbeContractState = Pick<
+  EditStateRow,
+  "anchor_start_ms" | "anchor_end_ms" | "trim_start_ms" | "trim_end_ms" | "excluded_ranges" | "removed"
+>;
+
+const pbeContractKey = (programId: string | null | undefined, fid: string) => `${programId ?? "local"}:${fid}`;
+
 // Layout constants moved to useWorkspaceLayout.ts
 
 
@@ -90,6 +98,10 @@ const Index: React.FC = () => {
     sourceEntries, setSourceEntries,
     resetAnalysisFlow,
   } = useAnalysisFlow();
+
+  // [STORY-GATE P3] 승인 전에는 PBE(조각 정밀편집) 진입을 막는다 (S2).
+  // 게이트 OFF면 awaitingApproval=false → 현행과 동일.
+  const storyGate = useStoryGate(activeNavItem, appState === "complete");
 
   const [holdPositions, setHoldPositions] = useState<Record<string, { x: number; y: number }>>({});
   const [boundaryHighlightIds, setBoundaryHighlightIds] = useState<string[]>([]);
@@ -1359,6 +1371,7 @@ const Index: React.FC = () => {
   // [EDIT-CONTRACT-B0 IMPL-2b] EDIT_CONTRACT_V2 게이트 — OFF면 아래 전 분기 기존 경로 그대로 (쓰기 0)
   const [editContractV2, setEditContractV2] = useState(false);
   const [editStatesList, setEditStatesList] = useState<EditStateRow[]>([]);
+  const [localPbeContractStates, setLocalPbeContractStates] = useState<Record<string, PbeContractState>>({});
   const editStatesRef = useRef<Map<string, EditStateRow>>(new Map());
   const editCtxRef = useRef<{ enabled: boolean; programId: string | null }>({ enabled: false, programId: null });
   useEffect(() => { fetchGateEnabled().then(setEditContractV2); }, []);
@@ -1373,12 +1386,13 @@ const Index: React.FC = () => {
   }, []);
   const refreshEditStatesRef = useRef(refreshEditStates);
   refreshEditStatesRef.current = refreshEditStates;
-  // [EDIT-CONTRACT-B0] PBE 재진입용 — 선택 조각의 현재 Edit State (게이트 ON에서만 사용)
+  // [EDIT-CONTRACT-B0] PBE 재진입용 — DB state 우선, cutover 전에는 적용 세션 state로 복원.
   const sfeContractState = useMemo(() => {
-    if (!editContractV2 || !singleEditTarget) return null;
+    if (!singleEditTarget) return null;
     const fid = String((singleEditTarget as any).root_fragment_uid ?? (singleEditTarget as any).fragment_id ?? "");
-    return editStatesList.find((s) => s.parent_fragment_id === fid) ?? null;
-  }, [editContractV2, singleEditTarget, editStatesList]);
+    const persisted = editContractV2 ? editStatesList.find((s) => s.parent_fragment_id === fid) : null;
+    return persisted ?? localPbeContractStates[pbeContractKey(activeNavItem, fid)] ?? null;
+  }, [activeNavItem, editContractV2, singleEditTarget, editStatesList, localPbeContractStates]);
 
   const handleSingleFragmentApply = useCallback(
     (payload: {
@@ -1428,26 +1442,39 @@ const Index: React.FC = () => {
       });
       setEditFragments(next);
 
+      const orig: any = editFragments.find((fr) => getUid(fr) === fragmentUid);
+      const programId = editCtxRef.current.programId ?? activeNavItem;
+      const rootFid = String(orig?.root_fragment_uid ?? orig?.fragment_id ?? fragmentUid);
+      const segs = isSplit ? segments! : [{ startSec: newStartSec, endSec: newEndSec }];
+      const { trim, excluded } = segmentsToExcludedMs(segs);
+      const contractSnapshot: PbeContractState = {
+        anchor_start_ms: toMs(Number(orig?.orig_start_sec ?? origStart)),
+        anchor_end_ms: toMs(Number(orig?.orig_end_sec ?? origEnd)),
+        trim_start_ms: trim[0],
+        trim_end_ms: trim[1],
+        excluded_ranges: excluded,
+        removed: false,
+      };
+      setLocalPbeContractStates((prev) => ({
+        ...prev,
+        [pbeContractKey(programId, rootFid)]: contractSnapshot,
+      }));
+
       if (editCtxRef.current.enabled) {
         // [EDIT-CONTRACT-B0] 신 계약 단일 권위 — edit_overlay 대신 edit-state upsert 1건 (Edit State = 승인된 편집)
         try {
-          const orig: any = editFragments.find((fr) => getUid(fr) === fragmentUid);
-          const programId = editCtxRef.current.programId;
-          const rootFid = String(orig?.root_fragment_uid ?? orig?.fragment_id ?? fragmentUid);
           if (orig?.source_id && programId) {
-            const segs = isSplit ? segments! : [{ startSec: newStartSec, endSec: newEndSec }];
-            const { trim, excluded } = segmentsToExcludedMs(segs);
             const itemId = timelineItemIdFor(programId, String(committedProposalId ?? "NA"), rootFid, 0);
             const known = editStatesRef.current.get(itemId);
             postEditState({
               program_id: programId,
               timeline_item_id: itemId,
               source_id: orig.source_id,
-              anchor_start_ms: toMs(Number(orig?.orig_start_sec ?? origStart)),
-              anchor_end_ms: toMs(Number(orig?.orig_end_sec ?? origEnd)),
-              trim_start_ms: trim[0],
-              trim_end_ms: trim[1],
-              excluded_ranges: excluded,
+              anchor_start_ms: contractSnapshot.anchor_start_ms,
+              anchor_end_ms: contractSnapshot.anchor_end_ms,
+              trim_start_ms: contractSnapshot.trim_start_ms,
+              trim_end_ms: contractSnapshot.trim_end_ms,
+              excluded_ranges: contractSnapshot.excluded_ranges,
               revision: known?.revision,
               parent_fragment_id: rootFid,
               command_type: isSplit ? "EXCLUDE_RANGE" : "TRIM",

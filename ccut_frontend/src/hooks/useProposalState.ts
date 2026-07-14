@@ -6,6 +6,7 @@ import { Fragment } from "@/data/fragmentData";
 import { narrativeService } from "@/services/narrativeService";
 import { videoService } from "@/services/videoService";
 import { assignShortDisplayIds, recalcDisplayIds } from "@/lib/fragmentIdentity";
+import { storyGateEnabled } from "@/hooks/useStoryGate";  // [STORY-GATE P3/S3] 완료 문구 분기
 
 /**
  * [STEP 10-K-C1-R39] Frontend Commit-Time Sequence Guard
@@ -945,12 +946,18 @@ export const useProposalState = (
             const _ledgerLine = _ledgerHits.length > 0 && _ledgerToken
               ? ` 말씀하신 '${_ledgerToken}'이 적힌 영상 ${_ledgerHits.length}개에서 골랐어요.`
               : "";
+            // [STORY-GATE P3 / S3] 게이트 ON이면 결과 통보가 아니라 협의를 연다.
+            // 승인 전에는 편집 결과물이 없으므로 "무대에서 재생해 보시고"라고 말하면 거짓말이 된다.
+            const _gateOn = await storyGateEnabled();
+            const _doneText = _gateOn
+              ? `이런 이야기로 엮었습니다 — ${_fmt(generatedProposals.B ?? generatedProposals.A)}.${_ledgerLine} 원고를 읽어 보시고, 고치고 싶은 곳을 말씀해 주세요. 마음에 드시면 승인해 주시면 그때 편집으로 넘어갑니다.`
+              : `다 골랐습니다 — A안 ${_fmt(generatedProposals.A)} · B안 ${_fmt(generatedProposals.B)}.${_ledgerLine} 아래 무대에서 재생해 보시고, 방향이 다르면 조건을 바꿔 말씀해 주세요.`;
             setStoryPlan((prev: any) => prev ? {
               ...prev,
               messages: [...(prev.messages ?? []), {
                 id: `ai_done_${Date.now()}`,
                 sender: "ai",
-                text: `다 골랐습니다 — A안 ${_fmt(generatedProposals.A)} · B안 ${_fmt(generatedProposals.B)}.${_ledgerLine} 아래 무대에서 재생해 보시고, 방향이 다르면 조건을 바꿔 말씀해 주세요.`,
+                text: _doneText,
                 timestamp: Date.now(),
               }],
             } : prev);
