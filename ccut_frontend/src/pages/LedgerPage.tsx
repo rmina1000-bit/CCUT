@@ -162,6 +162,8 @@ const LedgerPage: React.FC = () => {
     const [, e] = st.spans[idx];
     if (idx < st.spans.length - 1 && t >= e - LEAD) {   // 이 구간 끝 직전 → 미리 다음 구간으로
       resumeRef.current = true; v.pause(); v.currentTime = st.spans[idx + 1][0] / 1000;
+    } else if (idx === st.spans.length - 1 && t >= e) {  // ★ 마지막 구간 끝 → 조각 경계에서 정지
+      resumeRef.current = false; v.pause();              // 사용자 재개 아님 → onSeeked 재생 안 함
     }
   }, []);
   const startRaf = useCallback(() => {
