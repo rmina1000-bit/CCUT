@@ -256,11 +256,21 @@ async def get_ledger(program_id: str):
                 "coord_source": coord_source,       # db | ui_state_snapshot (D8 폴백 정직 표기)
                 "video_url": _fs._video_url(src["file_path"] if src else None, sid),
             })
-        return {"ok": True, "program_id": program_id, "program_name": prow["name"],
-                "mode": mode, "sequence_count": len(fids), "items": items,
-                "running_ms": running_ms,  # [SCRIPT-5] 상단 러닝타임(현재)
-                "excluded_count": excluded_count,  # [SCRIPT-2] 제외된 장면 수
-                "excluded_items": excluded_items}  # 복원용 최소 정보
+        out = {"ok": True, "program_id": program_id, "program_name": prow["name"],
+               "mode": mode, "sequence_count": len(fids), "items": items,
+               "running_ms": running_ms,  # [SCRIPT-5] 상단 러닝타임(현재)
+               "excluded_count": excluded_count,  # [SCRIPT-2] 제외된 장면 수
+               "excluded_items": excluded_items}  # 복원용 최소 정보
+        # [STORY-GATE P2] 게이트 ON일 때만 승인 상태를 함께 싣는다.
+        # OFF면 응답이 이전과 바이트 동일 (I-4) — 기존 프론트 경로 무영향.
+        try:
+            from story_gate import gate as _sg
+            if _sg.is_enabled():
+                from story_gate import service as _ss
+                out["story"] = _ss.story_state(program_id)
+        except Exception as _e:  # 승인 계층 실패가 원고 읽기를 막지 않는다 (정직 표기)
+            out["story_error"] = str(_e)
+        return out
     finally:
         con.close()
 

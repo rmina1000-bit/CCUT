@@ -19,6 +19,7 @@ logger = logging.getLogger(__name__)
 
 from fastapi import FastAPI, Depends, BackgroundTasks, UploadFile, File, Request, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse  # [STORY-GATE P2] 403 응답용
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
@@ -395,6 +396,12 @@ app.include_router(health_router)
 # [EDIT-CONTRACT-B0 IMPL-2] 공통 편집 계약 API — EDIT_CONTRACT_V2 게이트 OFF 시 쓰기 완전 0
 from edit_contract.api import router as edit_contract_router
 app.include_router(edit_contract_router)
+
+# [STORY-GATE P2] 스토리 승인 관문 — CCUT_STORY_GATE OFF 시 쓰기 완전 0
+from story_gate.api import router as story_gate_router
+from story_gate import gate as story_gate
+from story_gate import service as story_service
+app.include_router(story_gate_router)
 
 # [LEDGER-1] Text Ledger R0 — 스토리 원고 read API (읽기 전용, DB 무변)
 from ledger_r0 import router as ledger_router
@@ -1603,6 +1610,14 @@ async def make_proposal_preview(proposal_id: str, db: Session = Depends(get_db))
         clips.append({"source_path": spath, "start": start, "end": end})
     if not clips:
         return {"status": "NO_CLIPS", "preview_url": None}
+    # [STORY-GATE P2 / I-1] 승인 없이는 렌더 산출물을 만들지 않는다.
+    # 게이트 OFF면 이 검사 자체가 없다 (현행 무변).
+    if story_gate.is_enabled() and pr.program_id and not story_service.is_render_allowed(pr.program_id):
+        return JSONResponse(status_code=403, content={
+            "status": "STORY_NOT_APPROVED", "preview_url": None,
+            "error": "STORY_NOT_APPROVED", "program_id": pr.program_id,
+            "message": "이야기가 아직 승인되지 않았습니다. 원고를 확인하고 승인해 주세요.",
+        })
     from engine.proposal_preview_engine import ensure_proposal_preview
     result = ensure_proposal_preview(proposal_id=proposal_id, variant=variant, clips=clips)
     return {
@@ -2328,8 +2343,13 @@ async def post_generate_project_proposals(req: ProjectProposalRequest):
 
         # [PROPOSAL_PREVIEW_INJECT] preview_url 주입 (렌더도 executor — 루프 비점유)
         # [STORY-GATE P1] render_preview=False면 렌더를 건너뛴다 — sequence는 그대로.
+        # [STORY-GATE P2 / I-1] 게이트 ON + 미승인이면 요청이 True여도 렌더하지 않는다.
+        _pv_render = req.render_preview
+        if _pv_render and story_gate.is_enabled() and not story_service.is_render_allowed(project_id):
+            _pv_render = False
+            print(f"[STORY-GATE] {project_id} 미승인 -> render_preview 강제 False (I-1)")
         _pv_t0 = time.time()
-        if req.render_preview:
+        if _pv_render:
             proposals = await _loop.run_in_executor(None, inject_proposal_previews, proposals)
             print(f"[TIMING] preview_render={time.time() - _pv_t0:.1f}s")
         else:
@@ -2455,8 +2475,14 @@ async def post_generate_proposals(source_id: str, render_preview: bool = True):
         
         # [PROPOSAL_PREVIEW_INJECT] preview_url 주입
         # [STORY-GATE P1] render_preview=False면 렌더를 건너뛴다 — sequence는 그대로.
+        # [STORY-GATE P2 / I-1] 이 경로(단일 소스)는 program을 모른다 → 승인 확인 불가.
+        # 게이트 ON이면 자동 렌더를 아예 하지 않는다. 렌더는 승인 뒤 /preview·/render로만.
+        _pv_render = render_preview
+        if _pv_render and story_gate.is_enabled():
+            _pv_render = False
+            print(f"[STORY-GATE] {source_id} source-level 자동 렌더 차단 (program 미상, I-1)")
         _pv_t0 = time.time()
-        if render_preview:
+        if _pv_render:
             proposals = inject_proposal_previews(proposals)
             print(f"[TIMING] preview_render={time.time() - _pv_t0:.1f}s")
         else:
@@ -2690,6 +2716,13 @@ async def post_render(export_input_id: str, payload: dict = None, db: Session = 
                 program_id = prop.program_id
                 pg = db.query(ProgramTable).filter_by(program_id=program_id).first()
                 program_title = pg.name if pg else None
+    # [STORY-GATE P2 / I-1] 승인 없이는 렌더하지 않는다. 게이트 OFF면 검사 없음(현행 무변).
+    if story_gate.is_enabled() and program_id and not story_service.is_render_allowed(program_id):
+        return JSONResponse(status_code=403, content={
+            "status": "STORY_NOT_APPROVED", "error": "STORY_NOT_APPROVED",
+            "program_id": program_id, "export_input_id": export_input_id,
+            "message": "이야기가 아직 승인되지 않았습니다. 원고를 확인하고 승인해 주세요.",
+        })
     result = render_engine.render_from_export_input(export_input_id)
     if result and result.get("success"):
         from archive.db_models import ExportResultTable as _ERT
@@ -4243,7 +4276,7 @@ async def settings_gates():
     keys = ["CCUT_HUB_PLAN", "CCUT_AUTO_REINDEX", "CCUT_SINGLE_CACHE",
             "CCUT_LEGACY_NARRATIVE", "CCUT_REVISION", "CCUT_QUALITY_LOG",
             "CCUT_PERSON_REQUERY", "CCUT_LEDGER_KEEP", "MIRROR_ENABLED",
-            "CCUT_COMPOUND_INTENT", "EDIT_CONTRACT_V2"]
+            "CCUT_COMPOUND_INTENT", "EDIT_CONTRACT_V2", "CCUT_STORY_GATE"]
     return {"status": "OK", "gates": {k: os.getenv(k) or "" for k in keys}}
 
 
