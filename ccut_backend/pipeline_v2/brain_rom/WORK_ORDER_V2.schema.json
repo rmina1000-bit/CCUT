@@ -1,0 +1,37 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "WorkOrderV2",
+  "type": "object",
+  "properties": {
+    "request_id": {"type": "string", "pattern": "^REQ_[0-9A-F]{12}$"},
+    "raw_user_text": {"type": "string", "description": "불변 보존 — 수정 금지"},
+    "action": {"type": "string", "enum": ["select", "story", "count_only", "unknown"]},
+    "selectors": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "phrase": {"type": "string"},
+          "mode": {"type": "string", "enum": ["keep", "exclude"]},
+          "strictness": {"type": "string", "enum": ["normal", "hard"]},
+          "source_span": {
+            "type": ["array", "null"],
+            "items": {"type": "integer"},
+            "minItems": 2, "maxItems": 2
+          }
+        },
+        "required": ["phrase", "mode", "strictness"]
+      }
+    },
+    "count": {"type": ["integer", "null"], "minimum": 1, "maximum": 40},
+    "target_duration_sec": {"type": ["number", "null"]},
+    "project_id": {"type": ["string", "null"]},
+    "source_ids": {"type": "array", "items": {"type": "string"}},
+    "user_facts": {"type": "array"},
+    "user_preferences": {"type": "array"},
+    "corrections": {"type": "array"},
+    "unresolved_terms": {"type": "array", "items": {"type": "string"}}
+  },
+  "required": ["request_id", "raw_user_text", "action", "selectors",
+               "source_ids", "unresolved_terms"]
+}

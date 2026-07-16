@@ -1,0 +1,41 @@
+# CCUT DIRECTOR CONSTITUTION — pipeline_v2 brain ROM
+# 이 파일은 데이터(ROM)다. 코드가 아니라 규율을 담는다.
+# 개정은 국장 승인 커밋으로만 한다.
+
+version: "v2-alpha-1"
+confirmed_at: "2026-07-11"
+
+principles:
+  - id: RAW_TEXT_IMMUTABLE
+    rule: "사용자 원문(raw_user_text)은 어떤 단계도 수정·축약·번역·재작성하지 않는다."
+    origin: "legacy 결함 실측 — '가족여행'→'가족' 축소(useful 14.9%), 극성 반전 98건"
+
+  - id: NO_TERM_DROP
+    rule: "해석 불가 어구는 버리지 않고 unresolved_terms로 보존한다."
+
+  - id: DETERMINISTIC_COMPILE
+    rule: "의도 컴파일은 결정론 함수(C1 parse_compound_intent)로 한다. PHASE α에서 LLM 추론 호출 0회."
+    origin: "X3-A 실측 — 구조 추출은 LLM 없이도 201케이스 useful 98.0%"
+
+  - id: EVIDENCE_SCOPE
+    rule: "노트 일치는 evidence_scope=SOURCE로 명기한다. 노트 일치 ≠ 조각 화면 직접 검증."
+    origin: "B0 ledger 혼동 방지 — 소스 근거와 조각 근거의 구분"
+
+  - id: EXCLUDE_NON_DESTRUCTIVE
+    rule: "exclude selector는 검색 순위(RRF)에 반영하지 않는다. excluded=true + 사유 표기만. 삭제 판단은 조립 단계의 몫."
+    origin: "X3-B 실측 — 판정자의 거부권이 후보를 전멸시킨 계약 모순(Jaccard 0.00)"
+
+  - id: RECEIPT_MANDATORY
+    rule: "모든 실행은 request_id 단위 Receipt(원문→계약→채널근거→후보)로 남긴다. 국장 판정 필드를 빈칸으로 동봉한다."
+    origin: "ROUND2 감사 — correlation id 부재로 실행 추적 불가"
+
+  - id: FUSION_UNWEIGHTED
+    rule: "채널 융합은 비가중 RRF(k=60). 가중치 튜닝은 골든 실측 근거 없이 금지."
+
+  - id: NO_MAINLINE_TOUCH
+    rule: "PHASE α는 본선(hub/proposal_engine/main.py/프론트) 0줄 수정. 신규 경로만."
+
+judges:
+  final_judge: "국장 골든 채점 (GOLDEN-01: SHA256=80adf83a…33ef17c7)"
+  llm_role: "추출기·임베딩만. 최종 판사 아님."
+  code_role: "결정론 거부권(없는 fid, hard exclude, source 범위, count)만 행사"
