@@ -103,6 +103,7 @@ const LedgerPage: React.FC<LedgerPageProps> = ({ programId: propProgramId, embed
   const [playerOpen, setPlayerOpen] = useState(false);
   const [showOriginal, setShowOriginal] = useState<string | null>(null);
   const [editing, setEditing] = useState<Editing | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const hiddenRef = useRef<HTMLInputElement>(null);
   const playRef = useRef<{ spans: MsRange[]; idx: number } | null>(null);
@@ -364,6 +365,7 @@ const LedgerPage: React.FC<LedgerPageProps> = ({ programId: propProgramId, embed
     const ed = { itemId: it.timeline_item_id, chars, inactive, caret };
     editingRef.current = ed;
     setEditing(ed);
+    setSaveError(null);
     loadItem(it, false);  // 미리듣기 준비 — 편집하며 재생 버튼으로 확인
     setTimeout(() => hiddenRef.current?.focus({ preventScroll: true }), 0);
   }, [loadItem]);
@@ -377,17 +379,36 @@ const LedgerPage: React.FC<LedgerPageProps> = ({ programId: propProgramId, embed
   }, [editing, data, edlSpansOf]);
 
   const commitEdit = useCallback(async () => {
-    setEditing((cur) => {
-      if (!cur || !data?.items) return null;
-      const it = data.items.find((x) => x.timeline_item_id === cur.itemId);
-      if (it) {
-        const ranges: number[][] = [];
-        cur.inactive.forEach((i) => { const c = cur.chars[i]; if (c.s_ms != null) ranges.push([c.s_ms, c.e_ms!]); });
-        postEdit(it, { excluded_ranges: ranges, removed: false, command_type: "EXCLUDE_RANGE" })
-          .then((r) => { if (r?.ok) { onEditStateChanged?.(); reload(); } });
-      }
-      return null;
+    const cur = editingRef.current;
+    editingRef.current = null;  // Enter 직후 blur가 또 커밋하는 이중 발사 차단
+    setEditing(null);
+    if (!cur || !data?.items) return;
+    const it = data.items.find((x) => x.timeline_item_id === cur.itemId);
+    if (!it) return;
+    // 길이 0 구간(ASR 좌표 s_ms==e_ms)은 계약 위반이라 서버가 거부한다 — 전송에서 제외
+    const ranges: number[][] = [];
+    let droppedZero = 0;
+    cur.inactive.forEach((i) => {
+      const c = cur.chars[i];
+      if (c.s_ms == null || c.e_ms == null) return;
+      if (c.e_ms > c.s_ms) ranges.push([c.s_ms, c.e_ms]);
+      else droppedZero += 1;
     });
+    // 전부 길이 0이면 저장할 시간 구간이 없다 — 빈 배열 POST는 RESTORE(기존 편집 삭제)가 되므로 생략
+    if (ranges.length === 0 && droppedZero > 0) return;
+    const restoreEditing = () => {
+      setEditing((now) => now ?? cur);  // 사용자가 다른 문장 편집을 시작했으면 덮어쓰지 않는다
+      setTimeout(() => hiddenRef.current?.focus({ preventScroll: true }), 0);
+    };
+    try {
+      const r = await postEdit(it, { excluded_ranges: ranges, removed: false, command_type: "EXCLUDE_RANGE" });
+      if (r?.ok) { setSaveError(null); onEditStateChanged?.(); reload(); return; }
+      setSaveError(`저장 실패 — ${r?.message ?? r?.error ?? "알 수 없는 오류"}`);
+      restoreEditing();
+    } catch (e) {
+      setSaveError(`저장 실패 — ${String(e)}`);
+      restoreEditing();
+    }
   }, [data, postEdit, reload, onEditStateChanged]);
 
   const moveCaret = (from: number, dir: -1 | 1, chars: Char[]) => Math.max(0, Math.min(chars.length, from + dir));
@@ -616,6 +637,17 @@ const LedgerPage: React.FC<LedgerPageProps> = ({ programId: propProgramId, embed
         className="fixed opacity-0 w-px h-px pointer-events-none" style={{ left: -9999, top: 0 }}
         aria-hidden
       />
+
+      {/* 저장 실패 표시 — 침묵 금지 (원인 문구 포함) */}
+      {saveError && (
+        <div className="fixed bottom-14 left-1/2 -translate-x-1/2 z-40 px-4 py-1.5 rounded-full text-[12px]"
+          style={{ background: "hsl(0,45%,24%)", color: "hsl(0,30%,92%)", fontFamily: SANS }}
+          role="alert">
+          {saveError}
+          <button type="button" onClick={() => setSaveError(null)}
+            className="ml-3 underline underline-offset-2 opacity-80 hover:opacity-100">닫기</button>
+        </div>
+      )}
 
       {/* 편집 힌트 */}
       {editing && (
