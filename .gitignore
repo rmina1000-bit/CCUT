@@ -26,9 +26,15 @@ full_diff.txt
 .DS_Store
 Thumbs.db
 
-# DB ½º³À¼¦ (»èÁ¦ Àü ÀÚµ¿ ¹é¾÷, Ä¿¹Ô ´ë»ó ¾Æ´Ô)
+# DB ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ (ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ ï¿½Úµï¿½ ï¿½ï¿½ï¿½, Ä¿ï¿½ï¿½ ï¿½ï¿½ï¿½ ï¿½Æ´ï¿½)
 ccut_backend/db_snapshots/
 
 # SQLite journals (isolated test DB)
 *.db-wal
 *.db-shm
+
+# Quarantine & byproducts (2026-07-17 ìž”ìž¬ ì²­ì†Œ)
+_quarantine_*/
+*.bak_*
+*.timestamp-*.mjs
+test-results/
