@@ -335,24 +335,37 @@ const LedgerPage: React.FC<LedgerPageProps> = ({ programId: propProgramId, embed
     reload();
   }, [data?.items, saveOrder, onEditStateChanged, reload]);
 
+  // 저장 실패 공통 처리 — 무성 금지. 409(revision_conflict)는 낡은 화면이 원인이므로
+  // reload로 revision을 최신화하고 재시도를 안내한다 (자동 재시도 금지 — 낡은 기준 덮어쓰기 위험).
+  const reportEditFailure = useCallback((r: any) => {
+    if (r?.error === "revision_conflict") {
+      setSaveError(`저장 실패 — ${r?.message ?? "다른 화면의 수정이 먼저 반영됨"} · 원고를 새로고침했습니다, 다시 시도해 주세요.`);
+      reload();  // 항목 revision 최신화
+      return;
+    }
+    setSaveError(`저장 실패 — ${r?.message ?? r?.error ?? "알 수 없는 오류"}`);
+  }, [reload]);
+
   // 문장 통째 삭제 (✕) — REMOVE
   const [undoInfo, setUndoInfo] = useState<{ item: ScriptItem; savedSec: number } | null>(null);
   const undoTimer = useRef<number | null>(null);
   const removeItem = useCallback(async (it: ScriptItem) => {
     if (activeItem === it.timeline_item_id) closePlayer();
     const r = await postEdit(it, { excluded_ranges: [], removed: true, command_type: "REMOVE" });
-    if (!r?.ok) return;
+    if (!r?.ok) { reportEditFailure(r); return; }
+    setSaveError(null);
     onEditStateChanged?.();
     setUndoInfo({ item: { ...it, revision: r.revision }, savedSec: ((it.anchor_end_ms ?? 0) - (it.anchor_start_ms ?? 0)) / 1000 });
     if (undoTimer.current) window.clearTimeout(undoTimer.current);
     undoTimer.current = window.setTimeout(() => setUndoInfo(null), 8000);
     reload();
-  }, [activeItem, closePlayer, postEdit, reload, onEditStateChanged]);
+  }, [activeItem, closePlayer, postEdit, reload, onEditStateChanged, reportEditFailure]);
   const undoRemove = useCallback(async () => {
     if (!undoInfo) return;
     const r = await postEdit(undoInfo.item, { excluded_ranges: [], removed: false, command_type: "RESTORE" });
-    if (r?.ok) { onEditStateChanged?.(); setUndoInfo(null); reload(); }
-  }, [undoInfo, postEdit, reload, onEditStateChanged]);
+    if (r?.ok) { setSaveError(null); onEditStateChanged?.(); setUndoInfo(null); reload(); }
+    else reportEditFailure(r);
+  }, [undoInfo, postEdit, reload, onEditStateChanged, reportEditFailure]);
 
   // ── 워드식 글자 편집 ──────────────────────────────────────────────
   const enterEdit = useCallback((it: ScriptItem, caret = 0) => {
@@ -403,13 +416,13 @@ const LedgerPage: React.FC<LedgerPageProps> = ({ programId: propProgramId, embed
     try {
       const r = await postEdit(it, { excluded_ranges: ranges, removed: false, command_type: "EXCLUDE_RANGE" });
       if (r?.ok) { setSaveError(null); onEditStateChanged?.(); reload(); return; }
-      setSaveError(`저장 실패 — ${r?.message ?? r?.error ?? "알 수 없는 오류"}`);
+      reportEditFailure(r);  // 409면 reload로 revision 최신화 — 편집 내용은 아래에서 보존, 재시도 가능
       restoreEditing();
     } catch (e) {
       setSaveError(`저장 실패 — ${String(e)}`);
       restoreEditing();
     }
-  }, [data, postEdit, reload, onEditStateChanged]);
+  }, [data, postEdit, reload, onEditStateChanged, reportEditFailure]);
 
   const moveCaret = (from: number, dir: -1 | 1, chars: Char[]) => Math.max(0, Math.min(chars.length, from + dir));
 
@@ -552,7 +565,12 @@ const LedgerPage: React.FC<LedgerPageProps> = ({ programId: propProgramId, embed
                         <button type="button" onClick={(e) => { e.stopPropagation(); playItem(it); }}
                           className="px-0.5 opacity-70 hover:opacity-100" title="재생"><Play size={11} /></button>
                       </span>
-                      {!selected && <span className="text-[10px] align-super mr-1 opacity-70">off</span>}
+                      {/* off 배지 — 폭 0 앵커 + absolute 오버레이(재생 슬롯 위). 줄박스 폭·높이 기여 0 = 토글해도 리플로우 없음 */}
+                      {!selected && (
+                        <span className="relative inline-block w-0 pointer-events-none select-none" aria-hidden>
+                          <span className="absolute text-[10px] opacity-70 whitespace-nowrap" style={{ left: "-1.35em", top: "-0.95em" }}>off</span>
+                        </span>
+                      )}
                       {stage && <span>{stage} </span>}
                       {!stage && hallu && <span>(장면이 이어진다.) </span>}
                       {hallu && (
@@ -595,7 +613,7 @@ const LedgerPage: React.FC<LedgerPageProps> = ({ programId: propProgramId, embed
 
                       {hasExcl && !isEditing && (
                         <button type="button"
-                          onClick={(e) => { e.stopPropagation(); postEdit(it, { excluded_ranges: [], removed: false, command_type: "EXCLUDE_RANGE" }).then((r) => { if (r?.ok) { onEditStateChanged?.(); reload(); } }); }}
+                          onClick={(e) => { e.stopPropagation(); postEdit(it, { excluded_ranges: [], removed: false, command_type: "EXCLUDE_RANGE" }).then((r) => { if (r?.ok) { setSaveError(null); onEditStateChanged?.(); reload(); } else reportEditFailure(r); }); }}
                           className="text-[10px] align-super opacity-40 hover:opacity-90 transition-opacity px-0.5"
                           title="이 문장의 뺀 부분을 되살립니다">↩</button>
                       )}
@@ -618,7 +636,7 @@ const LedgerPage: React.FC<LedgerPageProps> = ({ programId: propProgramId, embed
           <p className="mt-2 text-center text-[10.5px] opacity-40">
             대본에서 뺀 장면 {data?.excluded_count}개
             <button type="button"
-              onClick={async () => { let changed = false; for (const ex of data?.excluded_items ?? []) { const r = await postEdit(ex, { excluded_ranges: [], removed: false, command_type: "RESTORE" }); changed = changed || !!r?.ok; } if (changed) onEditStateChanged?.(); reload(); }}
+              onClick={async () => { let changed = false; let firstFail: any = null; for (const ex of data?.excluded_items ?? []) { const r = await postEdit(ex, { excluded_ranges: [], removed: false, command_type: "RESTORE" }); changed = changed || !!r?.ok; if (!r?.ok && !firstFail) firstFail = r; } if (changed) onEditStateChanged?.(); if (firstFail) reportEditFailure(firstFail); else { setSaveError(null); reload(); } }}
               className="ml-2 underline underline-offset-2 opacity-70 hover:opacity-100">모두 되돌리기</button>
           </p>
         )}
