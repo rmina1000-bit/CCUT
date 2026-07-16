@@ -8,8 +8,11 @@
  * 저장은 계약(EXCLUDE_RANGE) 그대로 — 원문 불변, 회색 글자의 시간만 제외.
  */
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Play } from "lucide-react";
 import { videoService } from "@/services/videoService";
-import { compileSpans, type MsRange } from "@/utils/editContract";
+
+type MsRange = [number, number];
+const PLAYBACK_STOP_EPS_MS = 6;
 
 interface WordTok { w: string; s_ms: number; e_ms: number; p?: number | null; excluded?: boolean; }
 interface ScriptItem {
@@ -21,6 +24,8 @@ interface ScriptItem {
   excluded_ranges?: number[][];
   anchor_start_ms?: number;
   anchor_end_ms?: number;
+  trim_start_ms?: number;
+  trim_end_ms?: number;
   dialogue?: string | null;
   stage_direction?: string | null;
   place?: string | null;
@@ -28,14 +33,29 @@ interface ScriptItem {
   warnings?: string[];
   video_url?: string;
   missing?: { coords?: boolean };
+  selected?: boolean;
 }
 interface ScriptData {
   ok: boolean;
+  mode?: string;
   program_name?: string;
   running_ms?: number;
+  stringout_count?: number;
+  selected_count?: number;
+  unselected_count?: number;
   excluded_count?: number;
   excluded_items?: ScriptItem[];
   items?: ScriptItem[];
+}
+interface EdlClip {
+  order: number;
+  source_id: string;
+  start_sec: number;
+  end_sec: number;
+  duration_sec: number;
+  fragment_id: string;
+  clip_of?: string;
+  video_url?: string;
 }
 
 interface Char { ch: string; s_ms: number | null; e_ms: number | null; }
@@ -78,6 +98,7 @@ const LedgerPage: React.FC<LedgerPageProps> = ({ programId: propProgramId, embed
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [propProgramId]);
   const [data, setData] = useState<ScriptData | null>(null);
+  const [edlClips, setEdlClips] = useState<EdlClip[]>([]);
   const [activeItem, setActiveItem] = useState<string | null>(null);
   const [playerOpen, setPlayerOpen] = useState(false);
   const [showOriginal, setShowOriginal] = useState<string | null>(null);
@@ -95,9 +116,16 @@ const LedgerPage: React.FC<LedgerPageProps> = ({ programId: propProgramId, embed
   }, [embedded]);
 
   const reload = useCallback(() => {
-    if (!programId) { setData(null); return; }
-    fetch(`/api/ledger/${encodeURIComponent(programId)}`)
-      .then((r) => r.json()).then(setData).catch(() => setData(null));
+    if (!programId) { setData(null); setEdlClips([]); return; }
+    Promise.all([
+      fetch(`/api/ledger/${encodeURIComponent(programId)}`).then((r) => r.json()),
+      fetch(`/api/ledger/${encodeURIComponent(programId)}/edl`).then((r) => r.json()),
+    ])
+      .then(([ledger, edl]) => {
+        setData(ledger);
+        setEdlClips(Array.isArray(edl?.clips) ? edl.clips : []);
+      })
+      .catch(() => { setData(null); setEdlClips([]); });
   }, [programId]);
   useEffect(() => { reload(); }, [reload]);
 
@@ -118,34 +146,40 @@ const LedgerPage: React.FC<LedgerPageProps> = ({ programId: propProgramId, embed
   const lostCount = useMemo(
     () => (data?.items ?? []).filter((it) => it.missing?.coords).length, [data]);
 
-  // 현재 재생/편집 상태를 반영한 Render Span. 편집 중인 문장이면 로컬 회색(inactive)을 즉시 반영.
+  // Playback spans come from /ledger/{program}/edl; the text view does not compile edit state.
   const editingRef = useRef<Editing | null>(null);
-  const renderSpansOf = useCallback((it: ScriptItem): MsRange[] => {
-    const a0 = it.anchor_start_ms ?? 0, a1 = it.anchor_end_ms ?? a0;
-    let excluded = (it.excluded_ranges ?? []) as MsRange[];
-    const ed = editingRef.current;
-    if (ed && ed.itemId === it.timeline_item_id) {
-      excluded = [];
-      ed.inactive.forEach((i) => { const c = ed.chars[i]; if (c.s_ms != null) excluded.push([c.s_ms, c.e_ms!]); });
-    }
-    return compileSpans({ anchor_start_ms: a0, anchor_end_ms: a1, trim_start_ms: a0, trim_end_ms: a1, excluded_ranges: excluded, removed: false });
-  }, []);
+  const edlSpansOf = useCallback((it: ScriptItem): MsRange[] => {
+    return edlClips
+      .filter((clip) => clip.fragment_id === it.fragment_id)
+      .sort((a, b) => a.order - b.order)
+      .map((clip) => [Math.round(clip.start_sec * 1000), Math.round(clip.end_sec * 1000)] as MsRange)
+      .filter(([s, e]) => e > s);
+  }, [edlClips]);
 
   // 미니 플레이어에 항목을 로드. autoplay=false면 미리듣기 대기(편집 중).
   const loadItem = useCallback((it: ScriptItem, autoplay: boolean) => {
-    if (!it.video_url || it.anchor_start_ms === undefined) return;
-    const spans = renderSpansOf(it);
-    if (spans.length === 0) return;
-    setActiveItem(it.timeline_item_id);
-    setPlayerOpen(true);
+    if (!it.video_url || it.anchor_start_ms === undefined) {
+      videoRef.current?.pause();
+      playRef.current = null;
+      return;
+    }
+    const spans = edlSpansOf(it);
+    if (spans.length === 0) {
+      videoRef.current?.pause();
+      playRef.current = null;
+      return;
+    }
     const v = videoRef.current;
     if (!v) return;
     playRef.current = { spans, idx: 0 };
+    setActiveItem(it.timeline_item_id);
+    setPlayerOpen(true);
     const url = it.video_url.startsWith("/") ? `/api${it.video_url.replace(/^\/api/, "")}` : it.video_url;
+    v.onloadedmetadata = null;
     if (!v.src.endsWith(url) || v.readyState === 0 || v.error) { v.src = url; v.load(); }
     const seek = () => { v.currentTime = spans[0][0] / 1000; if (autoplay) v.play().catch(() => {}); };
     if (v.readyState >= 1) seek(); else v.onloadedmetadata = seek;
-  }, [renderSpansOf]);
+  }, [edlSpansOf]);
 
   const playItem = useCallback((it: ScriptItem) => loadItem(it, true), [loadItem]);
 
@@ -159,9 +193,18 @@ const LedgerPage: React.FC<LedgerPageProps> = ({ programId: propProgramId, embed
   const LEAD = 90;
   const rafTick = useCallback(() => {
     const v = videoRef.current, st = playRef.current;
-    if (!v || !st || v.ended || v.paused || v.seeking) { rafRef.current = null; return; }
-    rafRef.current = requestAnimationFrame(rafTick);
+    if (!v) { rafRef.current = null; return; }
+    if (!st || st.spans.length === 0) { v.pause(); rafRef.current = null; return; }
+    if (v.ended || v.paused || v.seeking) { rafRef.current = null; return; }
     const t = v.currentTime * 1000;
+    const last = st.spans[st.spans.length - 1]?.[1];
+    if (last !== undefined && t >= last - PLAYBACK_STOP_EPS_MS) {
+      resumeRef.current = false;
+      v.pause();
+      if (t > last) v.currentTime = last / 1000;
+      rafRef.current = null;
+      return;
+    }
     const idx = st.spans.findIndex(([s, e]) => t >= s - 5 && t < e);
     if (idx < 0) {                          // 제외 구간에 있음 → 다음 살아있는 구간으로
       const nx = st.spans.find(([s]) => s > t - 5);
@@ -174,6 +217,8 @@ const LedgerPage: React.FC<LedgerPageProps> = ({ programId: propProgramId, embed
       resumeRef.current = true; v.pause(); v.currentTime = st.spans[idx + 1][0] / 1000;
     } else if (idx === st.spans.length - 1 && t >= e) {  // ★ 마지막 구간 끝 → 조각 경계에서 정지
       resumeRef.current = false; v.pause();              // 사용자 재개 아님 → onSeeked 재생 안 함
+    } else {
+      rafRef.current = requestAnimationFrame(rafTick);
     }
   }, []);
   const startRaf = useCallback(() => {
@@ -185,21 +230,43 @@ const LedgerPage: React.FC<LedgerPageProps> = ({ programId: propProgramId, embed
 
   // seek(구간 스킵) 완료 → 재생 재개. 사용자 일시정지면 재개하지 않는다.
   const onSeeked = useCallback(() => {
-    if (resumeRef.current) { resumeRef.current = false; videoRef.current?.play().catch(() => {}); }
+    if (!resumeRef.current) return;
+    const v = videoRef.current, st = playRef.current;
+    resumeRef.current = false;
+    if (!v || !st || st.spans.length === 0) { v?.pause(); return; }
+    v.play().catch(() => {});
+  }, []);
+
+  const onTimeUpdate = useCallback(() => {
+    const v = videoRef.current, st = playRef.current;
+    if (!v) return;
+    if (!st || st.spans.length === 0) { if (!v.paused) v.pause(); return; }
+    if (v.paused) return;
+    const last = st.spans[st.spans.length - 1]?.[1];
+    const t = v.currentTime * 1000;
+    if (last !== undefined && t >= last - PLAYBACK_STOP_EPS_MS) {
+      resumeRef.current = false;
+      v.pause();
+      if (t > last) v.currentTime = last / 1000;
+    }
   }, []);
 
   // 재생 시작: 끝까지 온 상태면 처음부터(멈춤 버그 방지) + 감시 시작
   const onPlay = useCallback(() => {
     const v = videoRef.current, st = playRef.current;
-    if (v && st && st.spans.length) {
-      const t = v.currentTime * 1000, last = st.spans[st.spans.length - 1][1];
-      if (t >= last - 20) v.currentTime = st.spans[0][0] / 1000;
+    if (!v || !st || st.spans.length === 0) {
+      v?.pause();
+      stopRaf();
+      return;
     }
+    const t = v.currentTime * 1000, last = st.spans[st.spans.length - 1][1];
+    if (t >= last - 20) v.currentTime = st.spans[0][0] / 1000;
     startRaf();
-  }, [startRaf]);
+  }, [startRaf, stopRaf]);
 
   const closePlayer = useCallback(() => {
     resumeRef.current = false; stopRaf(); videoRef.current?.pause();
+    if (videoRef.current) videoRef.current.onloadedmetadata = null;
     playRef.current = null; setPlayerOpen(false); setActiveItem(null);
   }, [stopRaf]);
 
@@ -210,13 +277,39 @@ const LedgerPage: React.FC<LedgerPageProps> = ({ programId: propProgramId, embed
       body: JSON.stringify({
         program_id: programId, timeline_item_id: it.timeline_item_id, source_id: it.source_id,
         anchor_start_ms: it.anchor_start_ms, anchor_end_ms: it.anchor_end_ms,
-        trim_start_ms: it.anchor_start_ms, trim_end_ms: it.anchor_end_ms,
+        trim_start_ms: it.trim_start_ms ?? it.anchor_start_ms, trim_end_ms: it.trim_end_ms ?? it.anchor_end_ms,
         revision: it.revision ?? undefined, parent_fragment_id: it.fragment_id,
         origin: "TEXT_EDITOR", ...body,
       }),
     });
     return res.json();
   }, [programId]);
+
+  const saveOrder = useCallback(async (items: ScriptItem[], selectedIds?: string[]) => {
+    if (!programId) return null;
+    const order = items.filter((it) => !it.missing?.coords).map((it) => it.fragment_id);
+    const selected = selectedIds ?? items
+      .filter((it) => !it.missing?.coords && it.selected !== false)
+      .map((it) => it.fragment_id);
+    const res = await fetch(`/api/ledger/${encodeURIComponent(programId)}/order`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ mode: data?.mode, order, selected }),
+    });
+    return res.json();
+  }, [programId, data?.mode]);
+
+  const toggleItem = useCallback(async (it: ScriptItem) => {
+    const items = data?.items ?? [];
+    const nextSelected = it.selected === false;
+    const selected = items
+      .filter((x) => !x.missing?.coords && (x.timeline_item_id === it.timeline_item_id ? nextSelected : x.selected !== false))
+      .map((x) => x.fragment_id);
+    const r = await saveOrder(items, selected);
+    if (!r?.ok) return;
+    onEditStateChanged?.();
+    reload();
+  }, [data?.items, saveOrder, onEditStateChanged, reload]);
 
   // 문장 통째 삭제 (✕) — REMOVE
   const [undoInfo, setUndoInfo] = useState<{ item: ScriptItem; savedSec: number } | null>(null);
@@ -257,8 +350,8 @@ const LedgerPage: React.FC<LedgerPageProps> = ({ programId: propProgramId, embed
     editingRef.current = editing;
     if (!editing || !data?.items || !playRef.current) return;
     const it = data.items.find((x) => x.timeline_item_id === editing.itemId);
-    if (it) playRef.current.spans = renderSpansOf(it);
-  }, [editing, data, renderSpansOf]);
+    if (it) playRef.current.spans = edlSpansOf(it);
+  }, [editing, data, edlSpansOf]);
 
   const commitEdit = useCallback(async () => {
     setEditing((cur) => {
@@ -292,14 +385,14 @@ const LedgerPage: React.FC<LedgerPageProps> = ({ programId: propProgramId, embed
         let p = caret - 1;
         while (p >= 0 && chars[p].s_ms == null) p--;   // 공백 건너뜀
         if (p < 0) return cur;
-        const ni = new Set(inactive); ni.add(p);
+        const ni = new Set(inactive); ni.has(p) ? ni.delete(p) : ni.add(p);
         return { ...cur, inactive: ni, caret: p };
       }
       // Delete
       let p = caret;
       while (p < chars.length && chars[p].s_ms == null) p++;
       if (p >= chars.length) return cur;
-      const ni = new Set(inactive); ni.add(p);
+      const ni = new Set(inactive); ni.has(p) ? ni.delete(p) : ni.add(p);
       return { ...cur, inactive: ni, caret: p + 1 };
     });
   }, [commitEdit]);
@@ -363,7 +456,11 @@ const LedgerPage: React.FC<LedgerPageProps> = ({ programId: propProgramId, embed
             {programs.map((p) => <option key={p.program_id} value={p.program_id} style={{ color: "#111" }}>{p.name}</option>)}
           </select>
         )}
-        {data?.ok && <span className="ml-auto text-xs tabular-nums opacity-50">{fmtClock(data.running_ms)}</span>}
+        {data?.ok && (
+          <span className="ml-auto text-xs tabular-nums opacity-50">
+            {data.stringout_count ?? data.items?.length ?? 0} / {data.selected_count ?? 0} · {fmtClock(data.running_ms)}
+          </span>
+        )}
       </header>
 
       <main className={embedded ? "max-w-2xl mx-auto px-6 pb-8" : "max-w-2xl mx-auto px-6 pb-28"}
@@ -381,29 +478,37 @@ const LedgerPage: React.FC<LedgerPageProps> = ({ programId: propProgramId, embed
                 {sc.items.map((it) => {
                   const isActive = activeItem === it.timeline_item_id;
                   const isEditing = editing?.itemId === it.timeline_item_id;
+                  const selected = it.selected !== false;
                   const dimmed = playerOpen && !isActive && !isEditing;
                   const stage = stripPlace(it.stage_direction, sc.heading);
                   const hallu = it.warnings?.includes("non_korean");
                   const hasExcl = (it.excluded_ranges?.length ?? 0) > 0;
                   const canEdit = !!(it.words && it.words.length);
+                  const textOpacity = selected ? 1 : 0.34;
                   return (
                     <span
                       key={it.timeline_item_id}
                       onClick={(e) => {
                         if (isEditing) return;
                         if (e.detail >= 2) { if (canEdit) enterEdit(it, 0); }
-                        else playItem(it);
+                        else toggleItem(it);
                       }}
                       className="group/span rounded-[3px] transition-colors duration-150 px-[1px]"
                       style={{
                         cursor: isEditing ? "text" : "pointer",
                         opacity: dimmed ? 0.4 : 1,
                         // hover 시 조각이 '일어난다' — 다른 글자보다 약간 밝은 배경
-                        background: isEditing ? "hsl(228,14%,15%)" : isActive ? "hsl(230,14%,16%)" : undefined,
+                        background: isEditing ? "hsl(228,14%,15%)" : isActive ? "hsl(230,14%,16%)" : selected ? undefined : "hsl(228,10%,12%)",
+                        color: `rgba(231,232,236,${textOpacity})`,
                       }}
                       onMouseEnter={(e) => { if (!isEditing && !isActive) e.currentTarget.style.background = "hsl(228,13%,14%)"; }}
-                      onMouseLeave={(e) => { if (!isEditing && !isActive) e.currentTarget.style.background = ""; }}
+                      onMouseLeave={(e) => { if (!isEditing && !isActive) e.currentTarget.style.background = selected ? "" : "hsl(228,10%,12%)"; }}
                     >
+                      <span className="inline-flex align-[0.05em] opacity-0 group-hover/span:opacity-80 transition-opacity mr-1">
+                        <button type="button" onClick={(e) => { e.stopPropagation(); playItem(it); }}
+                          className="px-0.5 opacity-70 hover:opacity-100" title="재생"><Play size={11} /></button>
+                      </span>
+                      {!selected && <span className="text-[10px] align-super mr-1 opacity-70">off</span>}
                       {stage && <span>{stage} </span>}
                       {!stage && hallu && <span>(장면이 이어진다.) </span>}
                       {hallu && (
@@ -510,7 +615,7 @@ const LedgerPage: React.FC<LedgerPageProps> = ({ programId: propProgramId, embed
       {/* 플로팅 플레이어 — 양축 상한 */}
       <div className={`fixed bottom-5 right-5 z-30 transition-all duration-300 ${playerOpen ? "opacity-100 translate-y-0" : "opacity-0 translate-y-3 pointer-events-none"}`}>
         <div className="rounded-xl overflow-hidden shadow-2xl inline-block" style={{ background: "#000" }}>
-          <video ref={videoRef} onPlay={onPlay} onSeeked={onSeeked} onPause={stopRaf} onEnded={stopRaf} controls className="block"
+          <video ref={videoRef} onPlay={onPlay} onSeeked={onSeeked} onTimeUpdate={onTimeUpdate} onPause={stopRaf} onEnded={stopRaf} controls className="block"
             style={{ maxWidth: "min(360px, 40vw)", maxHeight: "48vh", width: "auto", height: "auto" }} />
         </div>
         <button type="button" onClick={closePlayer}

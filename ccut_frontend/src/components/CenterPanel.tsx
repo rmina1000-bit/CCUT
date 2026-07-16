@@ -14,11 +14,64 @@ import { AnalysisLoadingView } from "@/components/views/AnalysisLoadingView";
 import { ExportPanelSection } from "@/components/views/ExportPanelSection";
 import { FragSearchPanel } from "@/components/views/FragSearchPanel";
 import { ComposerSection } from "@/components/views/ComposerSection";
+import { DEBUG_LOG } from "@/utils/debugFlags";
 // [STORY-GATE P3] 승인 전에는 편집 결과물 대신 '원고'를 무대에 세운다.
 import LedgerPage from "@/pages/LedgerPage";
 import { useStoryGate } from "@/hooks/useStoryGate";
 
 import type { AppState, SourceEntry } from "@/types";
+
+const AUDIO_SPLICE_FADE_MS = 8;
+
+function playWithAudioRamp(video: HTMLVideoElement) {
+  video.volume = 0;
+  const startedAt = performance.now();
+  const ramp = () => {
+    const pct = Math.min(1, (performance.now() - startedAt) / AUDIO_SPLICE_FADE_MS);
+    video.volume = pct;
+    if (pct < 1 && !video.paused) requestAnimationFrame(ramp);
+  };
+  video.play().catch(() => {
+    video.volume = 1;
+  });
+  requestAnimationFrame(ramp);
+}
+
+function readFragmentStartSec(fragment: any): number {
+  return Number(fragment?.start_sec ?? fragment?.start_time ?? fragment?.start ?? ((fragment?.start_frame ?? 0) / 30));
+}
+
+function readFragmentEndSec(fragment: any): number {
+  const start = readFragmentStartSec(fragment);
+  const raw = Number(fragment?.end_sec ?? fragment?.end_time ?? fragment?.end ?? ((fragment?.end_frame ?? 0) / 30));
+  return raw > start ? raw : start + 1;
+}
+
+function readFragmentDurationSec(fragment: any): number {
+  return Math.max(readFragmentEndSec(fragment) - readFragmentStartSec(fragment), 0.001);
+}
+
+function physicalClipToFragment(clip: PhysicalClip): Fragment {
+  const start = clip.start_sec;
+  const end = clip.end_sec;
+  return {
+    fragment_id: clip.fragment_id,
+    fragment_uid: (clip as any).clip_of ?? clip.display_id ?? `${clip.fragment_id}_${clip.order}`,
+    source_id: clip.source_id,
+    source_video: clip.source_id,
+    display_id: clip.display_id ?? (clip as any).clip_of ?? clip.fragment_id,
+    start_sec: start,
+    end_sec: end,
+    start_time: start,
+    end_time: end,
+    start_frame: Math.round(start * 30),
+    end_frame: Math.max(Math.round(start * 30) + 1, Math.round(end * 30)),
+    duration: Math.max(1, Math.round((end - start) * 30)),
+    video_url: (clip as any).video_url,
+    selection_state: "S",
+    status: "committed",
+  } as any;
+}
 
 interface CenterPanelProps {
   selectedFragment: Fragment | null;
@@ -56,6 +109,7 @@ interface CenterPanelProps {
   programTitle?: string | null;
   onExportDone?: () => void;
   onStoryEditStateChanged?: () => void;
+  storyRefreshNonce?: number;
   // [FLOW] 제안 세대 기록 — 타임라인에 흘려보내고 옛 제안을 무대로 복원
   proposalHistory?: Array<{ id: string; ts: number; pair: any }>;
   activeProposalEntryId?: string | null;
@@ -301,6 +355,7 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
   programTitle,
   onExportDone,
   onStoryEditStateChanged,
+  storyRefreshNonce,
   proposalHistory = [],
   activeProposalEntryId = null,
   onRestoreProposalEntry,
@@ -329,9 +384,15 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
   // [STORY-GATE P3] 승인 관문 — 게이트 OFF면 enabled=false로 아무것도 바뀌지 않는다 (I-4)
   const storyGate = useStoryGate(programId, appState === "complete");
   const [storyViewKey, setStoryViewKey] = useState(0);       // '반영하기' 누를 때만 원고 재로드 (S5)
+  const storyRefreshNonceRef = useRef(storyRefreshNonce);
   const [storyApproveError, setStoryApproveError] = useState<string | null>(null);
   // 승인 전에는 편집 UI(무대 A/B·Export·지난 제안)를 일절 내지 않는다 (S2)
   const hideEditUI = storyGate.loading || (storyGate.enabled && !storyGate.approved);
+  useEffect(() => {
+    if (storyRefreshNonceRef.current === storyRefreshNonce) return;
+    storyRefreshNonceRef.current = storyRefreshNonce;
+    setStoryViewKey((k) => k + 1);
+  }, [storyRefreshNonce]);
   // [UI-①] 업로드 스테이징 (null=비활성)
   const [stagedFiles, setStagedFiles] = useState<StagedMeta[] | null>(null);
   // [PERSON-PALETTE] 이름을 물어볼 얼굴 군집 + 방금 저장한 이름 안내
@@ -584,7 +645,7 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
       seqEndBRef.current = -1;
       if (videoRefB.current && !videoRefB.current.paused) {
         videoRefB.current.pause();
-        console.log("[DUAL_PLAY_GUARD] B paused by A");
+        DEBUG_LOG && console.log("[DUAL_PLAY_GUARD] B paused by A");
       }
       setIsPlayingB(false);
     } else {
@@ -596,7 +657,7 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
       seqEndARef.current = -1;
       if (videoRefA.current && !videoRefA.current.paused) {
         videoRefA.current.pause();
-        console.log("[DUAL_PLAY_GUARD] A paused by B");
+        DEBUG_LOG && console.log("[DUAL_PLAY_GUARD] A paused by B");
       }
       setIsPlayingA(false);
     }
@@ -634,7 +695,7 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
           const hasMatch = fAliases.some(alias => queryAliases.includes(alias));
           if (hasMatch) {
             const resolvedVideoUrl = entry.video_url || videoUrl || null;
-            import.meta.env.DEV && console.log(`[VIDEO_URL_RESOLVE] fragId=${fragId} matchedAlias=${f.fragment_id} resolvedVideoUrl=${resolvedVideoUrl} fallbackUsed=0`);
+            DEBUG_LOG && import.meta.env.DEV && console.log(`[VIDEO_URL_RESOLVE] fragId=${fragId} matchedAlias=${f.fragment_id} resolvedVideoUrl=${resolvedVideoUrl} fallbackUsed=0`);
             return resolvedVideoUrl;
           }
         }
@@ -648,7 +709,7 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
         const sid = sidMatch[0];
         const srcEntry = sourceEntries.find(e => e.source_id === sid);
         if (srcEntry && srcEntry.video_url) {
-          import.meta.env.DEV && console.log(`[VIDEO_URL_RESOLVE] fragId=${fragId} matchedAlias=null resolvedBy=source_id:${sid} resolvedVideoUrl=${srcEntry.video_url} fallbackUsed=2`);
+          DEBUG_LOG && import.meta.env.DEV && console.log(`[VIDEO_URL_RESOLVE] fragId=${fragId} matchedAlias=null resolvedBy=source_id:${sid} resolvedVideoUrl=${srcEntry.video_url} fallbackUsed=2`);
           return srcEntry.video_url;
         }
       }
@@ -658,12 +719,12 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
       // (업로드 파일명 = {source_id}.mp4 실측 규칙). 잘못된 영상 대체보다 언제나 낫다.
       if (sidMatch) {
         const directUrl = `/static/uploads/${sidMatch[0]}.mp4`;
-        import.meta.env.DEV && console.log(`[VIDEO_URL_RESOLVE] fragId=${fragId} matchedAlias=null resolvedBy=fid-direct resolvedVideoUrl=${directUrl} fallbackUsed=2.5`);
+        DEBUG_LOG && import.meta.env.DEV && console.log(`[VIDEO_URL_RESOLVE] fragId=${fragId} matchedAlias=null resolvedBy=fid-direct resolvedVideoUrl=${directUrl} fallbackUsed=2.5`);
         return directUrl;
       }
 
       // source_id 로도 못 찾음 → 전역 1번영상 반복 금지(클립별 오재생 방지). null 반환, 상위에서 처리.
-      import.meta.env.DEV && console.log(`[VIDEO_URL_RESOLVE] fragId=${fragId} matchedAlias=null source_id 해석 실패 -> null fallbackUsed=3`);
+      DEBUG_LOG && import.meta.env.DEV && console.log(`[VIDEO_URL_RESOLVE] fragId=${fragId} matchedAlias=null source_id 해석 실패 -> null fallbackUsed=3`);
       return null;
     },
     [fragments, sourceFragments, sourceEntries, videoUrl]
@@ -702,6 +763,14 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
 
   const buildSeqFrags = useCallback(
     (proposalKey: "A" | "B"): Fragment[] => {
+      const backendEdlApplies =
+        !!programId &&
+        programId.startsWith("proj_") &&
+        exportClips.length > 0 &&
+        proposalKey === (committedProposalId ?? "B");
+      if (backendEdlApplies) {
+        return exportClips.map(physicalClipToFragment);
+      }
       // 만약 해당 제안서의 사용자 수동 편집 캐시(customEditFragments)가 존재한다면 이를 우선적으로 재생에 사용
       const cachedFrags = (proposals?.[proposalKey] as any)?.customEditFragments;
       if (cachedFrags && cachedFrags.length > 0) {
@@ -733,7 +802,7 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
         .map((id) => allSourceFragments.find((f) => f.fragment_id === id))
         .filter(Boolean) as Fragment[];
     },
-    [proposals, allSourceFragments, committedProposalId, fragments]
+    [proposals, allSourceFragments, committedProposalId, fragments, exportClips, programId]
   );
 
 
@@ -762,13 +831,8 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
         console.error(`[PLAYFRAG][BLOCKED] ${frag.fragment_id}: 영상 경로 해석 실패 — 오재생 방지를 위해 재생하지 않음`);
         return;
       }
-      const startSec = (frag as any).start_sec
-        ?? (frag as any).start
-        ?? (frag.start_frame ?? 0) / 30;
-      const rawEndSec = (frag as any).end_sec
-        ?? (frag as any).end
-        ?? (frag.end_frame ?? 0) / 30;
-      const endSec = rawEndSec > startSec ? rawEndSec : startSec + 1;
+      const startSec = readFragmentStartSec(frag);
+      const endSec = readFragmentEndSec(frag);
 
       endSecRef.current = endSec;
 
@@ -818,7 +882,7 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
         if (!v) return;
         v.pause();
         v.currentTime = startSec + seekOffset;
-        v.play().catch(() => {});
+        playWithAudioRamp(v);
       };
 
       if (fragUrl && !sameVideoSource(ref.current.currentSrc || ref.current.src, fragUrl)) {
@@ -908,9 +972,7 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
 
     let totalSec = 0;
     frags.forEach(f => {
-      const s = (f.start_frame ?? 0) / 30;
-      const e = (f.end_frame ?? 0) / 30;
-      totalSec += Math.max(e - s, 1);
+      totalSec += readFragmentDurationSec(f);
     });
 
     if (isA) {
@@ -945,23 +1007,21 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
     if (!frags.length) return;
     
     const foundIdx = frags.findIndex(f => {
-      const s = (f.start_frame ?? 0) / 30;
-      const e = (f.end_frame ?? 0) / 30;
+      const s = readFragmentStartSec(f);
+      const e = readFragmentEndSec(f);
       return time >= s && time < e;
     });
     
     if (foundIdx !== -1) {
       idxRef.current = foundIdx;
       const f = frags[foundIdx];
-      endRef.current = (f.end_frame ?? 0) / 30;
+      endRef.current = readFragmentEndSec(f);
       reportActiveId(f.fragment_id);
       
       let newElapsed = 0;
       for(let i=0; i < foundIdx; i++) {
         const pf = frags[i];
-        const s = (pf.start_frame ?? 0) / 30;
-        const e = (pf.end_frame ?? 0) / 30;
-        newElapsed += Math.max(e - s, 1);
+        newElapsed += readFragmentDurationSec(pf);
       }
       if (player === "A") seqElapsedSecARef.current = newElapsed;
       else seqElapsedSecBRef.current = newElapsed;
@@ -972,9 +1032,7 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
     let acc = 0;
     for (let i = 0; i < frags.length; i++) {
       const f = frags[i];
-      const s = (f.start_frame ?? 0) / 30;
-      const e = (f.end_frame ?? 0) / 30;
-      const dur = Math.max(e - s, 1);
+      const dur = readFragmentDurationSec(f);
       const next = acc + dur;
       if (targetGlobalTime < next) {
         return {
@@ -991,9 +1049,7 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
     const lastIdx = Math.max(0, frags.length - 1);
     if (frags.length > 0) {
       const lf = frags[lastIdx];
-      const ls = (lf.start_frame ?? 0) / 30;
-      const le = (lf.end_frame ?? 0) / 30;
-      const ldur = Math.max(le - ls, 1);
+      const ldur = readFragmentDurationSec(lf);
       return {
         index: lastIdx,
         offset: ldur,
@@ -1036,7 +1092,7 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
     if (targetUrl && !sameVideoSource(video.current.currentSrc || video.current.src, targetUrl)) {
       playFrag(player, targetFrag, isA ? seqEndARef : seqEndBRef, resolved.offset);
     } else {
-      const startSec = (targetFrag.start_frame ?? 0) / 30;
+      const startSec = readFragmentStartSec(targetFrag);
       if (isA) isSeekingRefA.current = true;
       else isSeekingRefB.current = true;
       video.current.currentTime = startSec + resolved.offset;
@@ -1600,7 +1656,12 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
                     src={playerSrcA ?? playerVideoUrlA ?? videoUrl ?? undefined}
                     poster={getProposalPoster("A")}
                     className="w-full h-full object-contain bg-black"
-                    onPlay={() => {
+                    onPlay={(e) => {
+                      if (!previewUrlA && seqEndARef.current <= 0) {
+                        e.currentTarget.pause();
+                        setIsPlayingA(false);
+                        return;
+                      }
                       // [DUAL_PLAY_GUARD] A가 play되면 B 즉시 정지
                       stopOtherPlayer("A");
                       setActivePlayerSafe("A");
@@ -1616,9 +1677,7 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
                       const frags = seqFragsARef.current;
                       if (nextIdx < frags.length) {
                         const curFrag = frags[seqIdxARef.current];
-                        const cs = (curFrag.start_frame ?? 0) / 30;
-                        const ce = (curFrag.end_frame ?? 0) / 30;
-                        seqElapsedSecARef.current += Math.max(ce - cs, 1);
+                        seqElapsedSecARef.current += readFragmentDurationSec(curFrag);
                         seqIdxARef.current = nextIdx;
                         setProposalTimeA(seqElapsedSecARef.current);
                         reportActiveId(frags[nextIdx].fragment_id);
@@ -1642,14 +1701,19 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
                       if (activePlayerRef.current !== "A") return;
                       if (isDraggingProposalSeekARef.current) return;
                       if (isSeekingRefA.current || e.currentTarget.seeking) return;
-                      // [PREVIEW_MODE_GUARD] preview_url 재생 중 fragment seq 개입 차단
-                      if (previewUrlA) {
-                        setProposalTimeA(e.currentTarget.currentTime);
+                      const v = e.currentTarget;
+                      if (!previewUrlA && seqEndARef.current <= 0) {
+                        v.pause();
+                        setIsPlayingA(false);
                         return;
                       }
-                      const v = e.currentTarget;
+                      // [PREVIEW_MODE_GUARD] preview_url 재생 중 fragment seq 개입 차단
+                      if (previewUrlA) {
+                        setProposalTimeA(v.currentTime);
+                        return;
+                      }
                       if (isSeqARef.current && seqTotalSecARef.current > 0) {
-                        const fragStart = (seqFragsARef.current[seqIdxARef.current]?.start_frame ?? 0) / 30;
+                        const fragStart = readFragmentStartSec(seqFragsARef.current[seqIdxARef.current]);
                         const global = seqElapsedSecARef.current + Math.max(0, v.currentTime - fragStart);
                         setProposalTimeA(global);
                       }
@@ -1673,10 +1737,7 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
 
                         if (nextIdx < frags.length) {
                           const curFrag = frags[seqIdxARef.current];
-                          const cs = (curFrag.start_frame ?? 0) / 30;
-                          const ce = (curFrag.end_frame ?? 0) / 30;
-                          
-                          seqElapsedSecARef.current += Math.max(ce - cs, 1);
+                          seqElapsedSecARef.current += readFragmentDurationSec(curFrag);
                           seqIdxARef.current = nextIdx;
                           setProposalTimeA(seqElapsedSecARef.current);
                           reportActiveId(frags[nextIdx].fragment_id);
@@ -1699,7 +1760,7 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
                       setDurationA(e.currentTarget.duration);
                       // [DUAL_PLAY_GUARD] inactive player는 seek+play 차단
                       if (activePlayerRef.current !== "A") {
-                        console.log("[DUAL_PLAY_GUARD] onLoadedMetadata A skipped (inactive)");
+                        DEBUG_LOG && console.log("[DUAL_PLAY_GUARD] onLoadedMetadata A skipped (inactive)");
                         pendingLocalTimeARef.current = null;
                         return;
                       }
@@ -1722,7 +1783,7 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
                           tgt.removeEventListener("seeked", onPendingSeeked);
                           if (Math.abs(tgt.currentTime - target) <= 0.5) {
                             console.log("[PENDING_SEEKED_PLAY]", { player: "A", currentTime: tgt.currentTime, target });
-                            tgt.play().catch(() => {});
+                            playWithAudioRamp(tgt);
                           } else {
                             console.warn("[PENDING_SEEK_MISMATCH]", { player: "A", currentTime: tgt.currentTime, target });
                           }
@@ -1736,7 +1797,7 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
                           seekDone = true;
                           tgt.removeEventListener("seeked", onPendingSeeked);
                           if (Math.abs(tgt.currentTime - target) <= 0.5) {
-                            tgt.play().catch(() => {});
+                            playWithAudioRamp(tgt);
                           } else {
                             console.warn("[PENDING_SEEK_TIMEOUT_ABORT]", { player: "A", currentTime: tgt.currentTime, target });
                           }
@@ -1892,7 +1953,12 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
                     src={playerSrcB ?? playerVideoUrlB ?? videoUrl ?? undefined}
                     poster={getProposalPoster("B")}
                     className="w-full h-full object-contain bg-black"
-                    onPlay={() => {
+                    onPlay={(e) => {
+                      if (!previewUrlB && seqEndBRef.current <= 0) {
+                        e.currentTarget.pause();
+                        setIsPlayingB(false);
+                        return;
+                      }
                       // [DUAL_PLAY_GUARD] B가 play되면 A 즉시 정지
                       stopOtherPlayer("B");
                       setActivePlayerSafe("B");
@@ -1907,9 +1973,7 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
                       const frags = seqFragsBRef.current;
                       if (nextIdx < frags.length) {
                         const curFrag = frags[seqIdxBRef.current];
-                        const cs = (curFrag.start_frame ?? 0) / 30;
-                        const ce = (curFrag.end_frame ?? 0) / 30;
-                        seqElapsedSecBRef.current += Math.max(ce - cs, 1);
+                        seqElapsedSecBRef.current += readFragmentDurationSec(curFrag);
                         seqIdxBRef.current = nextIdx;
                         setProposalTimeB(seqElapsedSecBRef.current);
                         reportActiveId(frags[nextIdx].fragment_id);
@@ -1933,14 +1997,19 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
                       if (activePlayerRef.current !== "B") return;
                       if (isDraggingProposalSeekBRef.current) return;
                       if (isSeekingRefB.current || e.currentTarget.seeking) return;
-                      // [PREVIEW_MODE_GUARD] preview_url 재생 중 fragment seq 개입 차단
-                      if (previewUrlB) {
-                        setProposalTimeB(e.currentTarget.currentTime);
+                      const v = e.currentTarget;
+                      if (!previewUrlB && seqEndBRef.current <= 0) {
+                        v.pause();
+                        setIsPlayingB(false);
                         return;
                       }
-                      const v = e.currentTarget;
+                      // [PREVIEW_MODE_GUARD] preview_url 재생 중 fragment seq 개입 차단
+                      if (previewUrlB) {
+                        setProposalTimeB(v.currentTime);
+                        return;
+                      }
                       if (isSeqBRef.current && seqTotalSecBRef.current > 0) {
-                        const fragStart = (seqFragsBRef.current[seqIdxBRef.current]?.start_frame ?? 0) / 30;
+                        const fragStart = readFragmentStartSec(seqFragsBRef.current[seqIdxBRef.current]);
                         const global = seqElapsedSecBRef.current + Math.max(0, v.currentTime - fragStart);
                         setProposalTimeB(global);
                       }
@@ -1964,10 +2033,7 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
 
                         if (nextIdx < frags.length) {
                           const curFrag = frags[seqIdxBRef.current];
-                          const cs = (curFrag.start_frame ?? 0) / 30;
-                          const ce = (curFrag.end_frame ?? 0) / 30;
-
-                          seqElapsedSecBRef.current += Math.max(ce - cs, 1);
+                          seqElapsedSecBRef.current += readFragmentDurationSec(curFrag);
                           seqIdxBRef.current = nextIdx;
                           setProposalTimeB(seqElapsedSecBRef.current);
                           reportActiveId(frags[nextIdx].fragment_id);
@@ -2007,7 +2073,7 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
                       setDurationB(e.currentTarget.duration);
                       // [DUAL_PLAY_GUARD] inactive player는 seek+play 차단
                       if (activePlayerRef.current !== "B") {
-                        console.log("[DUAL_PLAY_GUARD] onLoadedMetadata B skipped (inactive)");
+                        DEBUG_LOG && console.log("[DUAL_PLAY_GUARD] onLoadedMetadata B skipped (inactive)");
                         pendingLocalTimeBRef.current = null;
                         return;
                       }
@@ -2030,7 +2096,7 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
                           tgt.removeEventListener("seeked", onPendingSeeked);
                           if (Math.abs(tgt.currentTime - target) <= 0.5) {
                             console.log("[PENDING_SEEKED_PLAY]", { player: "B", currentTime: tgt.currentTime, target });
-                            tgt.play().catch(() => {});
+                            playWithAudioRamp(tgt);
                           } else {
                             console.warn("[PENDING_SEEK_MISMATCH]", { player: "B", currentTime: tgt.currentTime, target });
                           }
@@ -2044,7 +2110,7 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
                           seekDone = true;
                           tgt.removeEventListener("seeked", onPendingSeeked);
                           if (Math.abs(tgt.currentTime - target) <= 0.5) {
-                            tgt.play().catch(() => {});
+                            playWithAudioRamp(tgt);
                           } else {
                             console.warn("[PENDING_SEEK_TIMEOUT_ABORT]", { player: "B", currentTime: tgt.currentTime, target });
                           }

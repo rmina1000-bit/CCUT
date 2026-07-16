@@ -51,6 +51,96 @@ def _ledger_span_id(source_id: str, start_ms: int, end_ms: int) -> str:
     return "LSPAN_" + hashlib.sha1(f"{source_id}|{start_ms}|{end_ms}".encode()).hexdigest()[:12]
 
 
+def _load_ui(raw):
+    if not raw:
+        return {}
+    try:
+        ui = json.loads(raw)
+        while isinstance(ui, str):
+            ui = json.loads(ui)
+        return ui if isinstance(ui, dict) else {}
+    except Exception:
+        return {}
+
+
+def _program_source_ids(con, program_id: str):
+    rows = con.execute(
+        "SELECT source_id FROM project_sources WHERE program_id=? ORDER BY rowid", (program_id,)
+    ).fetchall()
+    return [r["source_id"] for r in rows if r["source_id"]]
+
+
+def _all_program_fids(con, program_id: str):
+    source_ids = _program_source_ids(con, program_id)
+    if not source_ids:
+        return []
+    q = ",".join("?" for _ in source_ids)
+    rows = con.execute(
+        f'SELECT fragment_id, source_id, start FROM semantic_fragments '
+        f'WHERE source_id IN ({q}) ORDER BY source_id, start',
+        source_ids,
+    ).fetchall()
+    return [r["fragment_id"] for r in rows if r["fragment_id"]]
+
+
+def _recommendation_rows(con, fids):
+    if not fids:
+        return {}
+    q = ",".join("?" for _ in fids)
+    rows = con.execute(
+        f"SELECT fragment_id, motion_score, hook_score, transcript, role "
+        f"FROM fragment_index WHERE fragment_id IN ({q})",
+        fids,
+    ).fetchall()
+    by_fid = {}
+    raw_scores = []
+    for r in rows:
+        motion = float(r["motion_score"] or 0)
+        hook = float(r["hook_score"] or 0)
+        has_text = bool((r["transcript"] or "").strip())
+        role = (r["role"] or "").lower()
+        role_bonus = 1.0 if role in {"opening", "closing", "hook", "climax"} else 0.5 if role else 0.0
+        raw = motion + hook + (0.12 if has_text else 0.0) + (0.18 * role_bonus)
+        raw_scores.append(raw)
+        by_fid[r["fragment_id"]] = {
+            "signal_name": "motion_hook_text",
+            "motion_score": motion,
+            "hook_score": hook,
+            "has_text": has_text,
+            "role": role or None,
+            "raw": raw,
+        }
+    lo = min(raw_scores) if raw_scores else 0.0
+    hi = max(raw_scores) if raw_scores else 0.0
+    for v in by_fid.values():
+        score = 0.5 if hi <= lo else (v["raw"] - lo) / (hi - lo)
+        v["score"] = round(max(0.0, min(1.0, score)), 3)
+        v["brightness_tier"] = "high" if score >= 0.67 else "mid" if score >= 0.34 else "low"
+        v.pop("raw", None)
+    return by_fid
+
+
+def _ordered_stringout_fids(ui, mode, selected_fids, all_fids):
+    paper = ((ui.get("paperCutOrder") or {}).get(mode) or []) if isinstance(ui, dict) else []
+    base = paper if paper else all_fids
+    seen = set()
+    ordered = []
+    all_set = set(all_fids)
+    for fid in base:
+        if fid in all_set and fid not in seen:
+            seen.add(fid)
+            ordered.append(fid)
+    for fid in all_fids:
+        if fid not in seen:
+            seen.add(fid)
+            ordered.append(fid)
+    for fid in selected_fids:
+        if fid not in seen:
+            seen.add(fid)
+            ordered.append(fid)
+    return ordered
+
+
 def _parse_segments(raw):
     """subtitles.segments 이중 인코딩 해소 (PHASE A 실측: 전 64건 json.loads 2회)."""
     v = json.loads(raw)
@@ -106,13 +196,16 @@ async def get_ledger(program_id: str):
         # [STORY-GATE P3] 원고 순서를 만드는 규칙은 하나뿐 — story_gate.service.resolve_sequence.
         # ui_state 우선, 분석 직후처럼 ui_state가 아직 NULL이면 proposals 폴백(B 우선).
         from story_gate.service import resolve_sequence as _resolve_seq
-        mode, fids, _seq_src = _resolve_seq(con, program_id)
+        mode, selected_fids, _seq_src = _resolve_seq(con, program_id)
+        ui = _load_ui(prow["ui_state"])
+        all_fids = _all_program_fids(con, program_id)
+        fids = _ordered_stringout_fids(ui, mode, selected_fids, all_fids)
+        selected_set = set(selected_fids)
+        play_order_by_fid = {fid: i for i, fid in enumerate(selected_fids)}
+        recommendation_by_fid = _recommendation_rows(con, fids)
         snapshot_coords = {}
-        if prow["ui_state"]:
+        if ui:
             try:
-                ui = json.loads(prow["ui_state"])
-                while isinstance(ui, str):
-                    ui = json.loads(ui)
                 # [D8 대응] fid 재발급으로 DB에서 좌표를 잃은 조각의 폴백 —
                 # ui_state 스냅샷(proposalsCustomFragments)의 좌표 (PHASE A: 좌표가 진실)
                 for cf in (ui.get("proposalsCustomFragments") or {}).get(mode) or []:
@@ -128,13 +221,17 @@ async def get_ledger(program_id: str):
         # [SCRIPT-2] 승인된 편집(Edit State) 반영 — REMOVE된 사용본은 대본에서 뺀다.
         removed_items = {}
         state_rev = {}
+        trim_by_item = {}
         excluded_by_item = {}  # [SCRIPT-2] timeline_item_id -> [[s_ms,e_ms], ...]
+        state_seen = {}
         try:
             for r in con.execute(
-                "SELECT timeline_item_id, removed, revision, excluded_ranges_json "
+                "SELECT timeline_item_id, removed, revision, trim_start_ms, trim_end_ms, excluded_ranges_json "
                 "FROM fragment_edit_state WHERE program_id=?", (program_id,)):
+                state_seen[r["timeline_item_id"]] = True
                 removed_items[r["timeline_item_id"]] = bool(r["removed"])
                 state_rev[r["timeline_item_id"]] = r["revision"]
+                trim_by_item[r["timeline_item_id"]] = (r["trim_start_ms"], r["trim_end_ms"])
                 try:
                     rngs = json.loads(r["excluded_ranges_json"] or "[]")
                     if rngs:
@@ -205,6 +302,7 @@ async def get_ledger(program_id: str):
                 continue
             sid = sf["source_id"]
             s_ms, e_ms = _to_ms(sf["start"]), _to_ms(sf["end"])
+            selected = fid in selected_set and not removed_items.get(item_id)
             if removed_items.get(item_id):
                 # [SCRIPT-2] 제외된 장면 — 대본 밖이지만 되돌릴 길은 항상 열어둔다
                 excluded_count += 1
@@ -213,7 +311,6 @@ async def get_ledger(program_id: str):
                     "anchor_start_ms": s_ms, "anchor_end_ms": e_ms,
                     "revision": state_rev.get(item_id),
                 })
-                continue
             src = srcs.get(sid)
             segs = segments_for(sid)
             if segs is None:
@@ -222,9 +319,11 @@ async def get_ledger(program_id: str):
                 text, warns, words = _asr_overlap(segs, sf["start"], sf["end"])
                 no_sub = False
             # [SCRIPT-2] 이미 저장된 EXCLUDE_RANGE로 제외된 단어에 취소선 플래그
+            item_trim_start, item_trim_end = trim_by_item.get(item_id, (s_ms, e_ms))
             item_excl = excluded_by_item.get(item_id) or []
             for w in words:
-                w["excluded"] = any(er[0] < w["e_ms"] and er[1] > w["s_ms"] for er in item_excl)
+                outside_trim = w["s_ms"] < item_trim_start or w["e_ms"] > item_trim_end
+                w["excluded"] = outside_trim or any(er[0] < w["e_ms"] and er[1] > w["s_ms"] for er in item_excl)
             scene, scene_src = visual_for(fid, sid, s_ms, e_ms)
             # [SCRIPT-1] 지문 = 장면 태그를 사람 문장으로 번역 (결정론 템플릿)
             stage = _stage(scene)
@@ -239,12 +338,17 @@ async def get_ledger(program_id: str):
             items.append({
                 "fragment_id": fid,
                 "timeline_item_id": item_id,
+                "selected": selected,
+                "play_order": play_order_by_fid.get(fid, 100000 + len(items)),
                 "revision": state_rev.get(item_id),  # 낙관적 잠금용 (없으면 신규)
                 "ledger_span_id": _ledger_span_id(sid, s_ms, e_ms),
                 "source_id": sid,
                 "source_title": (src["title"] if src else sid),
                 "anchor_start_ms": s_ms,
                 "anchor_end_ms": e_ms,
+                "trim_start_ms": item_trim_start,
+                "trim_end_ms": item_trim_end,
+                "removed": removed_items.get(item_id, False),
                 "dialogue": dialogue,               # 대사 (정체) — None이면 지문만
                 "words": (words if dialogue else []),  # [SCRIPT-2] 단어별 타임스탬프 (문장 안 편집)
                 "excluded_ranges": item_excl,       # [SCRIPT-2] 현재 제외 구간 (병합용)
@@ -253,12 +357,16 @@ async def get_ledger(program_id: str):
                 "original_text": original_text,     # 환각 원문 (상세 보기 보존)
                 "no_subtitle_source": no_sub,       # 소스 자체에 자막 없음 (11개 소스 케이스)
                 "warnings": warns,                  # non_korean / low_probability
+                "recommendation": recommendation_by_fid.get(fid),
                 "scene_note_source": scene_src,  # 'transcript'=대사 파생 태그
                 "coord_source": coord_source,       # db | ui_state_snapshot (D8 폴백 정직 표기)
                 "video_url": _fs._video_url(src["file_path"] if src else None, sid),
             })
         out = {"ok": True, "program_id": program_id, "program_name": prow["name"],
-               "mode": mode, "sequence_count": len(fids), "items": items,
+               "mode": mode, "sequence_count": len(selected_fids), "stringout_count": len(fids),
+               "selected_count": sum(1 for it in items if it.get("selected")),
+               "unselected_count": sum(1 for it in items if not it.get("selected") and not it.get("missing")),
+               "items": items,
                "running_ms": running_ms,  # [SCRIPT-5] 상단 러닝타임(현재)
                "excluded_count": excluded_count,  # [SCRIPT-2] 제외된 장면 수
                "excluded_items": excluded_items}  # 복원용 최소 정보
@@ -305,8 +413,10 @@ async def get_render_edl(program_id: str):
         clips = []
         order = 0
         total_ms = 0
-        for it in d["items"]:
+        for it in sorted(d["items"], key=lambda x: x.get("play_order", 100000)):
             if it.get("missing"):
+                continue
+            if it.get("selected") is False:
                 continue
             a0, a1 = it["anchor_start_ms"], it["anchor_end_ms"]
             st = state.get(it["timeline_item_id"])
@@ -333,5 +443,56 @@ async def get_render_edl(program_id: str):
                 total_ms += (ce - cs)
         return {"ok": True, "program_id": program_id, "program_name": d.get("program_name"),
                 "clip_count": len(clips), "total_ms": total_ms, "clips": clips}
+    finally:
+        con.close()
+
+
+@router.post("/ledger/{program_id}/order")
+async def save_ledger_order(program_id: str, payload: dict):
+    """Papercut order: save full display order plus active proposal order in ui_state."""
+    con = _connect()
+    try:
+        prow = con.execute(
+            "SELECT ui_state FROM programs WHERE program_id=?", (program_id,)
+        ).fetchone()
+        if prow is None:
+            return {"ok": False, "error": "program_not_found", "program_id": program_id}
+        ui = _load_ui(prow["ui_state"])
+        mode = payload.get("mode") or ui.get("committedProposalId") or ui.get("selectedProposalId") or "B"
+        full_order = [str(x) for x in (payload.get("order") or []) if x]
+        selected_order = [str(x) for x in (payload.get("selected") or []) if x]
+        all_fids = set(_all_program_fids(con, program_id))
+        if not full_order:
+            return {"ok": False, "error": "empty_order"}
+        full_order = [fid for fid in full_order if fid in all_fids]
+        selected_order = [fid for fid in selected_order if fid in all_fids]
+        paper = ui.get("paperCutOrder") if isinstance(ui.get("paperCutOrder"), dict) else {}
+        paper[mode] = full_order
+        ui["paperCutOrder"] = paper
+        pk = ui.get("proposalsKeyFragments") if isinstance(ui.get("proposalsKeyFragments"), dict) else {}
+        pk[mode] = selected_order
+        ui["proposalsKeyFragments"] = pk
+        if not ui.get("selectedProposalId") and not ui.get("committedProposalId"):
+            ui["selectedProposalId"] = mode
+        con.execute(
+            "UPDATE programs SET ui_state=? WHERE program_id=?",
+            (json.dumps(ui, ensure_ascii=False), program_id),
+        )
+        con.commit()
+        try:
+            from story_gate.service import compute_hash
+            sequence_hash = compute_hash(mode, selected_order)
+        except Exception:
+            sequence_hash = None
+        return {
+            "ok": True,
+            "program_id": program_id,
+            "mode": mode,
+            "order_count": len(full_order),
+            "selected_count": len(selected_order),
+            "sequence_hash": sequence_hash,
+            "order": full_order,
+            "selected": selected_order,
+        }
     finally:
         con.close()

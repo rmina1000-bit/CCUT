@@ -7,6 +7,7 @@ import { narrativeService } from "@/services/narrativeService";
 import { videoService } from "@/services/videoService";
 import { assignShortDisplayIds, recalcDisplayIds } from "@/lib/fragmentIdentity";
 import { storyGateEnabled } from "@/hooks/useStoryGate";  // [STORY-GATE P3/S3] 완료 문구 분기
+import { DEBUG_LOG } from "@/utils/debugFlags";
 
 /**
  * [STEP 10-K-C1-R39] Frontend Commit-Time Sequence Guard
@@ -156,7 +157,7 @@ export const useProposalState = (
         next[i] = { ...next[i], pair: proposals };
         return next;
       }
-      console.log("[FLOW] proposal generation appended:", sig);
+      DEBUG_LOG && console.log("[FLOW] proposal generation appended:", sig);
       return [...prev, { id: sig, ts: Date.now(), pair: proposals }];
     });
   }, [proposals]);
@@ -168,14 +169,14 @@ export const useProposalState = (
       if (!entries?.length) return;
       setProposalHistory(entries);
       setActiveProposalEntryId(entries[entries.length - 1]?.id ?? null);
-      console.log(`[TIMELINE-PERSIST] proposal history 복원: ${entries.length}세대`);
+      DEBUG_LOG && console.log(`[TIMELINE-PERSIST] proposal history 복원: ${entries.length}세대`);
     }, []);
 
   const restoreProposalEntry = useCallback((id: string) => {
     setProposalHistory((prev) => {
       const entry = prev.find((h) => h.id === id);
       if (entry) {
-        console.log("[FLOW] restore proposal entry:", id);
+        DEBUG_LOG && console.log("[FLOW] restore proposal entry:", id);
         setProposals(entry.pair);
         setActiveProposalEntryId(id);
         setSelectedProposalId(null);

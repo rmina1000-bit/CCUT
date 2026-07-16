@@ -5,6 +5,25 @@ from pathlib import Path
 from typing import Dict, Any, List
 from archive.manager import bams
 
+AUDIO_SPLICE_FADE_SEC = 0.008
+
+
+def _concat_filter_with_audio_splice_fade(durations: List[float]) -> str:
+    count = len(durations)
+    video_inputs = "".join(f"[{i}:v:0]" for i in range(count))
+    parts = [f"{video_inputs}concat=n={count}:v=1:a=0[v]"]
+    audio_inputs = []
+    for i, duration in enumerate(durations):
+        fade_dur = min(AUDIO_SPLICE_FADE_SEC, max(0.0, duration) / 2.0)
+        fade_out_start = max(0.0, duration - fade_dur)
+        parts.append(
+            f"[{i}:a:0]afade=t=in:st=0:d={fade_dur:.6f},"
+            f"afade=t=out:st={fade_out_start:.6f}:d={fade_dur:.6f}[aud{i}]"
+        )
+        audio_inputs.append(f"[aud{i}]")
+    parts.append(f"{''.join(audio_inputs)}concat=n={count}:v=0:a=1[a]")
+    return ";".join(parts)
+
 class RenderEngine:
     def __init__(self, bams):
         self.bams = bams
@@ -162,6 +181,7 @@ class RenderEngine:
         clip_dir.mkdir(parents=True, exist_ok=True)
         temp_list = out_p.with_suffix(".txt")
         temp_clips: List[Path] = []
+        temp_durations: List[float] = []
         try:
             sorted_clips = sorted(clips, key=lambda x: x.get("order", 0))
 
@@ -171,6 +191,7 @@ class RenderEngine:
                 src_path = source_paths.get(src_id)
                 if not src_path:
                     continue
+                clip_duration = max(0.0, float(clip["end"]) - float(clip["start"]))
                 tmp = clip_dir / f"clip_{i:04d}.mp4"
                 cut_cmd = [
                     "ffmpeg", "-y", "-loglevel", "error",
@@ -189,6 +210,7 @@ class RenderEngine:
                 r = subprocess.run(cut_cmd, capture_output=True, text=True, encoding="utf-8", errors="replace")
                 if r.returncode == 0 and tmp.exists() and tmp.stat().st_size > 0:
                     temp_clips.append(tmp)
+                    temp_durations.append(clip_duration)
                 else:
                     print(f"[RENDER] clip {i} 추출 실패: {r.stderr[:200]}")
 
@@ -199,19 +221,20 @@ class RenderEngine:
             # 2. concat 재인코딩 (단일 SPS/PPS·단일 stream).
             # [-c copy 금지] 각 클립이 따로 인코딩돼 SPS/PPS가 경계마다 바뀌면
             # Chrome 디코더가 조각 경계에서 멈춘다. 재인코딩으로 단일 stream 보장.
-            with open(temp_list, "w", encoding="utf-8") as f:
-                for t in temp_clips:
-                    f.write(f"file '{str(t).replace(chr(92), '/')}'\n")
             cmd = [
                 "ffmpeg", "-y", "-loglevel", "error",
-                "-f", "concat", "-safe", "0", "-i", str(temp_list),
-                "-fflags", "+genpts",
+            ]
+            for t in temp_clips:
+                cmd.extend(["-i", str(t)])
+            cmd.extend([
+                "-filter_complex", _concat_filter_with_audio_splice_fade(temp_durations),
+                "-map", "[v]", "-map", "[a]",
                 "-c:v", "libx264", "-preset", "veryfast", "-crf", "23",
                 "-g", "30", "-keyint_min", "30", "-sc_threshold", "0",
                 "-pix_fmt", "yuv420p",
                 "-c:a", "aac", "-b:a", "128k", "-ar", "48000", "-ac", "2",
                 "-movflags", "+faststart", output_path,
-            ]
+            ])
             process = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace")
 
             if process.returncode != 0:

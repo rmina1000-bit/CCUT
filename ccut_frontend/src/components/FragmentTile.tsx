@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { Fragment, formatDuration } from "@/data/fragmentData";
 import { displayName } from "@/lib/fragmentIdentity";
 import { Clock, Play } from "lucide-react";
+import { DEBUG_LOG } from "@/utils/debugFlags";
 
 interface FragmentTileProps {
   fragment: Fragment;
@@ -188,11 +189,11 @@ const FragmentTile: React.FC<FragmentTileProps> = ({
             const img = e.currentTarget;
             const naturalWidth = img.naturalWidth;
             const fallbackUsed = naturalWidth > 0 ? 0 : 1;
-            console.log(`[THUMB_RESOLVE] fragId=${fragment.fragment_id} display_id=${fragment.display_id || fragment.fragment_id} directThumbnail=${fragment.thumbnail?.thumbnail_url || "none"} base=${getBaseFragmentId(fragment)} resolvedThumbnail=${resolvedUrl} naturalWidth=${naturalWidth} fallbackUsed=${fallbackUsed}`);
+            DEBUG_LOG && console.log(`[THUMB_RESOLVE] fragId=${fragment.fragment_id} display_id=${fragment.display_id || fragment.fragment_id} directThumbnail=${fragment.thumbnail?.thumbnail_url || "none"} base=${getBaseFragmentId(fragment)} resolvedThumbnail=${resolvedUrl} naturalWidth=${naturalWidth} fallbackUsed=${fallbackUsed}`);
           }}
           onError={(e) => {
             setHasImageError(true);
-            console.log(`[THUMB_RESOLVE] fragId=${fragment.fragment_id} display_id=${fragment.display_id || fragment.fragment_id} directThumbnail=${fragment.thumbnail?.thumbnail_url || "none"} base=${getBaseFragmentId(fragment)} resolvedThumbnail=${resolvedUrl} naturalWidth=0 fallbackUsed=1`);
+            DEBUG_LOG && console.log(`[THUMB_RESOLVE] fragId=${fragment.fragment_id} display_id=${fragment.display_id || fragment.fragment_id} directThumbnail=${fragment.thumbnail?.thumbnail_url || "none"} base=${getBaseFragmentId(fragment)} resolvedThumbnail=${resolvedUrl} naturalWidth=0 fallbackUsed=1`);
           }}
         />
       )}

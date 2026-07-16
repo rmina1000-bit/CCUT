@@ -22,6 +22,24 @@ PREVIEW_DIR = STORAGE_DIR / "proposal_previews"
 PREVIEW_DIR.mkdir(parents=True, exist_ok=True)
 
 APP_BASE_URL = os.getenv("CCUT_BASE_URL", "http://127.0.0.1:8000").rstrip("/")
+AUDIO_SPLICE_FADE_SEC = 0.008
+
+
+def _concat_filter_with_audio_splice_fade(durations: list[float]) -> str:
+    count = len(durations)
+    video_inputs = "".join(f"[{i}:v:0]" for i in range(count))
+    parts = [f"{video_inputs}concat=n={count}:v=1:a=0[v]"]
+    audio_inputs = []
+    for i, duration in enumerate(durations):
+        fade_dur = min(AUDIO_SPLICE_FADE_SEC, max(0.0, duration) / 2.0)
+        fade_out_start = max(0.0, duration - fade_dur)
+        parts.append(
+            f"[{i}:a:0]afade=t=in:st=0:d={fade_dur:.6f},"
+            f"afade=t=out:st={fade_out_start:.6f}:d={fade_dur:.6f}[aud{i}]"
+        )
+        audio_inputs.append(f"[aud{i}]")
+    parts.append(f"{''.join(audio_inputs)}concat=n={count}:v=0:a=1[a]")
+    return ";".join(parts)
 
 
 def _preview_filename(proposal_id: str, variant: str) -> str:
@@ -93,6 +111,7 @@ def ensure_proposal_preview(
     # ── 임시 디렉터리에서 작업 ─────────────────────────────────────
     with tempfile.TemporaryDirectory(prefix="ccut_prev_") as tmpdir:
         temp_clips = []
+        temp_durations = []
 
         # STEP A: 각 clip 개별 re-encode
         def _encode_clip(idx, clip):
@@ -126,29 +145,33 @@ def ensure_proposal_preview(
                 for _f in concurrent.futures.as_completed(_futs):
                     _ordered[_futs[_f]] = _f.result()
             temp_clips = [r for r in _ordered if r]
+            temp_durations = [
+                c["end"] - c["start"]
+                for i, c in enumerate(valid_clips)
+                if i < len(_ordered) and _ordered[i]
+            ]
         else:
             # 기존 직렬 경로 (동작 무변)
             for i, clip in enumerate(valid_clips):
                 r = _encode_clip(i, clip)
                 if r:
                     temp_clips.append(r)
+                    temp_durations.append(clip["end"] - clip["start"])
 
         if not temp_clips:
             return _fail(proposal_id, variant, preview_url, "ALL_CLIPS_FAILED")
 
         # STEP B: re-encode concat 으로 단일 균질 mp4 생성
         # [-c copy 금지] source 간 fps/codec 차이로 Chrome boundary decode 멈춤 방지
-        concat_txt = os.path.join(tmpdir, "concat.txt")
-        with open(concat_txt, "w", encoding="utf-8") as f:
-            for tc in temp_clips:
-                f.write(f"file '{tc.replace(chr(92), '/')}'\n")
-
         concat_out = os.path.join(tmpdir, "preview_raw.mp4")
         cmd_concat = [
             "ffmpeg", "-y", "-loglevel", "error",
-            "-f", "concat", "-safe", "0",
-            "-i", concat_txt,
-            "-fflags", "+genpts",
+        ]
+        for tc in temp_clips:
+            cmd_concat.extend(["-i", tc])
+        cmd_concat.extend([
+            "-filter_complex", _concat_filter_with_audio_splice_fade(temp_durations),
+            "-map", "[v]", "-map", "[a]",
             "-c:v", "libx264", "-preset", "veryfast", "-crf", "23",
             # [STREAM-FIX] 1초마다 keyframe — 긴 제안에서 조각 경계 멈춤 방지
             "-g", "30", "-keyint_min", "30", "-sc_threshold", "0",
@@ -156,7 +179,7 @@ def ensure_proposal_preview(
             "-c:a", "aac", "-b:a", "128k",
             "-movflags", "+faststart",
             concat_out
-        ]
+        ])
         print(f"[PREVIEW_RENDER] Re-encode concat {len(temp_clips)} clips → {filename}")
         res_concat = subprocess.run(cmd_concat, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=600)
 

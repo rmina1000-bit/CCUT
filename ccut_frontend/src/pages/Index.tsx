@@ -50,7 +50,8 @@ import {
   type EditStateRow,
 } from "@/utils/editContractClient";
 import { toMs } from "@/utils/editContract";
-import { buildExportClipsFromResolvedFragments } from "@/utils/exportClipBuilder";
+import { buildExportClipsFromResolvedFragments, type PhysicalClip } from "@/utils/exportClipBuilder";
+import { DEBUG_LOG } from "@/utils/debugFlags";
 
 type PbeContractState = Pick<
   EditStateRow,
@@ -835,14 +836,14 @@ const Index: React.FC = () => {
   // Hash-based debug hydration for Playwright verification
   useEffect(() => {
     if (typeof window === "undefined") return;
-    console.log("[Debug] hash hook checking hash:", window.location.hash);
+    DEBUG_LOG && console.log("[Debug] hash hook checking hash:", window.location.hash);
     if (window.location.hash !== "#debug-hydrate") return;
     
-    console.log("[Debug] Running Playwright mockup hydration adapter...");
+    DEBUG_LOG && console.log("[Debug] Running Playwright mockup hydration adapter...");
     
     (window as any).triggerPBEMock = (caseTypeOrData?: any) => {
       if (typeof caseTypeOrData === "object" && caseTypeOrData !== null) {
-        console.log("[Debug] Hydrating mock data from caller...");
+        DEBUG_LOG && console.log("[Debug] Hydrating mock data from caller...");
         const { projects, sourceEntries, editFragments, proposals } = caseTypeOrData;
         if (projects) setProjects(projects);
         if (sourceEntries) setSourceEntries(sourceEntries);
@@ -856,7 +857,7 @@ const Index: React.FC = () => {
       }
 
       const caseType = typeof caseTypeOrData === "string" ? caseTypeOrData : "mid";
-      console.log(`[Debug] triggerPBEMock called with caseType: ${caseType}`);
+      DEBUG_LOG && console.log(`[Debug] triggerPBEMock called with caseType: ${caseType}`);
 
       const targetFps = 30.0;
       let targetFrags = [];
@@ -916,7 +917,7 @@ const Index: React.FC = () => {
   // [CCUT1.0.4 PROPOSALS PROJECT SOURCES HYDRATION]
   useEffect(() => {
     if (typeof window !== "undefined" && window.location.hash === "#debug-hydrate") {
-      console.log("[Hydration] Skipping backend hydration because #debug-hydrate is active");
+      DEBUG_LOG && console.log("[Hydration] Skipping backend hydration because #debug-hydrate is active");
       return;
     }
     const savedActiveProject = typeof window !== "undefined" ? localStorage.getItem("ccut_active_project_id") : null;
@@ -963,14 +964,14 @@ const Index: React.FC = () => {
       }
 
       try {
-        console.log(`[Hydration] Loading sources for project: ${activeNavItem}`);
+        DEBUG_LOG && console.log(`[Hydration] Loading sources for project: ${activeNavItem}`);
         pushAnalysisLog(`[Hydration] Loading sources for project: ${activeNavItem}`.slice(0, 120));
         const data = await videoService.getProjectSources(activeNavItem);
         if (!isMounted) return;
 
         // 2. API 응답 project_id 가 요청 projectId와 다르면 hydration skip
         if (!data || data.project_id !== activeNavItem) {
-          console.warn(`[Hydration] project_id mismatch. Request: ${activeNavItem}, Response: ${data?.project_id}`);
+          DEBUG_LOG && console.warn(`[Hydration] project_id mismatch. Request: ${activeNavItem}, Response: ${data?.project_id}`);
           return;
         }
 
@@ -980,7 +981,7 @@ const Index: React.FC = () => {
         //    세션이 진짜 비어 있을 때만 empty 처리(빈 프로젝트 → 업로드 화면).
         if (!data.sources || data.sources.length === 0) {
           if (sourceEntries.length === 0) {
-            console.log("[Hydration] Response sources length is 0 and session empty. Showing upload screen.");
+            DEBUG_LOG && console.log("[Hydration] Response sources length is 0 and session empty. Showing upload screen.");
             pushAnalysisLog("[Hydration] sources=0, session empty → upload screen");
             setSourceEntries([]);
             setSourceFragments([]);
@@ -993,7 +994,7 @@ const Index: React.FC = () => {
             setExpandedFragment(null);
             setAppState("empty");  // [B-5-FIX] 빈 프로젝트 → 업로드 화면 (FAILURE 아님)
           } else {
-            console.log("[Hydration] Response sources length is 0 but session has sources. Keeping current session (proposals likely not generated yet).");
+            DEBUG_LOG && console.log("[Hydration] Response sources length is 0 but session has sources. Keeping current session (proposals likely not generated yet).");
             pushAnalysisLog("[Hydration] sources=0 but session kept (proposals pending)");
           }
           return;
@@ -1082,11 +1083,11 @@ const Index: React.FC = () => {
                     });
                   }
                   if (gens.length) hydrateProposalHistory(gens);
-                  console.log(`[TIMELINE] 복원: 메시지 ${msgs.length} · 세대 ${gens.length}` +
+                  DEBUG_LOG && console.log(`[TIMELINE] 복원: 메시지 ${msgs.length} · 세대 ${gens.length}` +
                     (tl.has_more ? " (이전 페이지 더 있음)" : ""));
                 }
               } catch (e) {
-                console.warn("[TIMELINE] 복원 실패 — 새 흐름으로 시작", e);
+                DEBUG_LOG && console.warn("[TIMELINE] 복원 실패 — 새 흐름으로 시작", e);
               }
               if (stateRes && stateRes.ui_state && isMounted) {
                 const snap = JSON.parse(stateRes.ui_state);
@@ -1109,7 +1110,7 @@ const Index: React.FC = () => {
                         // [HONEST-EMPTY GUARD] 빈 스냅샷은 사용자 편집이 아니라 빈 제안의 잔상.
                         // DB에 실제 조각이 있는 제안을 빈 배열로 덮지 않는다 (Hollyhock 사례).
                         if (Array.isArray(snapKF) && snapKF.length === 0 && (next[mode].key_fragments?.length ?? 0) > 0) {
-                          console.warn("[Hydration] skip empty key_fragments snapshot for", mode);
+                          DEBUG_LOG && console.warn("[Hydration] skip empty key_fragments snapshot for", mode);
                         } else {
                           next[mode] = { ...next[mode], key_fragments: snapKF };
                         }
@@ -1124,7 +1125,7 @@ const Index: React.FC = () => {
               }
             } catch (_) {}
 
-            console.log(`[Hydration] Successfully hydrated ${restoredEntries.length} sources, ${(data.proposals || []).length} proposals for project: ${activeNavItem}`);
+            DEBUG_LOG && console.log(`[Hydration] Successfully hydrated ${restoredEntries.length} sources, ${(data.proposals || []).length} proposals for project: ${activeNavItem}`);
             pushAnalysisLog(`[Hydration] hydrated ${restoredEntries.length} sources, ${(data.proposals || []).length} proposals`);
           }
         }
@@ -1265,10 +1266,10 @@ const Index: React.FC = () => {
     if (newMsgs.length) {
       newMsgs.forEach((e) => syncedTimelineIdsRef.current.add(e.client_id));
       videoService.appendTimeline(activeNavItem, newMsgs)
-        .then((r) => console.log(`[TIMELINE] +${newMsgs.length} message (server added=${r?.added})`))
+          .then((r) => DEBUG_LOG && console.log(`[TIMELINE] +${newMsgs.length} message (server added=${r?.added})`))
         .catch((err) => {
           newMsgs.forEach((e) => syncedTimelineIdsRef.current.delete(e.client_id));
-          console.warn("[TIMELINE] message append 실패 — 다음 변경 시 재시도", err);
+          DEBUG_LOG && console.warn("[TIMELINE] message append 실패 — 다음 변경 시 재시도", err);
         });
     }
 
@@ -1282,10 +1283,10 @@ const Index: React.FC = () => {
         if (!gens.length) return;
         gens.forEach((e) => syncedTimelineIdsRef.current.add(e.client_id));
         videoService.appendTimeline(activeNavItem, gens)
-          .then((r) => console.log(`[TIMELINE] +${gens.length} generation (server added=${r?.added})`))
+          .then((r) => DEBUG_LOG && console.log(`[TIMELINE] +${gens.length} generation (server added=${r?.added})`))
           .catch((err) => {
             gens.forEach((e) => syncedTimelineIdsRef.current.delete(e.client_id));
-            console.warn("[TIMELINE] generation append 실패 — 다음 변경 시 재시도", err);
+            DEBUG_LOG && console.warn("[TIMELINE] generation append 실패 — 다음 변경 시 재시도", err);
           });
       }, 4000);
     }
@@ -1374,6 +1375,8 @@ const Index: React.FC = () => {
   const [localPbeContractStates, setLocalPbeContractStates] = useState<Record<string, PbeContractState>>({});
   const editStatesRef = useRef<Map<string, EditStateRow>>(new Map());
   const editCtxRef = useRef<{ enabled: boolean; programId: string | null }>({ enabled: false, programId: null });
+  const refreshLedgerEdlRef = useRef<(() => Promise<void>) | null>(null);
+  const [storyLedgerRefreshNonce, setStoryLedgerRefreshNonce] = useState(0);
   useEffect(() => { fetchGateEnabled().then(setEditContractV2); }, []);
   useEffect(() => { editCtxRef.current = { enabled: editContractV2, programId: activeNavItem }; }, [editContractV2, activeNavItem]);
   const refreshEditStates = useCallback(async (): Promise<EditStateRow[]> => {
@@ -1480,7 +1483,11 @@ const Index: React.FC = () => {
               command_type: isSplit ? "EXCLUDE_RANGE" : "TRIM",
               origin: "PBE",
             }).then((r: any) => {
-              if (r?.ok) refreshEditStatesRef.current();
+              if (r?.ok) {
+                refreshEditStatesRef.current();
+                refreshLedgerEdlRef.current?.();
+                setStoryLedgerRefreshNonce((n) => n + 1);
+              }
               else console.error("[EC-V2] edit-state 거부:", r);
             }).catch((err) => console.error("[EC-V2] edit-state save error:", err));
           }
@@ -2088,9 +2095,47 @@ const Index: React.FC = () => {
     }));
   }, [resolverResult, displayProposalId, proposals, sourceEntries, toFullUrl, isPreviewingSelectedProposal, editContractV2, editStatesList]);
 
+  const [ledgerEdlClips, setLedgerEdlClips] = useState<PhysicalClip[]>([]);
+  const refreshLedgerEdl = useCallback(async () => {
+    if (!activeNavItem || !activeNavItem.startsWith("proj_")) {
+      setLedgerEdlClips([]);
+      return;
+    }
+    try {
+      const res = await fetch(`/api/ledger/${encodeURIComponent(activeNavItem)}/edl`);
+      const edl = await res.json();
+      const clips = Array.isArray(edl?.clips) ? edl.clips : [];
+      setLedgerEdlClips(
+        clips
+          .map((clip: any, idx: number) => {
+            const start = Number(clip.start_sec ?? 0);
+            const end = Number(clip.end_sec ?? start);
+            const duration = Number(clip.duration_sec ?? Math.max(0, end - start));
+            return {
+              order: Number(clip.order ?? idx),
+              source_id: String(clip.source_id ?? ""),
+              start_sec: Number(start.toFixed(3)),
+              end_sec: Number(end.toFixed(3)),
+              duration_sec: Number((Number.isFinite(duration) ? duration : Math.max(0, end - start)).toFixed(3)),
+              fragment_id: String(clip.fragment_id ?? clip.clip_of ?? `clip_${idx}`),
+              display_id: String(clip.clip_of ?? clip.fragment_id ?? `clip_${idx}`),
+              video_url: clip.video_url,
+              clip_of: clip.clip_of,
+            } as PhysicalClip & { video_url?: string; clip_of?: string };
+          })
+          .filter((clip: PhysicalClip) => clip.source_id && clip.end_sec > clip.start_sec)
+      );
+    } catch (_) {
+      setLedgerEdlClips([]);
+    }
+  }, [activeNavItem]);
+  refreshLedgerEdlRef.current = refreshLedgerEdl;
+
+  useEffect(() => { void refreshLedgerEdl(); }, [refreshLedgerEdl]);
+
   const physicalClips = useMemo(() => {
-    return buildExportClipsFromResolvedFragments(resolvedFragments);
-  }, [resolvedFragments]);
+    return ledgerEdlClips.length ? ledgerEdlClips : buildExportClipsFromResolvedFragments(resolvedFragments);
+  }, [ledgerEdlClips, resolvedFragments]);
 
   // [STEP 10-I.5.27-E7] Mark first preview ready
   useEffect(() => {
@@ -2519,7 +2564,8 @@ const Index: React.FC = () => {
             exportClips={physicalClips}
             storyPlan={storyPlan}
             onStoryPlanConfirm={setStoryPlan}
-            onStoryEditStateChanged={() => { refreshEditStatesRef.current(); }}
+            onStoryEditStateChanged={() => { refreshEditStatesRef.current(); void refreshLedgerEdl(); }}
+            storyRefreshNonce={storyLedgerRefreshNonce}
             sourceEntries={sourceEntries}
             programId={activeNavItem}
             programTitle={projects.find(p => p.id === activeNavItem)?.name ?? undefined}
