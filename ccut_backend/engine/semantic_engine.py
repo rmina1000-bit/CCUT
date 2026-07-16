@@ -624,7 +624,8 @@ class SemanticFragmentGenerator:
             # [STEP 10-I.5.9] Skip boundaries from workers that just repeat VF boundaries
             # [단계3] 텍스트가 없는 evidence의 scene_change는 스킵 면제.
             # ASR worker 중복 방지는 텍스트가 실제로 있을 때만 적용.
-            has_text = bool(ev.get("text", "").strip())
+            # text 키가 None으로 실존하는 evidence(무발화/ASR 스킵 소스)에서 죽지 않는다 — None=빈 문자열 동등
+            has_text = bool((ev.get("text") or "").strip())
             if has_text and wn in ["audio", "signal_processor", "whisper", "qwen3_asr", "asr"]:
                 continue
 

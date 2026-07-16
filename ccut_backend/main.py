@@ -1221,9 +1221,16 @@ async def generate_fragments(
             is_new_source = True
     else:
         # source_id가 명시된 경우 (업로드 직후 흐름)
-        # 이미 조각 데이터가 있다면 신규 분석 생략 (Dedupe)
+        # [GHOST-CLEANUP 1호] 분석됨 판정의 진실원 = SF (VF는 파생 재료일 뿐 —
+        # 옛 VF 지층만 남은 소스가 새 분석을 영구 차단하던 관문 절단)
+        from archive.db_models import SemanticFragmentTable as _SFT
         existing_frags = bams.get_fragments_by_source(source_id)
-        is_new_source = False if existing_frags else True
+        _has_sf = db.query(_SFT).filter_by(source_id=source_id).count() > 0
+        is_new_source = not (existing_frags and _has_sf)
+        if is_new_source and existing_frags:
+            # 옛 VF 지층 제거 — 신규 경로의 VF 재생성(결정론 id)과 PK 충돌 방지
+            db.query(FragmentTable).filter_by(source_id=source_id, status="VIRTUAL").delete()
+            db.commit()
 
         # [DURATION-MISMATCH-FIX] DB duration과 실제 duration이 5초 이상 차이나거나
         # semantic_fragments가 없으면 → VIRTUAL fragments + semantic_fragments 초기화 후 재분석
