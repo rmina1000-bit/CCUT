@@ -146,9 +146,10 @@ const LedgerPage: React.FC<LedgerPageProps> = ({ programId: propProgramId, embed
   const lostCount = useMemo(
     () => (data?.items ?? []).filter((it) => it.missing?.coords).length, [data]);
 
-  // Playback spans come from /ledger/{program}/edl; the text view does not compile edit state.
   const editingRef = useRef<Editing | null>(null);
+
   const edlSpansOf = useCallback((it: ScriptItem): MsRange[] => {
+    if (it.selected === false) return [];
     return edlClips
       .filter((clip) => clip.fragment_id === it.fragment_id)
       .sort((a, b) => a.order - b.order)
@@ -177,58 +178,81 @@ const LedgerPage: React.FC<LedgerPageProps> = ({ programId: propProgramId, embed
     const url = it.video_url.startsWith("/") ? `/api${it.video_url.replace(/^\/api/, "")}` : it.video_url;
     v.onloadedmetadata = null;
     if (!v.src.endsWith(url) || v.readyState === 0 || v.error) { v.src = url; v.load(); }
-    const seek = () => { v.currentTime = spans[0][0] / 1000; if (autoplay) v.play().catch(() => {}); };
-    if (v.readyState >= 1) seek(); else v.onloadedmetadata = seek;
+    const playNow = () => {
+      v.play().catch(() => {});
+    };
+    const start = () => {
+      v.currentTime = spans[0][0] / 1000;
+      if (autoplay) playNow();
+    };
+    if (v.readyState >= 1) start(); else v.onloadedmetadata = start;
   }, [edlSpansOf]);
 
   const playItem = useCallback((it: ScriptItem) => loadItem(it, true), [loadItem]);
 
-  // 구간 재생 감시 — requestAnimationFrame(60fps)로 제외 구간 경계를 촘촘히 자른다.
-  // (timeupdate는 ~250ms 간격이라 짧은 단어의 끝을 넘겨버림)
-  // 제외 구간을 seek으로 스킵할 때 소리가 새거나 뭉개지지 않도록:
-  //   살아있는 구간 끝 LEAD(ms) 전에 미리 [일시정지 → 다음 구간으로 이동 → 이동완료 후 재개].
-  //   pause 상태에서 seek하므로 오디오 글리치가 없고, 미리 멈추므로 제외 구간 시작이 새지 않는다.
   const rafRef = useRef<number | null>(null);
-  const resumeRef = useRef(false);          // seek용 일시정지인지(=완료 후 재개) vs 사용자 일시정지인지 구분
+  const resumeRef = useRef(false);
   const LEAD = 90;
-  const rafTick = useCallback(() => {
-    const v = videoRef.current, st = playRef.current;
-    if (!v) { rafRef.current = null; return; }
-    if (!st || st.spans.length === 0) { v.pause(); rafRef.current = null; return; }
-    if (v.ended || v.paused || v.seeking) { rafRef.current = null; return; }
-    const t = v.currentTime * 1000;
-    const last = st.spans[st.spans.length - 1]?.[1];
-    if (last !== undefined && t >= last - PLAYBACK_STOP_EPS_MS) {
-      resumeRef.current = false;
-      v.pause();
-      if (t > last) v.currentTime = last / 1000;
-      rafRef.current = null;
-      return;
-    }
-    const idx = st.spans.findIndex(([s, e]) => t >= s - 5 && t < e);
-    if (idx < 0) {                          // 제외 구간에 있음 → 다음 살아있는 구간으로
-      const nx = st.spans.find(([s]) => s > t - 5);
-      if (nx) { resumeRef.current = true; v.pause(); v.currentTime = nx[0] / 1000; }
-      else v.pause();                       // 뒤에 살아있는 구간 없음 → 끝
-      return;
-    }
-    const [, e] = st.spans[idx];
-    if (idx < st.spans.length - 1 && t >= e - LEAD) {   // 이 구간 끝 직전 → 미리 다음 구간으로
-      resumeRef.current = true; v.pause(); v.currentTime = st.spans[idx + 1][0] / 1000;
-    } else if (idx === st.spans.length - 1 && t >= e) {  // ★ 마지막 구간 끝 → 조각 경계에서 정지
-      resumeRef.current = false; v.pause();              // 사용자 재개 아님 → onSeeked 재생 안 함
-    } else {
-      rafRef.current = requestAnimationFrame(rafTick);
-    }
-  }, []);
-  const startRaf = useCallback(() => {
-    if (rafRef.current == null) rafRef.current = requestAnimationFrame(rafTick);
-  }, [rafTick]);
+
   const stopRaf = useCallback(() => {
     if (rafRef.current != null) { cancelAnimationFrame(rafRef.current); rafRef.current = null; }
   }, []);
 
-  // seek(구간 스킵) 완료 → 재생 재개. 사용자 일시정지면 재개하지 않는다.
+  const closePlayer = useCallback(() => {
+    resumeRef.current = false;
+    stopRaf();
+    videoRef.current?.pause();
+    if (videoRef.current) videoRef.current.onloadedmetadata = null;
+    playRef.current = null;
+    setPlayerOpen(false); setActiveItem(null);
+  }, [stopRaf]);
+
+  const rafTick = useCallback(() => {
+    const v = videoRef.current, st = playRef.current;
+    if (!v) { rafRef.current = null; return; }
+    if (!st || st.spans.length === 0) {
+      v.pause();
+      rafRef.current = null;
+      return;
+    }
+    if (v.ended || v.paused || v.seeking) { rafRef.current = null; return; }
+    const t = v.currentTime * 1000;
+    const lastEnd = st.spans[st.spans.length - 1]?.[1];
+    if (lastEnd !== undefined && t >= lastEnd - PLAYBACK_STOP_EPS_MS) {
+      resumeRef.current = false;
+      v.pause();
+      if (t > lastEnd) v.currentTime = lastEnd / 1000;
+      rafRef.current = null;
+      return;
+    }
+    const idx = st.spans.findIndex(([s, e]) => t >= s - 5 && t < e);
+    if (idx < 0) {
+      const nx = st.spans.find(([s]) => s > t - 5);
+      if (nx) {
+        resumeRef.current = true;
+        v.pause();
+        v.currentTime = nx[0] / 1000;
+      } else {
+        v.pause();
+      }
+      rafRef.current = null;
+      return;
+    }
+    const [, e] = st.spans[idx];
+    if (idx < st.spans.length - 1 && t >= e - LEAD) {
+      resumeRef.current = true;
+      v.pause();
+      v.currentTime = st.spans[idx + 1][0] / 1000;
+      rafRef.current = null;
+    } else {
+      rafRef.current = requestAnimationFrame(rafTick);
+    }
+  }, []);
+
+  const startRaf = useCallback(() => {
+    if (rafRef.current == null) rafRef.current = requestAnimationFrame(rafTick);
+  }, [rafTick]);
+
   const onSeeked = useCallback(() => {
     if (!resumeRef.current) return;
     const v = videoRef.current, st = playRef.current;
@@ -237,21 +261,6 @@ const LedgerPage: React.FC<LedgerPageProps> = ({ programId: propProgramId, embed
     v.play().catch(() => {});
   }, []);
 
-  const onTimeUpdate = useCallback(() => {
-    const v = videoRef.current, st = playRef.current;
-    if (!v) return;
-    if (!st || st.spans.length === 0) { if (!v.paused) v.pause(); return; }
-    if (v.paused) return;
-    const last = st.spans[st.spans.length - 1]?.[1];
-    const t = v.currentTime * 1000;
-    if (last !== undefined && t >= last - PLAYBACK_STOP_EPS_MS) {
-      resumeRef.current = false;
-      v.pause();
-      if (t > last) v.currentTime = last / 1000;
-    }
-  }, []);
-
-  // 재생 시작: 끝까지 온 상태면 처음부터(멈춤 버그 방지) + 감시 시작
   const onPlay = useCallback(() => {
     const v = videoRef.current, st = playRef.current;
     if (!v || !st || st.spans.length === 0) {
@@ -259,15 +268,29 @@ const LedgerPage: React.FC<LedgerPageProps> = ({ programId: propProgramId, embed
       stopRaf();
       return;
     }
-    const t = v.currentTime * 1000, last = st.spans[st.spans.length - 1][1];
-    if (t >= last - 20) v.currentTime = st.spans[0][0] / 1000;
+    const t = v.currentTime * 1000, lastEnd = st.spans[st.spans.length - 1][1];
+    if (t >= lastEnd - 20) {
+      v.currentTime = st.spans[0][0] / 1000;
+    }
     startRaf();
   }, [startRaf, stopRaf]);
 
-  const closePlayer = useCallback(() => {
-    resumeRef.current = false; stopRaf(); videoRef.current?.pause();
-    if (videoRef.current) videoRef.current.onloadedmetadata = null;
-    playRef.current = null; setPlayerOpen(false); setActiveItem(null);
+  const onPlaying = useCallback(() => {
+    const v = videoRef.current;
+    if (!v) return;
+    startRaf();
+  }, [startRaf]);
+
+  const onPlaybackTimeUpdate = useCallback(() => {
+    const v = videoRef.current;
+    const st = playRef.current;
+    if (!v || !st || st.spans.length === 0) return;
+    const endMs = st.spans[st.spans.length - 1][1];
+    const currentMs = Math.round(v.currentTime * 1000);
+    if (!v.paused && currentMs >= endMs) {
+      v.pause();
+      stopRaf();
+    }
   }, [stopRaf]);
 
   // 저장 (EXCLUDE_RANGE / REMOVE / RESTORE 공통)
@@ -615,7 +638,7 @@ const LedgerPage: React.FC<LedgerPageProps> = ({ programId: propProgramId, embed
       {/* 플로팅 플레이어 — 양축 상한 */}
       <div className={`fixed bottom-5 right-5 z-30 transition-all duration-300 ${playerOpen ? "opacity-100 translate-y-0" : "opacity-0 translate-y-3 pointer-events-none"}`}>
         <div className="rounded-xl overflow-hidden shadow-2xl inline-block" style={{ background: "#000" }}>
-          <video ref={videoRef} onPlay={onPlay} onSeeked={onSeeked} onTimeUpdate={onTimeUpdate} onPause={stopRaf} onEnded={stopRaf} controls className="block"
+          <video ref={videoRef} onPlay={onPlay} onPlaying={onPlaying} onSeeked={onSeeked} onTimeUpdate={onPlaybackTimeUpdate} onPause={stopRaf} onEnded={stopRaf} controls className="block"
             style={{ maxWidth: "min(360px, 40vw)", maxHeight: "48vh", width: "auto", height: "auto" }} />
         </div>
         <button type="button" onClick={closePlayer}
