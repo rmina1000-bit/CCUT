@@ -41,7 +41,6 @@ import { generateProposals } from "@/proposal/proposalOrchestrator";
 import { collectFragmentAliases, resolveProposalFragments } from "@/utils/proposalFragmentResolver";
 // [EDIT-CONTRACT-B0 IMPL-2b] 공통 편집 계약 클라이언트 — 게이트 OFF면 어디서도 호출되지 않는다
 import {
-  applyStatesToFragments,
   fetchEditStates,
   fetchGateEnabled,
   postEditState,
@@ -49,6 +48,8 @@ import {
   timelineItemIdFor,
   type EditStateRow,
 } from "@/utils/editContractClient";
+// [R2] 조각맵 분할 표시 = 상태의 순수 파생 — Apply 경로와 재수화 경로가 같은 함수를 쓴다
+import { rebuildFragmentTiles } from "@/utils/fragmentTiles";
 import { toMs } from "@/utils/editContract";
 import { buildExportClipsFromResolvedFragments, type PhysicalClip } from "@/utils/exportClipBuilder";
 import { DEBUG_LOG } from "@/utils/debugFlags";
@@ -1397,6 +1398,15 @@ const Index: React.FC = () => {
     return persisted ?? localPbeContractStates[pbeContractKey(activeNavItem, fid)] ?? null;
   }, [activeNavItem, editContractV2, singleEditTarget, editStatesList, localPbeContractStates]);
 
+  // [R2] 같은 parent에 상태 행이 여럿(NA/B 분열)일 때 표시 파생이 고를 행 = PBE 발급식 그대로.
+  // ref 경유로 identity를 고정해 재수화 effect/memo의 deps를 흔들지 않는다.
+  const preferredPbeItemIdRef = useRef<(fid: string) => string>(() => "");
+  useEffect(() => {
+    preferredPbeItemIdRef.current = (fid: string) =>
+      timelineItemIdFor(editCtxRef.current.programId ?? "", String(committedProposalId ?? "NA"), fid, 0);
+  }, [committedProposalId]);
+  const preferredPbeItemIdFor = useCallback((fid: string) => preferredPbeItemIdRef.current(fid), []);
+
   const handleSingleFragmentApply = useCallback(
     (payload: {
       fragmentUid: string;
@@ -1409,6 +1419,71 @@ const Index: React.FC = () => {
       const { fragmentUid, newStartSec, newEndSec, origStart, origEnd, segments } = payload;
       // [PBE-⑦] 중간 프레임 삭제 → 살아남는 구간이 2개 이상이면 조각을 분할한다.
       const isSplit = Array.isArray(segments) && segments.length > 1;
+
+      const orig: any = editFragments.find((fr) => getUid(fr) === fragmentUid);
+      const programId = editCtxRef.current.programId ?? activeNavItem;
+      const rootFid = String(orig?.root_fragment_uid ?? orig?.fragment_id ?? fragmentUid);
+      const segs = isSplit ? segments! : [{ startSec: newStartSec, endSec: newEndSec }];
+      const { trim, excluded } = segmentsToExcludedMs(segs);
+      const contractSnapshot: PbeContractState = {
+        anchor_start_ms: toMs(Number(orig?.orig_start_sec ?? origStart)),
+        anchor_end_ms: toMs(Number(orig?.orig_end_sec ?? origEnd)),
+        trim_start_ms: trim[0],
+        trim_end_ms: trim[1],
+        excluded_ranges: excluded,
+        removed: false,
+      };
+      setLocalPbeContractStates((prev) => ({
+        ...prev,
+        [pbeContractKey(programId, rootFid)]: contractSnapshot,
+      }));
+
+      if (editCtxRef.current.enabled) {
+        // [R2] 배열 조작 금지 — 표시는 이벤트 누적이 아니라 상태의 순수 파생.
+        // 저장 성공 → edit_state 최신값 확보 → 뿌리의 타일 전체를 파생 함수로 교체 (멱등).
+        if (!orig?.source_id || !programId) {
+          console.error("[EC-V2] edit-state 저장 불가: source_id/program 결손", { fragmentUid, programId });
+          return;
+        }
+        const proposalKey = String(committedProposalId ?? "NA");
+        const itemId = timelineItemIdFor(programId, proposalKey, rootFid, 0);
+        const known = editStatesRef.current.get(itemId);
+        postEditState({
+          program_id: programId,
+          timeline_item_id: itemId,
+          source_id: orig.source_id,
+          anchor_start_ms: contractSnapshot.anchor_start_ms,
+          anchor_end_ms: contractSnapshot.anchor_end_ms,
+          trim_start_ms: contractSnapshot.trim_start_ms,
+          trim_end_ms: contractSnapshot.trim_end_ms,
+          excluded_ranges: contractSnapshot.excluded_ranges,
+          revision: known?.revision,
+          parent_fragment_id: rootFid,
+          command_type: isSplit ? "EXCLUDE_RANGE" : "TRIM",
+          origin: "PBE",
+        }).then(async (r: any) => {
+          if (!r?.ok) {
+            console.error("[EC-V2] edit-state 거부:", r);
+            return;
+          }
+          const states = await refreshEditStatesRef.current();
+          const prefer = (fid: string) => timelineItemIdFor(programId, proposalKey, fid, 0);
+          const rebuilt = rebuildFragmentTiles(editFragments as any[], states, prefer) as typeof editFragments;
+          setEditFragments(rebuilt);
+          if (committedProposalId && proposals) {
+            setProposals((pPrev) => {
+              if (!pPrev) return pPrev;
+              const target = committedProposalId as "A" | "B";
+              return { ...pPrev, [target]: { ...pPrev[target], customEditFragments: rebuilt } };
+            });
+          }
+          refreshLedgerEdlRef.current?.();
+          setStoryLedgerRefreshNonce((n) => n + 1);
+        }).catch((err) => console.error("[EC-V2] edit-state save error:", err));
+        return;
+      }
+
+      // ── 레거시 (게이트 OFF) — 기존 flatMap + edit_overlay 경로 그대로 ──
       const next = editFragments.flatMap((fr) => {
         if (getUid(fr) !== fragmentUid) return [fr];
         if (!isSplit) {
@@ -1445,56 +1520,6 @@ const Index: React.FC = () => {
       });
       setEditFragments(next);
 
-      const orig: any = editFragments.find((fr) => getUid(fr) === fragmentUid);
-      const programId = editCtxRef.current.programId ?? activeNavItem;
-      const rootFid = String(orig?.root_fragment_uid ?? orig?.fragment_id ?? fragmentUid);
-      const segs = isSplit ? segments! : [{ startSec: newStartSec, endSec: newEndSec }];
-      const { trim, excluded } = segmentsToExcludedMs(segs);
-      const contractSnapshot: PbeContractState = {
-        anchor_start_ms: toMs(Number(orig?.orig_start_sec ?? origStart)),
-        anchor_end_ms: toMs(Number(orig?.orig_end_sec ?? origEnd)),
-        trim_start_ms: trim[0],
-        trim_end_ms: trim[1],
-        excluded_ranges: excluded,
-        removed: false,
-      };
-      setLocalPbeContractStates((prev) => ({
-        ...prev,
-        [pbeContractKey(programId, rootFid)]: contractSnapshot,
-      }));
-
-      if (editCtxRef.current.enabled) {
-        // [EDIT-CONTRACT-B0] 신 계약 단일 권위 — edit_overlay 대신 edit-state upsert 1건 (Edit State = 승인된 편집)
-        try {
-          if (orig?.source_id && programId) {
-            const itemId = timelineItemIdFor(programId, String(committedProposalId ?? "NA"), rootFid, 0);
-            const known = editStatesRef.current.get(itemId);
-            postEditState({
-              program_id: programId,
-              timeline_item_id: itemId,
-              source_id: orig.source_id,
-              anchor_start_ms: contractSnapshot.anchor_start_ms,
-              anchor_end_ms: contractSnapshot.anchor_end_ms,
-              trim_start_ms: contractSnapshot.trim_start_ms,
-              trim_end_ms: contractSnapshot.trim_end_ms,
-              excluded_ranges: contractSnapshot.excluded_ranges,
-              revision: known?.revision,
-              parent_fragment_id: rootFid,
-              command_type: isSplit ? "EXCLUDE_RANGE" : "TRIM",
-              origin: "PBE",
-            }).then((r: any) => {
-              if (r?.ok) {
-                refreshEditStatesRef.current();
-                refreshLedgerEdlRef.current?.();
-                setStoryLedgerRefreshNonce((n) => n + 1);
-              }
-              else console.error("[EC-V2] edit-state 거부:", r);
-            }).catch((err) => console.error("[EC-V2] edit-state save error:", err));
-          }
-        } catch (err) {
-          console.error("[EC-V2] edit-state save error:", err);
-        }
-      } else {
       // [F-2a-FIX] 편집 영속: edit_overlay 저장 — 레거시 경로 (게이트 OFF, 바이트 동일 행동)
       try {
         const editedList = next.filter((fr: any) =>
@@ -1514,7 +1539,6 @@ const Index: React.FC = () => {
         }
       } catch (err) {
         console.error("edit-overlay save error:", err);
-      }
       }
 
       if (committedProposalId && proposals) {
@@ -1918,7 +1942,7 @@ const Index: React.FC = () => {
             if (editCtxRef.current.enabled) {
               // [EDIT-CONTRACT-B0] ui_state로 복원된 customEditFragments를 덮어쓰지 않는다 — edit-state 권위
               const states = await refreshEditStatesRef.current();
-              const rebuilt = states.length ? (applyStatesToFragments(initialFrags as any[], states) as any[]) : initialFrags;
+              const rebuilt = states.length ? (rebuildFragmentTiles(initialFrags as any[], states, preferredPbeItemIdFor) as any[]) : initialFrags;
               setEditFragments(rebuilt as any);
               setProposals((prev) => {
                 if (!prev || !prev[target]) return prev;
@@ -2083,7 +2107,7 @@ const Index: React.FC = () => {
     }
 
     const editAppliedFragments = editContractV2 && editStatesList.length
-      ? (applyStatesToFragments(nextFragments as any[], editStatesList) as typeof nextFragments)
+      ? (rebuildFragmentTiles(nextFragments as any[], editStatesList, preferredPbeItemIdFor) as typeof nextFragments)
       : nextFragments;
 
     if (!isPreviewingSelectedProposal) return editAppliedFragments;
@@ -2286,7 +2310,7 @@ const Index: React.FC = () => {
       if (editCtxRef.current.enabled) {
         // [EDIT-CONTRACT-B0] 게이트 ON — edit-state 컴파일 재구성이 유일 권위 (fid 일치 병합 폐기)
         const states = await refreshEditStatesRef.current();
-        if (states.length) setEditFragments((prev) => applyStatesToFragments(prev as any[], states) as any);
+        if (states.length) setEditFragments((prev) => rebuildFragmentTiles(prev as any[], states, preferredPbeItemIdFor) as any);
         return;
       }
       try {
