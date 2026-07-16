@@ -15,7 +15,9 @@ BACKEND_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 ROOT = os.path.dirname(BACKEND_DIR)
 DB_PATH = os.path.join(BACKEND_DIR, "ccut_app.db")
 THUMBS_DIR = os.path.join(ROOT, "storage", "thumbnails")
-PROXIES_DIR = os.path.join(BACKEND_DIR, "storage", "proxies")
+# [#15] play_ 사이드카가 실제 저장되는 곳은 ROOT/storage/proxies (video_engine이 STORAGE_DIR 기준으로 씀)
+# — BACKEND_DIR/storage는 유령 폴더라 존재 검사가 항상 실패해 원본 폴백(검정 재생)됐다.
+PROXIES_DIR = os.path.join(ROOT, "storage", "proxies")
 
 
 def _fmt_time(sec):
