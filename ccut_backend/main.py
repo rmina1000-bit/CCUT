@@ -131,7 +131,7 @@ def _resolve_static_path(path: str):
 
 
 UPLOAD_DIR = STORAGE_DIR / "uploads"
-APP_BASE_URL = os.getenv("CCUT_BASE_URL", "http://127.0.0.1:8000").rstrip("/")
+APP_BASE_URL = os.getenv("CCUT_BASE_URL", "http://127.0.0.1:8011").rstrip("/")
 
 STORAGE_DIR.mkdir(parents=True, exist_ok=True)
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
@@ -5029,4 +5029,4 @@ async def get_human_watch_logs():
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="127.0.0.1", port=8000)
+    uvicorn.run(app, host="127.0.0.1", port=8011)
