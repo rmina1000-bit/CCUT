@@ -1,8 +1,9 @@
 /**
- * [R2 수리] 조각맵 분할 타일 = "상태의 순수 파생".
- * 뿌리 조각 + fragment_edit_state(spans) → 표시 타일 목록을 매번 통째로 재계산한다.
- * 입력 배열에 _c 자식이 섞여 있어도 먼저 뿌리로 접은 뒤 다시 파생하므로
- * 같은 상태면 몇 번을 돌려도 같은 결과(멱등) — _c1_c1 중첩은 원리적으로 불가.
+ * [#21·#22 조각은 하나] 조각맵 타일 = "상태의 순수 파생" — 뿌리당 타일 1개.
+ * 헌장 §6 조각 헌법: 조각은 자동 분할되지 않는다. 중간 제외 = 조각 내부의
+ * 비활성 구간 (삭제 ❌ 렌더 제외 ✔ 구조 유지). _cN 파생 표시는 폐지
+ * (2026-07-17 국장 판정 ①-나). 살아남는 구간은 spans_ms 속성으로 타일에 동봉.
+ * 입력 배열에 저장 잔재 _c 자식이 섞여 있어도 뿌리로 접은 뒤 재파생 (멱등).
  * 세션 내 Apply 경로와 새로고침 재수화 경로가 이 모듈 하나를 쓴다.
  */
 import { rangeDisplayName } from "@/lib/fragmentIdentity";
@@ -10,7 +11,9 @@ import { toMs } from "./editContract";
 import type { EditStateRow } from "./editContractClient";
 
 const rootFidOf = (fr: Record<string, any>): string =>
-  String(fr.root_fragment_uid ?? fr.fragment_id ?? fr.fragment_uid ?? "");
+  // [#21 데이터 호환] 저장 잔재 _cN uid는 root_fragment_uid가 없어도 접미사를 벗겨 뿌리로 접는다
+  // (중첩 _c1_c1 포함). 신규 _cN 생산은 폐지 — 이 폴백은 과거 데이터 전용.
+  String(fr.root_fragment_uid ?? fr.fragment_id ?? fr.fragment_uid ?? "").replace(/(_c\d+)+$/, "");
 
 /** _c 자식에서 뿌리 조각 표현을 복원 (좌표는 orig_* 우선, 없으면 state anchor). */
 function rootRepOf<T extends Record<string, any>>(fr: T, st: EditStateRow | undefined): T {
@@ -34,41 +37,45 @@ function rootRepOf<T extends Record<string, any>>(fr: T, st: EditStateRow | unde
   };
 }
 
-/** (뿌리조각, edit_state) → 표시 타일[]. 순수 함수 — spans 1개=trim, N개=_cN, removed=[] */
+const fmtMs = (ms: number): string => {
+  const s = Math.max(0, Math.round(ms / 1000));
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+};
+
+/**
+ * (뿌리조각, edit_state) → 표시 타일 0~1개. 순수 함수.
+ * removed=[] / spans 1개=trim / spans N개=타일 1개 + 내부 제외 마커 — _cN 파생 없음.
+ * 좌표 = 생존 외피(spans 첫 시작~끝 끝), duration = 살아남는 길이,
+ * 표기 = "제목 · 살아남/전체 ✂n구간" (내부 제외 존재 시).
+ */
 export function tilesForRoot<T extends Record<string, any>>(
   root: T,
   st: EditStateRow | undefined,
 ): T[] {
   if (!st) return [root];
   if (st.removed || st.spans.length === 0) return []; // REMOVE → 사용본 제외
-  const fid = rootFidOf(root);
-  if (st.spans.length === 1) {
-    const [s, e] = st.spans[0];
-    return [{
-      ...root,
-      stable_key: undefined,  // 승계 금지 — key는 uid로
-      start_sec: s / 1000, end_sec: e / 1000,
-      start_time: s / 1000, end_time: e / 1000,
-      start_frame: Math.round((s / 1000) * 30), end_frame: Math.round((e / 1000) * 30),
-      duration: Math.max(1, Math.round((e / 1000) * 30) - Math.round((s / 1000) * 30)),
-      orig_start_sec: st.anchor_start_ms / 1000, orig_end_sec: st.anchor_end_ms / 1000,
-      trim_applied: true,
-    }];
-  }
-  return st.spans.map(([s, e], k) => ({
+  const first = st.spans[0][0];
+  const last = st.spans[st.spans.length - 1][1];
+  const aliveMs = st.spans.reduce((acc, [s, e]) => acc + (e - s), 0);
+  const totalMs = st.anchor_end_ms - st.anchor_start_ms;
+  const nSpans = st.spans.length;
+  const title = root.display_name ? String(root.display_name).split(" · ")[0] : undefined;
+  const display_name = nSpans > 1
+    ? `${title ? `${title} · ` : ""}${fmtMs(aliveMs)}/${fmtMs(totalMs)} ✂${nSpans}구간`
+    : rangeDisplayName(root.display_name, first / 1000, last / 1000);
+  return [{
     ...root,
-    stable_key: undefined,  // 승계 금지 — key는 uid(_cN, 유일)로
-    fragment_id: `${fid}_c${k + 1}`,
-    fragment_uid: `${fid}_c${k + 1}`,
-    root_fragment_uid: fid,
-    display_name: rangeDisplayName(root.display_name, s / 1000, e / 1000),
-    start_sec: s / 1000, end_sec: e / 1000,
-    start_time: s / 1000, end_time: e / 1000,
-    start_frame: Math.round((s / 1000) * 30), end_frame: Math.round((e / 1000) * 30),
-    duration: Math.max(1, Math.round((e / 1000) * 30) - Math.round((s / 1000) * 30)),
+    stable_key: undefined,  // 승계 금지 — key는 uid로
+    display_name,
+    start_sec: first / 1000, end_sec: last / 1000,
+    start_time: first / 1000, end_time: last / 1000,
+    start_frame: Math.round((first / 1000) * 30), end_frame: Math.round((last / 1000) * 30),
+    duration: Math.max(1, Math.round((aliveMs / 1000) * 30)),
     orig_start_sec: st.anchor_start_ms / 1000, orig_end_sec: st.anchor_end_ms / 1000,
+    spans_ms: st.spans.map(([s, e]) => [s, e]),   // 생존 구간 동봉 (ms 정수 단일 권위)
+    has_excluded_inside: nSpans > 1,              // 내부 제외 존재 마커
     trim_applied: true,
-  }));
+  }];
 }
 
 /** 뿌리 fid → 상태 매칭. parent_fragment_id 우선(중복 시 선호 item id), 다음 anchor ±10ms. */

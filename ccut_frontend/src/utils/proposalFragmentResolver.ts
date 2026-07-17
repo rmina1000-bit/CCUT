@@ -46,6 +46,10 @@ export const collectFragmentAliases = (f: any): string[] => {
   if (f.root_fragment_uid) ids.add(f.root_fragment_uid);
   if (f.parent_fragment_uid) ids.add(f.parent_fragment_uid);
   if (f.derivedFrom) ids.add(f.derivedFrom);
+  // [#21 데이터 호환] 저장 잔재 _cN uid → 접미사 벗긴 뿌리 id도 alias로 (시퀀스는 뿌리 id만 보유).
+  for (const raw of [f.fragment_id, f.fragment_uid]) {
+    if (typeof raw === "string" && /(_c\d+)+$/.test(raw)) ids.add(raw.replace(/(_c\d+)+$/, ""));
+  }
   if (f.semantic?.id) ids.add(f.semantic.id);
   if (f.semantic?.fragment_id) ids.add(f.semantic.fragment_id);
   if (f.structural?.source_fragment_id) ids.add(f.structural.source_fragment_id);

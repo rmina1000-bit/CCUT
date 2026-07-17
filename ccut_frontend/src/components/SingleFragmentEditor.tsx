@@ -191,8 +191,10 @@ export const SingleFragmentEditor: React.FC<SingleFragmentEditorProps> = ({
     probe.onload = () => openGate(key);
     probe.src = `/static/thumbnails/P_${fragment.fragment_id}_0.jpg`;
 
-    requestExtract(fragment, 12, startSec, endSec);
-  }, [open, fragment, startSec, endSec]);
+    // [#21 단일 좌표계] 파노라마는 항상 뿌리(anchor) 전 구간에서 추출 — 컷·비활성·복원과
+    // 같은 좌표계. anchor는 불변이므로 캐시 키(P_{fid})와도 영원히 정합.
+    requestExtract(fragment, 12, baseStartSec, baseEndSec);
+  }, [open, fragment, startSec, endSec, baseStartSec, baseEndSec]);
 
   // [PBE-RACE FIX] 추출 요청 단일 경로 — 응답이 '내가 요청한 (조각,밀도)'일 때만 개방.
   // 실패 시 게이트를 열지 않는다(구버전 catch가 열어서 404 폭풍의 방아쇠였음) —
@@ -253,9 +255,11 @@ export const SingleFragmentEditor: React.FC<SingleFragmentEditorProps> = ({
     };
   }, [dragging, leftCut, rightCut, frameCount]);
 
-  const durationSec =
-    typeof startSec === "number" && typeof endSec === "number"
-      ? Math.max(0, endSec - startSec)
+  // [#21 단일 좌표계] 레일·재생·밀도·시간표시의 기준 길이 = 뿌리(anchor) 전체.
+  // 구판은 현재 타일 길이(durationSec)를 쓰는 곳과 anchor를 쓰는 곳이 섞여 있었다(좌표 혼합 결함).
+  const railDuration =
+    typeof baseStartSec === "number" && typeof baseEndSec === "number"
+      ? Math.max(0, baseEndSec - baseStartSec)
       : undefined;
 
   // [PBE-RESIZE] 브라우저 창 크기가 줄어들면 모달 크기/위치를 뷰포트 안으로 다시 가둔다.
@@ -339,12 +343,12 @@ export const SingleFragmentEditor: React.FC<SingleFragmentEditorProps> = ({
     const probe = new Image();
     probe.onload = () => openGate(key);
     probe.src = `/static/thumbnails/P_${fragment.fragment_id}${suffix}_0.jpg`;
-    requestExtract(fragment, clamped, startSec, endSec);
+    requestExtract(fragment, clamped, baseStartSec, baseEndSec); // [#21] anchor 좌표
   };
 
-  // 밀도 프리셋: 초 단위 간격 → 프레임 수 (전체 길이 기준)
+  // 밀도 프리셋: 초 단위 간격 → 프레임 수 (뿌리 전체 길이 기준)
   const densityPresets = (() => {
-    const d = durationSec && durationSec > 0 ? durationSec : 12;
+    const d = railDuration && railDuration > 0 ? railDuration : 12;
     const byInterval = (sec: number) => Math.max(4, Math.min(48, Math.round(d / sec)));
     return [
       { label: "0.5s", n: byInterval(0.5) },
@@ -392,8 +396,8 @@ export const SingleFragmentEditor: React.FC<SingleFragmentEditorProps> = ({
   useEffect(() => {
     if (!isPlaying) return;
 
-    const frameDuration = durationSec && durationSec > 0
-      ? (durationSec / frameCount) * 1000
+    const frameDuration = railDuration && railDuration > 0
+      ? (railDuration / frameCount) * 1000
       : 200;
 
     const interval = setInterval(() => {
@@ -408,7 +412,7 @@ export const SingleFragmentEditor: React.FC<SingleFragmentEditorProps> = ({
     }, frameDuration);
 
     return () => clearInterval(interval);
-  }, [isPlaying, durationSec, frameCount, keptSegments]);
+  }, [isPlaying, railDuration, frameCount, keptSegments]);
 
   const handlePlayToggle = () => {
     setIsPlaying((prev) => {
@@ -704,7 +708,7 @@ export const SingleFragmentEditor: React.FC<SingleFragmentEditorProps> = ({
               </div>
             )}
             <div className="absolute top-2 right-2 bg-black/75 px-2 py-1 rounded text-white text-[11px] font-mono shadow-md">
-              {((currentIndex / frameCount) * (durationSec || 0)).toFixed(1)}s / {durationSec !== undefined ? `${durationSec.toFixed(1)}s` : "—"}
+              {((currentIndex / frameCount) * (railDuration || 0)).toFixed(1)}s / {railDuration !== undefined ? `${railDuration.toFixed(1)}s` : "—"}
             </div>
           </div>
         )}
@@ -744,7 +748,7 @@ export const SingleFragmentEditor: React.FC<SingleFragmentEditorProps> = ({
             {/* [PBE-DENSITY] 프레임 간격 조그 — 촘촘히/듬성듬성 */}
             <div className="flex items-center justify-between px-1">
               <span className="text-[10px] text-muted-foreground/60 font-mono">
-                프레임 간격 {durationSec ? (durationSec / frameCount).toFixed(2) : "—"}s · {frameCount}장
+                프레임 간격 {railDuration ? (railDuration / frameCount).toFixed(2) : "—"}s · {frameCount}장
               </span>
               <div className="flex items-center gap-1">
                 {densityPresets.map((p) => (
@@ -879,7 +883,7 @@ export const SingleFragmentEditor: React.FC<SingleFragmentEditorProps> = ({
             {/* Time Labels Rail */}
             <div className="flex justify-between items-center text-[10px] text-muted-foreground/60 px-1 font-mono">
               <span>0.0s</span>
-              <span>{formatSec(durationSec)}</span>
+              <span>{formatSec(railDuration)}</span>
             </div>
 
             {/* Inactive Zone Labels */}
