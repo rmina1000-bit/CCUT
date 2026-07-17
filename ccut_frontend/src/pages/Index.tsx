@@ -1884,7 +1884,16 @@ const Index: React.FC = () => {
     if (!proposal) return;
 
     if ((proposal as any).customEditFragments) {
-      setEditFragments((proposal as any).customEditFragments);
+      // [GHOST#1 2a] 스냅샷 직주입 금지 — 순서·구성은 스냅샷을 따르되, 좌표·분할은
+      // edit-state 재파생이 항상 이긴다 (edit-state 무근거 편집 잔상은 표시하지 않는다).
+      // 게이트 OFF·상태 미로드 시엔 종전 그대로 (ref 경유라 effect deps 무변).
+      const snap = (proposal as any).customEditFragments as any[];
+      const states = Array.from(editStatesRef.current.values());
+      setEditFragments(
+        editCtxRef.current.enabled && states.length
+          ? (rebuildFragmentTiles(snap, states, preferredPbeItemIdFor) as any)
+          : (snap as any)
+      );
     } else {
       const rawSeq = (proposal as any).resolved_aliases || (proposal as any).sequence || [];
       if (rawSeq.length > 0) {
@@ -1947,7 +1956,12 @@ const Index: React.FC = () => {
               setProposals((prev) => {
                 if (!prev || !prev[target]) return prev;
                 const existing = (prev[target] as any).customEditFragments;
-                return { ...prev, [target]: { ...prev[target], customEditFragments: existing?.length ? existing : rebuilt } };
+                // [GHOST#1 2a] 스냅샷이 신선한 rebuild를 이기지 않는다 —
+                // 순서는 existing 유지, 좌표·분할은 edit-state로 재파생. 상태 미로드 시엔 종전 그대로.
+                const refreshed = states.length
+                  ? (existing?.length ? (rebuildFragmentTiles(existing as any[], states, preferredPbeItemIdFor) as any[]) : rebuilt)
+                  : (existing?.length ? existing : rebuilt);
+                return { ...prev, [target]: { ...prev[target], customEditFragments: refreshed } };
               });
               return;
             }
