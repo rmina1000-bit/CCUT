@@ -29,8 +29,6 @@ from archive.models import SourceVideo
 from archive.db_models import PublishedTable, ProgramTable, FragmentTable, SourceTable, ProposalTable, ProjectSourceTable, ExportInputTable, ExportResultTable
 from database import get_db
 
-from engine.boundary_editor import pbe_engine
-from engine.pbe_logic import pbe_ai, smart_pbe
 from engine.voice_engine import voice_engine
 from engine.vector_engine import vector_engine
 from engine.search_engine import search_engine
@@ -3954,65 +3952,9 @@ async def extract_pbe_panoramas(req: PanoramaExtractRequest, background_tasks: B
     return {"status": "COMPLETED", "count": len(enriched_fragments), "num_frames": _n}
 
 
-@app.post("/pbe/context")
-async def get_pbe_context(req: ContextRequest):
-    return pbe_engine.get_seam_context(req.left_frag_id, req.right_frag_id)
-
-
-class BoundaryChangeRequest(BaseModel):
-    seam_id: str
-    new_split_point: float
-    user_msg: str
-
-
-@app.post("/pbe/apply")
-async def apply_pbe_change(req: BoundaryChangeRequest):
-    parts = req.seam_id.split("_")
-    left_id = parts[1] if len(parts) > 1 else ""
-    right_id = parts[2] if len(parts) > 2 else ""
-    res = pbe_ai.commit_pbe_change(left_id, right_id, req.new_split_point, req.user_msg)
-    
-    # [STEP 14-A] Log PBE boundary adjustments as negative feedback to predictions
-    try:
-        from learning.decision_logger import DecisionLogger
-        DecisionLogger.log_pbe_manual_edit(
-            project_id="pbe_manual_project",
-            fragment_id=left_id,
-            before_start=0.0,
-            before_end=0.0,
-            after_start=req.new_split_point,
-            after_end=req.new_split_point
-        )
-    except Exception as log_err:
-        print(f"[DECISION_LOGGER][ERROR] Failed to log manual PBE delta shift: {log_err}")
-        
-    return res
-
-
-class SmartSuggestRequest(BaseModel):
-    left_frag: dict
-    right_frag: dict
-
-
-@app.post("/pbe/suggest")
-async def smart_pbe_suggest(req: SmartSuggestRequest):
-    """[1.0.6 SMART PBE] 최적 Seam 위치 + 이유 + 신뢰도 반환"""
-    suggestion = smart_pbe.suggest_boundary(
-        left_frag=req.left_frag,
-        right_frag=req.right_frag,
-    )
-    return suggestion
-
-
-class PBEChatRequest(BaseModel):
-    message: str
-    seam_id: str = ""
-
-
-@app.post("/pbe/analyze")
-async def analyze_pbe_chat(req: PBEChatRequest):
-    return pbe_ai.process_chat_trim(req.seam_id, req.message)
-
+# [GHOST 소각 — 구 2조각 PBE 백엔드] /pbe/context·apply·suggest·analyze 라우트 4개와
+# 전용 모델(BoundaryChange·SmartSuggest·PBEChat Request), engine/boundary_editor.py·pbe_logic.py 제거.
+# 근거: STEP C 대장 #1·2·3 (프로덕션 도달 경로 0 증명), 헌장 §6·§10. 복원은 git 이력.
 
 # ── 프로그램 생성 라우트 (/programs) ───────────────────────────────
 
