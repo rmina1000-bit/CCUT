@@ -34,10 +34,9 @@ import { videoService } from "@/services/videoService";
 
 import { Direction, DirectionSnapshot, Proposal, StoryPlanPreview } from "@/proposal/proposalTypes";
 import {
-  createInitialSnapshot,
   createNextSnapshot,
 } from "@/proposal/directionSnapshot";
-import { generateProposals } from "@/proposal/proposalOrchestrator";
+// [GHOST#3 절단] generateProposals(strategyEngine 폴백)·createInitialSnapshot import 제거 — 가짜 제안 경로 소멸
 import { collectFragmentAliases, resolveProposalFragments } from "@/utils/proposalFragmentResolver";
 // [EDIT-CONTRACT-B0 IMPL-2b] 공통 편집 계약 클라이언트 — 게이트 OFF면 어디서도 호출되지 않는다
 import {
@@ -726,6 +725,7 @@ const Index: React.FC = () => {
               // 3. 제안 생성 요청
               let generatedProposals: Record<"A" | "B", any> = {} as any;
               let proposalData: any = null;
+              let proposalError: string | null = null;  // [GHOST#3] 실패 이유 — 화면 표시용 (침묵 금지)
               markTiming("proposal_requested");
 
               try {
@@ -783,24 +783,52 @@ const Index: React.FC = () => {
                 }
               } catch (pErr) {
                 console.error("[proposal-orchestration] error:", pErr);
+                proposalError = pErr instanceof Error ? pErr.message : String(pErr);
               }
 
               // 4. 최종 상태 적용
-              if (Object.keys(generatedProposals).length === 0) {
-                const initialSnapshot = createInitialSnapshot();
-                generatedProposals = generateProposals(finalEditFragments, initialSnapshot);
-                setDirectionSnapshot(initialSnapshot);
-              }
+              // [GHOST#3 절단] 백엔드 제안 부재/실패 시 프론트 임의 생성(strategyEngine 가짜 제안) 금지
+              // — 헌장 §5 거짓말 금지·침묵 실패 금지. 분석 결과(조각)는 그대로 보존하고
+              //   실패 이유를 화면에 표시한다. 재시도는 사용자가 결정한다.
+              const proposalsEmpty = Object.keys(generatedProposals).length === 0;
 
               setEditFragments(finalEditFragments);
               setSourceFragments(updatedEntries[0]?.fragments || []);
-              setProposals(generatedProposals);
+              if (!proposalsEmpty) setProposals(generatedProposals);
               markTiming("proposal_mapped_to_ui");
               markTiming("story_visible"); // Set at same time as proposals are mapped
               setSemanticFragments(Object.values(semanticResults).flat());
 
               setAnalyzeProgress(100);
-              setAnalyzeMessage(failedSourceIds.length > 0 ? `일부 분석 실패 (${failedSourceIds.length}개), 제안 생성 완료` : "모든 영상 분석 및 제안 완료");
+              setAnalyzeMessage(
+                proposalsEmpty
+                  ? `분석은 끝났지만 편집 제안 생성에 실패했습니다 — ${proposalError ?? "백엔드가 제안을 반환하지 않았습니다"}. 조각은 보존되어 있으니 다시 시도해 주세요.`
+                  : (failedSourceIds.length > 0 ? `일부 분석 실패 (${failedSourceIds.length}개), 제안 생성 완료` : "모든 영상 분석 및 제안 완료")
+              );
+              if (proposalsEmpty) {
+                // 분석 배너는 complete 전환과 함께 사라지므로, 지속 표면(지휘부 채팅)에 이유를 남긴다.
+                // 제안 실패 시엔 storyPlan 골격 effect(:1169, proposals 필수)가 못 태어나므로
+                // 여기서 null-안전하게 최소 골격을 세운다 — 침묵 화면 금지.
+                const failMsg = {
+                  id: `ai_proposal_fail_${Date.now()}`,
+                  sender: "ai" as const,
+                  text: `분석은 끝났지만 편집 제안(A·B) 생성에 실패했습니다 — ${proposalError ?? "백엔드가 제안을 반환하지 않았습니다"}. 조각은 그대로 보존되어 있습니다. 잠시 후 다시 말씀해 주시면 재시도하겠습니다.`,
+                  timestamp: Date.now(),
+                };
+                setStoryPlan((prev: any) => ({
+                  ...(prev ?? {
+                    story_plan_id: `STP_${Date.now()}`,
+                    source_count: updatedEntries.length,
+                    consultation_status: "draft_ready",
+                    confirmation_status: "pending",
+                    direction_options: [],
+                    detected_theme: "",
+                    selected_direction: undefined,
+                    messages: [],
+                  }),
+                  messages: [...((prev?.messages) ?? []), failMsg],
+                }));
+              }
               setAppState("complete");
               markTiming("user_selectable");
 
