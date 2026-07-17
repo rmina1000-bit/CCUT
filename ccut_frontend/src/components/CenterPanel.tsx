@@ -92,6 +92,11 @@ interface CenterPanelProps {
   sources?: any[];
   proposals?: any;
   committedProposalId?: string | null;
+  // [#28 재생원 일원화] 조각맵에 현재 깔린 제안(committed ?? selected) — 그 제안의 라이브 재생은
+  // fragments prop(조각맵 파생)만 쓴다. 화면과 재생은 같은 진실 (헌장 §5).
+  displayProposalId?: string | null;
+  // [F1 하나의 강물] 재생 불가 안내를 지휘부 채팅에 흘리는 위임 콜백 (toast 폐지 — SEE FAIL 1)
+  onPlaybackNotice?: (text: string) => void;
   onPreviewProposal?: (key: string) => void;
   onCommitProposal?: (key: string) => void;
   onPreviewNext?: () => void;
@@ -342,6 +347,8 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
   videoUrl,
   proposals,
   committedProposalId,
+  displayProposalId,
+  onPlaybackNotice,
   onPreviewProposal,
   onCommitProposal,
   sourceId,
@@ -634,10 +641,27 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
     }
   }, []);
 
+  // [R2 정지 정밀화] span 경계 감시 rAF 핸들 (A/B 각 1개) — 재생 정지·전환 시 반드시 취소.
+  const boundaryRafARef = useRef<number | null>(null);
+  const boundaryRafBRef = useRef<number | null>(null);
+  // [R2 가짜 발화 차단] 소스 교체(pending) 경로의 지연 무장용 — seek 착지 전 구 소스
+  // currentTime이 새 span end와 비교돼 span을 건너뛰는 경합을 막는다 (검증 중 실측된 결함).
+  const pendingSeqEndARef = useRef<number | null>(null);
+  const pendingSeqEndBRef = useRef<number | null>(null);
+  const stopBoundaryWatch = useCallback((player: "A" | "B") => {
+    const ref = player === "A" ? boundaryRafARef : boundaryRafBRef;
+    if (ref.current !== null) {
+      cancelAnimationFrame(ref.current);
+      ref.current = null;
+    }
+  }, []);
+
   // [DUAL_PLAY_GUARD] 반대편 player 즉시 hard-stop
   const stopOtherPlayer = useCallback((active: "A" | "B") => {
     if (active === "A") {
       // B를 완전 정지
+      stopBoundaryWatch("B");                // [R2] 경계 감시 루프 취소 (누수 금지)
+      pendingSeqEndBRef.current = null;      // [R2] 지연 무장 잔재 소거
       playSessionBRef.current += 1;          // invalidate stale B events
       pendingLocalTimeBRef.current = null;   // pending seek 무효화
       isSeqBRef.current = false;
@@ -650,6 +674,8 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
       setIsPlayingB(false);
     } else {
       // A를 완전 정지
+      stopBoundaryWatch("A");                // [R2] 경계 감시 루프 취소 (누수 금지)
+      pendingSeqEndARef.current = null;      // [R2] 지연 무장 잔재 소거
       playSessionARef.current += 1;          // invalidate stale A events
       pendingLocalTimeARef.current = null;   // pending seek 무효화
       isSeqARef.current = false;
@@ -661,7 +687,7 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
       }
       setIsPlayingA(false);
     }
-  }, []);
+  }, [stopBoundaryWatch]);
 
   const sameVideoSource = useCallback((currentSrc?: string | null, nextSrc?: string | null) => {
     if (!nextSrc) return true;
@@ -678,6 +704,12 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
 
   const getVideoUrlForFrag = useCallback(
     (fragId: string): string | null => {
+      // [R1 #34] 문자열만 수용 — 객체/undefined가 오면 조용히 죽지 않고 명시적 거부.
+      // (RED 1: key_fragments 소진 시 sequence 객체가 흘러들어 fragId.match 크래시 → 앱 먹통)
+      if (typeof fragId !== "string" || !fragId) {
+        console.error("[VIDEO_URL_RESOLVE][REJECT] fragId가 문자열이 아님 — 재생원 해석 거부", { fragId });
+        return null;
+      }
       if (sourceEntries.length === 0) return videoUrl ?? null;
 
       const allPossibleFragments = [
@@ -733,11 +765,13 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
   const getVideoUrlForProposal = useCallback(
     (proposalKey: "A" | "B"): string | null => {
       const p = proposals?.[proposalKey];
-      const firstFragId = p?.key_fragments?.[0] ?? p?.sequence?.[0];
-      if (!firstFragId) return videoUrl ?? null;
+      // [R1 #34] sequence(객체 배열) 폴백 절단 — key_fragments가 비면 null.
+      // 조각맵이 비었으면 비었다고 말한다. 옛 시퀀스를 꺼내오지 않는다 (#3·#28 계열, 헌장 §5).
+      const firstFragId = p?.key_fragments?.[0];
+      if (!firstFragId) return null;
       return getVideoUrlForFrag(firstFragId);
     },
-    [proposals, getVideoUrlForFrag, videoUrl]
+    [proposals, getVideoUrlForFrag]
   );
 
   // [PROPOSAL_PREVIEW] proposal.preview_url 우선, 없으면 fragment URL fallback
@@ -763,6 +797,33 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
 
   const buildSeqFrags = useCallback(
     (proposalKey: "A" | "B"): Fragment[] => {
+      // [#28 재생원 일원화 (가') 국장 승인 2026-07-17] 조각맵에 깔린 제안의 라이브 재생 =
+      // 조각맵 상태(fragments prop)의 순수 파생 — 보류 제외·순서·트림이 이미 반영된 배열.
+      // 서버 ledger EDL 클립 선점(구 backendEdlApplies 1순위)·저장된 제안 시퀀스
+      // (customEditFragments 캐시·resolved_aliases·key_fragments)로 떨어지지 않는다:
+      // 세 진실(EDL 15클립·제안 9키·조각맵 1타일)이 갈라질 때 화면과 재생이 어긋나던 병
+      // 절단 (헌장 §5 — 화면과 재생은 같은 진실). 빈 조각맵이면 빈 배열 — 옛 시퀀스 부활 금지.
+      // 내부 제외 정밀 스킵: 타일 동봉 spans_ms(05723b0f, ms 정수)를 소비해 span당 재생
+      // 항목 1개로 전개 — 근사 후퇴 없음 (e96d8d18 스킵·끝정지·재재생 자산 보존).
+      if (proposalKey === (displayProposalId ?? committedProposalId)) {
+        return (fragments ?? [])
+          .filter((f) => !f.excluded)
+          .flatMap((f: any) => {
+            const spans: Array<[number, number]> | null =
+              Array.isArray(f.spans_ms) && f.spans_ms.length > 1 ? f.spans_ms : null;
+            if (!spans) return [f]; // span 0·1개 = 타일 좌표가 이미 그 구간
+            return spans.map(([s, e]) => ({
+              ...f,
+              start_sec: s / 1000, end_sec: e / 1000,
+              start_time: s / 1000, end_time: e / 1000,
+              start_frame: Math.round((s / 1000) * 30),
+              end_frame: Math.round((e / 1000) * 30),
+              duration: Math.max(1, Math.round(((e - s) / 1000) * 30)),
+            }));
+          });
+      }
+
+      // 조각맵에 깔리지 않은(비표시) 제안 중 확정본은 서버 EDL 클립으로 재생 (기존 경로 보존).
       const backendEdlApplies =
         !!programId &&
         programId.startsWith("proj_") &&
@@ -771,20 +832,15 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
       if (backendEdlApplies) {
         return exportClips.map(physicalClipToFragment);
       }
-      // 만약 해당 제안서의 사용자 수동 편집 캐시(customEditFragments)가 존재한다면 이를 우선적으로 재생에 사용
-      const cachedFrags = (proposals?.[proposalKey] as any)?.customEditFragments;
-      if (cachedFrags && cachedFrags.length > 0) {
-        return cachedFrags.filter((f: any) => !f.excluded);
-      }
-
-      // 만약 재생하려는 제안서(A or B)가 현재 커밋/편집 중인 제안서(committedProposalId)이고,
-      // 사용자 수동 편집 목록(fragments)이 존재한다면 이를 우선적으로 재생에 사용
-      if (proposalKey === committedProposalId && fragments && fragments.length > 0) {
-        return fragments.filter((f) => !f.excluded);
-      }
 
       const p = proposals?.[proposalKey];
       if (!p) return [];
+
+      // 조각맵에 깔리지 않은(비표시) 제안의 비교 재생 — 저장본 시퀀스 사용은 정당.
+      const cachedFrags = (p as any)?.customEditFragments;
+      if (cachedFrags && cachedFrags.length > 0) {
+        return cachedFrags.filter((f: any) => !f.excluded);
+      }
 
       // [STEP 10-K-C1-R39-R1] resolved_aliases가 있으면 우선적으로 사용하여 가드가 적용된 데이터를 재생에 반영
       const resolved = (p as any).resolved_aliases;
@@ -802,7 +858,7 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
         .map((id) => allSourceFragments.find((f) => f.fragment_id === id))
         .filter(Boolean) as Fragment[];
     },
-    [proposals, allSourceFragments, committedProposalId, fragments, exportClips, programId]
+    [proposals, allSourceFragments, committedProposalId, displayProposalId, fragments, exportClips, programId]
   );
 
 
@@ -834,7 +890,15 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
       const startSec = readFragmentStartSec(frag);
       const endSec = readFragmentEndSec(frag);
 
-      endSecRef.current = endSec;
+      // [R2 가짜 발화 차단] 무장 시점 분리 — 동일 소스 seek(동기)는 즉시,
+      // 소스 교체(pending·비동기)는 seek 착지(onLoadedMetadata pending 소비) 때 무장.
+      const willSwapSrc = !!fragUrl && !sameVideoSource(ref.current.currentSrc || ref.current.src, fragUrl);
+      if (willSwapSrc) {
+        endSecRef.current = -1;
+        (isA ? pendingSeqEndARef : pendingSeqEndBRef).current = endSec;
+      } else {
+        endSecRef.current = endSec;
+      }
 
       import.meta.env.DEV && console.log("[PLAYFRAG]", {
         player,
@@ -920,8 +984,94 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
     [getVideoUrlForFrag, sameVideoSource, videoUrl, stopOtherPlayer]
   );
 
+  // [R2 정지 정밀화 — 국장 승인 (가) rAF] span 경계 도달 시 전환/정지의 단일 처리부.
+  // 트리거 2원: ① rAF 루프(가시 탭, ≈16ms 주기 — 정밀도 결정) ② timeupdate 백스톱
+  // (백그라운드 탭 — 브라우저가 rAF를 정지시키는 환경에서 현행 등가 동작 보존).
+  // 중복 발화 봉쇄: 처리 즉시 endRef를 -1로 소거 — 두 트리거 중 먼저 온 쪽만 유효.
+  // 착지 = 미달 방향: currentTime >= end - LEAD 에서 끊는다 (지운 말이 들리는 것보다 낫다).
+  const BOUNDARY_LEAD_SEC = 0.02; // rAF 1주기(≈16.7ms) 예산 — 초과 0 / 미달 ≤20ms
+  const handleSpanBoundary = useCallback((player: "A" | "B") => {
+    const isA = player === "A";
+    const v = (isA ? videoRefA : videoRefB).current;
+    if (!v) return;
+    const endRef = isA ? seqEndARef : seqEndBRef;
+    if (endRef.current <= 0) return; // 이미 처리됨 (중복 발화 금지)
+    const isSeqRef = isA ? isSeqARef : isSeqBRef;
+    const idxRef = isA ? seqIdxARef : seqIdxBRef;
+    const fragsRef = isA ? seqFragsARef : seqFragsBRef;
+    const elapsedRef = isA ? seqElapsedSecARef : seqElapsedSecBRef;
+    import.meta.env.DEV && console.log(`[BOUNDARY_HIT_${player}]`, {
+      currentTime: v.currentTime, seqEnd: endRef.current,
+      overshoot_ms: Math.round((v.currentTime - endRef.current) * 1000),
+      seqIdx: idxRef.current, isSeq: isSeqRef.current,
+    });
+    endRef.current = -1;
+    if (isSeqRef.current) {
+      const nextIdx = idxRef.current + 1;
+      const frags = fragsRef.current;
+      if (nextIdx < frags.length) {
+        elapsedRef.current += readFragmentDurationSec(frags[idxRef.current]);
+        idxRef.current = nextIdx;
+        (isA ? setProposalTimeA : setProposalTimeB)(elapsedRef.current);
+        reportActiveId(frags[nextIdx].fragment_id);
+        // [CLIP_SWITCH_GUARD_B] 조각 전환 중 잔상 숨김 (기존 B 전용 동작 보존)
+        if (!isA && videoRefB.current) {
+          const bv = videoRefB.current;
+          bv.style.opacity = "0";
+          let restored = false;
+          const onSeekedOnce = () => {
+            if (restored) return;
+            restored = true;
+            bv.removeEventListener("seeked", onSeekedOnce);
+            bv.style.opacity = "1";
+          };
+          bv.addEventListener("seeked", onSeekedOnce);
+          setTimeout(() => {
+            if (restored) return;
+            restored = true;
+            bv.style.opacity = "1";
+          }, 400);
+        }
+        playFrag(player, frags[nextIdx], endRef);
+      } else {
+        isSeqRef.current = false;
+        idxRef.current = -1;
+        v.pause();
+        (isA ? setIsPlayingA : setIsPlayingB)(false);
+        reportActiveId(null);
+      }
+    } else {
+      v.pause();
+      (isA ? setIsPlayingA : setIsPlayingB)(false);
+    }
+  }, [playFrag, reportActiveId]);
+
+  const startBoundaryWatch = useCallback((player: "A" | "B") => {
+    const isA = player === "A";
+    const rafRef = isA ? boundaryRafARef : boundaryRafBRef;
+    if (rafRef.current !== null) cancelAnimationFrame(rafRef.current); // 단일 루프 보장
+    const tick = () => {
+      rafRef.current = null;
+      const v = (isA ? videoRefA : videoRefB).current;
+      const end = (isA ? seqEndARef : seqEndBRef).current;
+      // 정지·seek 중·경계 소거 상태면 루프 종료 — play/seeked에서 재무장
+      if (!v || end <= 0 || v.paused || v.seeking) return;
+      if (v.currentTime >= end - BOUNDARY_LEAD_SEC) {
+        handleSpanBoundary(player);
+        return;
+      }
+      rafRef.current = requestAnimationFrame(tick);
+    };
+    rafRef.current = requestAnimationFrame(tick);
+  }, [handleSpanBoundary]);
+
+  // [R2] 언마운트 시 감시 루프 취소 (누수 금지)
+  useEffect(() => () => { stopBoundaryWatch("A"); stopBoundaryWatch("B"); }, [stopBoundaryWatch]);
+
   const stopSeq = useCallback(
     (player: "A" | "B") => {
+      stopBoundaryWatch(player); // [R2] 경계 감시 루프 취소
+      (player === "A" ? pendingSeqEndARef : pendingSeqEndBRef).current = null; // [R2] 지연 무장 잔재 소거
       cleanupPendingLoadHandler(player);
 
       if (player === "A") {
@@ -940,14 +1090,23 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
 
       reportActiveId(null);
     },
-    [cleanupPendingLoadHandler, reportActiveId]
+    [cleanupPendingLoadHandler, reportActiveId, stopBoundaryWatch]
   );
 
   const startSeq = useCallback((player: "A" | "B") => {
     const isA = player === "A";
     const ref = isA ? videoRefA : videoRefB;
     const frags = buildSeqFrags(player);
-    if (frags.length === 0) return;
+    if (frags.length === 0) {
+      // [건3 빈 조각맵 정직 안내 + F1 하나의 강물] 침묵 무반응·옛 시퀀스 폴백 금지 (헌장 §5).
+      // 안내는 지휘부 채팅으로 흐른다 (toast 폐지 — 헌장 §3부칙 F1, SEE FAIL 1 수리).
+      if (player === (displayProposalId ?? committedProposalId)) {
+        onPlaybackNotice?.("재생할 조각이 없습니다 — 보류맵에서 조각을 되돌리시면 재생됩니다.");
+      } else {
+        onPlaybackNotice?.(`재생할 조각이 없습니다 — ${player}안에 재생 가능한 조각이 없어요.`);
+      }
+      return;
+    }
 
     console.log(
       `[SEQ_FRAGS_AUDIT_JSON] ${player}\n` +
@@ -998,7 +1157,7 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
       reportActiveId(frags[0].fragment_id);
       playFrag("B", frags[0], seqEndBRef);
     }
-  }, [buildSeqFrags, playFrag, stopSeq, reportActiveId, setActivePlayerSafe]);
+  }, [buildSeqFrags, playFrag, stopSeq, reportActiveId, setActivePlayerSafe, displayProposalId, committedProposalId, onPlaybackNotice]);
  
   const reSyncSequence = useCallback((player: "A" | "B", time: number) => {
     const frags = player === "A" ? seqFragsARef.current : seqFragsBRef.current;
@@ -1666,6 +1825,7 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
                       stopOtherPlayer("A");
                       setActivePlayerSafe("A");
                       setIsPlayingA(true);
+                      startBoundaryWatch("A"); // [R2] 경계 감시 무장
                     }}
                     onPause={() => setIsPlayingA(false)}
                     onEnded={() => {
@@ -1695,6 +1855,7 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
                     }}
                     onSeeked={() => {
                       isSeekingRefA.current = false;
+                      startBoundaryWatch("A"); // [R2] span 전환 seek 후 재무장 (play 이벤트 없는 동일-src seek 대비)
                     }}
                     onTimeUpdate={(e) => {
                       // [DUAL_PLAY_GUARD] inactive player는 advance 차단
@@ -1718,41 +1879,11 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
                         setProposalTimeA(global);
                       }
 
-                      const near =
-                        seqEndARef.current > 0 && !v.seeking && v.currentTime >= seqEndARef.current;
-                      if (!near) return;
-
-                      if (near) {
-                        console.log("[NEAR_TRUE_A]", {
-                          currentTime: v.currentTime,
-                          seqEndRef: seqEndARef.current,
-                          seqIdx: seqIdxARef.current,
-                          isSeq: isSeqARef.current
-                        });
-                      }
-
-                      if (isSeqARef.current) {
-                        const nextIdx = seqIdxARef.current + 1;
-                        const frags = seqFragsARef.current;
-
-                        if (nextIdx < frags.length) {
-                          const curFrag = frags[seqIdxARef.current];
-                          seqElapsedSecARef.current += readFragmentDurationSec(curFrag);
-                          seqIdxARef.current = nextIdx;
-                          setProposalTimeA(seqElapsedSecARef.current);
-                          reportActiveId(frags[nextIdx].fragment_id);
-                          playFrag("A", frags[nextIdx], seqEndARef);
-                        } else {
-                          isSeqARef.current = false;
-                          seqIdxARef.current = -1;
-                          seqEndARef.current = -1;
-                          v.pause();
-                          setIsPlayingA(false);
-                          reportActiveId(null);
-                        }
-                      } else {
-                        v.pause();
-                        setIsPlayingA(false);
+                      // [R2] 경계 판정 본체는 rAF 루프(startBoundaryWatch)가 담당 (≈16ms 정밀).
+                      // 여기는 백그라운드 탭(브라우저가 rAF 정지) 전용 백스톱 — 동일 처리부 공유,
+                      // endRef 소거로 중복 발화 봉쇄.
+                      if (seqEndARef.current > 0 && v.currentTime >= seqEndARef.current - BOUNDARY_LEAD_SEC) {
+                        handleSpanBoundary("A");
                       }
                     }}
                     onLoadedMetadata={(e) => {
@@ -1773,6 +1904,11 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
                           duration: e.currentTarget.duration
                         });
                         pendingLocalTimeARef.current = null;
+                        // [R2 가짜 발화 차단] 소스 교체 완료 — 이제 span end 무장 (구 소스 시간과의 비교 불가 시점)
+                        if (pendingSeqEndARef.current !== null) {
+                          seqEndARef.current = pendingSeqEndARef.current;
+                          pendingSeqEndARef.current = null;
+                        }
                         const tgt = e.currentTarget;
                         const target = pending;
                         let seekDone = false;
@@ -1963,6 +2099,7 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
                       stopOtherPlayer("B");
                       setActivePlayerSafe("B");
                       setIsPlayingB(true);
+                      startBoundaryWatch("B"); // [R2] 경계 감시 무장
                     }}
                     onPause={() => setIsPlayingB(false)}
                     onEnded={() => {
@@ -1991,6 +2128,7 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
                     }}
                     onSeeked={() => {
                       isSeekingRefB.current = false;
+                      startBoundaryWatch("B"); // [R2] span 전환 seek 후 재무장
                     }}
                     onTimeUpdate={(e) => {
                       // [DUAL_PLAY_GUARD] inactive player는 advance 차단
@@ -2014,58 +2152,10 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
                         setProposalTimeB(global);
                       }
 
-                      const near =
-                        seqEndBRef.current > 0 && !v.seeking && v.currentTime >= seqEndBRef.current;
-                      if (!near) return;
-
-                      if (near) {
-                        console.log("[NEAR_TRUE_B]", {
-                          currentTime: v.currentTime,
-                          seqEndRef: seqEndBRef.current,
-                          seqIdx: seqIdxBRef.current,
-                          isSeq: isSeqBRef.current
-                        });
-                      }
-
-                      if (isSeqBRef.current) {
-                        const nextIdx = seqIdxBRef.current + 1;
-                        const frags = seqFragsBRef.current;
-
-                        if (nextIdx < frags.length) {
-                          const curFrag = frags[seqIdxBRef.current];
-                          seqElapsedSecBRef.current += readFragmentDurationSec(curFrag);
-                          seqIdxBRef.current = nextIdx;
-                          setProposalTimeB(seqElapsedSecBRef.current);
-                          reportActiveId(frags[nextIdx].fragment_id);
-                          // [CLIP_SWITCH_GUARD_B] 조각 전환 중 잔상 숨김
-                          if (videoRefB.current) {
-                            videoRefB.current.style.opacity = "0";
-                            let restored = false;
-                            const onSeeked = () => {
-                              if (restored) return;
-                              restored = true;
-                              videoRefB.current?.removeEventListener("seeked", onSeeked);
-                              if (videoRefB.current) videoRefB.current.style.opacity = "1";
-                            };
-                            videoRefB.current.addEventListener("seeked", onSeeked);
-                            setTimeout(() => {
-                              if (restored) return;
-                              restored = true;
-                              if (videoRefB.current) videoRefB.current.style.opacity = "1";
-                            }, 400);
-                          }
-                          playFrag("B", frags[nextIdx], seqEndBRef);
-                        } else {
-                          isSeqBRef.current = false;
-                          seqIdxBRef.current = -1;
-                          seqEndBRef.current = -1;
-                          v.pause();
-                          setIsPlayingB(false);
-                          reportActiveId(null);
-                        }
-                      } else {
-                        v.pause();
-                        setIsPlayingB(false);
+                      // [R2] 경계 판정 본체는 rAF 루프가 담당 — 여기는 백그라운드 탭 백스톱.
+                      // (CLIP_SWITCH_GUARD_B 잔상 숨김은 공유 처리부 handleSpanBoundary로 이관)
+                      if (seqEndBRef.current > 0 && v.currentTime >= seqEndBRef.current - BOUNDARY_LEAD_SEC) {
+                        handleSpanBoundary("B");
                       }
                     }}
                     onLoadedMetadata={(e) => {
@@ -2086,6 +2176,11 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
                           duration: e.currentTarget.duration
                         });
                         pendingLocalTimeBRef.current = null;
+                        // [R2 가짜 발화 차단] 소스 교체 완료 — 이제 span end 무장
+                        if (pendingSeqEndBRef.current !== null) {
+                          seqEndBRef.current = pendingSeqEndBRef.current;
+                          pendingSeqEndBRef.current = null;
+                        }
                         const tgt = e.currentTarget;
                         const target = pending;
                         let seekDone = false;

@@ -14,6 +14,45 @@ import { Button } from "@/components/ui/button";
 import { Fragment } from "@/data/fragmentData";
 import { getUid, displayName } from "@/lib/fragmentIdentity";
 
+// [R3 G1] 편집기 단일 진실(ms 구간) 연산 — 순수 함수. 격자 인덱스는 여기 없다.
+type MsRange = [number, number];
+function mergeRangeMs(list: MsRange[], range: MsRange): MsRange[] {
+  const [s, e] = range;
+  if (e <= s) return list;
+  const all = [...list, [s, e] as MsRange].sort((a, b) => a[0] - b[0]);
+  const out: MsRange[] = [];
+  for (const r of all) {
+    const last = out[out.length - 1];
+    if (last && r[0] <= last[1]) last[1] = Math.max(last[1], r[1]);
+    else out.push([r[0], r[1]]);
+  }
+  return out;
+}
+function subtractRangeMs(list: MsRange[], range: MsRange): MsRange[] {
+  const [s, e] = range;
+  if (e <= s) return list;
+  const out: MsRange[] = [];
+  for (const [rs, re] of list) {
+    if (re <= s || rs >= e) { out.push([rs, re]); continue; }
+    if (rs < s) out.push([rs, s]);
+    if (re > e) out.push([e, re]);
+  }
+  return out;
+}
+/** trim 창에서 excluded를 뺀 생존 span (compile과 동일 산식) */
+function aliveSpansOf(trimStart: number, trimEnd: number, excluded: MsRange[]): MsRange[] {
+  if (trimEnd <= trimStart) return [];
+  let spans: MsRange[] = [[trimStart, trimEnd]];
+  for (const r of excluded) spans = subtractRangeMs(spans, r);
+  return spans.filter(([s, e]) => e - s >= 1);
+}
+/** 두 구간의 겹침 [s,e] 또는 null */
+function overlapMs(a: MsRange, b: MsRange): MsRange | null {
+  const s = Math.max(a[0], b[0]);
+  const e = Math.min(a[1], b[1]);
+  return e - s >= 1 ? [s, e] : null;
+}
+
 const LocalDialogContent = React.forwardRef<
   React.ElementRef<typeof DialogPrimitive.Content>,
   React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content> & {
@@ -99,13 +138,14 @@ export const SingleFragmentEditor: React.FC<SingleFragmentEditorProps> = ({
   contractState = null,
   onApply,
 }) => {
-  const [leftCut, setLeftCut] = useState(0);
-  const [rightCut, setRightCut] = useState(12);
+  // [R3 G1 — 국장 승인 2026-07-17] 편집기의 단일 진실 = ms 구간 (anchor 절대좌표).
+  // 격자 인덱스(leftCut/rightCut/deletedFrames)는 폐지 — 격자는 표시 파생일 뿐 저장을 오염시키지 않는다.
+  const [trimStartMs, setTrimStartMs] = useState(0);
+  const [trimEndMs, setTrimEndMs] = useState(0);
+  const [excludedMs, setExcludedMs] = useState<MsRange[]>([]);
   // [PBE-DENSITY] 파노라마 프레임 수 (기본 12). 12가 아니면 백엔드가 P_{fid}_d{n}_{i}.jpg 로 생성.
   const [frameCount, setFrameCount] = useState(12);
   const frameSuffix = frameCount === 12 ? "" : `_d${frameCount}`;
-  // [PBE-⑦] 중간 프레임 삭제 — 우클릭 메뉴로 토글, 적용 시 살아남는 연속 구간으로 분할
-  const [deletedFrames, setDeletedFrames] = useState<Set<number>>(new Set());
   const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number; index: number } | null>(null);
   const [loadedFrames, setLoadedFrames] = useState<Record<number, boolean>>({});
   const [imageErrorAttempts, setImageErrorAttempts] = useState<Record<number, number>>({});
@@ -149,21 +189,31 @@ export const SingleFragmentEditor: React.FC<SingleFragmentEditorProps> = ({
   const currentStartSec = startSec;   // 현재 살아남은 시작(이미 trim 반영됨)
   const currentEndSec   = endSec;     // 현재 살아남은 끝
   const baseDuration = (baseStartSec !== undefined && baseEndSec !== undefined) ? (baseEndSec - baseStartSec) : undefined;
+  // [R3 G1] anchor 절대좌표(ms 정수) — 격자·표시의 유일한 환산 기준
+  const anchorStartMsVal = typeof baseStartSec === "number" ? Math.round(baseStartSec * 1000) : 0;
+  const anchorEndMsVal = typeof baseEndSec === "number" ? Math.round(baseEndSec * 1000) : 0;
+  const anchorDurMs = Math.max(0, anchorEndMsVal - anchorStartMsVal);
 
   useEffect(() => {
     if (!open || !fragment) return;
 
-    if (baseDuration && baseDuration > 0 && currentStartSec !== undefined && currentEndSec !== undefined) {
-      let lc = Math.round(((currentStartSec - baseStartSec) / baseDuration) * 12);
-      let rc = Math.round(((currentEndSec   - baseStartSec) / baseDuration) * 12);
-      lc = Math.max(0, Math.min(12, lc));
-      rc = Math.max(0, Math.min(12, rc));
-      if (rc <= lc) rc = Math.min(12, lc + 1);   // 최소 1칸 보장
-      setLeftCut(lc);
-      setRightCut(rc);
+    // [R3 G1] 열기 초기값 = 타일 좌표의 ms 정확값 (격자 양자화 폐지).
+    // excluded는 타일 동봉 spans_ms(05723b0f)의 간극에서 파생. contractState가 있으면
+    // 아래 복원 effect가 저장 원본으로 덮는다 (선언 순서 보장 — 기존 규약 유지).
+    const aS = typeof baseStartSec === "number" ? Math.round(baseStartSec * 1000) : 0;
+    const aE = typeof baseEndSec === "number" ? Math.round(baseEndSec * 1000) : 0;
+    const ts = currentStartSec !== undefined ? Math.round(currentStartSec * 1000) : aS;
+    const te = currentEndSec !== undefined ? Math.round(currentEndSec * 1000) : aE;
+    setTrimStartMs(Math.max(aS, Math.min(ts, aE)));
+    setTrimEndMs(Math.max(aS, Math.min(te, aE)));
+    const spans: MsRange[] | null = Array.isArray((fragment as any).spans_ms) && (fragment as any).spans_ms.length > 0
+      ? (fragment as any).spans_ms : null;
+    if (spans && spans.length > 1) {
+      const gaps: MsRange[] = [];
+      for (let i = 0; i < spans.length - 1; i++) gaps.push([spans[i][1], spans[i + 1][0]]);
+      setExcludedMs(gaps);
     } else {
-      setLeftCut(0);
-      setRightCut(12);
+      setExcludedMs([]);
     }
     setLoadedFrames({});
     setImageErrorAttempts({});
@@ -171,7 +221,6 @@ export const SingleFragmentEditor: React.FC<SingleFragmentEditorProps> = ({
     setReadyKey(null);
     setExtractFailed(false);
     setFrameCount(12); // [PBE-DENSITY] 열 때는 항상 기본 밀도
-    setDeletedFrames(new Set());
     setCtxMenu(null);
     setPosition(null);
     // [PBE-RESIZE] 열 때 확정 높이를 부여 → flex 세로 분배가 안정적으로 동작(레일 항상 노출).
@@ -234,12 +283,15 @@ export const SingleFragmentEditor: React.FC<SingleFragmentEditorProps> = ({
       const rect = containerRef.current.getBoundingClientRect();
       const x = e.clientX - rect.left;
       const percentage = Math.max(0, Math.min(1, x / rect.width));
+      // [R3 G1] 드래그는 격자 스냅 UI지만 저장 좌표는 그 칸 경계의 ms 정수 — 사용자의 신규 지정만 저장을 바꾼다.
       const index = Math.round(percentage * frameCount);
-
+      const cellW = anchorDurMs / frameCount;
+      const ms = Math.round(anchorStartMsVal + index * cellW);
+      const minGap = Math.max(1, Math.round(cellW)); // 최소 1칸 보장 (기존 규약)
       if (dragging === 'left') {
-        setLeftCut(Math.max(0, Math.min(rightCut - 1, index)));
+        setTrimStartMs(Math.max(anchorStartMsVal, Math.min(trimEndMs - minGap, ms)));
       } else if (dragging === 'right') {
-        setRightCut(Math.max(leftCut + 1, Math.min(frameCount, index)));
+        setTrimEndMs(Math.max(trimStartMs + minGap, Math.min(anchorEndMsVal, ms)));
       }
     };
 
@@ -253,7 +305,7 @@ export const SingleFragmentEditor: React.FC<SingleFragmentEditorProps> = ({
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('mouseup', handleMouseUp);
     };
-  }, [dragging, leftCut, rightCut, frameCount]);
+  }, [dragging, trimStartMs, trimEndMs, frameCount, anchorStartMsVal, anchorEndMsVal, anchorDurMs]);
 
   // [#21 단일 좌표계] 레일·재생·밀도·시간표시의 기준 길이 = 뿌리(anchor) 전체.
   // 구판은 현재 타일 길이(durationSec)를 쓰는 곳과 anchor를 쓰는 곳이 섞여 있었다(좌표 혼합 결함).
@@ -310,31 +362,25 @@ export const SingleFragmentEditor: React.FC<SingleFragmentEditorProps> = ({
   };
 
   const handleReset = () => {
-    setLeftCut(0);
-    setRightCut(frameCount);
+    // [R3 G1] 초기화 = 단일 진실을 anchor 전체·제외 없음으로
+    setTrimStartMs(anchorStartMsVal);
+    setTrimEndMs(anchorEndMsVal);
+    setExcludedMs([]);
     setCurrentIndex(0);
     setIsPlaying(false);
-    setDeletedFrames(new Set());
     setCtxMenu(null);
   };
 
-  // [PBE-DENSITY] 프레임 밀도 변경 — 컷 위치는 비율 보존 환산, 프레임은 백엔드 재추출.
+  // [R3 G3] 밀도 변경 = 표시 해상도 변경일 뿐 — 저장 진실(trim·excluded ms) 무접촉.
+  // 구판의 deletedFrames 초기화(편집 소거 벡터, #33 실측 [[6350,7620]]→[])와 컷 비율 환산 폐지.
   const changeDensity = (n: number) => {
     if (!fragment || n === frameCount) return;
-    const clamped = Math.max(4, Math.min(48, n));
-    const scale = clamped / frameCount;
-    let lc = Math.round(leftCut * scale);
-    let rc = Math.round(rightCut * scale);
-    lc = Math.max(0, Math.min(clamped - 1, lc));
-    rc = Math.max(lc + 1, Math.min(clamped, rc));
-    setLeftCut(lc);
-    setRightCut(rc);
-    setCurrentIndex((ci) => Math.max(0, Math.min(clamped - 1, Math.round(ci * scale))));
+    const clamped = Math.max(4, Math.min(48, n)); // [G5] 상한 48 — 전 프레임 전개 금지
+    setCurrentIndex((ci) => Math.max(0, Math.min(clamped - 1, Math.round(ci * (clamped / frameCount)))));
     setIsPlaying(false);
     setLoadedFrames({});
     setImageErrorAttempts({});
     setFrameCacheBuster({});
-    setDeletedFrames(new Set()); // 밀도가 바뀌면 프레임 인덱스 의미가 바뀌므로 삭제 표시는 초기화
     setCtxMenu(null);
     setFrameCount(clamped);
     // 이 밀도 캐시가 이미 있으면 즉시 개방 (프로브), 없으면 추출 완료 응답으로만 개방
@@ -358,21 +404,45 @@ export const SingleFragmentEditor: React.FC<SingleFragmentEditorProps> = ({
     ];
   })();
 
-  // [PBE-⑦] 살아남는 프레임 = [leftCut, rightCut) 중 삭제되지 않은 것
-  const aliveFrameCount = (() => {
-    let n = 0;
-    for (let i = leftCut; i < rightCut; i++) if (!deletedFrames.has(i)) n++;
-    return n;
-  })();
-  const activeRatio = aliveFrameCount / frameCount;
-  const aliveDuration = baseDuration !== undefined ? baseDuration * activeRatio : 0;
+  // [R3 G1·G2] 생존 span = 단일 진실(ms)의 순수 파생 — 적용·표시·미리보기 전부 이것에서.
+  const aliveSpans = aliveSpansOf(trimStartMs, trimEndMs, excludedMs);
+  const aliveMs = aliveSpans.reduce((acc, [s, e]) => acc + (e - s), 0);
+  const aliveDuration = aliveMs / 1000; // 격자 비율 근사 폐지 — ms 정확값
+  const cellWidthMs = frameCount > 0 ? anchorDurMs / frameCount : 0;
+  /** 칸 i의 anchor 절대 ms 구간 (표시용 — 저장 시에는 round된 정수 사용) */
+  const cellRangeMs = (i: number): MsRange => [
+    anchorStartMsVal + i * cellWidthMs,
+    anchorStartMsVal + (i + 1) * cellWidthMs,
+  ];
+  /** 칸 i 안의 제외 구간들(칸 좌표 겹침) — G2 부분 표시의 원천 */
+  const cellExcludedOverlaps = (i: number): MsRange[] => {
+    const cell = cellRangeMs(i);
+    const out: MsRange[] = [];
+    for (const r of excludedMs) {
+      const ov = overlapMs(cell, r);
+      if (ov) out.push(ov);
+    }
+    return out;
+  };
+  /** 칸 판정: 제외와의 겹침 정도 (full = 사실상 전체, partial = 일부 걸침) */
+  const cellExclusionState = (i: number): "full" | "partial" | "none" => {
+    const ovs = cellExcludedOverlaps(i);
+    if (ovs.length === 0) return "none";
+    const covered = ovs.reduce((acc, [s, e]) => acc + (e - s), 0);
+    return covered >= cellWidthMs - 1 ? "full" : "partial";
+  };
+  /** 칸 중심이 생존 span 안인가 — 미리보기 재생 스킵용 파생 */
+  const isKeptFrame = (i: number): boolean => {
+    const mid = anchorStartMsVal + (i + 0.5) * cellWidthMs;
+    return aliveSpans.some(([s, e]) => mid >= s && mid < e);
+  };
 
-  // 살아남는 연속 구간(세그먼트) — 적용 시 분할의 원천
+  // 살아남는 연속 칸 구간(미리보기 재생 진행용) — 표시 파생, 저장과 무관
   const keptSegments = (() => {
     const segs: Array<{ from: number; to: number }> = []; // [from, to) 프레임 인덱스
     let runStart: number | null = null;
-    for (let i = leftCut; i <= rightCut; i++) {
-      const kept = i < rightCut && !deletedFrames.has(i);
+    for (let i = 0; i <= frameCount; i++) {
+      const kept = i < frameCount && isKeptFrame(i);
       if (kept && runStart === null) runStart = i;
       if (!kept && runStart !== null) {
         segs.push({ from: runStart, to: i });
@@ -389,9 +459,6 @@ export const SingleFragmentEditor: React.FC<SingleFragmentEditorProps> = ({
     }
     return null;
   };
-
-  const isKeptFrame = (index: number) =>
-    keptSegments.some((seg) => index >= seg.from && index < seg.to);
 
   useEffect(() => {
     if (!isPlaying) return;
@@ -429,27 +496,16 @@ export const SingleFragmentEditor: React.FC<SingleFragmentEditorProps> = ({
     });
   };
 
-  // [EDIT-CONTRACT-B0] 재진입 복원 — contractState가 있으면 기본(단일 창) 역산을 덮어쓴다.
-  // 선언 순서상 열기 effect보다 나중에 실행. DEBT: 밀도 d≠12 재진입은 12칸 기준 근사 — 후속 정제.
+  // [R3 G2] 재진입 복원 — 저장 원본(ms)을 그대로 단일 진실에 대입. 격자 양자화(12칸 역산·
+  // mid-포함 검사) 폐지: 격자보다 짧은 원고발 정밀 excluded도 소거 없이 살아난다.
   useEffect(() => {
     if (!open || !fragment || !contractState) return;
     const aMs = contractState.anchor_start_ms;
-    const durMs = contractState.anchor_end_ms - contractState.anchor_start_ms;
-    if (durMs <= 0) return;
-    const toIdx = (ms: number) => Math.round(((ms - aMs) / durMs) * 12);
-    let lc = Math.max(0, Math.min(12, toIdx(contractState.trim_start_ms)));
-    let rc = Math.max(0, Math.min(12, toIdx(contractState.trim_end_ms)));
-    if (rc <= lc) rc = Math.min(12, lc + 1);
-    setLeftCut(lc);
-    setRightCut(rc);
-    const del = new Set<number>();
-    for (const [s, e] of contractState.excluded_ranges) {
-      for (let i = 0; i < 12; i++) {
-        const midMs = aMs + ((i + 0.5) / 12) * durMs;
-        if (midMs >= s && midMs < e) del.add(i);
-      }
-    }
-    setDeletedFrames(del);
+    const eMs = contractState.anchor_end_ms;
+    if (eMs - aMs <= 0) return;
+    setTrimStartMs(Math.max(aMs, Math.min(contractState.trim_start_ms, eMs)));
+    setTrimEndMs(Math.max(aMs, Math.min(contractState.trim_end_ms, eMs)));
+    setExcludedMs(contractState.excluded_ranges.map(([s, e]) => [s, e] as MsRange));
   }, [open, fragment, contractState]);
 
   if (!fragment) return null;
@@ -458,18 +514,12 @@ export const SingleFragmentEditor: React.FC<SingleFragmentEditorProps> = ({
     if (!fragment) return;
     const origStart = baseStartSec ?? 0;
     const origEnd   = baseEndSec ?? 0;
-    const duration  = origEnd - origStart;
-    const newStartSec = origStart + (leftCut / frameCount) * duration;
-    const newEndSec   = origStart + (rightCut / frameCount) * duration;
-    // [PBE-⑦] 중간 삭제가 있으면 살아남는 구간들을 초 단위 세그먼트로 전달 (분할)
-    const segments = keptSegments.map((s) => ({
-      startSec: origStart + (s.from / frameCount) * duration,
-      endSec:   origStart + (s.to / frameCount) * duration,
-    }));
+    // [R3 G1] 적용 = 단일 진실(ms)의 생존 span 그대로 — 격자 환산 없음.
+    const segments = aliveSpans.map(([s, e]) => ({ startSec: s / 1000, endSec: e / 1000 }));
     onApply?.({
       fragmentUid: getUid(fragment),
-      newStartSec,
-      newEndSec,
+      newStartSec: trimStartMs / 1000,
+      newEndSec: trimEndMs / 1000,
       origStart,
       origEnd,
       segments,
@@ -800,8 +850,12 @@ export const SingleFragmentEditor: React.FC<SingleFragmentEditorProps> = ({
                 className="relative w-max h-[84px] bg-[hsl(228,12%,6%)] border border-border/10 rounded-md overflow-hidden flex select-none cursor-pointer"
               >
                 {Array.from({ length: frameCount }).map((_, index) => {
-                  const isDeleted = deletedFrames.has(index);
-                  const isGrayscale = index < leftCut || index >= rightCut || isDeleted;
+                  // [R3 G2] 칸 상태 = 단일 진실(ms)의 파생 — full(전체 제외)·partial(부분 걸침)·트림 밖
+                  const [cellS, cellE] = cellRangeMs(index);
+                  const exState = cellExclusionState(index);
+                  const overlaps = exState === "partial" ? cellExcludedOverlaps(index) : [];
+                  const outsideTrim = cellE <= trimStartMs + 1 || cellS >= trimEndMs - 1;
+                  const isGrayscale = outsideTrim || exState === "full";
                   const isLoaded = loadedFrames[index];
                   const src = `/static/thumbnails/P_${fragment.fragment_id}${frameSuffix}_${index}.jpg` +
                     (frameCacheBuster[index] ? `?t=${frameCacheBuster[index]}` : "");
@@ -809,7 +863,9 @@ export const SingleFragmentEditor: React.FC<SingleFragmentEditorProps> = ({
                   return (
                     <div
                       key={index}
-                      className="relative w-[56px] flex-shrink-0 h-full border-r border-border/10 last:border-r-0 overflow-hidden bg-black/40 flex items-center justify-center pointer-events-none"
+                      // [R3 G4] hover = 이 칸의 초 범위 표기 (브라우저 툴팁). 이벤트는 레일로 버블링.
+                      title={`${((cellS - anchorStartMsVal) / 1000).toFixed(1)}~${((cellE - anchorStartMsVal) / 1000).toFixed(1)}s · ${(cellWidthMs / 1000).toFixed(2)}s`}
+                      className="relative w-[56px] flex-shrink-0 h-full border-r border-border/10 last:border-r-0 overflow-hidden bg-black/40 flex items-center justify-center"
                     >
                       {(!extractReady || !isLoaded) && (
                         <div className="absolute inset-0 flex items-center justify-center bg-black/70 z-10">
@@ -823,17 +879,41 @@ export const SingleFragmentEditor: React.FC<SingleFragmentEditorProps> = ({
                         <img
                           src={src}
                           alt={`Frame ${index}`}
-                          className={`w-full h-full object-cover transition-all duration-200 ${isGrayscale ? "grayscale brightness-[0.35]" : ""}`}
+                          className={`w-full h-full object-cover transition-all duration-200 pointer-events-none ${isGrayscale ? "grayscale brightness-[0.35]" : ""}`}
                           onLoad={() => setLoadedFrames(prev => ({ ...prev, [index]: true }))}
                           onError={() => handleImageError(index)}
                         />
                       )}
-                      <span className="absolute bottom-1 right-1 text-[8px] bg-black/60 px-1 rounded text-white font-mono z-20">
+                      {/* [R3 G2] 부분 걸침 = 걸친 ms 구간만 칸 안에서 정확한 위치·폭으로 표시 (자동 확대·축소 없음) */}
+                      {overlaps.map(([os, oe], k) => (
+                        <div
+                          key={k}
+                          className="absolute top-0 bottom-0 bg-red-600/45 border-x border-red-400/70 pointer-events-none z-10"
+                          style={{
+                            left: `${(((os - cellS) / cellWidthMs) * 100).toFixed(2)}%`,
+                            width: `${(((oe - os) / cellWidthMs) * 100).toFixed(2)}%`,
+                          }}
+                        />
+                      ))}
+                      <span className="absolute bottom-1 right-1 text-[8px] bg-black/60 px-1 rounded text-white font-mono z-20 pointer-events-none">
                         {index}
                       </span>
-                      {isDeleted && (
+                      {exState !== "none" && (readOnly ? (
                         <span className="absolute top-1 left-1 text-[9px] bg-red-600/80 px-1 rounded text-white font-bold z-20">✕</span>
-                      )}
+                      ) : (
+                        /* [X-복원 + R3 G1] X 클릭 = 이 칸과 겹치는 제외 구간을 뺀다(subtract) —
+                           부분 걸침 칸이면 걸친 부분만 되살아난다. 레일 mousedown 전파 차단. */
+                        <button
+                          type="button"
+                          title="이 칸 되살리기"
+                          onMouseDown={(e) => e.stopPropagation()}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setExcludedMs((prev) => subtractRangeMs(prev, [Math.round(cellS), Math.round(cellE)]));
+                          }}
+                          className="absolute top-1 left-1 text-[9px] bg-red-600/80 hover:bg-red-500 px-1 rounded text-white font-bold z-20 pointer-events-auto cursor-pointer"
+                        >✕</button>
+                      ))}
                     </div>
                   );
                 })}
@@ -854,7 +934,8 @@ export const SingleFragmentEditor: React.FC<SingleFragmentEditorProps> = ({
                   onMouseDown={readOnly ? undefined : handleMouseDown("left")}
                   className={`absolute top-0 bottom-0 w-4 ${readOnly ? "cursor-default opacity-50" : "cursor-ew-resize"} flex items-center justify-center z-30`}
                   style={{
-                    left: `calc(${leftCut * (100 / frameCount)}% - 8px)`,
+                    // [R3 G1] 핸들 위치 = ms 진실의 비율 파생 — 비격자 저장값도 정확한 위치에 선다
+                    left: `calc(${anchorDurMs > 0 ? (((trimStartMs - anchorStartMsVal) / anchorDurMs) * 100).toFixed(3) : 0}% - 8px)`,
                   }}
                 >
                   <div className="w-1.5 h-full bg-primary flex flex-col justify-center items-center rounded-sm">
@@ -868,7 +949,7 @@ export const SingleFragmentEditor: React.FC<SingleFragmentEditorProps> = ({
                   onMouseDown={readOnly ? undefined : handleMouseDown("right")}
                   className={`absolute top-0 bottom-0 w-4 ${readOnly ? "cursor-default opacity-50" : "cursor-ew-resize"} flex items-center justify-center z-30`}
                   style={{
-                    left: `calc(${rightCut * (100 / frameCount)}% - 8px)`,
+                    left: `calc(${anchorDurMs > 0 ? (((trimEndMs - anchorStartMsVal) / anchorDurMs) * 100).toFixed(3) : 100}% - 8px)`,
                   }}
                 >
                   <div className="w-1.5 h-full bg-blue-500 flex flex-col justify-center items-center rounded-sm">
@@ -888,9 +969,9 @@ export const SingleFragmentEditor: React.FC<SingleFragmentEditorProps> = ({
 
             {/* Inactive Zone Labels */}
             <div className="flex justify-between items-center text-[10px] text-muted-foreground/80 mt-1 px-1">
-              <span className={leftCut > 0 ? "text-red-400 font-medium" : "opacity-30"}>앞 버림</span>
+              <span className={trimStartMs > anchorStartMsVal ? "text-red-400 font-medium" : "opacity-30"}>앞 버림</span>
               <span className="text-primary font-bold">살아남는 구간</span>
-              <span className={rightCut < frameCount ? "text-blue-400 font-medium" : "opacity-30"}>뒤 버림</span>
+              <span className={trimEndMs < anchorEndMsVal ? "text-blue-400 font-medium" : "opacity-30"}>뒤 버림</span>
             </div>
           </div>
         ) : (
@@ -944,21 +1025,26 @@ export const SingleFragmentEditor: React.FC<SingleFragmentEditorProps> = ({
               className="fixed z-[100] bg-[hsl(228,12%,12%)] border border-border/30 rounded-md shadow-xl py-1 min-w-[120px]"
               style={{ left: Math.min(ctxMenu.x, window.innerWidth - 140), top: Math.min(ctxMenu.y, window.innerHeight - 80) }}
             >
-              <div className="px-3 py-1 text-[10px] text-muted-foreground/60 font-mono border-b border-border/20">프레임 {ctxMenu.index}</div>
+              <div className="px-3 py-1 text-[10px] text-muted-foreground/60 font-mono border-b border-border/20">
+                {/* [R3 G4] 메뉴에도 칸의 초 범위 병기 */}
+                프레임 {ctxMenu.index} · {((cellRangeMs(ctxMenu.index)[0] - anchorStartMsVal) / 1000).toFixed(1)}~{((cellRangeMs(ctxMenu.index)[1] - anchorStartMsVal) / 1000).toFixed(1)}s
+              </div>
               <button
                 type="button"
                 className="w-full text-left px-3 py-1.5 text-xs text-foreground hover:bg-secondary/50"
                 onClick={() => {
-                  setDeletedFrames((prev) => {
-                    const next = new Set(prev);
-                    if (next.has(ctxMenu.index)) next.delete(ctxMenu.index);
-                    else next.add(ctxMenu.index);
-                    return next;
-                  });
+                  // [R3 G1] 삭제 = 이 칸의 정확한 ms 구간을 excluded에 더한다 / 복원 = 겹치는 구간을 뺀다.
+                  const [cs, ce] = cellRangeMs(ctxMenu.index);
+                  const cell: MsRange = [Math.round(cs), Math.round(ce)];
+                  if (cellExclusionState(ctxMenu.index) !== "none") {
+                    setExcludedMs((prev) => subtractRangeMs(prev, cell));
+                  } else {
+                    setExcludedMs((prev) => mergeRangeMs(prev, cell));
+                  }
                   setCtxMenu(null);
                 }}
               >
-                {deletedFrames.has(ctxMenu.index) ? "복원" : "삭제"}
+                {cellExclusionState(ctxMenu.index) !== "none" ? "복원" : "삭제"}
               </button>
             </div>
           </>,

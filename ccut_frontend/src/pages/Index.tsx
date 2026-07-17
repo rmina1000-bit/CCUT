@@ -2281,6 +2281,24 @@ const Index: React.FC = () => {
     handleConsultation(text);
   }, [handleConsultation]);
 
+  // [F1 하나의 강물 — SEE FAIL 1 수리] 재생 불가 안내를 지휘부 채팅에 흘린다 (toast 폐지).
+  // 연타 도배 금지: 직전 메시지가 동일 문구면 재전송하지 않는다. storyPlan 부재 시
+  // 최소 골격 생성 (#3 절개분과 동일 규약 — 침묵 화면 금지).
+  const handlePlaybackNotice = useCallback((text: string) => {
+    setStoryPlan((prev: any) => {
+      const msgs = prev?.messages ?? [];
+      const last = msgs[msgs.length - 1];
+      if (last?.sender === "ai" && last?.text === text) return prev;
+      const notice = {
+        id: `ai_playback_notice_${Date.now()}`,
+        sender: "ai" as const,
+        text,
+        timestamp: Date.now(),
+      };
+      return { ...(prev ?? { story_plan_id: `STP_${Date.now()}` }), messages: [...msgs, notice] };
+    });
+  }, []);
+
   const handleBackgroundClick = useCallback((e: React.MouseEvent) => {
     const target = e.target as HTMLElement;
     if (target.closest(".fragment-tile")) return;
@@ -2370,6 +2388,8 @@ const Index: React.FC = () => {
             videoUrl={currentVideoUrl}
             onAnalyze={handleStartAnalysis}
             committedProposalId={committedProposalId}
+            displayProposalId={displayProposalId}
+            onPlaybackNotice={handlePlaybackNotice}
             onPreviewProposal={handleProposalPreview}
             onCommitProposal={handleProposalCommit}
             onExport={handleExport}
