@@ -193,11 +193,65 @@ const LedgerPage: React.FC<LedgerPageProps> = ({ programId: propProgramId, embed
 
   const rafRef = useRef<number | null>(null);
   const resumeRef = useRef(false);
-  const LEAD = 90;
+  const LEAD = 20; // [B2 #42] CenterPanel(R2)과 단일화 — 미달 방향 착지
 
   const stopRaf = useCallback(() => {
     if (rafRef.current != null) { cancelAnimationFrame(rafRef.current); rafRef.current = null; }
   }, []);
+
+  // [B3 #26] 전환 가드 — seek 진행(실측 23~50ms) 중 컴포지터가 그리는 중간 프레임(디코더
+  // 키프레임 체인)의 노출 차단. CenterPanel CLIP_SWITCH_GUARD와 동일 규약:
+  // 가림(opacity 0) → seek → seeked에서 복원 (+400ms 백업). 컨테이너 배경 유지 — 검은 플래시 없음.
+  const hideForSeek = useCallback(() => {
+    const v = videoRef.current;
+    if (!v) return;
+    v.style.opacity = "0";
+    let restored = false;
+    const restore = () => {
+      if (restored) return;
+      restored = true;
+      v.removeEventListener("seeked", restore);
+      v.style.opacity = "1";
+    };
+    v.addEventListener("seeked", restore);
+    setTimeout(restore, 400);
+  }, []);
+
+  // [B1 #41 — 단일 처리부·다중 트리거] span 경계 판정의 유일한 본체. 트리거는
+  // ① rAF 루프(가시 탭, 정밀) ② timeupdate 백스톱(백그라운드 탭 — rAF 정지 환경).
+  // 반환 true = 경계 처리(정지/전환) 수행됨.
+  const checkSpanBoundary = useCallback((v: HTMLVideoElement, st: { spans: MsRange[] }): boolean => {
+    const t = v.currentTime * 1000;
+    const lastEnd = st.spans[st.spans.length - 1]?.[1];
+    if (lastEnd !== undefined && t >= lastEnd - PLAYBACK_STOP_EPS_MS) {
+      resumeRef.current = false;
+      v.pause();
+      if (t > lastEnd) v.currentTime = lastEnd / 1000;
+      return true;
+    }
+    const idx = st.spans.findIndex(([s, e]) => t >= s - 5 && t < e);
+    if (idx < 0) {
+      const nx = st.spans.find(([s]) => s > t - 5);
+      if (nx) {
+        resumeRef.current = true;
+        v.pause();
+        hideForSeek();
+        v.currentTime = nx[0] / 1000;
+      } else {
+        v.pause();
+      }
+      return true;
+    }
+    const [, e] = st.spans[idx];
+    if (idx < st.spans.length - 1 && t >= e - LEAD) {
+      resumeRef.current = true;
+      v.pause();
+      hideForSeek();
+      v.currentTime = st.spans[idx + 1][0] / 1000;
+      return true;
+    }
+    return false;
+  }, [hideForSeek]);
 
   const closePlayer = useCallback(() => {
     resumeRef.current = false;
@@ -217,38 +271,12 @@ const LedgerPage: React.FC<LedgerPageProps> = ({ programId: propProgramId, embed
       return;
     }
     if (v.ended || v.paused || v.seeking) { rafRef.current = null; return; }
-    const t = v.currentTime * 1000;
-    const lastEnd = st.spans[st.spans.length - 1]?.[1];
-    if (lastEnd !== undefined && t >= lastEnd - PLAYBACK_STOP_EPS_MS) {
-      resumeRef.current = false;
-      v.pause();
-      if (t > lastEnd) v.currentTime = lastEnd / 1000;
-      rafRef.current = null;
-      return;
-    }
-    const idx = st.spans.findIndex(([s, e]) => t >= s - 5 && t < e);
-    if (idx < 0) {
-      const nx = st.spans.find(([s]) => s > t - 5);
-      if (nx) {
-        resumeRef.current = true;
-        v.pause();
-        v.currentTime = nx[0] / 1000;
-      } else {
-        v.pause();
-      }
-      rafRef.current = null;
-      return;
-    }
-    const [, e] = st.spans[idx];
-    if (idx < st.spans.length - 1 && t >= e - LEAD) {
-      resumeRef.current = true;
-      v.pause();
-      v.currentTime = st.spans[idx + 1][0] / 1000;
+    if (checkSpanBoundary(v, st)) {
       rafRef.current = null;
     } else {
       rafRef.current = requestAnimationFrame(rafTick);
     }
-  }, []);
+  }, [checkSpanBoundary]);
 
   const startRaf = useCallback(() => {
     if (rafRef.current == null) rafRef.current = requestAnimationFrame(rafTick);
@@ -271,10 +299,11 @@ const LedgerPage: React.FC<LedgerPageProps> = ({ programId: propProgramId, embed
     }
     const t = v.currentTime * 1000, lastEnd = st.spans[st.spans.length - 1][1];
     if (t >= lastEnd - 20) {
+      hideForSeek(); // [B3] 재재생 되감기 seek도 가드
       v.currentTime = st.spans[0][0] / 1000;
     }
     startRaf();
-  }, [startRaf, stopRaf]);
+  }, [startRaf, stopRaf, hideForSeek]);
 
   const onPlaying = useCallback(() => {
     const v = videoRef.current;
@@ -282,17 +311,16 @@ const LedgerPage: React.FC<LedgerPageProps> = ({ programId: propProgramId, embed
     startRaf();
   }, [startRaf]);
 
+  // [B1 #41] timeupdate 백스톱 — 최종 끝만 보던 구멍을 전 경계 검사로.
+  // 백그라운드 탭(브라우저가 rAF 정지)에서도 중간 제외 구간이 통재생되지 않는다 (헌장 §5).
+  // 단일 처리부(checkSpanBoundary) 공유 — 가시 탭에서는 rAF가 20ms 리드로 선점하므로 중복 발화 없음.
   const onPlaybackTimeUpdate = useCallback(() => {
     const v = videoRef.current;
     const st = playRef.current;
     if (!v || !st || st.spans.length === 0) return;
-    const endMs = st.spans[st.spans.length - 1][1];
-    const currentMs = Math.round(v.currentTime * 1000);
-    if (!v.paused && currentMs >= endMs) {
-      v.pause();
-      stopRaf();
-    }
-  }, [stopRaf]);
+    if (v.paused || v.seeking || v.ended) return;
+    if (checkSpanBoundary(v, st)) stopRaf();
+  }, [checkSpanBoundary, stopRaf]);
 
   // 저장 (EXCLUDE_RANGE / REMOVE / RESTORE 공통)
   const postEdit = useCallback(async (it: ScriptItem, body: Record<string, unknown>) => {

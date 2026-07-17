@@ -1014,22 +1014,23 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
         idxRef.current = nextIdx;
         (isA ? setProposalTimeA : setProposalTimeB)(elapsedRef.current);
         reportActiveId(frags[nextIdx].fragment_id);
-        // [CLIP_SWITCH_GUARD_B] 조각 전환 중 잔상 숨김 (기존 B 전용 동작 보존)
-        if (!isA && videoRefB.current) {
-          const bv = videoRefB.current;
-          bv.style.opacity = "0";
+        // [CLIP_SWITCH_GUARD — #40 A·B 동형] 조각 전환 중 잔상·seek 중간 프레임 숨김.
+        // 구판은 B 전용 비대칭(:2083)이었음 — A·B는 같은 동작이어야 한다 (국장 판정).
+        {
+          const gv = v;
+          gv.style.opacity = "0";
           let restored = false;
           const onSeekedOnce = () => {
             if (restored) return;
             restored = true;
-            bv.removeEventListener("seeked", onSeekedOnce);
-            bv.style.opacity = "1";
+            gv.removeEventListener("seeked", onSeekedOnce);
+            gv.style.opacity = "1";
           };
-          bv.addEventListener("seeked", onSeekedOnce);
+          gv.addEventListener("seeked", onSeekedOnce);
           setTimeout(() => {
             if (restored) return;
             restored = true;
-            bv.style.opacity = "1";
+            gv.style.opacity = "1";
           }, 400);
         }
         playFrag(player, frags[nextIdx], endRef);
@@ -1798,7 +1799,8 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
                 }
 
                 // fallback: preview_url 없을 때만 fragment 시퀀스 재생
-                console.warn("[PROPOSAL_PREVIEW_MISSING]", { variant: "A", proposal_id: (proposals?.A as any)?.proposal_id });
+                // [B4] 사전 렌더 없음 → 라이브 시퀀스 재생은 정상 동작 — 경고 아님, 정보 등급
+                console.info("[PROPOSAL_PREVIEW_MISSING]", { variant: "A", proposal_id: (proposals?.A as any)?.proposal_id });
                 if (!isSeqARef.current || videoRefA.current.paused) {
                   startSeq("A");
                   handleProposalPreview("A");
@@ -2072,7 +2074,8 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
                 }
 
                 // fallback: preview_url 없을 때만 fragment 시퀀스 재생
-                console.warn("[PROPOSAL_PREVIEW_MISSING]", { variant: "B", proposal_id: (proposals?.B as any)?.proposal_id });
+                // [B4] 정보 등급 — 정상 동작을 경고로 표시하지 않는다
+                console.info("[PROPOSAL_PREVIEW_MISSING]", { variant: "B", proposal_id: (proposals?.B as any)?.proposal_id });
                 if (!isSeqBRef.current || videoRefB.current.paused) {
                   startSeq("B");
                   handleProposalPreview("B");

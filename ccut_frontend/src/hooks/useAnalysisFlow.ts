@@ -31,8 +31,12 @@ export function useAnalysisFlow() {
   const [highlightedPanoramaFrag, setHighlightedPanoramaFrag] = useState<string | null>(null);
   const [expandedFragment, setExpandedFragment] = useState<string | null>(null);
   const [editFragments, setEditFragments] = useState<Fragment[]>(initialEditFragments);
-  const [reservedFragments, setReservedFragments] = useState<Fragment[]>(initialReservedFragments);
-  const [deletedFragments, setDeletedFragments] = useState<Fragment[]>([]);
+  // [#38 — "조각의 속성은 공유, 제안의 구성은 분리"] 보류·휴지통은 제안(A/B)별 구성 정보.
+  // 원료 웅덩이(editFragments)는 공용 유지 — 조각 실물은 하나다 (헌장 §1-9).
+  const [reservedByProposal, setReservedByProposal] = useState<Record<"A" | "B", Fragment[]>>({
+    A: initialReservedFragments, B: initialReservedFragments,
+  });
+  const [deletedByProposal, setDeletedByProposal] = useState<Record<"A" | "B", Fragment[]>>({ A: [], B: [] });
   const [appState, setAppState] = useState<AppState>("empty");
   const [sourceFragments, setSourceFragments] = useState<Fragment[]>([]);
   const [currentSourceId, setCurrentSourceId] = useState<string | null>(null);
@@ -45,8 +49,8 @@ export function useAnalysisFlow() {
   const resetAnalysisFlow = useCallback(() => {
     setSourceFragments([]);
     setEditFragments([]);
-    setReservedFragments([]);
-    setDeletedFragments([]);
+    setReservedByProposal({ A: [], B: [] });
+    setDeletedByProposal({ A: [], B: [] });
     setSelectedFragment(null);
     setHighlightedPanoramaFrag(null);
     setExpandedFragment(null);
@@ -63,8 +67,8 @@ export function useAnalysisFlow() {
     highlightedPanoramaFrag, setHighlightedPanoramaFrag,
     expandedFragment, setExpandedFragment,
     editFragments, setEditFragments,
-    reservedFragments, setReservedFragments,
-    deletedFragments, setDeletedFragments,
+    reservedByProposal, setReservedByProposal,
+    deletedByProposal, setDeletedByProposal,
     appState, setAppState,
     sourceFragments, setSourceFragments,
     currentSourceId, setCurrentSourceId,

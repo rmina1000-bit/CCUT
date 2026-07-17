@@ -86,8 +86,8 @@ const Index: React.FC = () => {
     highlightedPanoramaFrag, setHighlightedPanoramaFrag,
     expandedFragment, setExpandedFragment,
     editFragments, setEditFragments,
-    reservedFragments, setReservedFragments,
-    deletedFragments, setDeletedFragments,
+    reservedByProposal, setReservedByProposal,
+    deletedByProposal, setDeletedByProposal,
     appState, setAppState,
     sourceFragments, setSourceFragments,
     currentSourceId, setCurrentSourceId,
@@ -102,7 +102,8 @@ const Index: React.FC = () => {
   // 게이트 OFF면 awaitingApproval=false → 현행과 동일.
   const storyGate = useStoryGate(activeNavItem, appState === "complete");
 
-  const [holdPositions, setHoldPositions] = useState<Record<string, { x: number; y: number }>>({});
+  // [#38] 보류맵 좌표도 제안별 구성 정보 (버킷 별칭은 displayProposalId 정의 뒤에)
+  const [holdPositionsByProposal, setHoldPositionsByProposal] = useState<Record<"A" | "B", Record<string, { x: number; y: number }>>>({ A: {}, B: {} });
   const [boundaryHighlightIds, setBoundaryHighlightIds] = useState<string[]>([]);
   // [GHOST 소각 #4] 구 2조각 PBE 상태(editorTarget·pbeWindow·editorOpen) 제거 — 소비자 전무 증명(STEP C)
   const [singleEditOpen, setSingleEditOpen] = useState(false);
@@ -167,6 +168,31 @@ const Index: React.FC = () => {
   );
   // [FLOW] 확정/선택 전에도 조각맵이 비지 않게 — 무대에 선 제안(기본 A)을 따라간다.
   const displayProposalId = committedProposalId ?? selectedProposalId ?? (proposals ? "A" : null);
+
+  // [#38 — "조각의 속성은 공유, 제안의 구성은 분리"] 표시 제안의 버킷으로 보류·좌표·휴지통을 선택.
+  // 기존 소비처(~20곳)의 호출 계약을 보존하기 위해 옛 이름의 파생 별칭 + 버킷 지향 setter를 제공한다.
+  const proposalBucket: "A" | "B" = displayProposalId === "B" ? "B" : "A";
+  const reservedFragments = reservedByProposal[proposalBucket];
+  const deletedFragments = deletedByProposal[proposalBucket];
+  const holdPositions = holdPositionsByProposal[proposalBucket];
+  const setReservedFragments = useCallback((updater: Fragment[] | ((prev: Fragment[]) => Fragment[])) => {
+    setReservedByProposal((prev) => ({
+      ...prev,
+      [proposalBucket]: typeof updater === "function" ? (updater as any)(prev[proposalBucket]) : updater,
+    }));
+  }, [proposalBucket, setReservedByProposal]);
+  const setDeletedFragments = useCallback((updater: Fragment[] | ((prev: Fragment[]) => Fragment[])) => {
+    setDeletedByProposal((prev) => ({
+      ...prev,
+      [proposalBucket]: typeof updater === "function" ? (updater as any)(prev[proposalBucket]) : updater,
+    }));
+  }, [proposalBucket, setDeletedByProposal]);
+  const setHoldPositions = useCallback((updater: Record<string, { x: number; y: number }> | ((prev: Record<string, { x: number; y: number }>) => Record<string, { x: number; y: number }>)) => {
+    setHoldPositionsByProposal((prev) => ({
+      ...prev,
+      [proposalBucket]: typeof updater === "function" ? (updater as any)(prev[proposalBucket]) : updater,
+    }));
+  }, [proposalBucket]);
 
   // [UI-③⑤] 업로드 문진 답변 — storyPlan 생성 시 story_intent/메시지에 주입
   const intakeRef = useRef<{
@@ -309,13 +335,14 @@ const Index: React.FC = () => {
 
 // logProposalPair moved to useProposalState
 
+  // [#38] 스냅샷은 제안별 전체(byProposal)를 저장 — 같은 필드명, 값 형태만 승격 (하위호환 읽기는 재수화에서)
   const buildUiSnapshot = useCallback(() => ({
-    reservedFragments,
-    holdPositions,
+    reservedFragments: reservedByProposal,
+    holdPositions: holdPositionsByProposal,
     committedProposalId,
     selectedProposalId,
     activeSource,
-    deletedFragments,
+    deletedFragments: deletedByProposal,
     proposalsKeyFragments: proposals ? {
       A: (proposals as any).A?.key_fragments,
       B: (proposals as any).B?.key_fragments,
@@ -324,7 +351,43 @@ const Index: React.FC = () => {
       A: (proposals as any).A?.customEditFragments,
       B: (proposals as any).B?.customEditFragments,
     } : undefined,
-  }), [reservedFragments, holdPositions, committedProposalId, selectedProposalId, activeSource, deletedFragments, proposals]);
+  }), [reservedByProposal, holdPositionsByProposal, committedProposalId, selectedProposalId, activeSource, deletedByProposal, proposals]);
+
+  // [#30 merge-저장 — 원칙 "모르는 것을 지우지 않는다" (국장 승인 2026-07-17)]
+  // 클라 소유 필드(아래 목록)는 스냅샷이 덮어쓰고, 그 외(서버 소유·미지 — 예: paperCutOrder)는
+  // 저장 직전 서버 원본을 읽어 보존 병합한다. 경계: 클라가 의도적으로 비운 소유 필드를
+  // merge가 되살리면 #1(스냅샷 부활)의 재림 — 소유 필드는 절대 병합하지 않는다.
+  const OWNED_UI_FIELDS = useMemo(() => new Set([
+    "reservedFragments", "holdPositions", "committedProposalId", "selectedProposalId",
+    "activeSource", "deletedFragments", "proposalsKeyFragments", "proposalsCustomFragments",
+  ]), []);
+  const saveUiStateMerged = useCallback(async (programId: string, snapshot: Record<string, any>) => {
+    let unknown: Record<string, any> = {};
+    try {
+      const cur = await videoService.getProjectState(programId);
+      if (cur?.ui_state) {
+        const parsed = JSON.parse(cur.ui_state);
+        for (const [k, v] of Object.entries(parsed)) {
+          if (!OWNED_UI_FIELDS.has(k)) unknown[k] = v;
+        }
+      }
+    } catch (e) {
+      // [#43 (1)] 침묵 금지 — 병합 원본을 못 읽으면 미지 필드(예: paperCutOrder)가 이번 저장에서
+      // 보존되지 못할 수 있다. 저장 자체는 차단하지 않되, 이유를 콘솔 + 지휘부 채팅에 남긴다 (헌장 §5).
+      console.error("[UI_STATE_MERGE][READ_FAIL] 서버 상태를 읽지 못함 — 스냅샷 단독 저장 (미지 필드 미보존 위험)", e);
+      setStoryPlan((prev: any) => {
+        const text = "저장 중 서버 상태를 읽지 못해 일부 항목이 보존되지 않을 수 있습니다.";
+        const msgs = prev?.messages ?? [];
+        const last = msgs[msgs.length - 1];
+        if (last?.sender === "ai" && last?.text === text) return prev;
+        return {
+          ...(prev ?? { story_plan_id: `STP_${Date.now()}` }),
+          messages: [...msgs, { id: `ai_save_merge_fail_${Date.now()}`, sender: "ai" as const, text, timestamp: Date.now() }],
+        };
+      });
+    }
+    return videoService.saveProjectState(programId, { ui_state: JSON.stringify({ ...unknown, ...snapshot }) });
+  }, [OWNED_UI_FIELDS, setStoryPlan]);
 
   const {
     resetAnalysisState,
@@ -338,6 +401,7 @@ const Index: React.FC = () => {
     setSelectedProposalId, setCommittedProposalId, setProposals, setDirectionSnapshot,
     resetAnalysisFlow, setActiveNavItem, setNavCollapsed, setProjects,
     activeNavItem, appState, buildUiSnapshot,
+    saveUiState: saveUiStateMerged, // [#30] merge-저장 주입
   });
 
   // [B-5-FIX] 저장된 백엔드 proposals → UI proposals 형태 매핑 (복원용, 업로드 매핑과 동일 형태)
@@ -925,9 +989,10 @@ const Index: React.FC = () => {
         setProposals(null);
         setCommittedProposalId(null);
         setSelectedProposalId(null);
-        setReservedFragments([]);
-        setHoldPositions({});
-        setDeletedFragments([]);
+        // [#38] 프로젝트 전환 클리어는 양 버킷 전체
+        setReservedByProposal({ A: [], B: [] });
+        setHoldPositionsByProposal({ A: {}, B: {} });
+        setDeletedByProposal({ A: [], B: [] });
         setCurrentSourceId(null);
         setCurrentVideoUrl(null);
         setSingleEditOpen(false);
@@ -1066,12 +1131,29 @@ const Index: React.FC = () => {
               }
               if (stateRes && stateRes.ui_state && isMounted) {
                 const snap = JSON.parse(stateRes.ui_state);
-                if (snap.reservedFragments?.length) setReservedFragments(snap.reservedFragments);
-                if (snap.holdPositions) setHoldPositions(snap.holdPositions);
+                // [#38 하위호환 읽기 — 유일 지점] 구형(공용 1벌)은 A·B 양쪽 복제로 승격,
+                // 신형({A,B})은 그대로. 마이그레이션 스크립트 불요 — 열 때 자가 승격.
+                const upFrags = (v: any): Record<"A" | "B", Fragment[]> | null => {
+                  if (!v) return null;
+                  if (Array.isArray(v)) return v.length ? { A: v, B: v } : null;
+                  if (Array.isArray(v.A) || Array.isArray(v.B)) return { A: v.A ?? [], B: v.B ?? [] };
+                  return null;
+                };
+                const upPos = (v: any): Record<"A" | "B", Record<string, { x: number; y: number }>> | null => {
+                  if (!v || typeof v !== "object") return null;
+                  // 신형 판별: A/B 키 보유 (조각 uid는 SF_/frag_ 계열이라 충돌 없음)
+                  if (v.A !== undefined || v.B !== undefined) return { A: v.A ?? {}, B: v.B ?? {} };
+                  return { A: v, B: v }; // 구형 평면 Record → 복제 승격
+                };
+                const rf = upFrags(snap.reservedFragments);
+                if (rf) setReservedByProposal(rf);
+                const hp = upPos(snap.holdPositions);
+                if (hp) setHoldPositionsByProposal(hp);
                 if (snap.committedProposalId) setCommittedProposalId(snap.committedProposalId);
                 if (snap.selectedProposalId) setSelectedProposalId(snap.selectedProposalId);
                 if (snap.activeSource) setActiveSource(snap.activeSource);
-                if (snap.deletedFragments?.length) setDeletedFragments(snap.deletedFragments);
+                const df = upFrags(snap.deletedFragments);
+                if (df) setDeletedByProposal(df);
                 // [수정 6] proposals.key_fragments + customEditFragments 복원
                 // DB proposals 원본 위에 저장된 현재 상태를 덮어씀
                 if (snap.proposalsKeyFragments || snap.proposalsCustomFragments) {
@@ -2409,11 +2491,8 @@ const Index: React.FC = () => {
             onExportDone={() => {
               // [FIX-EXPORT-UISTATE] 내보내기 완료 시 ui_state 저장
               if (activeNavItem && activeNavItem.startsWith("proj_")) {
-                const uiSnap = buildUiSnapshot();
-                videoService.saveProjectState(
-                  activeNavItem,
-                  { ui_state: JSON.stringify(uiSnap) }
-                ).catch(() => {});
+                // [#30] merge-저장 — 모르는 것을 지우지 않는다
+                saveUiStateMerged(activeNavItem, buildUiSnapshot()).catch(() => {});
               }
               setActiveNavItem("upload");
             }}

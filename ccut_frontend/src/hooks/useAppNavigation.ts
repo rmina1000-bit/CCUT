@@ -16,6 +16,8 @@ interface UseAppNavigationParams {
   appState: string;
   // uiSnap 단일 빌더 (STEP 2 dedup)
   buildUiSnapshot: () => any;
+  // [#30 merge-저장] "모르는 것을 지우지 않는다" — Index의 saveUiStateMerged 주입
+  saveUiState: (programId: string, snapshot: any) => Promise<any>;
 }
 
 export function useAppNavigation({
@@ -30,6 +32,7 @@ export function useAppNavigation({
   activeNavItem,
   appState,
   buildUiSnapshot,
+  saveUiState,
 }: UseAppNavigationParams) {
   const resetAnalysisState = useCallback(() => {
     // [REFACTOR-01] proposal 4개(useProposalState 소유) 먼저, 그 뒤 analysis 13개(useAnalysisFlow). 원본 호출순서·빈 deps 보존.
@@ -50,8 +53,7 @@ export function useAppNavigation({
   const onItemClick = (newId: string) => {
     // [B-5d] 전환 직전: 현재 프로젝트 UI 스냅샷 저장 (백그라운드, non-blocking)
     if (activeNavItem && activeNavItem.startsWith("proj_") && appState === "complete") {
-      const uiSnap = buildUiSnapshot();
-      videoService.saveProjectState(activeNavItem, { ui_state: JSON.stringify(uiSnap) }).catch(() => {});
+      saveUiState(activeNavItem, buildUiSnapshot()).catch(() => {}); // [#30] merge-저장
     }
     // [FIX-LIST-ORDER] 프로젝트를 '여는(클릭) 것'은 조회이므로 목록 순서를 바꾸지 않는다.
     // (Claude 채팅 사이드바 방식: 열람으로는 순서 불변, 실제 활동에서만 최상단으로)
@@ -80,8 +82,7 @@ export function useAppNavigation({
   const onNewProject = () => {
     // [B-5d] + 버튼도 전환으로 취급: 현재 프로젝트 스냅샷 저장 후 빈 화면으로
     if (activeNavItem && activeNavItem.startsWith("proj_") && appState === "complete") {
-      const uiSnap = buildUiSnapshot();
-      videoService.saveProjectState(activeNavItem, { ui_state: JSON.stringify(uiSnap) }).catch(() => {});
+      saveUiState(activeNavItem, buildUiSnapshot()).catch(() => {}); // [#30] merge-저장
     }
     // [B-5b-v2] '+' → DB 즉시 생성 없음. 빈 상태 전환만 (업로드 시 createProject 실행)
     resetAnalysisState();
