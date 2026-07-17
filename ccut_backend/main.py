@@ -3899,11 +3899,7 @@ async def get_edit_overlay(source_id: str, db: Session = Depends(get_db)):
 
 
 # ── PBE 라우트 ──────────────────────────────────────────────────────
-
-class ContextRequest(BaseModel):
-    left_frag_id: str
-    right_frag_id: str
-
+# [GHOST 소각] ContextRequest(구 2조각 seam 문맥 요청 모델) 제거 — /pbe/context 라우트 소각과 동반.
 
 class PanoramaExtractRequest(BaseModel):
     fragments: list[dict]

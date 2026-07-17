@@ -13,9 +13,7 @@ import { AccountPanel } from "@/components/AccountPanel";
 import { TrashPanel } from "@/components/TrashPanel";
 import { SettingsPanel } from "@/components/SettingsPanel";
 import { SingleFragmentEditor } from "@/components/SingleFragmentEditor";
-// [PBE REBUILD 2-1] 기존 PBE 컴포넌트 runtime import 제거. 타입만 임시 유지(새 편집창 신설 시 완전 제거).
-// import PrecisionBoundaryEditor from "@/features/pbe/PrecisionBoundaryEditor";
-import type { BoundaryEditorTarget } from "@/features/pbe/pbeTypes";
+// [GHOST 소각 #4·5] 구 2조각 PBE(PrecisionBoundaryEditor) 완전 소각 — 타입·주석 렌더 포함. 복원은 git 이력.
 
 
 import {
@@ -106,9 +104,7 @@ const Index: React.FC = () => {
 
   const [holdPositions, setHoldPositions] = useState<Record<string, { x: number; y: number }>>({});
   const [boundaryHighlightIds, setBoundaryHighlightIds] = useState<string[]>([]);
-  const [editorTarget, setEditorTarget] = useState<BoundaryEditorTarget | null>(null);
-  const [pbeWindow, setPbeWindow] = useState<Fragment[]>([]);
-  const [editorOpen, setEditorOpen] = useState(false);
+  // [GHOST 소각 #4] 구 2조각 PBE 상태(editorTarget·pbeWindow·editorOpen) 제거 — 소비자 전무 증명(STEP C)
   const [singleEditOpen, setSingleEditOpen] = useState(false);
   const [singleEditTarget, setSingleEditTarget] = useState<Fragment | null>(null);
   const [fragmentOverrides, setFragmentOverrides] = useState<Map<string, Fragment>>(new Map());
@@ -862,57 +858,7 @@ const Index: React.FC = () => {
     [logProposalPair, resetAnalysisState, toFullUrl, activeNavItem, sourceEntries]
   );
 
-  // Hash-based debug hydration for Playwright verification
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    DEBUG_LOG && console.log("[Debug] hash hook checking hash:", window.location.hash);
-    if (window.location.hash !== "#debug-hydrate") return;
-    
-    DEBUG_LOG && console.log("[Debug] Running Playwright mockup hydration adapter...");
-    
-    (window as any).triggerPBEMock = (caseTypeOrData?: any) => {
-      if (typeof caseTypeOrData === "object" && caseTypeOrData !== null) {
-        DEBUG_LOG && console.log("[Debug] Hydrating mock data from caller...");
-        const { projects, sourceEntries, editFragments, proposals } = caseTypeOrData;
-        if (projects) setProjects(projects);
-        if (sourceEntries) setSourceEntries(sourceEntries);
-        if (editFragments) {
-          setEditFragments(editFragments);
-          setSourceFragments(editFragments);
-        }
-        if (proposals) setProposals(proposals);
-        setAppState("complete");
-        return;
-      }
-
-      const caseType = typeof caseTypeOrData === "string" ? caseTypeOrData : "mid";
-      DEBUG_LOG && console.log(`[Debug] triggerPBEMock called with caseType: ${caseType}`);
-
-      const targetFps = 30.0;
-      let targetFrags = [];
-      const currentFrags = editFragments;
-
-      if (caseType === "first") {
-        targetFrags = [currentFrags[0]].filter(Boolean);
-      } else if (caseType === "mid") {
-        targetFrags = [currentFrags[0], currentFrags[1]].filter(Boolean);
-      } else {
-        targetFrags = [currentFrags[0], currentFrags[1], currentFrags[4] || currentFrags[2]].filter(Boolean);
-      }
-
-      setPbeWindow(targetFrags);
-      setEditorTarget({
-        leftRealIndex: 0,
-        rightRealIndex: targetFrags.length - 1,
-        clickSide: caseType === "first" ? "left" : caseType === "mid" ? "right" : "center",
-      });
-      setEditorOpen(true);
-
-      const logDisplayIds = targetFrags.map(f => f.display_id || f.fragment_id);
-      const logSelectionStates = targetFrags.map(f => f.selection_state || "S");
-      console.log(`[PBE_OPEN_CONTEXT] leftFragId=${targetFrags[0]?.fragment_id || 'null'} rightFragId=${targetFrags[targetFrags.length - 1]?.fragment_id || 'null'} clickSide=${caseType === "first" ? "left" : caseType === "mid" ? "right" : "center"} targetFrags=[${logDisplayIds.join(', ')}] selection_states=[${logSelectionStates.join('/')}]`);
-    };
-  }, [editFragments]);
+  // [GHOST 소각 #4] triggerPBEMock(#debug-hydrate Playwright 어댑터) 제거 — 구 2조각 PBE 진입 유일 경로였음
 
   // [B-5c] 백엔드 프로젝트 목록 로드 (재기동/새로고침/휴지통 복원 후에도 영속)
   const reloadProjects = useCallback(async () => {
@@ -2276,73 +2222,14 @@ const Index: React.FC = () => {
     return result;
   }, [displayProposalId, editFragments, proposals, reservedFragments]);
 
+  // [GHOST 소각 #4] 구 2조각 편집창 진입 핸들러 — 도달불가 본문(S|S·S|N|S seam 창 구성) 제거,
+  // 차단 셸만 유지 (호출자 계약 보존 — 새 편집창 진입은 handleSingleFragmentEdit).
   const handleOpenBoundaryEditor = useCallback(
-    async (leftFragId: string | null, rightFragId: string | null, clickSide?: "left" | "right" | "center") => {
-      // [PBE REBUILD 2-1] 기존 편집창 진입 차단. 새 편집창 준비 중.
+    async (_leftFragId: string | null, _rightFragId: string | null, _clickSide?: "left" | "right" | "center") => {
       console.log("[PBE_DISABLED] open blocked (rebuild in progress)");
       return;
-      // ↓ 이하 기존 본문은 새 편집창 연결 시 정리 (지금은 도달 불가)
-      // 1. Get left and right fragments based on the ID/UID strings in the timeline (filteredFragments)
-      const leftFrag = leftFragId
-        ? filteredFragments.find(f => f.fragment_id === leftFragId || getUid(f) === leftFragId)
-        : null;
-      const rightFrag = rightFragId
-        ? filteredFragments.find(f => f.fragment_id === rightFragId || getUid(f) === rightFragId)
-        : null;
-
-      if (!leftFrag && !rightFrag) return;
-
-      // 2. Build the exact PBE Window targeting the seam context (DoD §6 boundary context rules)
-      // We want to load:
-      // - If S|S: [leftFrag, rightFrag]
-      // - If S|N|S: [leftFrag, ...middle_N_fragments, rightFrag]
-      // - If Left single trim: [leftFrag]
-      // - If Right single trim: [rightFrag]
-      // [BETA1 PBE REDUCTION] PBE는 parent fragment 1개만 편집한다.
-      // 두 조각 경계 / S|N|S / cross-source 편집은 1차 베타에서 제외.
-      // 어떤 클릭이 들어와도 단일 조각으로 축소한다 (이음새/center = 좌측 조각).
-      let targetFrags: Fragment[] = [];
-      if (leftFrag) {
-        targetFrags = [leftFrag];
-      } else if (rightFrag) {
-        targetFrags = [rightFrag];
-      }
-
-      // Format for PBE fragment specifications
-      const pbeFragments = targetFrags.map(f => ({
-        ...f,
-        start_frame: f.start_frame ?? Math.round((f.start ?? f.start_time ?? 0) * 30),
-        end_frame: f.end_frame ?? Math.round(((f.start ?? f.start_time ?? 0) + (f.duration ?? 0)) * 30),
-        selection_state: f.selection_state || (reservedFragments.some(r => getUid(r) === getUid(f)) ? "N" : "S"),
-      }));
-
-      setPbeWindow(pbeFragments);
-      setEditorTarget({
-        leftRealIndex: 0,
-        rightRealIndex: pbeFragments.length - 1,
-        clickSide: clickSide || "center",
-      });
-      setEditorOpen(true);
-
-      // 3. Proactively trigger backend panorama frame extraction to prevent broken frame thumbnails
-      try {
-        const payloadFrags = pbeFragments.map(f => ({
-          fragment_id: f.fragment_id,
-          source_id: f.source_id || currentSourceId,
-          start_time: (f.start_frame ?? 0) / 30,
-          end_time: (f.end_frame ?? 0) / 30
-        }));
-
-        fetch(`${videoService.API_BASE_URL}/pbe/extract-panoramas`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ fragments: payloadFrags }),
-        }).catch(err => console.error("Extract panorama request failed async:", err));
-      } catch (e) {
-        console.error("Failed to post extract panorama:", e);
-      }
     },
-    [filteredFragments, reservedFragments, currentSourceId]
+    []
   );
 
   // [F-2b] overlay 복원: currentSourceId 변경 시 DB trim값 merge
@@ -2388,147 +2275,11 @@ const Index: React.FC = () => {
     })();
   }, [currentSourceId]);
 
-  const handleEditorApply = useCallback(async (result: { updatedFragments: Fragment[]; removedFragmentIds: string[] }) => {
-    const { updatedFragments } = result;
-    setEditFragments(updatedFragments);
-    setPbeWindow([]);
-    setEditorOpen(false);
-
-    if (committedProposalId && proposals) {
-      setProposals((prev) => {
-        if (!prev) return prev;
-        const target = committedProposalId as "A" | "B";
-        const newKeyOrder = updatedFragments
-          .filter((f) => f.status !== "removed")
-          .map((f) => getUid(f));
-        return {
-          ...prev,
-          [target]: {
-            ...prev[target],
-            key_fragments: newKeyOrder,
-            customEditFragments: updatedFragments
-          },
-        };
-      });
-    }
-
-    setStoryPlan((prev: any) => {
-      if (!prev) return prev;
-      const systemMessage = {
-        id: `pbe_apply_${Date.now()}`,
-        sender: "ai" as const,
-        text: `정밀 편집(PBE)을 통해 조각 경계가 수정되었습니다. 수정된 프레임 범위가 타임라인에 반영되었으며 새 편집안으로 저장되었습니다.`,
-        timestamp: Date.now(),
-      };
-      return {
-        ...prev,
-        messages: [...(prev.messages ?? []), systemMessage],
-      };
-    });
-
-    try {
-      await fetch(`${videoService.API_BASE_URL}/save_edit`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          fragments: updatedFragments,
-          timestamp: Date.now(),
-        }),
-      });
-    } catch (e) {
-      console.error("Save edit error:", e);
-    }
-
-    // [F-2a] 편집 영속: 유효 조각을 edit_overlay에 저장 (기존 save_edit 유지, 별도)
-    try {
-      for (const f of updatedFragments) {
-        const s = (f as any).start_time ?? (f as any).start_sec ?? (f as any).start;
-        const e = (f as any).end_time ?? (f as any).end_sec ?? (f as any).end;
-        if (typeof s !== "number" || typeof e !== "number") continue;
-        await videoService.upsertEditOverlay({
-          source_id: (f as any).source_id,
-          fragment_id: f.fragment_id,
-          effective_start_sec: s,
-          effective_end_sec: e,
-          excluded: (f as any).excluded === true || (f as any).status === "removed",
-          edit_type: "TRIM",
-          root_fragment_id: (f as any).root_fragment_uid ?? f.fragment_id,
-        });
-      }
-    } catch (err) {
-      console.error("edit-overlay save error:", err);
-    }
-  }, [setStoryPlan, committedProposalId, proposals, setProposals]);
-
-
+  // [GHOST 소각 #4] handleEditorApply(구 편집기 적용 — 무게이트 edit_overlay 쓰기 포함, GHOST #2의 쓰는 짝)와
+  // SEAM 채팅 분기(/pbe/analyze — 백엔드 라우트도 소각됨) 제거. 채팅은 항상 협의 경로로 직행.
   const handleOnConsultation = useCallback(async (text: string) => {
-    if (editorOpen) {
-      const userMsgId = `user_${Date.now()}`;
-      const aiMsgId = `ai_${Date.now() + 1}`;
-
-      const userMsg = {
-        id: userMsgId,
-        sender: "user" as const,
-        text,
-        timestamp: Date.now(),
-      };
-
-      const aiMsg = {
-        id: aiMsgId,
-        sender: "ai" as const,
-        text: "비례바 명령을 처리 중입니다...",
-        timestamp: Date.now() + 1,
-        isInterpreting: true
-      };
-
-      setStoryPlan((prev: any) => {
-        if (!prev) return prev;
-        return {
-          ...prev,
-          messages: [...(prev.messages ?? []), userMsg, aiMsg],
-        };
-      });
-
-      try {
-        const seamId = pbeWindow.length > 0
-          ? `SEAM_${pbeWindow[0]?.fragment_id}_${pbeWindow[pbeWindow.length - 1]?.fragment_id}`
-          : "";
-        const res = await fetch(`${videoService.API_BASE_URL}/pbe/analyze`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ message: text, seam_id: seamId })
-        });
-        if (res.ok) {
-          const data = await res.json();
-          window.dispatchEvent(new CustomEvent("pbe-chat-command", { detail: data }));
-
-          setStoryPlan((prev: any) => {
-            if (!prev) return prev;
-            return {
-              ...prev,
-              messages: (prev.messages ?? []).map((m: any) =>
-                m.id === aiMsgId ? { ...m, text: data.ai_msg || "처리 완료.", isInterpreting: false } : m
-              )
-            };
-          });
-        }
-      } catch (e) {
-        console.error("PBE chat command failed:", e);
-        setStoryPlan((prev: any) => {
-          if (!prev) return prev;
-          return {
-            ...prev,
-            messages: (prev.messages ?? []).map((m: any) =>
-              m.id === aiMsgId ? { ...m, text: "오류가 발생했습니다.", isInterpreting: false } : m
-            )
-          };
-        });
-      }
-      return;
-    }
-
     handleConsultation(text);
-  }, [editorOpen, handleConsultation, pbeWindow, setStoryPlan]);
+  }, [handleConsultation]);
 
   const handleBackgroundClick = useCallback((e: React.MouseEvent) => {
     const target = e.target as HTMLElement;
@@ -2756,18 +2507,6 @@ const Index: React.FC = () => {
           </div>
         </>
       )}
-      {/* [PBE REBUILD 2-1] 기존 편집창 진입 차단. 새 SingleFragmentEditor로 교체 예정.
-      <PrecisionBoundaryEditor
-        open={editorOpen}
-        onOpenChange={setEditorOpen}
-        fragments={pbeWindow}
-        editFragments={editFragments}
-        target={editorTarget}
-        videoUrl={toFullUrl(currentVideoUrl)}
-        sources={sourceEntries.map(s => ({ source_id: s.source_id, label: s.label, video_url: toFullUrl(s.video_url) || "" }))}
-        onApply={handleEditorApply}
-      />
-      */}
       <SingleFragmentEditor
         open={singleEditOpen}
         onOpenChange={setSingleEditOpen}

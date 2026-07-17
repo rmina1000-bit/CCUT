@@ -1,7 +1,7 @@
 import React, { useState, useCallback, useMemo } from "react";
 import { Fragment } from "@/data/fragmentData";
 import FragmentTile from "./FragmentTile";
-import { getUid } from "@/lib/pbeEngine";
+import { getUid } from "@/lib/fragmentIdentity";
 import {
   SyntheticCollapsedSeam,
   detectSyntheticSeams,

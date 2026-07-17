@@ -55,16 +55,8 @@ const FragmentTile: React.FC<FragmentTileProps> = ({
       return directUrl;
     }
 
-    // 2. We can search all source fragments or loaded project fragments.
-    // Index.tsx stores these in sourceEntries or editFragments, and window.triggerPBEMock might hydrate them.
-    // Let's find any loaded fragments in the application memory to locate the parent/base fragment.
-    // In React, we can retrieve them by checking if they are exposed globally, or we can search the current DOM or window.
-    // When Index.tsx maps/updates fragments, we can register them or check window context.
-    // Wait, let's see if we can locate the base fragment inside sourceEntries or editFragments.
-    // Let's write a lookup function that queries window.ccutFragments or similar, OR we can check common patterns.
-    // To make this robust, let's look up using the base fragment ID since base ID is VF... which has a real thumbnail URL.
-    // For example, if getBaseFragmentId returns 'VF1_SRC_CB9107CA', its thumbnail is '/static/thumbnails/VF1_SRC_CB9107CA.jpg'.
-    // Wait, is that true? Let's check the database sample output:
+    // 2. 직접 썸네일이 없으면 base fragment ID로 표준 경로를 유도한다.
+    //    base ID(예: VF1_SRC_CB9107CA)의 썸네일은 '/static/thumbnails/{baseId}.jpg' 규약.
     // Fragment VF1_SRC_CB9107CA -> thumb_url is '/static/thumbnails/VF1_SRC_CB9107CA.jpg'.
     // Fragment VF2_SRC_CB9107CA -> thumb_url is '/static/thumbnails/VF2_SRC_CB9107CA.jpg'.
     // Yes! The base fragments (the primary video fragments) are named VF1_SRC_..., VF2_SRC_...

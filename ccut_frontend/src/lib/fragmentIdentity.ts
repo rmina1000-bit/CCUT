@@ -3,12 +3,11 @@
  * Fragment 식별자 공용 유틸리티
  *
  * 사용처:
- *   - src/components/FragmentMap.tsx (LOCK · via pbeEngine shim)
- *   - src/pages/Index.tsx (직접 또는 via pbeEngine shim)
- *   - src/features/pbe/PrecisionBoundaryEditor.tsx
- *   - src/features/pbe/pbeBoundaryOps.ts
+ *   - src/components/FragmentMap.tsx (LOCK)
+ *   - src/components/ReservedFragments.tsx
+ *   - src/pages/Index.tsx
  *
- * 원 출처: 구 src/lib/pbeEngine.ts 에서 PBE 외부에서도 사용되는 공용 유틸만 분리 이관.
+ * 원 출처: 구 src/lib/pbeEngine.ts(shim — GHOST 소각으로 삭제됨)에서 공용 유틸만 분리 이관.
  */
 
 import { Fragment } from "@/data/fragmentData";

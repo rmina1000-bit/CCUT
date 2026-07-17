@@ -3,7 +3,7 @@ import { createPortal } from "react-dom";
 import { Fragment } from "@/data/fragmentData";
 import FragmentTile from "./FragmentTile";
 import TrashBin from "./TrashBin";
-import { getUid } from "@/lib/pbeEngine";
+import { getUid } from "@/lib/fragmentIdentity";
 
 interface Position {
   x: number;
