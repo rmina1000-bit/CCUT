@@ -162,14 +162,20 @@ def _llm_understand(input_text, recent_messages=None, source_ids=None,
         "- confirm: 직전에 CCUT이 제안한 방향에 대한 승인(그대로 진행해 등).\n"
         "- chat: 그 외 전부 — 일상 이야기·감정·질문·근황. 사람 이름이 나와도 이야기면 chat이다.\n"
         "  예: '은한이가 자전거 탔어!' → chat / '은한이 나오는 장면만 넣어줬으면 좋겠어' → edit\n"
-        "- unclear: 편집 의도는 있는데 무엇을 고를지 기준이 없을 때 ('새로 편집해줘', '느낌있게').\n"
+        "- retrigger: 새 기준 없이 '다시/재/새로/한 번 더 + 편집·제안해 달라'는 순수 재실행 명령 "
+        "('다시 편집해줘', '재제안'). 기준 단어가 하나라도 있으면 edit이다. "
+        "주의: '다르게/바꿔서/딴 걸로' 같은 변화 요구가 붙거나('다시 해줘 근데 이번엔 좀 다르게'), "
+        "'처음부터 다시'처럼 해제인지 재실행인지 애매하면 retrigger가 아니라 unclear다.\n"
+        "- reset: 기준을 없애고 전체를 다시 보자는 말 ('전부 다시 봐줘', '조건 없이 다 보여줘', '기준 없애줘').\n"
+        "- unclear: 편집 의도는 있는데 무엇을 고를지 기준이 없고 재실행도 해제도 아닐 때 "
+        "('느낌있게', '처음부터 다시', '다시 해줘 근데 이번엔 좀 다르게').\n"
         "instruction 규칙: edit일 때만 채운다. 반드시 '무엇을 고르는 기준'(예: '정은한 나오는 "
         "장면만', '물놀이 위주로 길게')이어야 한다. 사용자에게 묻는 문장을 넣으면 절대 안 된다. "
         "기준을 모르면 kind를 unclear로 하라.\n"
         "reply 규칙: 반드시 한국어로만(중국어·영어 문장 금지). 모델명·제조사(Qwen 등) 언급 금지 — "
         "너의 이름은 오직 CCUT이다. 날짜·시간·작업 상황 질문은 위 값으로 정확히 답하고, "
         "날씨·뉴스 등 모르는 실시간 정보는 아는 척하지 않는다.\n"
-        'JSON만 출력: {"kind":"chat|edit|confirm|unclear","reply":"...",'
+        'JSON만 출력: {"kind":"chat|edit|confirm|retrigger|reset|unclear","reply":"...",'
         '"instruction":"edit일 때 선별 기준, 아니면 빈 문자열"}\n'
         + (f"최근 대화:\n{ctx}" if ctx else "")
         + f"사용자: {input_text}\n")
@@ -208,6 +214,19 @@ def _llm_understand(input_text, recent_messages=None, source_ids=None,
                      reply or "네, 지금 방향 그대로 진행하겠습니다.",
                      normalized=input_text, confidence=0.7, via="qwen",
                      matched={"kind": "llm_confirm"})
+    # [#49 (a) — det·qwen 양 경로 일관] LLM이 재실행/해제로 분류한 경우도 같은 action으로.
+    if kind == "retrigger":
+        # [경계 가드 — V 판정 "애매하면 clarification, retrigger로 몰지 않는다"]
+        # 소형 LLM이 프롬프트 배제 조건을 무시하는 실측(A1·A2) → 결정론 후처리로 강등:
+        # 변화 요구(다르게·바꿔·딴)나 '처음부터'가 붙으면 순수 재실행이 아니다.
+        if _re_mod.search(r"다르게|다른\s*(방향|느낌|걸|거)|바꿔|바꾸|딴\s*(걸|거)|처음부터", input_text):
+            kind = "unclear"
+        else:
+            return _resp("retrigger", "직전 기준으로 다시 골라볼게요.",
+                         confidence=0.7, via="qwen", matched={"kind": "retrigger_llm"})
+    if kind == "reset":
+        return _resp("intent_clear", "기준 없이 전체에서 다시 고를게요.",
+                     confidence=0.7, via="qwen", matched={"kind": "intent_clear_llm"})
     if kind == "unclear":
         # 되묻기는 LLM 문장을 쓰지 않는다 — reply 칸에 예시 지시문을 넣는 사고가
         # 관측됨("물놀이 장면 위주로 길게 편집해주세요"가 CCUT 말로 출력). 고정 템플릿.
@@ -319,25 +338,33 @@ def route_edit_intent(source_ids=None, input_text="", recent_messages=None,
                 return rr
             return r0  # 그새 프로젝트에 생겼으면 그 결과 그대로
 
-    # ── 0.7 맨몸 재편집 [BARE-REDO] — "편집을 다시해줘"처럼 새 조건이 없는 재요청은
-    #    옛 지시를 무단 재사용하지 않고 되묻는다 (국장 지적 2026-07-05: LLM 폴백이
-    #    직전 '물놀이' 지시를 그대로 다시 실행해버린 사건). 조건이 붙어 있으면
-    #    ("은한이만 다시") 아래 사다리가 정상 처리.
-    if len(t) <= 15 and _re.match(
-            r"^(편집|제안|영상)?\s*(을|를)?\s*(다시|재)\s*(편집)?\s*"
-            r"(해\s*줘|해줘|해\s*봐|해봐|부탁해?|만들어\s*줘|만들어줘|하자|할래)?[.!~?\s]*$", t):
-        _prev = None
-        for m in reversed(recent_messages or []):
-            txt = str(m.get("text") or "").strip()
-            if m.get("sender") == "user" and txt and len(txt) > 3 \
-                    and not _re.match(r"^(편집|제안|영상)?\s*(을|를)?\s*(다시|재)", txt):
-                _prev = txt[:40]
-                break
-        reply = (f"다시 하기 전에 기준을 여쭤볼게요 — 이전처럼 \"{_prev}\" 그대로 갈까요, "
-                 "아니면 다른 방향으로 바꿀까요?" if _prev
-                 else "어떤 방향으로 다시 할까요? 예: '사람 중심으로', '더 짧게', '실내만'.")
-        return _resp("ask_clarification", reply, confidence=0.9, via="deterministic",
-                     matched={"kind": "bare_redo", "prev": _prev})
+    # ── 0.65 의도 해제 [INTENT-CLEAR — #49 (a) 4단, 국장 승인 2026-07-17] —
+    #    "전부 다시 봐줘"류 = 활성 의도 스택 초기화 + 무필터 복귀 (F4·§1-10: 승계가 감옥이 되면 안 된다).
+    #    "처음부터 다시"는 재실행/해제가 애매 — 여기서 잡지 않고 clarification으로 (V 판정).
+    if _re.match(
+            r"^(조건\s*없이|기준\s*없이)?\s*(전부|전체|다)\s*(다시)?\s*"
+            r"(보여\s*줘|봐\s*줘|봐줘|보자|보여주라)[.!~?\s]*$", t) or \
+       _re.match(r"^기준\s*(을|를)?\s*(없애|빼|치워|지워)\s*(줘|주세요|라)?[.!~?\s]*$", t):
+        return _resp("intent_clear",
+                     "기준 없이 전체에서 다시 고를게요.",
+                     confidence=0.9, via="deterministic",
+                     matched={"kind": "intent_clear"})
+
+    # ── 0.7 재실행 [RETRIGGER — #49 (a) 1·2단, 국장 승인 2026-07-17. 구 BARE-REDO 대체] —
+    #    재실행 신호(다시·재·새로·한 번 더)만 있고 필터 명사(인물·장소·행위·길이·분위기)가 0개인
+    #    문장은 '명령'이지 '의도'가 아니다 — 주제(open_theme)로 오해해 의도를 덮어쓰지 않는다
+    #    (16:06 사건: "스토리 다시 편집하게 해줘" → open_theme 오분류 → keep=26/26 무필터).
+    #    처리: 분류만 반환 — 직전 활성 의도의 승계/무의도 무필터+고지는 프론트가 결정(§5 표시 동반).
+    #    계보: 구 BARE-REDO(07-05 "무단 재사용 금지→되묻기")를 승계+표시 설계가 대체 —
+    #    승계 사실을 지휘부 채팅에 즉시 고지하므로 '무단'이 아니다.
+    if len(t) <= 24 and _re.match(
+            r"^(그럼\s*)?(스토리|편집|제안|영상)?\s*(을|를)?\s*(다시|재|새로|한\s*번\s*더)\s*"
+            r"(편집|제안|골라|만들|뽑)?\s*(하게|하도록)?\s*"
+            r"(해\s*줘|해줘|해\s*봐|해봐|부탁해?|줘|주세요|하자|할래|볼래|보자)?[.!~?\s]*$", t):
+        return _resp("retrigger",
+                     "직전 기준으로 다시 골라볼게요.",
+                     confidence=0.9, via="deterministic",
+                     matched={"kind": "retrigger"})
 
     # ── 0.5 조회/열람 [SHOW] — "보여줘/있나/찾아줘"는 편집이 아니라 보여주기다.
     #    편집 동사가 함께 있으면(예: "찾아서 편집해줘") 편집 사다리가 우선.

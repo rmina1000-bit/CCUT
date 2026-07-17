@@ -1066,7 +1066,11 @@ const Index: React.FC = () => {
             setActiveSource("A");
             
             const firstEntry = restoredEntries[0];
-            setEditFragments(firstEntry.fragments);
+            // [#23 수리 — 국장 승인 2026-07-17] 원료 웅덩이(editFragments)에 전 소스 조각 합집합 적재.
+            // 구판(첫 소스만)은 사용자가 원본맵에서 추가한 타 소스 조각이 재진입 시 조용히 증발하던
+            // 병소(§5) — 시퀀스 매칭분만 렌더되므로 조각맵 표시 수는 불변. 분석(업로드) 경로는
+            // 원래 전 소스 누적(:659·:776)이라 무접촉.
+            setEditFragments(restoredEntries.flatMap((e) => e.fragments));
             setSourceFragments(firstEntry.fragments);
             
             setCurrentSourceId(firstEntry.source_id);
@@ -1938,6 +1942,16 @@ const Index: React.FC = () => {
     [removeByUid, editFragments, committedProposalId, proposals, setProposals]
   );
 
+  // [#23 (가) 병합 — 국장 승인 2026-07-17] 웅덩이 보존 병합: uid 기준으로 복원본이 이기고,
+  // 웅덩이의 나머지 조각은 보존한다. 유령 부활 금지 — 복원본에만 있는 uid(웅덩이에 원료가
+  // 없는 옛 세대 조각)는 편입하지 않는다(#1 재림 차단). 삭제 조각의 표시 부활은 구성층
+  // (key_fragments)이 지배하므로 발생하지 않는다 — 검증으로 실증.
+  const mergeIntoPool = useCallback((pool: Fragment[], restored: Fragment[]): Fragment[] => {
+    if (pool.length === 0) return restored; // 빈 웅덩이 = 미적재 상태(지움 아님) — 종전 동작 유지, 빈 화면 경합 방지
+    const restoredByUid = new Map(restored.map((f) => [getUid(f), f]));
+    return pool.map((f) => restoredByUid.get(getUid(f)) ?? f);
+  }, []);
+
   // A/B안 토글 시 각 안의 편집 상태(editFragments) 복원
   useEffect(() => {
     if (!committedProposalId || !proposals) return;
@@ -1952,11 +1966,11 @@ const Index: React.FC = () => {
       // 게이트 OFF·상태 미로드 시엔 종전 그대로 (ref 경유라 effect deps 무변).
       const snap = (proposal as any).customEditFragments as any[];
       const states = Array.from(editStatesRef.current.values());
-      setEditFragments(
-        editCtxRef.current.enabled && states.length
-          ? (rebuildFragmentTiles(snap, states, preferredPbeItemIdFor) as any)
-          : (snap as any)
-      );
+      // [#23 (가) 처치 1/4] 통째 교체 → 웅덩이 보존 병합 (2a 유지: 좌표·분할은 rebuild 산출이 이김)
+      const restored = editCtxRef.current.enabled && states.length
+        ? (rebuildFragmentTiles(snap, states, preferredPbeItemIdFor) as any[])
+        : (snap as any[]);
+      setEditFragments((prev) => mergeIntoPool(prev, restored));
     } else {
       const rawSeq = (proposal as any).resolved_aliases || (proposal as any).sequence || [];
       if (rawSeq.length > 0) {
@@ -2003,8 +2017,8 @@ const Index: React.FC = () => {
           };
         });
 
-        // 즉시 rawSeq 버전으로 표시
-        setEditFragments(initialFrags);
+        // 즉시 rawSeq 버전으로 표시 — [#23 (가) 처치 2/4] 웅덩이 보존 병합
+        setEditFragments((prev) => mergeIntoPool(prev, initialFrags));
 
         // [F-2b-MERGE] overlay 비동기 조회 → mergedFrags를 customEditFragments에 저장
         // 이렇게 해야 다음 L1395 재실행(A→B→A 전환) 시 overlay가 보존됨
@@ -2015,7 +2029,8 @@ const Index: React.FC = () => {
               // [EDIT-CONTRACT-B0] ui_state로 복원된 customEditFragments를 덮어쓰지 않는다 — edit-state 권위
               const states = await refreshEditStatesRef.current();
               const rebuilt = states.length ? (rebuildFragmentTiles(initialFrags as any[], states, preferredPbeItemIdFor) as any[]) : initialFrags;
-              setEditFragments(rebuilt as any);
+              // [#23 (가) 처치 3/4] 웅덩이 보존 병합 (2a: edit-state 재파생 승리 유지)
+              setEditFragments((prev) => mergeIntoPool(prev, rebuilt as any[]));
               setProposals((prev) => {
                 if (!prev || !prev[target]) return prev;
                 const existing = (prev[target] as any).customEditFragments;
@@ -2051,7 +2066,8 @@ const Index: React.FC = () => {
                 });
                 if (changed) mergedFrags = merged;
               }
-              setEditFragments(mergedFrags as any);
+              // [#23 (가) 처치 4/4] 웅덩이 보존 병합 (게이트 OFF 레거시 overlay 경로)
+              setEditFragments((prev) => mergeIntoPool(prev, mergedFrags as any[]));
               setProposals((prev) => {
                 if (!prev || !prev[target]) return prev;
                 return {

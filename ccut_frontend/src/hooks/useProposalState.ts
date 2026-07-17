@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { Proposal, Direction, DirectionSnapshot } from "@/proposal/proposalTypes";
 import { createNextSnapshot } from "@/proposal/directionSnapshot";
 import { generateProposals } from "@/proposal/proposalOrchestrator";
@@ -64,6 +64,9 @@ type ConsultationDecision = {
   text: string;
   shouldRunProposal: boolean;
   fallbackKind?: "empty" | "unknown" | "ambiguous" | "repeat";
+  // [#49 (a) 2단] content=내용 지시(의도 갱신) / inherit=재실행(직전 의도 승계) /
+  // inherit_empty=재실행인데 활성 의도 없음(무필터+고지) / clear=의도 해제(무필터)
+  intentKind?: "content" | "inherit" | "inherit_empty" | "clear";
   // [INTENT-ROUTER] 백엔드 종업원이 애칭→풀네임 등으로 정규화한 실행 지시문
   normalizedInstruction?: string;
   // [ARCHIVE P1] archive_query가 추린 후보 조각 (인물+장소 교집합) — hub가 이만 판정
@@ -139,10 +142,15 @@ export const useProposalState = (
   }>>([]);
   const [activeProposalEntryId, setActiveProposalEntryId] = useState<string | null>(null);
 
+  // [#49 (a) 2단 — 의도 승계] 활성 의도 = 마지막 '내용 지시'만 기억. 명령(retrigger)은 덮지 않는다.
+  // 세션 수명 — 프로젝트 전환 시 초기화 (영속은 범위 밖, 한계로 보고).
+  const activeIntentRef = useRef<string | null>(null);
+
   // 프로젝트 전환 시 세대 기록 초기화 (storyPlan과 동일 수명)
   useEffect(() => {
     setProposalHistory([]);
     setActiveProposalEntryId(null);
+    activeIntentRef.current = null; // [#49 (a)] 의도도 프로젝트 수명
   }, [projectId]);
 
   // proposals가 바뀔 때마다 세대 기록 갱신 — 새 pair면 append, 같은 pair면 스냅샷만 갱신
@@ -630,15 +638,26 @@ export const useProposalState = (
         });
         return; // 제안 생성 없음 — 편집하라고 할 때만 편집한다
       }
+      // [#49 (a) — 국장 승인 2026-07-17] retrigger = 명령: 직전 활성 의도 승계(있으면) /
+      // 무필터+정직 고지(없으면). intent_clear = 의도 해제 + 무필터 복귀 (F4·§1-10).
+      // 명령이 의도를 덮어쓰지 않는다 — 16:06 사건("스토리 다시 편집하게 해줘"가 의도를 대체) 절단.
+      const isRetrigger = route.action === "retrigger";
+      const isIntentClear = route.action === "intent_clear";
       consultationDecision = {
         text: route.reply || "네, 확인했습니다.",
         // revise_current는 현 단계에선 재제안 경로로 수렴 (백엔드 REVISION 게이트가 하류 처리)
         // ask_include_archive는 승인 대화 — 제안 실행 없이 되묻기만 표시 (P1)
-        shouldRunProposal: route.action === "run_proposal" || route.action === "revise_current",
+        shouldRunProposal: route.action === "run_proposal" || route.action === "revise_current"
+          || isRetrigger || isIntentClear,
         fallbackKind: route.action === "ask_clarification" ? "ambiguous"
           : route.action === "answer_only" ? "unknown"
           : route.action === "ask_include_archive" ? "ambiguous" : undefined,
-        normalizedInstruction: route.normalized_instruction || text,
+        normalizedInstruction: isIntentClear ? ""
+          : isRetrigger ? (activeIntentRef.current ?? "")
+          : (route.normalized_instruction || text),
+        intentKind: isIntentClear ? "clear"
+          : isRetrigger ? (activeIntentRef.current ? "inherit" : "inherit_empty")
+          : "content",
         candidateFragmentIds: route.candidate_fragment_ids || undefined,
         // [ARCHIVE B] "응, 포함해줘" 승인 시 종업원이 지정한 아카이브 소스
         includeSourceIds: route.include_source_ids || undefined,
@@ -791,8 +810,14 @@ export const useProposalState = (
         }
       }
 
-      // [INTENT-ROUTER] 종업원이 정규화한 지시문으로 실행 ("은한이만" → "정은한만")
-      const inputText = consultationDecision.normalizedInstruction || text;
+      // [#49 (a) 2단 절단 — 구판 `normalizedInstruction || text`가 재실행 명령을 의도로 승격시키던 지점]
+      // 내용 지시만 원문 폴백을 갖고, 승계/해제는 decision이 확정한 값(승계 의도 또는 "")을 그대로 쓴다.
+      const intentKind = consultationDecision.intentKind ?? "content";
+      const inputText = intentKind === "content"
+        ? (consultationDecision.normalizedInstruction || text)
+        : (consultationDecision.normalizedInstruction ?? "");
+      if (intentKind === "content" && inputText.trim()) activeIntentRef.current = inputText; // 의도 갱신
+      if (intentKind === "clear") activeIntentRef.current = null;                            // 의도 해제
       console.log("[CONSULTATION_NL_SUBMIT]\n" + JSON.stringify({
         inputText,
         rawInput: text,
@@ -835,7 +860,15 @@ export const useProposalState = (
             .filter(Boolean);
       const _visibleFragmentCount = _visibleFragmentIds.length;
       const _estMin = Math.max(1, Math.ceil(((_fragmentPoolSize / 8) * 7 + 45) / 60));
-      const _workingText = `조각 ${_visibleFragmentCount}개를 "${inputText}" 기준으로 다시 고르고 있어요. 판단과 미리보기 렌더까지 약 ${_estMin}분 예상 — 끝나면 알려드릴게요.`;
+      // [#49 (a) 3단 — §5·F1] 적용 중인 의도를 지휘부 채팅에 정직 표시. toast 금지.
+      const _workingText =
+        intentKind === "inherit"
+          ? `지금 "${inputText}" 기준으로 고르고 있어요. 바꾸시려면 말씀해 주세요. (약 ${_estMin}분 예상)`
+        : intentKind === "inherit_empty"
+          ? `적용 중인 기준이 없어서 전체에서 다시 골랐어요. 기준을 말씀해 주시면 그 기준으로 갑니다. (약 ${_estMin}분 예상)`
+        : intentKind === "clear"
+          ? `기준 없이 전체에서 다시 고르고 있어요. (약 ${_estMin}분 예상)`
+        : `조각 ${_visibleFragmentCount}개를 "${inputText}" 기준으로 다시 고르고 있어요. 판단과 미리보기 렌더까지 약 ${_estMin}분 예상 — 끝나면 알려드릴게요.`;
       console.log(`[B2-0] INPUT{source_ids=${JSON.stringify(effectiveSourceIds)}, pool=${_fragmentPoolSize}, selected=${JSON.stringify(_visibleFragmentIds)}} -> OUTPUT{status_text=${JSON.stringify(_workingText)}, N=${_visibleFragmentCount}}`);
       setStoryPlan((prev: any) => prev ? {
         ...prev,
