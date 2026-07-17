@@ -962,6 +962,10 @@ const Index: React.FC = () => {
     const savedActiveProject = typeof window !== "undefined" ? localStorage.getItem("ccut_active_project_id") : null;
     if (!savedActiveProject || savedActiveProject === "projects" || !activeNavItem || activeNavItem === "projects" || activeNavItem === "default_project" || activeNavItem === "__new__" || activeNavItem === "settings") {
       // [FIX-RUNTIME-1b] 'settings'(환경진단 화면) 전환은 프로젝트 hydration 트리거가 아님 → 세션 보존.
+      // [#32 침묵 제거 ①] 프로젝트를 향했는데 localStorage 게이트가 복원을 막는 경우만 정직 표기 (§5).
+      if (activeNavItem && activeNavItem.startsWith("proj_")) {
+        console.warn(`[HYDRATION][GATE_SKIP] 프로젝트 복원 게이트 차단 — activeNavItem=${activeNavItem}, saved=${savedActiveProject}`);
+      }
       return;
     }
 
@@ -1011,7 +1015,8 @@ const Index: React.FC = () => {
 
         // 2. API 응답 project_id 가 요청 projectId와 다르면 hydration skip
         if (!data || data.project_id !== activeNavItem) {
-          DEBUG_LOG && console.warn(`[Hydration] project_id mismatch. Request: ${activeNavItem}, Response: ${data?.project_id}`);
+          // [#32 침묵 제거 ②] 응답 프로젝트 불일치 — 복원 중단을 정직 표기 (§5)
+          console.warn(`[HYDRATION][ID_MISMATCH] 복원 중단 — 요청=${activeNavItem}, 응답=${data?.project_id}`);
           return;
         }
 
@@ -1021,7 +1026,8 @@ const Index: React.FC = () => {
         //    세션이 진짜 비어 있을 때만 empty 처리(빈 프로젝트 → 업로드 화면).
         if (!data.sources || data.sources.length === 0) {
           if (sourceEntries.length === 0) {
-            DEBUG_LOG && console.log("[Hydration] Response sources length is 0 and session empty. Showing upload screen.");
+            // [#32 침묵 제거 ③] 빈 소스 → 업로드 화면 강하도 상시 표기
+            console.info(`[HYDRATION][EMPTY_SOURCES] ${activeNavItem}: 소스 0 + 세션 비어있음 → 업로드 화면`);
             pushAnalysisLog("[Hydration] sources=0, session empty → upload screen");
             setSourceEntries([]);
             setSourceFragments([]);
@@ -1034,7 +1040,7 @@ const Index: React.FC = () => {
             setExpandedFragment(null);
             setAppState("empty");  // [B-5-FIX] 빈 프로젝트 → 업로드 화면 (FAILURE 아님)
           } else {
-            DEBUG_LOG && console.log("[Hydration] Response sources length is 0 but session has sources. Keeping current session (proposals likely not generated yet).");
+            console.info(`[HYDRATION][EMPTY_SOURCES_KEPT] ${activeNavItem}: 소스 0이나 세션 보존 (제안 생성 대기 추정)`);
             pushAnalysisLog("[Hydration] sources=0 but session kept (proposals pending)");
           }
           return;
@@ -1127,7 +1133,8 @@ const Index: React.FC = () => {
                     (tl.has_more ? " (이전 페이지 더 있음)" : ""));
                 }
               } catch (e) {
-                DEBUG_LOG && console.warn("[TIMELINE] 복원 실패 — 새 흐름으로 시작", e);
+                // [#32 침묵 제거 ④] 타임라인/상태 재수화 실패 상시 표기 (§5)
+                console.warn("[HYDRATION][TIMELINE_RESTORE_FAIL] 복원 실패 — 새 흐름으로 시작", e);
               }
               if (stateRes && stateRes.ui_state && isMounted) {
                 const snap = JSON.parse(stateRes.ui_state);
