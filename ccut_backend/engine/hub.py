@@ -165,20 +165,25 @@ _THEME_VOCAB = [
     "풍경", "음식", "요리", "사람", "인물", "아이", "어린이", "가족", "밤", "야경", "거리",
     "호텔", "침실", "방", "체육관", "공원", "놀이터",
     "병원", "지하철",  # [PLACE P1] 장소-단독 명령은 이 어휘(전체풀 judge) 경로
+    "큰애", "작은애", "막내", "배경",  # [QWEN-R1 R-b⑤] 가족 호칭·비교 대상 어휘
 ]
+# [QWEN-R1 R-b④] 시간 부사 — 장소 어휘('방' 등)의 부분매칭 오탐원. 테마 매칭 전 마스킹.
+_TIME_ADVERBS = ("방금", "아까", "지금")
+# [R-b⑤ 방어] 테마 어휘를 부분 포함하는 비편집 결합어 — '배경음악'의 '배경' 오탐 차단.
+_VOCAB_GUARD = ("배경음악", "배경 음악")
 _NUM_KO = {"한": 1, "두": 2, "세": 3, "네": 4, "다섯": 5, "여섯": 6,
            "일곱": 7, "여덟": 8, "아홉": 9, "열": 10}
-_EXCLUDE_MARK = ("빼", "제외", "말고", "없이")
+_EXCLUDE_MARK = ("빼", "제외", "말고", "없이", "줄여", "줄이", "덜")  # [R-b①] 감축 동사 = exclude 극성
 
 
 def _det_count(t):
-    """'5개','다섯 개' → 정수. '명'(사람 수)은 제외."""
-    m = re.search(r"(\d+)\s*개", t)
+    """'5개','다섯 개','3컷' → 정수. '명'(사람 수)은 제외. [R-b③] 단위: 개·컷·조각·장면."""
+    m = re.search(r"(\d+)\s*(?:개|컷|조각|장면)", t)
     if m:
         n = int(m.group(1))
         return n if 1 <= n <= 40 else None
     for k, v in _NUM_KO.items():
-        if re.search(k + r"\s*개", t):
+        if re.search(k + r"\s*(?:개|컷|조각|장면)", t):
             return v
     return None
 
@@ -252,7 +257,12 @@ def _deterministic_intent(t):
     """알려진 어휘에 한해 {keep,exclude,count} 확정. 못 잡으면 theme_found=False."""
     count = _det_count(t)
     is_excl = any(k in t for k in _EXCLUDE_MARK)
-    theme = next((kw for kw in _THEME_VOCAB if kw in t), None)
+    # [R-b②④] 테마 매칭용 사본 — 'X보다'(비교 기준부)와 시간 부사를 마스킹해
+    # "인물보다 배경 위주"의 '인물', "방금 그거"의 '방' 오탐을 차단. 극성·count는 원문 그대로.
+    t_theme = re.sub(r"\S+보다", " ", t)
+    for adv in _TIME_ADVERBS + _VOCAB_GUARD:
+        t_theme = t_theme.replace(adv, " ")
+    theme = next((kw for kw in _THEME_VOCAB if kw in t_theme), None)
     if theme is None:
         # [PERSON-ALIAS] 저장된 사람 이름/애칭이 명령에 있으면 그 인물의 풀네임이 테마
         # (조각 태그는 '인물:풀네임'이므로 애칭을 풀네임으로 정규화해야 judge가 매칭)
@@ -1079,7 +1089,8 @@ def plan_edit(source_ids, instruction_text, batch=8, verbose=True,
         _pool_sig = hashlib.sha256(
             "|".join(sorted(f'{b["fid"]}:{_scene_sensor_hash(b.get("scene"))}' for b in bundles)).encode("utf-8")
         ).hexdigest()[:16]
-        _plan_key = (tuple(source_ids), theme, is_exclude, intent.get("count"),
+        _plan_key = (("prepass1", os.getenv("CCUT_TAG_PREPASS", "1")),
+                     tuple(source_ids), theme, is_exclude, intent.get("count"),
                      _pool_sig, HUB_MODEL, _golden_state_sig(),
                      ("ledger", _ledger_sig,
                       hashlib.sha256(_ledger_text.encode("utf-8")).hexdigest()[:12])
@@ -1097,16 +1108,37 @@ def plan_edit(source_ids, instruction_text, batch=8, verbose=True,
     import time as _t
     _jbatch = int(os.getenv("CCUT_HUB_JUDGE_BATCH", "8"))
     _t0 = _t.time()
-    judged = _judge_batch(theme, bundles, batch=_jbatch)
+    # [QWEN-R1 R-a] 이중핵 정배선 — 명확(태그 정확 일치)=규칙 프리패스, 애매=판사.
+    # keep·exclude 양분기 대칭: scene 태그 "(인물:테마)"/"(장소:테마)" 정확 일치 = is_theme 확정,
+    # 판사는 태그 부재 조각만 심사. CCUT_TAG_PREPASS=0으로 가역(기본 ON).
+    _prepass = []
+    _judge_bundles = bundles
+    if os.getenv("CCUT_TAG_PREPASS", "1") not in ("0", "false", "False"):
+        _tag_re = re.compile(r"\((?:인물|장소):" + re.escape(theme) + r"\)")
+        _prepass = [b for b in bundles if _tag_re.search(b.get("scene") or "")]
+        if _prepass:
+            _pre_fids = {b["fid"] for b in _prepass}
+            _judge_bundles = [b for b in bundles if b["fid"] not in _pre_fids]
+            if verbose:
+                _mode = "exclude" if is_exclude else "keep"
+                print(f"[R-a PREPASS] tag-exact {_mode}={len(_prepass)} judge_rest={len(_judge_bundles)}")
+                if is_exclude:
+                    # [§5] 규칙이 제외한 조각은 목록 원시로 남긴다 (조용한 제외 금지)
+                    for _b in _prepass:
+                        print(f"[R-a PREPASS] excluded {_b['fid']} (태그 정확 일치)")
+    judged = _judge_batch(theme, _judge_bundles, batch=_jbatch)
     if verbose:
         print(f"[HUB-PLAN] judged {len(judged)}frags batch={_jbatch} "
               f"calls={(len(judged) + _jbatch - 1) // _jbatch} time={_t.time() - _t0:.1f}s")
     if is_exclude:
+        # 프리패스 조각 = 테마 확정 → 제외(kept에 미포함). 잔여는 판사 판정대로.
         kept = [j for j in judged if not j["is_theme"]]
         tag = f"exclude '{theme}'"
     else:
-        _confirm_keep_candidates_single(theme, judged, bundles)
-        kept = [j for j in judged if j["is_theme"]]
+        _confirm_keep_candidates_single(theme, judged, _judge_bundles)
+        kept = [{"fid": b["fid"], "time": f'{b["start"]}~{b["end"]}s', "scene": b["scene"],
+                 "is_theme": True, "reason": "태그 정확 일치(규칙)"} for b in _prepass] \
+               + [j for j in judged if j["is_theme"]]
         tag = f"keep '{theme}'"
     if _ledger_enabled:
         if is_exclude:
