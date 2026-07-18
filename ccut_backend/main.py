@@ -2233,6 +2233,21 @@ async def get_project_sources(project_id: str):
             })
 
         # [B-5-FIX] 저장된 프로젝트 제안도 함께 복원 (program_id 기준 props 재사용) — 돌아오면 A/B 그대로
+        # [#57 REV 체인] mode별 최신 1건만 노출 — REV_* 수정본이 부모를 화면에서 대체한다.
+        # 부모 행은 DB에 불변 보존(이력·거짓말 금지 §5). created_at 없으면 구행 취급.
+        import datetime as _dt_rev
+        _latest_by_mode = {}
+        for _pp in props:
+            _k = _pp.mode or "?"
+            _cur = _latest_by_mode.get(_k)
+            _t_new = _pp.created_at or _dt_rev.datetime.min
+            _t_cur = (_cur.created_at or _dt_rev.datetime.min) if _cur else None
+            if _cur is None or _t_new > _t_cur:
+                _latest_by_mode[_k] = _pp
+        if len(_latest_by_mode) < len(props):
+            print(f"[#57 REV-RESTORE] {project_id}: {len(props)}행 -> mode별 최신 {len(_latest_by_mode)}건 "
+                  f"({[(_k, _v.proposal_id) for _k, _v in _latest_by_mode.items()]})")
+        props = list(_latest_by_mode.values())
         collected_proposals = [{
             "proposal_id": p.proposal_id,
             "mode": p.mode,
@@ -2585,7 +2600,11 @@ async def post_proposal_revision(payload: dict):
         p = db.query(ProposalTable).filter(ProposalTable.proposal_id == proposal_id).first()
         if not p:
             return {"status": "ERROR", "message": f"proposal not found: {proposal_id}"}
-        rev = _rev.detect_revision(instruction, has_committed_proposal=True)
+        # [#57] 종업원이 이미 이해한 op가 오면 재검증 후 그대로 집행(LLM 중복 호출 제거).
+        # 없으면 서버가 감지(결정론 → 큐원 폴백). 어느 경로든 validate 통과 op만 집행.
+        rev = _rev.validate_revision(payload.get("revision") or {})
+        if not rev:
+            rev = _rev.detect_revision_full(instruction, has_committed_proposal=True)
         if not rev:
             return {"status": "NOT_REVISION",
                     "message": "수정 명령으로 인식되지 않음 — 신규 제안 경로를 사용하세요"}
@@ -4324,6 +4343,57 @@ async def route_edit_intent_api(req: EditIntentRouteRequest):
             fragment_labels=req.fragment_labels)
 
     return await asyncio.get_event_loop().run_in_executor(None, _run)
+
+
+@app.post("/intent/route-edit/stream")
+async def route_edit_intent_stream_api(req: EditIntentRouteRequest):
+    """[F2 스트리밍 — 헌장 §3-부칙] 허브 대화 reply를 토큰 단위 SSE로 흘린다.
+    결정론 사다리/편집 분류 응답은 즉답 final 1건(스트리밍 불요 경로 유지),
+    자유대화(answer_only)만 stream_smalltalk 토큰 스트림. 응답 내용·구조는
+    일괄 엔드포인트와 동일(final.result = 기존 계약 그대로) — F6 후퇴 없음.
+    TTFT는 dev 로그([F2-TTFT])로 계측. 위생 위반·실패는 고정문구 강등(무언 실패 금지)."""
+    import json as _json
+    import time as _time
+    from fastapi.responses import StreamingResponse
+    from engine.intent_router import route_edit_intent, stream_smalltalk
+
+    def _sse(obj):
+        return "data: " + _json.dumps(obj, ensure_ascii=False) + "\n\n"
+
+    def gen():
+        t0 = _time.time()
+        r = route_edit_intent(
+            source_ids=req.source_ids, input_text=req.input_text,
+            recent_messages=req.recent_messages,
+            selected_proposal_id=req.selected_proposal_id,
+            fragment_labels=req.fragment_labels, defer_chat=True)
+        sc = r.pop("_stream_chat", None)
+        if not sc:
+            # 결정론/편집 분류 — 완성 응답이 이미 있다. 즉답 1건 (스트리밍 불요 경로)
+            print(f"[F2-TTFT] path=direct first_out_ms={int((_time.time() - t0) * 1000)} "
+                  f"action={r.get('action')}")
+            yield _sse({"type": "final", "result": r})
+            return
+        yield _sse({"type": "meta", "action": "answer_only"})
+        first_ms = None
+        final_text = None
+        for kind, payload in stream_smalltalk(req.input_text, req.recent_messages,
+                                              facts=sc.get("facts") or ""):
+            if kind == "token":
+                if first_ms is None:
+                    first_ms = int((_time.time() - t0) * 1000)
+                    print(f"[F2-TTFT] path=stream first_token_ms={first_ms}")
+                yield _sse({"type": "token", "text": payload})
+            elif kind == "done":
+                final_text = payload
+        if not final_text:
+            final_text = "네, 듣고 있어요. 편하게 이야기해 주세요."
+        r["reply"] = final_text
+        print(f"[F2-TTFT] path=stream total_ms={int((_time.time() - t0) * 1000)} "
+              f"reply_len={len(final_text)}")
+        yield _sse({"type": "final", "result": r})
+
+    return StreamingResponse(gen(), media_type="text/event-stream")
 
 
 class HubKeepRequest(BaseModel):

@@ -118,8 +118,23 @@ def _resp(action, reply, normalized=None, confidence=0.9, matched=None, via="det
     }
 
 
+_ORDINAL_KO = {0: "첫 번째", 1: "두 번째", 2: "세 번째", 3: "네 번째",
+               4: "다섯 번째", -1: "마지막"}
+
+
+def _revision_reply(rev):
+    """[#57 §5] 수정 op의 정직 예고문 — 무엇을 어디서 어떻게 바꾸는지 실행 전에 말한다."""
+    where = f"{rev['target_mode']}안에서" if rev.get("target_mode") else "지금 안에서"
+    if rev["op"] == "remove_ordinal":
+        pos = _ORDINAL_KO.get(rev["index"], f"{rev['index'] + 1}번째")
+        return f"네, {where} {pos} 조각을 빼겠습니다."
+    if rev["op"] == "set_count":
+        return f"네, {where} 조각 {rev['count']}개로 맞추겠습니다."
+    return f"네, {where} '{rev['theme']}' 조각을 빼겠습니다."
+
+
 def _llm_understand(input_text, recent_messages=None, source_ids=None,
-                    person_vocab=None):
+                    person_vocab=None, defer_chat=False):
     """[문맥 종업원 v2 — 국장지시 2026-07-06] 매트릭스가 아니라 문맥으로 판단한다.
     한 번의 호출로 대화/편집/승인/모호를 분류하고, 대화면 그 자리에서 진짜 답을 만든다.
     실제 날짜·작업 상황을 주입해 '오늘 몇일?' 환각(22일 사건)을 봉쇄한다.
@@ -235,6 +250,13 @@ def _llm_understand(input_text, recent_messages=None, source_ids=None,
                      "'물놀이 위주로', '실내만', '더 길게/짧게'.",
                      confidence=0.6, via="qwen", matched={"kind": "llm_unclear"})
     if kind == "chat":
+        # [F2 스트리밍] defer_chat=True면 대화 생성을 하지 않고 표식만 반환 —
+        # 스트림 엔드포인트가 stream_smalltalk로 토큰 단위 생성한다. 분류는 이미 완료.
+        if defer_chat:
+            r = _resp("answer_only", "", confidence=0.85, via="qwen",
+                      matched={"kind": "free_chat"})
+            r["_stream_chat"] = {"facts": facts}
+            return r
         # [대화 품질 2026-07-06] 분류(temp 0)와 대화(temp 0.7)를 분리 — 분류 초안 답 대신
         # 대화 전용 프롬프트(화제 이탈 금지·실시간 정보 아는 척 금지)로 최종 답을 만든다.
         talk = _llm_smalltalk(input_text, recent_messages, facts=facts)
@@ -258,18 +280,17 @@ def _sanitize_talk(reply):
     return reply
 
 
-def _llm_smalltalk(input_text, recent_messages=None, facts=""):
-    """[SMALLTALK/자유대화] 질문/잡담에 사람다운 답 — '나는 편집기라서'류 거절 금지
-    (국장: 거절은 사용자를 바보 취급하는 것). 실패 시 None → 호출부가 따뜻한 고정 문구.
-    [국장지시 2026-07-06] 편집 얘기가 아니어도 사용자의 화제를 진짜로 따라간다 —
-    매 답을 편집 제안으로 되돌리지 않는다. facts=실제 날짜·작업 상황 블록(환각 봉쇄)."""
+def _smalltalk_prompt(input_text, recent_messages=None, facts="", plain=False):
+    """[F2] 자유대화 프롬프트 조립 — 일괄(JSON)과 스트림(plain 텍스트)이 규칙을 공유."""
     ctx = ""
     for m in (recent_messages or [])[-6:]:
         who = "사용자" if (m.get("sender") == "user") else "CCUT"
         txt = str(m.get("text") or "")[:120]
         if txt:
             ctx += f"{who}: {txt}\n"
-    prompt = (
+    tail = ("답변 문장만 출력한다 — JSON·따옴표·머리말 금지.\n" if plain
+            else 'JSON만 출력: {"reply":"..."}\n')
+    return (
         "너는 CCUT — 영상 편집을 돕는 다정한 동료다. 사용자의 말에 따뜻한 존댓말 "
         "한국어 1~3문장으로 '실제로' 대답한다.\n"
         + facts +
@@ -282,9 +303,17 @@ def _llm_smalltalk(input_text, recent_messages=None, facts=""):
         "4. '저는 편집기라서'류 거절 금지. 매번 편집 얘기로 돌리지도 마라.\n"
         "5. 반드시 한국어만(중국어·영어 문장 금지). 모델명·제조사(Qwen 등) 언급 금지 — "
         "너의 이름은 오직 CCUT이다. 모르는 건 솔직히 모른다고 한다.\n"
-        'JSON만 출력: {"reply":"..."}\n'
+        + tail
         + (f"최근 대화:\n{ctx}" if ctx else "")
         + f"사용자: {input_text}\n")
+
+
+def _llm_smalltalk(input_text, recent_messages=None, facts=""):
+    """[SMALLTALK/자유대화] 질문/잡담에 사람다운 답 — '나는 편집기라서'류 거절 금지
+    (국장: 거절은 사용자를 바보 취급하는 것). 실패 시 None → 호출부가 따뜻한 고정 문구.
+    [국장지시 2026-07-06] 편집 얘기가 아니어도 사용자의 화제를 진짜로 따라간다 —
+    매 답을 편집 제안으로 되돌리지 않는다. facts=실제 날짜·작업 상황 블록(환각 봉쇄)."""
+    prompt = _smalltalk_prompt(input_text, recent_messages, facts=facts)
     try:
         # temperature 0.7 — 대화는 결정성보다 자연스러움 (판사 경로와 분리)
         out = hub._ollama_json(prompt, timeout=30, temperature=0.7)
@@ -294,9 +323,33 @@ def _llm_smalltalk(input_text, recent_messages=None, facts=""):
         return None
 
 
+def stream_smalltalk(input_text, recent_messages=None, facts=""):
+    """[F2 스트리밍] 자유대화 토큰 스트림 생성기.
+    산출: ('token', 조각) 반복 → ('done', 전체문장) / 위생 위반·실패 시 ('abort', None).
+    위생 규칙은 _sanitize_talk와 동일 기준을 누적문에 적용 — 위반 즉시 중단해
+    호출부가 CCUT 고정 문구로 강등한다 (조용한 유출 금지)."""
+    prompt = _smalltalk_prompt(input_text, recent_messages, facts=facts, plain=True)
+    acc = ""
+    try:
+        for chunk in hub._ollama_stream(prompt, timeout=30, temperature=0.7):
+            acc += chunk
+            if _re_mod.search(r"[一-鿿]", acc) or \
+               _re_mod.search(r"qwen|큐원|퀜|通义|阿里|알리바바", acc, _re_mod.IGNORECASE):
+                print("[F2-STREAM] 위생 위반 감지 -> 중단·고정문구 강등")
+                yield ("abort", None)
+                return
+            yield ("token", chunk)
+    except Exception as e:
+        print(f"[F2-STREAM] 스트림 실패 ({e}) -> 중단·고정문구 강등")
+        yield ("abort", None)
+        return
+    yield ("done", acc.strip())
+
+
 def route_edit_intent(source_ids=None, input_text="", recent_messages=None,
                       selected_proposal_id=None, allow_llm=True, person_vocab=None,
-                      archive_lookup=None, search_lookup=None, fragment_labels=None):
+                      archive_lookup=None, search_lookup=None, fragment_labels=None,
+                      defer_chat=False):
     t = (input_text or "").strip()
     if not t:
         return _resp("ask_clarification", "말씀을 조금만 더 입력해 주세요.", confidence=1.0)
@@ -357,9 +410,13 @@ def route_edit_intent(source_ids=None, input_text="", recent_messages=None,
     #    처리: 분류만 반환 — 직전 활성 의도의 승계/무의도 무필터+고지는 프론트가 결정(§5 표시 동반).
     #    계보: 구 BARE-REDO(07-05 "무단 재사용 금지→되묻기")를 승계+표시 설계가 대체 —
     #    승계 사실을 지휘부 채팅에 즉시 고지하므로 '무단'이 아니다.
+    #    [#59 어미 틈 봉합] 동사군에 연결어미 활용형(만들어·골라서·뽑아) 추가 — 구판은
+    #    어간만 수용해 "스토리 다시 만들어 줘"가 매칭 실패 → 5.5 OPEN-EDIT로 누출,
+    #    open_theme(core='스토리')로 실행되며 활성 의도를 덮어썼다(16:06 잔여 실측).
+    #    긴 형태 우선(만들어→만들) — 정규식 대안은 순서 매칭.
     if len(t) <= 24 and _re.match(
             r"^(그럼\s*)?(스토리|편집|제안|영상)?\s*(을|를)?\s*(다시|재|새로|한\s*번\s*더)\s*"
-            r"(편집|제안|골라|만들|뽑)?\s*(하게|하도록)?\s*"
+            r"(편집|제안|골라서|골라|만들어|만들|뽑아|뽑)?\s*(하게|하도록)?\s*"
             r"(해\s*줘|해줘|해\s*봐|해봐|부탁해?|줘|주세요|하자|할래|볼래|보자)?[.!~?\s]*$", t):
         return _resp("retrigger",
                      "직전 기준으로 다시 골라볼게요.",
@@ -473,6 +530,19 @@ def route_edit_intent(source_ids=None, input_text="", recent_messages=None,
                      "지금 안은 건드리지 않을게요.",
                      confidence=0.95, matched={"kind": "honest_restore_hint"})
 
+    # ── 0.78 [#57 REVISION 도구층] 명시 타겟 국소 수정 — "B안에서 두 번째 조각 빼줘".
+    #    'X안에서'로 기존 안 수정 문맥이 명시되면 인물/어휘 사다리보다 먼저 —
+    #    새 제안(전체 재제안)으로 뭉개지 않는다. 이해=큐원 폴백, 집행 op=규칙 검증.
+    from engine import revision as _revm
+    if _revm.revision_enabled() and _revm.detect_target_mode(t):
+        _rev0 = _revm.detect_revision_full(t, True, allow_llm=allow_llm)
+        if _rev0:
+            r = _resp("revise_current", _revision_reply(_rev0), normalized=t,
+                      confidence=0.9, via=_rev0.get("via", "deterministic"),
+                      matched={"kind": "revision", "op": _rev0["op"]})
+            r["revision"] = _rev0
+            return r
+
     # ── 0.8 정체성 질문 — 결정론 자기소개 최우선 (Qwen 자백 사건 봉쇄).
     #    대화 게이트보다 먼저: 정체성은 LLM으로 새지 않고 고정 문구로 답한다.
     if _re.search(r"(너|네|니)가?\s*누구|누군지|누구야|누구니|정체|이름이 뭐|뭐 ?하는 (ai|애|친구|프로그램)", t):
@@ -494,7 +564,8 @@ def route_edit_intent(source_ids=None, input_text="", recent_messages=None,
     if _CHAT_SIGNAL_RE.search(t) and not _AFFIRM_SHORT_RE.match(t) \
             and (allow_llm or not _EDIT_MARK_RE.search(t)):
         if allow_llm:
-            und = _llm_understand(t, recent_messages, source_ids, person_vocab)
+            und = _llm_understand(t, recent_messages, source_ids, person_vocab,
+                                  defer_chat=defer_chat)
             if und:
                 return und
         # hub 미응답/비활성 — 편집 강요 없이 정직한 수신 확인
@@ -565,20 +636,29 @@ def route_edit_intent(source_ids=None, input_text="", recent_messages=None,
             return r
 
         # ── 1b. 인물 단독 ──
-        if matched != canonical:
-            reply = (alias_prefix
-                     + (f"{canonical} 나오는 장면은 빼고 다시 골라볼게요." if is_excl
-                        else f"그 사람이 나오는 장면만 다시 골라볼게요."))
+        # [고리① ③ — QWEN-R1] 인물 밖 내용어가 남으면("심장 시술") 인물-단독으로
+        # 확정하지 않는다 — 사다리를 계속 타서 OPEN-EDIT/큐원이 전체 문맥을 보존한다.
+        # §5: 실제로는 인물만 고르지 않을 것이므로 "인물만 골라볼게요"라고 말하지 않는다.
+        _residue = hub._person_shadow_residue(t, [matched])
+        if _residue and not is_excl:
+            print(f"[INTENT-ROUTER] person+잔여 {_residue!r} -> 인물단독 미확정, "
+                  f"정규화({matched}->{canonical})만 승계하고 사다리 계속")
+            t = normalized
         else:
-            reply = (f"네, {canonical} 나오는 장면은 빼고 다시 골라볼게요." if is_excl
-                     else f"네, {canonical} 나오는 장면만 다시 골라볼게요.")
-        r = _resp("run_proposal", reply, normalized=normalized,
-                  confidence=person.get("confidence", 0.95),
-                  matched={"kind": "person_alias" if matched != canonical else "person",
-                           "input": matched, "canonical": canonical,
-                           "person_id": person.get("person_id")})
-        r["filters"] = filters
-        return r
+            if matched != canonical:
+                reply = (alias_prefix
+                         + (f"{canonical} 나오는 장면은 빼고 다시 골라볼게요." if is_excl
+                            else f"그 사람이 나오는 장면만 다시 골라볼게요."))
+            else:
+                reply = (f"네, {canonical} 나오는 장면은 빼고 다시 골라볼게요." if is_excl
+                         else f"네, {canonical} 나오는 장면만 다시 골라볼게요.")
+            r = _resp("run_proposal", reply, normalized=normalized,
+                      confidence=person.get("confidence", 0.95),
+                      matched={"kind": "person_alias" if matched != canonical else "person",
+                               "input": matched, "canonical": canonical,
+                               "person_id": person.get("person_id")})
+            r["filters"] = filters
+            return r
 
     # ── 2. 장면/개수/제외 어휘 (기존 결정론 그대로 신뢰) ──
     det = hub._deterministic_intent(t)
@@ -607,15 +687,20 @@ def route_edit_intent(source_ids=None, input_text="", recent_messages=None,
         return _resp("run_proposal", "네, 지금 방향 그대로 진행하겠습니다.",
                      normalized=t, confidence=0.85, matched={"kind": "confirm"})
 
-    # ── 4. 현재 안 국소 수정 (CCUT_REVISION 게이트) ──
-    if selected_proposal_id and os.getenv("CCUT_REVISION", "0") in ("1", "true", "True"):
+    # ── 4. 현재 안 국소 수정 [#57 REVISION 도구층 — 게이트 기본 ON 격상] ──
+    #    선택된 안이 있으면 서수/개수/테마 수정 명령을 국소 집행으로 — op를 동봉해
+    #    프론트가 /revision/proposals 를 부른다 (구판: action만 반환 → 전체 재제안 수렴).
+    if selected_proposal_id and _revm.revision_enabled():
         try:
-            from engine import revision as _rev
-            if _rev.detect_revision(t, True):
-                return _resp("revise_current", "네, 지금 안에서 그 부분만 손보겠습니다.",
-                             normalized=t, confidence=0.85, matched={"kind": "revision"})
-        except Exception:
-            pass
+            _rev4 = _revm.detect_revision_full(t, True, allow_llm=allow_llm)
+            if _rev4:
+                r = _resp("revise_current", _revision_reply(_rev4), normalized=t,
+                          confidence=0.85, via=_rev4.get("via", "deterministic"),
+                          matched={"kind": "revision", "op": _rev4["op"]})
+                r["revision"] = _rev4
+                return r
+        except Exception as _rev_err:
+            print(f"[P3-REV][WARN] ladder4 실패 ({_rev_err}) -> 기존 사다리 계속")
 
     # ── 5. 질문/잡담 2차 그물 — 게이트(0.9)를 지나쳤지만 의문형인 말.
     #    편집 동사가 있으면("생일잔치만 편집해줄래?") 질문 꼴이어도 편집으로 —
@@ -623,6 +708,12 @@ def route_edit_intent(source_ids=None, input_text="", recent_messages=None,
     q_re, vague_re = _regexes()
     if q_re.search(t) and not _re.search(r"편집|나오게|남게|남겨|골라|만들|빼|줄여|늘려|위주|중심|모아|추려", t):
         if allow_llm:
+            # [F2 스트리밍] 질문 그물의 대화 생성도 defer 시 표식만 — 스트림이 생성
+            if defer_chat:
+                r = _resp("answer_only", "", confidence=0.8, via="qwen",
+                          matched={"kind": "smalltalk"})
+                r["_stream_chat"] = {"facts": ""}
+                return r
             _talk = _llm_smalltalk(t, recent_messages)
             if _talk:
                 return _resp("answer_only", _talk, confidence=0.8, via="qwen",
@@ -634,7 +725,8 @@ def route_edit_intent(source_ids=None, input_text="", recent_messages=None,
                      confidence=0.8)
     if vague_re.search(t):
         if allow_llm:
-            llm = _llm_understand(t, recent_messages, source_ids, person_vocab)
+            llm = _llm_understand(t, recent_messages, source_ids, person_vocab,
+                                  defer_chat=defer_chat)
             if llm:
                 return llm
         return _resp("ask_clarification",
@@ -660,7 +752,8 @@ def route_edit_intent(source_ids=None, input_text="", recent_messages=None,
 
     # ── 6. 결정론이 전부 놓친 말 → Qwen 종업원 ──
     if allow_llm:
-        llm = _llm_understand(t, recent_messages, source_ids, person_vocab)
+        llm = _llm_understand(t, recent_messages, source_ids, person_vocab,
+                              defer_chat=defer_chat)
         if llm:
             return llm
     # [국장지시 2026-07-06] 못 알아들어도 편집 조건을 강요하지 않는다 — 대화도 정상 경로

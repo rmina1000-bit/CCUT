@@ -577,7 +577,7 @@ export const useProposalState = (
           fragmentLabels[label] = String(f.fragment_id || "").replace(/_[LMR]\d*$/, "");
         }
       });
-      const route = await videoService.routeEditIntent({
+      const routePayload = {
         project_id: projectId,
         source_ids: orderedSourceIds ?? [],
         input_text: text,
@@ -586,7 +586,25 @@ export const useProposalState = (
           .map((m: any) => ({ sender: m.sender, text: m.text })),
         selected_proposal_id: selectedProposalId,
         fragment_labels: fragmentLabels,
-      });
+      };
+      // [F2 스트리밍] 스트림 우선 — 대화 reply가 토큰 단위로 즉시 차오른다.
+      // 스트림 실패 시 기존 일괄 엔드포인트로 폴백 (무언 실패 금지, 계약 동일).
+      let route: any;
+      const _f2T0 = Date.now();
+      try {
+        route = await videoService.routeEditIntentStream(routePayload, (accum: string) => {
+          setStoryPlan((prev: any) => prev ? {
+            ...prev,
+            messages: (prev.messages ?? []).map((m: any) =>
+              m.id === aiMsgId ? { ...m, text: accum, isInterpreting: true } : m),
+          } : prev);
+        });
+        console.log(`[F2-TTFT front] stream total_ms=${Date.now() - _f2T0}`);
+      } catch (streamErr: any) {
+        console.warn("[F2] 스트림 실패 → 일괄 폴백:", streamErr?.message);
+        route = await videoService.routeEditIntent(routePayload);
+        console.log(`[F2-TTFT front] batch total_ms=${Date.now() - _f2T0}`);
+      }
       console.log("[INTENT-ROUTER route]\n" + JSON.stringify({
         action: route.action,
         via: route.via,
@@ -637,6 +655,69 @@ export const useProposalState = (
           };
         });
         return; // 제안 생성 없음 — 편집하라고 할 때만 편집한다
+      }
+      // [#57 REVISION 도구층] 국소 수정 — 전체 재제안으로 뭉개지 않고 /revision/proposals로
+      // 집행한다 (큐원=이해 op 동봉, 규칙=시퀀스 조작). 실패/미지원이면 기존 재제안 경로 폴백.
+      if (route.action === "revise_current" && route.revision) {
+        const targetMode: "A" | "B" | null =
+          route.revision.target_mode === "A" || route.revision.target_mode === "B"
+            ? route.revision.target_mode
+            : (selectedProposalId === "A" || selectedProposalId === "B" ? selectedProposalId : null);
+        const targetProposal = targetMode ? (proposals as any)?.[targetMode] : null;
+        if (targetMode && targetProposal?.proposal_id) {
+          try {
+            const revRes = await videoService.reviseProposal({
+              proposal_id: targetProposal.proposal_id,
+              instruction: route.normalized_instruction || text,
+              source_ids: orderedSourceIds ?? [],
+              revision: route.revision,
+            });
+            console.log("[P4-REV front]\n" + JSON.stringify({
+              status: revRes.status, parent: revRes.parent, proposal_id: revRes.proposal_id,
+              reason: revRes.reason, count: revRes.count,
+            }, null, 2));
+            if (revRes.status === "OK") {
+              const beforeCount = targetProposal.key_fragments?.length ?? 0;
+              const seq = revRes.sequence ?? [];
+              setProposals((prev: any) => {
+                if (!prev?.[targetMode]) return prev;
+                return {
+                  ...prev,
+                  [targetMode]: {
+                    ...prev[targetMode],
+                    proposal_id: revRes.proposal_id,
+                    key_fragments: seq.map((s: any) => s.fragment_id),
+                    resolved_aliases: seq.map((s: any) => ({
+                      proposal_fragment_id: s.fragment_id,
+                      source_id: s.source_id,
+                      source_fragment_id: s.fragment_id,
+                      display_id: s.display_id,
+                      start_sec: s.start,
+                      end_sec: s.end,
+                      thumbnail_url: s.thumbnail_url,
+                    })),
+                    // 구 프리뷰는 수정 전 시퀀스의 렌더 — 그대로 두면 §5 위반(화면≠데이터)
+                    preview_url: null,
+                  },
+                };
+              });
+              // [§5 정직 보고] 무엇이 몇 개 → 몇 개가 됐는지 + 원시 사유를 흐름에 남긴다
+              const doneText = `${targetMode}안에 반영했어요 — 조각 ${beforeCount}개 → ${revRes.count}개. (${revRes.reason})`;
+              setStoryPlan((prev: any) => {
+                if (!prev) return prev;
+                return {
+                  ...prev,
+                  messages: (prev.messages ?? []).map((m: any) =>
+                    m.id === aiMsgId ? { ...m, text: doneText, isInterpreting: false } : m),
+                };
+              });
+              return; // 국소 수정 완결 — 전체 재제안 없음
+            }
+            console.warn("[P4-REV front] 미집행 status=", revRes.status, "→ 재제안 경로 폴백");
+          } catch (e: any) {
+            console.warn("[P4-REV front] 실패 — 재제안 경로 폴백:", e?.message);
+          }
+        }
       }
       // [#49 (a) — 국장 승인 2026-07-17] retrigger = 명령: 직전 활성 의도 승계(있으면) /
       // 무필터+정직 고지(없으면). intent_clear = 의도 해제 + 무필터 복귀 (F4·§1-10).
@@ -980,12 +1061,19 @@ export const useProposalState = (
             const _ledgerLine = _ledgerHits.length > 0 && _ledgerToken
               ? ` 말씀하신 '${_ledgerToken}'이 적힌 영상 ${_ledgerHits.length}개에서 골랐어요.`
               : "";
+            // [4b §5 고지 — 국장 A 확정] 번역층이 실제 사용된 경우에만 해석 사실을 알린다
+            const _trSc = generatedProposals.B?.self_check ?? generatedProposals.B?.proposal_reason?.self_check
+              ?? generatedProposals.A?.self_check ?? generatedProposals.A?.proposal_reason?.self_check ?? null;
+            const _tr = _trSc?.translated;
+            const _trLine = _tr?.from && _tr?.to
+              ? ` 말씀하신 '${_tr.from}'은 '${_tr.to}' 장면으로 해석했어요.`
+              : "";
             // [STORY-GATE P3 / S3] 게이트 ON이면 결과 통보가 아니라 협의를 연다.
             // 승인 전에는 편집 결과물이 없으므로 "무대에서 재생해 보시고"라고 말하면 거짓말이 된다.
             const _gateOn = await storyGateEnabled();
             const _doneText = _gateOn
-              ? `이런 이야기로 엮었습니다 — ${_fmt(generatedProposals.B ?? generatedProposals.A)}.${_ledgerLine} 원고를 읽어 보시고, 고치고 싶은 곳을 말씀해 주세요. 마음에 드시면 승인해 주시면 그때 편집으로 넘어갑니다.`
-              : `다 골랐습니다 — A안 ${_fmt(generatedProposals.A)} · B안 ${_fmt(generatedProposals.B)}.${_ledgerLine} 아래 무대에서 재생해 보시고, 방향이 다르면 조건을 바꿔 말씀해 주세요.`;
+              ? `이런 이야기로 엮었습니다 — ${_fmt(generatedProposals.B ?? generatedProposals.A)}.${_trLine}${_ledgerLine} 원고를 읽어 보시고, 고치고 싶은 곳을 말씀해 주세요. 마음에 드시면 승인해 주시면 그때 편집으로 넘어갑니다.`
+              : `다 골랐습니다 — A안 ${_fmt(generatedProposals.A)} · B안 ${_fmt(generatedProposals.B)}.${_trLine}${_ledgerLine} 아래 무대에서 재생해 보시고, 방향이 다르면 조건을 바꿔 말씀해 주세요.`;
             setStoryPlan((prev: any) => prev ? {
               ...prev,
               messages: [...(prev.messages ?? []), {
@@ -1000,12 +1088,16 @@ export const useProposalState = (
           if (emptyA && emptyB) {
             const sc = generatedProposals.B?.self_check || generatedProposals.A?.self_check;
             const theme = sc?.theme ? `'${sc.theme}' ` : "";
+            // [4b §5] 빈 제안이라도 번역을 썼다면 어떤 해석으로 찾았는지 알린다
+            const emptyTr = sc?.translated?.from && sc?.translated?.to
+              ? ` ('${sc.translated.from}'은 '${sc.translated.to}' 장면으로 해석해 찾았어요.)`
+              : "";
             setStoryPlan((prev: any) => prev ? {
               ...prev,
               messages: [...(prev.messages ?? []), {
                 id: `ai_empty_${Date.now()}`,
                 sender: "ai",
-                text: `말씀하신 ${theme}조건에 맞는 조각을 찾지 못했습니다. 조작된 결과를 보여드리지 않기 위해 빈 제안을 드립니다. 다른 조건으로 말씀해 주시거나, 이전 제안을 타임라인에서 '다시 열기'로 불러오실 수 있어요.`,
+                text: `말씀하신 ${theme}조건에 맞는 조각을 찾지 못했습니다.${emptyTr} 조작된 결과를 보여드리지 않기 위해 빈 제안을 드립니다. 다른 조건으로 말씀해 주시거나, 이전 제안을 타임라인에서 '다시 열기'로 불러오실 수 있어요.`,
                 timestamp: Date.now(),
               }],
             } : prev);
@@ -1044,6 +1136,9 @@ export const useProposalState = (
     proposals,
     orderedSourceIds,
     projectId,
+    // [#57] revise 타겟 결정이 현재 선택 안을 읽는다 — stale closure로 다른 안을
+    // 수정하는 사고 방지 (기존 참조 587·854행도 같은 구멍이었음)
+    selectedProposalId,
     setSelectedProposalId,
     setCommittedProposalId,
     setProposals

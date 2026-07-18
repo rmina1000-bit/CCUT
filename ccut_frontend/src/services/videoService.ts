@@ -176,6 +176,64 @@ export const videoService = {
         return await response.json();
     },
 
+    // [F2 스트리밍] 종업원 응답 SSE 수신 — token 이벤트마다 onToken(누적문) 콜백,
+    // final 이벤트의 result(기존 계약과 동일 형태)를 반환. 실패는 throw — 호출부가
+    // 일괄(routeEditIntent) 폴백한다 (무언 실패 금지).
+    routeEditIntentStream: async (
+        payload: any,
+        onToken?: (accum: string) => void,
+    ) => {
+        const response = await fetch(`${API_BASE_URL}/intent/route-edit/stream`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload)
+        });
+        if (!response.ok || !response.body) throw new Error(`stream ${response.status}`);
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buf = "";
+        let accum = "";
+        let final: any = null;
+        for (;;) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            buf += decoder.decode(value, { stream: true });
+            let idx;
+            while ((idx = buf.indexOf("\n\n")) >= 0) {
+                const raw = buf.slice(0, idx).trim();
+                buf = buf.slice(idx + 2);
+                if (!raw.startsWith("data:")) continue;
+                try {
+                    const ev = JSON.parse(raw.slice(5));
+                    if (ev.type === "token" && typeof ev.text === "string") {
+                        accum += ev.text;
+                        onToken?.(accum);
+                    } else if (ev.type === "final") {
+                        final = ev.result;
+                    }
+                } catch { /* 조각난 이벤트는 다음 청크에서 완성 */ }
+            }
+        }
+        if (!final) throw new Error("stream ended without final");
+        return final;
+    },
+
+    // [#57 REVISION 도구층] 기존 안 국소 수정 — 새 REV_* 제안으로 저장(부모 불변), 새 시퀀스 반환
+    reviseProposal: async (payload: {
+        proposal_id: string;
+        instruction: string;
+        source_ids?: string[];
+        revision?: any;
+    }) => {
+        const response = await fetch(`${API_BASE_URL}/revision/proposals`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload)
+        });
+        if (!response.ok) throw new Error(await response.text());
+        return await response.json();
+    },
+
     requestProjectProposals: async (
         projectId: string, 
         sourceIds: string[], 

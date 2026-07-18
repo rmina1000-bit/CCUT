@@ -1177,6 +1177,9 @@ class ProposalEngine:
                     proposal_self_check["omitted"] = _plan_sc.get("omitted", [])
                 if _plan_sc.get("judged_count") is not None:
                     proposal_self_check["judged_count"] = _plan_sc.get("judged_count")
+                # [4b §5 고지] 번역층 사용 사실을 제안까지 승계 — 프론트 완료 보고가 읽는다
+                if _plan_sc.get("translated"):
+                    proposal_self_check["translated"] = _plan_sc.get("translated")
                 if _plan_sc.get("status") in ("WARN", "FAIL") and proposal_self_check.get("status") == "PASS":
                     proposal_self_check["status"] = "WARN"
                     proposal_self_check["message"] = _plan_sc.get("message") or proposal_self_check.get("message")

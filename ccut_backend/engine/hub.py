@@ -81,6 +81,37 @@ def _ollama_json(prompt: str, timeout: int = 60, temperature: float = 0) -> dict
     return json.loads(data.get("response", "{}") or "{}")
 
 
+def _ollama_stream(prompt: str, timeout: int = 60, temperature: float = 0.7,
+                   num_predict: int = 512):
+    """[F2 스트리밍] 토큰 단위 생성기 — /api/generate stream=true (NDJSON).
+    format 미지정(자유 텍스트) — 대화 reply 전용. 판사/추출(format:json) 경로 무접촉."""
+    body = json.dumps({
+        "model": HUB_MODEL,
+        "prompt": prompt,
+        "stream": True,
+        "keep_alive": "10m",
+        "options": {"temperature": temperature, "num_predict": num_predict},
+    }).encode("utf-8")
+    req = urllib.request.Request(
+        OLLAMA_URL + "/api/generate", data=body,
+        headers={"Content-Type": "application/json"},
+    )
+    with urllib.request.urlopen(req, timeout=timeout) as resp:
+        for line in resp:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                data = json.loads(line.decode("utf-8"))
+            except Exception:
+                continue
+            chunk = data.get("response") or ""
+            if chunk:
+                yield chunk
+            if data.get("done"):
+                break
+
+
 def _build_prompt(theme_ko, theme_en, chunk):
     """조각을 번호(1..N)로 지칭. 거점이 테마 판정 + 불확실 시 재분석 명령."""
     theme = theme_ko + (f" ({theme_en})" if theme_en else "")
@@ -253,6 +284,31 @@ def _person_theme(t):
     return hit["canonical"] if hit else None
 
 
+# [고리① QWEN-R1] 인물 그림자 잔여 검출 — 인물 이름과 편집 상용구를 걷어낸 뒤
+# 남는 '내용어'가 있으면 결정론은 인물로 확정하지 않는다 ("심장 시술" 소실 사건).
+_PERSON_BOILER = (
+    "나오는", "나오게", "나온", "나와", "등장하는", "등장", "출연", "보이는", "찍힌", "있는",
+    "장면", "조각", "컷", "클립", "부분", "영상",
+    "위주로", "중심으로", "만으로",
+    "편집", "남겨", "남게", "골라", "모아", "추려", "뽑아", "만들어", "만들", "보여",
+    "해 줘", "해줘", "해 봐", "해봐", "주세요", "부탁해", "부탁", "줘", "다시", "좀",
+    "빼 줘", "빼줘", "빼고", "빼", "제외", "말고", "없이", "지워", "없애", "삭제", "줄여",
+)
+
+
+def _person_shadow_residue(t, matched_tokens):
+    """인물 표기·상용구·숫자를 제거한 잔여 내용어(2자 이상 토큰)를 반환. 없으면 ''."""
+    s = t or ""
+    for tok in (matched_tokens or []):
+        if tok:
+            s = s.replace(tok, " ")
+    for w in sorted(_PERSON_BOILER, key=len, reverse=True):
+        s = s.replace(w, " ")
+    s = re.sub(r"\d+\s*(개|컷|조각|장면)?", " ", s)
+    s = re.sub(r"[^0-9A-Za-z가-힣]+", " ", s)
+    return " ".join(x for x in s.split() if len(x) >= 2)
+
+
 def _deterministic_intent(t):
     """알려진 어휘에 한해 {keep,exclude,count} 확정. 못 잡으면 theme_found=False."""
     count = _det_count(t)
@@ -266,7 +322,16 @@ def _deterministic_intent(t):
     if theme is None:
         # [PERSON-ALIAS] 저장된 사람 이름/애칭이 명령에 있으면 그 인물의 풀네임이 테마
         # (조각 태그는 '인물:풀네임'이므로 애칭을 풀네임으로 정규화해야 judge가 매칭)
-        theme = _person_theme(t)
+        # [고리① 절단] 단, 인물 밖 내용어가 남으면 확정하지 않는다 — "정은한 심장 시술
+        # 장면만"을 keep=정은한으로 깎던 그림자. det 미확정 → LLM 폴백이 테마를 본다.
+        hit = resolve_person_name(t)
+        if hit:
+            _residue = _person_shadow_residue(t, [hit["matched"]])
+            if _residue:
+                print(f"[HUB-EXTRACT] person-shadow 억제: '{hit['canonical']}' 외 "
+                      f"잔여 내용어 {_residue!r} -> det 미확정(LLM 폴백)")
+            else:
+                theme = hit["canonical"]
     keep = exclude = None
     if theme:
         if is_excl:
@@ -277,7 +342,7 @@ def _deterministic_intent(t):
             "theme_found": theme is not None}
 
 
-# ---------- [C1] 복합 intent: 절 단위 극성 파서 (env CCUT_COMPOUND_INTENT, 기본 OFF) ----------
+# ---------- [C1] 복합 intent: 절 단위 극성 파서 (env CCUT_COMPOUND_INTENT, #58 승격: 기본 ON) ----------
 # 근거: outputs/compound_intent_deep (201케이스) — 문장 전체 극성+next() 1테마 방식은
 # useful 14.9%/극성오류 98건, 절 단위 v3는 useful 98.0%/극성오류 4건.
 # 사전 확장분은 이 파서 전용(legacy _THEME_VOCAB 무변). 매칭은 longest-match consume.
@@ -329,11 +394,20 @@ def _clause_term_hits(clause, vocab):
     return [term for pos, term in sorted(hits)]
 
 
+def _compound_enabled():
+    # [#58 C1 승격] 기본 ON — CCUT_COMPOUND_INTENT=0 으로 가역 (구: 기본 OFF)
+    return os.getenv("CCUT_COMPOUND_INTENT", "1") not in ("0", "false", "False")
+
+
 def parse_compound_intent(t, vocab=None):
     """한 문장 안의 keep/exclude 를 절 단위로 분리 판정.
     반환: {keep_terms:[], exclude_terms:[], keep_clauses:[], count, found}
     아무 어휘도 못 잡으면 found=False → 호출측은 legacy 경로 그대로."""
     t = t or ""
+    # [#58 승격 정합] R-b④⑤ 마스킹 승계(0f81e698) — '방금'의 '방', '배경음악'의
+    # '배경' 부분매칭 오탐이 승격 경로에서 되살아나지 않게 동일 차단.
+    for _adv in _TIME_ADVERBS + _VOCAB_GUARD:
+        t = t.replace(_adv, " ")
     if vocab is None:
         # 인물 이름/애칭도 절 단위 극성 대상("정은한는 빼고 한미숙 위주로")
         vocab = sorted(set(_THEME_VOCAB) | set(_COMPOUND_VOCAB_EXTRA) | set(_named_persons()),
@@ -563,25 +637,75 @@ def self_check_selection(theme, is_exclude, selected, judged=None, judge_mode=No
 
 
 def extract_intent(instruction):
-    """[추출] 명령 → {keep, exclude, count}. 결정론(알려진 어휘) 우선, 새 표현만 LLM 폴백."""
+    """[추출] 명령 → {keep, exclude, count}. [#58 C1 승격] 절단위 극성 파서 최우선 —
+    복합문("셀카는 빼고 가족여행만")의 keep/exclude를 절 단위로 확정 (201케이스
+    useful 98% 실측, e302dc87). 못 잡으면 기존 결정론(단일 테마) → LLM 폴백 순서 무변."""
+    if _compound_enabled():
+        _c = parse_compound_intent(instruction or "")
+        # [고리① 절단 — C1 대칭] keep이 전부 인물 표기뿐인데 인물 밖 내용어가 남으면
+        # C1도 확정하지 않는다 ("정은한 심장 시술 장면만" -> keep=['정은한'] 그림자 재생산 차단).
+        if _c["found"] and _c["keep_terms"] and not _c["exclude_terms"]:
+            _persons = set(_named_persons())
+            if all(k in _persons for k in _c["keep_terms"]):
+                _residue = _person_shadow_residue(instruction or "", _c["keep_terms"])
+                if _residue:
+                    print(f"[C1-COMPOUND] person-shadow 억제: keep={_c['keep_terms']} 외 "
+                          f"잔여 내용어 {_residue!r} -> C1 미확정(det/LLM 폴백)")
+                    _c = {**_c, "found": False}
+        if _c["found"]:
+            print(f"[C1-COMPOUND] keep={_c['keep_terms']} exclude={_c['exclude_terms']} "
+                  f"count={_c['count']} (extract_intent 승격 경로)")
+            _base = {"keep": (_c["keep_terms"][0] if _c["keep_terms"] else None),
+                     "exclude": (_c["exclude_terms"][0] if _c["exclude_terms"] else None),
+                     "count": _c["count"],
+                     "keep_terms": _c["keep_terms"],
+                     "exclude_terms": _c["exclude_terms"],
+                     "keep_clauses": _c["keep_clauses"]}
+            # [4b M3 해소] exclude만 확정되고 keep측 잔여 내용어가 남으면("정은한 빼고
+            # 심장 시술만") keep은 이해층(LLM+번역)으로 보충 — exclude는 결정론 우선 유지.
+            if _c["exclude_terms"] and not _c["keep_terms"]:
+                _residue = _person_shadow_residue(instruction or "", _c["exclude_terms"])
+                if _residue:
+                    print(f"[C1-COMPOUND] exclude 확정 + keep측 잔여 {_residue!r} -> "
+                          "keep은 LLM 이해층 보충")
+                    _llm = _llm_extract_intent(instruction, det_count=_c["count"])
+                    if _llm.get("keep"):
+                        _base["keep"] = _llm["keep"]
+                        if _llm.get("keep_query"):
+                            _base["keep_query"] = _llm["keep_query"]
+                            _base["translated"] = _llm.get("translated")
+            return _base
     det = _deterministic_intent(instruction or "")
     if det["theme_found"]:
         print(f"[HUB-EXTRACT] det keep={det['keep']} exclude={det['exclude']} count={det['count']}")
         return {"keep": det["keep"], "exclude": det["exclude"], "count": det["count"]}
     # 어휘 못 잡음 → LLM 폴백(새 표현). count는 결정론값 우선.
+    return _llm_extract_intent(instruction, det_count=det["count"])
+
+
+def _llm_extract_intent(instruction, det_count=None):
+    """[4b 번역층 — 국장 A 확정 2026-07-18] 큐원이 새 표현의 keep/exclude를 뽑고,
+    상위 개념은 근접 '태그 어휘'로 번역까지 제안한다("심장 시술"→"병원"). 규칙이
+    화이트리스트(_THEME_VOCAB)로 검증한 번역만 keep_query/exclude_query로 채택 —
+    원문 keep/exclude는 불변 보존(조건 1), 번역 채택 시 translated로 §5 고지(조건 2).
+    판사 규칙 무접촉 — 번역은 검색층 테마 선택에서만 쓰인다."""
+    vocab_line = ", ".join(_THEME_VOCAB)
     prompt = (
-        "사용자 영상편집 명령에서 아래 셋만 뽑아 JSON으로 출력한다. 조각 판단/선택은 하지 마라.\n"
+        "사용자 영상편집 명령에서 아래 항목만 뽑아 JSON으로 출력한다. 조각 판단/선택은 하지 마라.\n"
         f"명령: {instruction}\n"
         "키: keep(남길 내용조건 명사구, 없으면 null), "
-        "exclude(빼야 할 내용조건, 없으면 null), count(조각 개수 정수, 없으면 null)\n"
+        "exclude(빼야 할 내용조건, 없으면 null), count(조각 개수 정수, 없으면 null), "
+        "keep_vocab(keep과 개념이 충분히 가까운 아래 태그 어휘 1개, 가까운 것이 없으면 null), "
+        "exclude_vocab(exclude에 대해 같은 규칙)\n"
+        f"태그 어휘: {vocab_line}\n"
         "예시:\n"
-        '  "실내만" -> {"keep":"실내","exclude":null,"count":null}\n'
-        '  "실내 빼줘" -> {"keep":null,"exclude":"실내","count":null}\n'
-        '  "한명만 있는 조각만" -> {"keep":"한 명만 있는 장면","exclude":null,"count":null}\n'
-        '  "운동장만" -> {"keep":"운동장","exclude":null,"count":null}\n'
-        '  "조각 5개로" -> {"keep":null,"exclude":null,"count":5}\n'
-        '  "물놀이 5개" -> {"keep":"물놀이","exclude":null,"count":5}\n'
-        '  "더 빠르게" -> {"keep":null,"exclude":null,"count":null}\n'
+        '  "실내만" -> {"keep":"실내","exclude":null,"count":null,"keep_vocab":"실내","exclude_vocab":null}\n'
+        '  "실내 빼줘" -> {"keep":null,"exclude":"실내","count":null,"keep_vocab":null,"exclude_vocab":"실내"}\n'
+        '  "철수 심장 수술 장면만" -> {"keep":"심장 수술","exclude":null,"count":null,"keep_vocab":"병원","exclude_vocab":null}\n'
+        '  "우주선 나오는 장면만" -> {"keep":"우주선","exclude":null,"count":null,"keep_vocab":null,"exclude_vocab":null}\n'
+        '  "한명만 있는 조각만" -> {"keep":"한 명만 있는 장면","exclude":null,"count":null,"keep_vocab":null,"exclude_vocab":null}\n'
+        '  "물놀이 5개" -> {"keep":"물놀이","exclude":null,"count":5,"keep_vocab":"물놀이","exclude_vocab":null}\n'
+        '  "더 빠르게" -> {"keep":null,"exclude":null,"count":null,"keep_vocab":null,"exclude_vocab":null}\n'
         "JSON만:"
     )
     try:
@@ -594,11 +718,29 @@ def extract_intent(instruction):
         c = None
     llm_count = int(c) if isinstance(c, (int, float)) and 1 <= int(c) <= 40 else None
     # 개수는 결정론('N개')이 LLM보다 신뢰도 높음 → 결정론 우선
-    final_count = det["count"] if det["count"] is not None else llm_count
-    print(f"[HUB-EXTRACT] llm keep={_clean_s(out.get('keep'))} "
-          f"exclude={_clean_s(out.get('exclude'))} count={final_count}")
-    return {"keep": _clean_s(out.get("keep")), "exclude": _clean_s(out.get("exclude")),
-            "count": final_count}
+    final_count = det_count if det_count is not None else llm_count
+    keep = _clean_s(out.get("keep"))
+    exclude = _clean_s(out.get("exclude"))
+
+    def _vocab_ok(orig, v):
+        """[4b 규칙 검증] 화이트리스트 어휘만 + 원문이 이미 담은 어휘는 번역 아님."""
+        v = _clean_s(v)
+        if not orig or not v or v not in _THEME_VOCAB:
+            return None
+        return None if v in orig else v
+
+    keep_q = _vocab_ok(keep, out.get("keep_vocab"))
+    excl_q = _vocab_ok(exclude, out.get("exclude_vocab"))
+    result = {"keep": keep, "exclude": exclude, "count": final_count}
+    if keep_q:
+        result["keep_query"] = keep_q
+        result["translated"] = {"from": keep, "to": keep_q}
+    elif excl_q:
+        result["exclude_query"] = excl_q
+        result["translated"] = {"from": exclude, "to": excl_q}
+    print(f"[HUB-EXTRACT] llm keep={keep} exclude={exclude} count={final_count} "
+          f"keep_query={result.get('keep_query')} exclude_query={result.get('exclude_query')}")
+    return result
 
 
 GOLDEN_CASES_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "golden_cases.json")
@@ -1003,22 +1145,19 @@ def plan_edit(source_ids, instruction_text, batch=8, verbose=True,
         print(f"[QWEN_ROUTE] route=hub_plan model={HUB_MODEL}")
         print(f"[HUB-PLAN] intent={intent}")
 
-    # [C1] 복합 intent 게이트: 절 단위 keep/exclude 로 극성 교정 (기본 OFF, 가역)
-    _compound = None
-    if os.getenv("CCUT_COMPOUND_INTENT") in ("1", "true", "True"):
-        _c = parse_compound_intent(instruction_text or "")
-        if _c["found"]:
-            _compound = _c
-            intent = {**intent,
-                      "keep": (_c["keep_terms"][0] if _c["keep_terms"] else None),
-                      "exclude": (_c["exclude_terms"][0] if _c["exclude_terms"] else None),
-                      "keep_terms": _c["keep_terms"],
-                      "exclude_terms": _c["exclude_terms"]}
-            if verbose:
-                print(f"[C1-COMPOUND] keep={_c['keep_terms']} exclude={_c['exclude_terms']} "
-                      f"keep_clauses={json.dumps(_c['keep_clauses'], ensure_ascii=False)}")
+    # [#58 C1 승격] 절단위 극성은 extract_intent가 이미 반영 — 여기서는 참조만
+    # (구 게이트 블록의 이중 파싱 제거). ledger keep-절 제한·plan 캐시 키가 소비.
+    _compound = ({"keep_terms": intent.get("keep_terms") or [],
+                  "exclude_terms": intent.get("exclude_terms") or [],
+                  "keep_clauses": intent.get("keep_clauses") or []}
+                 if (intent.get("keep_terms") or intent.get("exclude_terms")) else None)
 
-    theme = intent["keep"] or intent["exclude"]
+    # [4b 번역층] 검색층 테마는 번역어(keep_query/exclude_query) 우선 —
+    # 원문 keep/exclude는 intent에 불변 보존(조건 1). 판사 규칙 무접촉.
+    if intent.get("keep"):
+        theme = intent.get("keep_query") or intent["keep"]
+    else:
+        theme = intent.get("exclude_query") or intent.get("exclude")
     is_exclude = intent["exclude"] is not None and intent["keep"] is None
 
     # 조각풀은 두 분기 모두 필요 → 먼저 적재 (plan 캐시 키의 pool hash에도 사용)
@@ -1195,6 +1334,9 @@ def plan_edit(source_ids, instruction_text, batch=8, verbose=True,
         theme, is_exclude, keep, judged=judged,
         judge_mode="batch+single" if not is_exclude else None,
     )
+    # [4b §5 고지] 번역이 실제 사용된 판이면 self_check에 실어 화면까지 흘린다(조건 2)
+    if intent.get("translated"):
+        self_check["translated"] = intent["translated"]
     _plan = {"keep": keep, "count": intent["count"], "intent": intent,
              "reason": f"{tag}: {len(keep)}/{len(judged)}",
              "self_check": self_check}
