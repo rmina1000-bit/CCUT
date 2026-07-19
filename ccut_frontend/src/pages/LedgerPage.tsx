@@ -10,7 +10,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Play } from "lucide-react";
 import { videoService } from "@/services/videoService";
-import { FRAGMENT_TEXT_FONT, fragmentTextColor } from "@/lib/fragmentText";
+import { FRAGMENT_TEXT_FONT, fragmentTextColor, FRAGMENT_EXCLUDED_STYLE } from "@/lib/fragmentText";
 
 type MsRange = [number, number];
 const PLAYBACK_STOP_EPS_MS = 6;
@@ -667,7 +667,7 @@ const LedgerPage: React.FC<LedgerPageProps> = ({ programId: propProgramId, embed
                                 <span
                                   onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); caretTo(i); }}
                                   style={editing.inactive.has(i)
-                                    ? { color: "hsl(220,5%,45%)", textDecoration: "line-through" }
+                                    ? FRAGMENT_EXCLUDED_STYLE
                                     : undefined}
                                 >{c.ch === " " ? " " : c.ch}</span>
                               </React.Fragment>
@@ -677,7 +677,7 @@ const LedgerPage: React.FC<LedgerPageProps> = ({ programId: propProgramId, embed
                           </>
                         ) : it.words && it.words.length ? (
                           it.words.map((w, wi) => (
-                            <span key={wi} style={w.excluded ? { color: "hsl(220,5%,45%)", textDecoration: "line-through" } : undefined}>
+                            <span key={wi} style={w.excluded ? FRAGMENT_EXCLUDED_STYLE : undefined}>
                               {w.w}{" "}
                             </span>
                           ))

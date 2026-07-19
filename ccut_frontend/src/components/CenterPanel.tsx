@@ -17,8 +17,8 @@ import { ComposerSection } from "@/components/views/ComposerSection";
 import { DEBUG_LOG } from "@/utils/debugFlags";
 // [STORY-GATE P3] 승인 전에는 편집 결과물 대신 '원고'를 무대에 세운다.
 import { useStoryGate } from "@/hooks/useStoryGate";
-import { fragmentTranscriptText, FRAGMENT_TEXT_FONT, FRAGMENT_TEXT_ACTIVE_COLOR } from "@/lib/fragmentText";
-import { isStoryMode } from "@/lib/storyMode";
+import { fragmentTranscriptText, FRAGMENT_TEXT_FONT, FRAGMENT_TEXT_STYLE, FRAGMENT_SILENT_STYLE } from "@/lib/fragmentText";
+import { storyStageVisible } from "@/lib/storyMode";
 
 import type { AppState, SourceEntry } from "@/types";
 
@@ -418,19 +418,33 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
   // 승인 전에는 편집 UI(무대 A/B·Export·지난 제안)를 일절 내지 않는다 (S2)
   const hideEditUI = storyGate.loading || (storyGate.enabled && !storyGate.approved);
 
-  // [#19-b 심판 2026-07-19] 중앙 '활성 세대'의 단일 표현 판정값(자리싸움 종식). 활성 세대는
-  // 스토리카드 또는 A/B 무대 하나뿐 — 판정 기준은 이 값 하나. hideEditUI(승인상태)는 A/B를
-  // 번갈아 확정하면 approved↔review로 왕복해 표현이 오락가락하던 잔재라 판정에서 뺀다.
-  //   story 카드 = 한 번도 승인 안 된 원고(story_draft) 또는 재편집 세션(#22-b).
-  //   A/B 무대 = 승인했다가 A/B 비교로 어긋난 review·승인(approved) — A↔B 왕복에 불변.
-  const centerShowStory = isStoryMode(storyGate.story?.story_state, !!reEditActive)
-    && !!programId && (!!proposals || (storyGate.story?.item_count ?? 0) > 0);
+  // [#19-b 심판 2026-07-19 · R8 유령 1·4호 2026-07-20] 중앙 '활성 세대'의 단일 판정값.
+  //   story 카드 = 한 번도 승인 안 된 원고(story_draft) 또는 재편집 세션(reEditActive).
+  //   A/B 무대 = 승인(approved) 또는 A/B 확정으로 어긋난 review — A↔B 확정 왕복에 불변.
+  // 판정·후단 조건 모두 storyStageVisible 하나에 흡수 — 우측(rightStoryMode)과 완전 동일한
+  // 식이라 '분열 경로'가 없다. 밖에서 `||proposals` 같은 조건을 덧대지 않는다(그게 유령 4호).
+  const centerShowStory = storyStageVisible(storyGate.story, !!reEditActive);
   useEffect(() => {
     if (storyRefreshNonceRef.current === storyRefreshNonce) return;
     storyRefreshNonceRef.current = storyRefreshNonce;
     void storyGate.reload();
     setStoryViewKey((k) => k + 1);
   }, [storyGate.reload, storyRefreshNonce]);
+  // [R8 유령 4호 후속 2026-07-20] 새 제안 '세대'(컨설팅·재제안)가 생기면 원고 상태를 즉시
+  // 새로고침한다. centerShowStory가 item_count 기반 storyStageVisible로 통일되며 구
+  // `||!!proposals` 지름길이 사라졌으므로, 원고 카드가 폴링(≤10s)을 기다리지 않고 바로 뜨도록
+  // 즉시성을 '데이터 새로고침'으로 대체한다. 기준은 proposal_id 시그니처라 A/B '확정'(id 불변)
+  // 에는 반응하지 않는다 → 확정 왕복 중 무대는 흔들리지 않는다(검증 ②). stale 가드가 중복 흡수.
+  const lastProposalSigRef = useRef<string | null>(null);
+  useEffect(() => {
+    const sig = proposals
+      ? `${(proposals.A as any)?.proposal_id ?? "A"}|${(proposals.B as any)?.proposal_id ?? "B"}`
+      : null;
+    if (sig && sig !== lastProposalSigRef.current) {
+      lastProposalSigRef.current = sig;
+      void storyGate.reload();
+    }
+  }, [proposals, storyGate.reload]);
   // [STORY-TRACK-A A-5] 중앙 채팅창 = 표현(보기)만. 편집은 우측 조각맵으로 이전됐고,
   // 여기선 '활성 텍스트조각만' 읽기전용으로 보여준다(스토리 카드). 단일 진실(/ledger)
   // 공유 — 우측에서 활성/비활성 바꾸면 storyRefreshNonce/storyViewKey로 여기도 갱신.
@@ -1590,14 +1604,24 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
         {/* [FLOW] 중앙 타임라인 — 개략·채팅·지난 제안이 하나의 흐름으로 위로 흘러간다.
             현재(활성) 제안 pair만 아래 '무대'(플레이어 그리드)에 서고,
             지난 제안은 고스트 카드로 흐름 속에 남아 '다시 열기'로 무대 복원. */}
-        {storyPlan && ((storyPlan.messages || []).length > 0 || proposalHistory.length > 0) && (
+        {((storyPlan?.messages || []).length > 0 || proposalHistory.length > 0) && (
           <div className="w-full max-w-[800px] flex flex-col gap-6 py-8 animate-in fade-in duration-700">
+
+            {/* [R8 유령 5호 2026-07-20] 스토리박스 독립 — 렌더 조건에서 `storyPlan &&` 제거.
+                storyPlan(대화 원고)이 죽어도 proposalHistory>0이면 지난 원고 세대는 상주한다
+                (프로젝트 전환·확정 왕복 중 소실 0). '지난 원고 0개'(이 블록 미출현)와 '복원 실패'
+                (세대는 있는데 대화 기록만 못 불러옴)를 아래 안내로 구분한다. */}
+            {!storyPlan && proposalHistory.length > 0 && (
+              <div className="text-[11px] text-muted-foreground/50 px-1">
+                이전 대화 기록은 불러오지 못했어요. 지난 원고 세대는 아래에 그대로 남아 있습니다.
+              </div>
+            )}
 
             <div className="flex flex-col gap-8">
               {[
                 // timestamp 없는 메시지는 ts=0으로 맨 위로 튀지 않게 — 직전 메시지
                 // 시각을 승계해 입력 순서(아래로 쌓임)를 지킨다.
-                ...(() => { let last = 0; return (storyPlan.messages || []).map((msg: any) => {
+                ...(() => { let last = 0; return (storyPlan?.messages || []).map((msg: any) => {
                   last = typeof msg.timestamp === "number" && msg.timestamp > 0 ? msg.timestamp : last + 1;
                   return { kind: "msg" as const, ts: last, msg };
                 }); })(),
@@ -2424,7 +2448,9 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
                     // (FRAGMENT_TEXT_FONT · 15px · leading 1.7). 화면 내 모든 조각 텍스트 동일 폰트.
                     <div key={it.id} className="flex gap-2.5 text-[15px] leading-[1.7]" style={{ fontFamily: FRAGMENT_TEXT_FONT }}>
                       <span className="flex-shrink-0 text-[11px] font-mono text-primary/50 mt-0.5">{i + 1}</span>
-                      <p className="text-foreground/85">{it.text || <span className="italic" style={{ color: FRAGMENT_TEXT_ACTIVE_COLOR }}>(무음)</span>}</p>
+                      {/* [R8 유령 6호] 표시 스타일 단일 계약 — 하드코딩 italic·/85 제거.
+                          정자체·활성색을 우측 전사와 동일 계약(FRAGMENT_TEXT_STYLE)에서 받는다. */}
+                      <p style={FRAGMENT_TEXT_STYLE}>{it.text || <span style={FRAGMENT_SILENT_STYLE}>(무음)</span>}</p>
                     </div>
                   ))
                 ) : (
@@ -2450,10 +2476,10 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
                       r.status === 409 ? "그새 원고가 바뀌었습니다. 다시 보고 승인해 주세요."
                       : r.status === 503 ? "승인 원장(story_approval)이 아직 이 DB에 없습니다 — Cutover 필요."
                       : "승인하지 못했습니다.");
-                    else {
-                      setStoryApproveError(null);
-                      onStoryEditStateChanged?.();
-                    }
+                    else setStoryApproveError(null);
+                    // [R8 유령 3호] 성공·실패(409=그새 원고 바뀜) 모두 원고를 최신으로 — 단일
+                    // 소유자(nonce)로 gate 갱신. approve 내부 reload를 뺐으므로 이 발화가 유일 경로.
+                    onStoryEditStateChanged?.();
                   }}
                   className="ml-auto shrink-0 px-3 py-1.5 rounded-lg text-[12px] font-semibold bg-primary/80 text-primary-foreground hover:bg-primary transition-colors">
                   이 이야기로 갑니다

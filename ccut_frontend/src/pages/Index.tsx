@@ -18,7 +18,7 @@ import { AccountPanel } from "@/components/AccountPanel";
 import { TrashPanel } from "@/components/TrashPanel";
 import { SettingsPanel } from "@/components/SettingsPanel";
 import { SingleFragmentEditor } from "@/components/SingleFragmentEditor";
-import { isStoryMode } from "@/lib/storyMode";
+import { storyStageVisible } from "@/lib/storyMode";
 // [GHOST 소각 #4·5] 구 2조각 PBE(PrecisionBoundaryEditor) 완전 소각 — 타입·주석 렌더 포함. 복원은 git 이력.
 
 
@@ -124,10 +124,10 @@ const Index: React.FC = () => {
     setActiveNavItem(id);
   }, [setActiveNavItem]);
 
-  // [STORY-TRACK-A A-1] 우측창 스토리 모드 = 게이트 승인 전(또는 재편집 진입) + 원고 존재.
+  // [STORY-TRACK-A A-1 · R8 유령 4호 2026-07-20] 우측창 스토리 모드 = 중앙(centerShowStory)과
+  // '완전 동일한 식' storyStageVisible 하나. 판정·후단 조건이 유틸 안에 있어 분열 경로가 없다.
   const activeReEdit = reEditProgramId === activeNavItem;
-  const rightStoryMode = isStoryMode(storyGate.story?.story_state, activeReEdit)
-    && (storyGate.story?.item_count ?? 0) > 0;
+  const rightStoryMode = storyStageVisible(storyGate.story, activeReEdit);
 
   // [STORY-TRACK-C C-3] 조각맵:보류맵 세로 분할 비율(조각맵 몫 0..1). 기존 ccut_center_width와
   // 동일 localStorage 방식. 편집 단계도 마지막 조정 존중(§9) — 값은 단계 무관 공유.

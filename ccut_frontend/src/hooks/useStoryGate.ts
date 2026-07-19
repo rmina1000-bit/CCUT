@@ -57,6 +57,10 @@ export function useStoryGate(programId?: string | null, active = true) {
   // 사용자가 지금 보고 있는 원고의 지문 — 서버 해시가 이것과 달라지면 "새 결과 있음"
   const viewingHashRef = useRef<string | null>(null);
   const [staleHash, setStaleHash] = useState<string | null>(null);
+  // [R8 유령 2호 2026-07-20] 요청 순번 가드 — reload·폴러·프로젝트 전환이 뒤섞여도 '마지막으로
+  // 띄운 요청'의 응답만 화면에 반영한다. 늦게 도착한 응답이 최신을 덮어 화면이 흔들리던
+  // ('취객 흔들림') 경로를 봉인. 매 fetch 직전 ++, 응답 도착 시 순번이 최신이 아니면 폐기.
+  const reqSeqRef = useRef(0);
 
   useEffect(() => {
     let dead = false;
@@ -67,10 +71,17 @@ export function useStoryGate(programId?: string | null, active = true) {
   }, []);
 
   const reload = useCallback(async () => {
-    if (!programId) { setStory(null); setStoryReady(true); return null; }
+    if (!programId) { reqSeqRef.current++; setStory(null); setStoryReady(true); return null; }
+    const myId = ++reqSeqRef.current;
     const s = await fetchStory(programId);
-    setStory(s);
+    if (myId !== reqSeqRef.current) return s;   // [R8] 늦은 응답 — 폐기(최신이 이미 반영됨)
     setStoryReady(true);
+    if (!s) return s;                            // [R8] 실패·부재 — 최신 원고 유지(null 덮어쓰기 금지)
+    setStory(s);
+    // [R8] 사용자 행동에 따른 '명시적' 새로고침(편집·승인 직후) — 이 원고를 시청 기준으로 승격,
+    // stale 알림 해제. 다음 폴이 사용자 자기 편집을 '새 분석 결과'로 오탐하던 것도 함께 봉인한다.
+    viewingHashRef.current = s.sequence_hash;
+    setStaleHash(null);
     return s;
   }, [programId]);
 
@@ -81,17 +92,19 @@ export function useStoryGate(programId?: string | null, active = true) {
     if (!gateReady) return;
     setStoryReady(false);
     if (!enabled || !programId || !active) {
+      reqSeqRef.current++;   // [R8] 진행 중 요청 무효화 — 늦은 응답이 이 clear를 덮지 못하게
       setStory(null);
       setStoryReady(true);
       return;
     }
     let dead = false;
     const tick = async () => {
+      const myId = ++reqSeqRef.current;
       const s = await fetchStory(programId);
-      if (dead) return;
-      setStory(s);
+      if (dead || myId !== reqSeqRef.current) return;   // [R8 유령 2호] 늦은 응답 폐기
       setStoryReady(true);
-      if (!s) return;
+      if (!s) return;                                    // [R8] 실패·부재 — 최신 원고 유지(null 덮어쓰기 금지)
+      setStory(s);
       // [STORY-GATE P3 / S5] 원고를 자동으로 갈아치우지 않는다.
       // 2차 집중분석이 끝나 서버 원고가 바뀌어도 화면은 그대로 두고, 알림만 띄운다.
       if (viewingHashRef.current === null) viewingHashRef.current = s.sequence_hash;
@@ -110,9 +123,12 @@ export function useStoryGate(programId?: string | null, active = true) {
   const approve = useCallback(async () => {
     if (!programId || !story) return { ok: false, status: 0, body: {} };
     const res = await approveStory(programId, story.sequence_hash);
-    await reload();
+    // [R8 유령 3호 2026-07-20] 승인 후 원고 새로고침은 '단일 소유자'(nonce 경유)에게 맡긴다 —
+    // 여기서 직접 reload하지 않는다. 호출자(CenterPanel)가 성공·실패(409=그새 바뀜) 모두
+    // onStoryEditStateChanged를 발화 → Index가 nonce를 올려 중앙 gate를 1회만 갱신한다.
+    // (기존: approve 내부 reload + nonce reload = 같은 gate 이중 발사 → stale 겹침의 씨앗.)
     return res;
-  }, [programId, story, reload]);
+  }, [programId, story]);
 
   return {
     ready: gateReady && storyReady,

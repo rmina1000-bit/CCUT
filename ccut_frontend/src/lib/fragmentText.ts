@@ -13,6 +13,7 @@
  *
  * 큐원은 조각을 '고르고 배열'만 한다. 글자는 원문 그대로 — 재작성 금지.
  */
+import type { CSSProperties } from "react";
 
 /**
  * [#21 잔여 — 폰트 단일화 2026-07-19] 화면 내 모든 '조각 텍스트'(우측 전사·중앙 스토리카드)는
@@ -23,10 +24,32 @@ export const FRAGMENT_TEXT_FONT =
 
 export const FRAGMENT_TEXT_ACTIVE_COLOR = "rgba(231,232,236,1)";
 export const FRAGMENT_TEXT_INACTIVE_COLOR = "rgba(231,232,236,0.34)";
+// [#21-c R8 2026-07-20] 제외(범위·단어) 표시색 — 우측 전사가 하드코딩하던 회색. 계약으로 흡수.
+export const FRAGMENT_TEXT_EXCLUDED_COLOR = "hsl(220,5%,45%)";
 
 export function fragmentTextColor(active: boolean): string {
   return active ? FRAGMENT_TEXT_ACTIVE_COLOR : FRAGMENT_TEXT_INACTIVE_COLOR;
 }
+
+/**
+ * [#21 잔여 — R8 유령 6호 2026-07-20] 조각 텍스트 '표시 스타일' 단일 계약(색·기울임까지).
+ * 계층마다 italic·foreground/85를 하드코딩해 폰트가 기울어(쓰러져) 보이던 것을 봉인한다.
+ * 표시 계층(중앙 스토리카드·우측 전사)은 이 스타일 객체만 쓴다 — 앱 기본은 정자체(normal).
+ */
+export const FRAGMENT_TEXT_STYLE: CSSProperties = {
+  color: FRAGMENT_TEXT_ACTIVE_COLOR,
+  fontStyle: "normal",
+};
+/** 무음 마커 — 활성 텍스트와 같은 색·같은 정자체. (구 중앙 italic 제거) */
+export const FRAGMENT_SILENT_STYLE: CSSProperties = {
+  color: FRAGMENT_TEXT_ACTIVE_COLOR,
+  fontStyle: "normal",
+};
+/** 제외 표시 — 회색 + 취소선. 우측 전사가 쓰던 인라인 하드코딩을 대체한다. */
+export const FRAGMENT_EXCLUDED_STYLE: CSSProperties = {
+  color: FRAGMENT_TEXT_EXCLUDED_COLOR,
+  textDecoration: "line-through",
+};
 
 export interface FragmentTextSource {
   words?: Array<{ w: string }> | null;
