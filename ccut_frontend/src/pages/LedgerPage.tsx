@@ -10,6 +10,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Play } from "lucide-react";
 import { videoService } from "@/services/videoService";
+import { FRAGMENT_TEXT_FONT, fragmentTextColor } from "@/lib/fragmentText";
 
 type MsRange = [number, number];
 const PLAYBACK_STOP_EPS_MS = 6;
@@ -61,7 +62,8 @@ interface EdlClip {
 interface Char { ch: string; s_ms: number | null; e_ms: number | null; }
 interface Editing { itemId: string; chars: Char[]; inactive: Set<number>; caret: number; }
 
-const SANS = `-apple-system,"Segoe UI","Malgun Gothic","Apple SD Gothic Neo",system-ui,sans-serif`;
+// [#21 잔여] 조각 텍스트 폰트 단일 원천 — 우측 전사·중앙 스토리카드 공용.
+const SANS = FRAGMENT_TEXT_FONT;
 
 const fmtClock = (ms?: number) => {
   if (!ms || ms < 0) return "0:00";
@@ -85,9 +87,21 @@ const wordsToChars = (words: WordTok[]): Char[] => {
 
 /** [STORY-GATE P3] 워크스페이스 안에 끼워 넣을 수 있게 props 수용.
  *  embedded=true면 자기 배경·프로젝트 선택기(페이지 껍데기)를 접고 본문만 낸다. */
-interface LedgerPageProps { programId?: string; embedded?: boolean; onEditStateChanged?: () => void; }
+interface LedgerPageProps {
+  programId?: string;
+  embedded?: boolean;
+  onEditStateChanged?: () => void;
+  // [STORY-TRACK-A A-4] 텍스트조각 클릭 시 원본맵 동기화 콜백 — (fragment_id, source_id).
+  onItemFocus?: (fragmentId: string, sourceId: string) => void;
+  // [STORY-TRACK-B] 조각 재생을 공용 미니 창으로 위임 — 있으면 내부 미니 창 대신 이걸 쓴다
+  // (하나의 미니 창으로 통일). sec spans canonical.
+  onPlayItem?: (target: { videoUrl: string; spans: [number, number][]; fragmentId?: string; label?: string }) => void;
+  // [#4 SOURCE-TITLE 2026-07-19] source_id -> 임시명(A,B,C…업로드순, 조각맵과 동일 매핑,
+  // main.py _xl_label 원본). 전사에서 원본영상이 바뀌는 지점마다 대제목으로 표기한다.
+  sourceLabels?: Record<string, string>;
+}
 
-const LedgerPage: React.FC<LedgerPageProps> = ({ programId: propProgramId, embedded, onEditStateChanged }) => {
+const LedgerPage: React.FC<LedgerPageProps> = ({ programId: propProgramId, embedded, onEditStateChanged, onItemFocus, onPlayItem, sourceLabels }) => {
   const [programs, setPrograms] = useState<Array<{ program_id: string; name: string }>>([]);
   const [programId, setProgramId] = useState<string>(() =>
     propProgramId || new URLSearchParams(window.location.search).get("program") || ""
@@ -130,19 +144,24 @@ const LedgerPage: React.FC<LedgerPageProps> = ({ programId: propProgramId, embed
   }, [programId]);
   useEffect(() => { reload(); }, [reload]);
 
-  const scenes = useMemo(() => {
-    const out: Array<{ heading: string | null; items: ScriptItem[] }> = [];
-    let lastPlace: string | null | undefined = undefined;
+  // [#4 전사 전체화 2026-07-19] 장소(place) 기반 장면 그룹핑 폐기. 구획은 원본영상(source)
+  // 단위 하나뿐 — 업로드순(sourceLabels 라벨 A,B,C…= main.py display_order)으로 그룹 정렬,
+  // 그룹 안은 조각 시작시간순(ledger가 source_id,start 순으로 주므로 소스 내부는 이미 정렬됨).
+  // ledger API는 7개 소스 77조각 전부 반환(missing.coords=0 실측) — 표시 계층이 전량을 낸다.
+  const sourceGroups = useMemo(() => {
+    const bySource = new Map<string, ScriptItem[]>();
     for (const it of data?.items ?? []) {
       if (it.missing?.coords) continue;
-      const p = it.place ?? null;
-      if (out.length === 0 || (p && p !== lastPlace)) {
-        out.push({ heading: p, items: [it] });
-        lastPlace = p ?? lastPlace ?? null;
-      } else out[out.length - 1].items.push(it);
+      const sid = it.source_id ?? "__unknown__";
+      if (!bySource.has(sid)) bySource.set(sid, []);
+      bySource.get(sid)!.push(it);
     }
-    return out;
-  }, [data]);
+    // 업로드순 = 라벨 순(A<B<…<G). 라벨 없으면 뒤로.
+    const labelOf = (sid: string) => sourceLabels?.[sid] ?? "￿" + sid;
+    return Array.from(bySource.entries())
+      .map(([sid, items]) => ({ sourceId: sid, label: sourceLabels?.[sid] ?? null, items }))
+      .sort((a, b) => labelOf(a.sourceId).localeCompare(labelOf(b.sourceId)));
+  }, [data, sourceLabels]);
 
   const lostCount = useMemo(
     () => (data?.items ?? []).filter((it) => it.missing?.coords).length, [data]);
@@ -189,7 +208,27 @@ const LedgerPage: React.FC<LedgerPageProps> = ({ programId: propProgramId, embed
     if (v.readyState >= 1) start(); else v.onloadedmetadata = start;
   }, [edlSpansOf]);
 
-  const playItem = useCallback((it: ScriptItem) => loadItem(it, true), [loadItem]);
+  // [STORY-TRACK-B] onPlayItem 있으면 공용 미니 창으로 위임(내부 창 미사용) — 창 1개 통일.
+  // 없으면(단독 페이지) 기존 내부 미니 창 loadItem. spans는 edl(제외구간 반영) ms→sec.
+  const playItem = useCallback((it: ScriptItem, fragNo?: string) => {
+    if (onPlayItem && it.video_url && it.anchor_start_ms !== undefined) {
+      let spansSec = edlSpansOf(it).map(([s, e]) => [s / 1000, e / 1000] as [number, number]);
+      // [#20 비활성 조각 재생 2026-07-19] 비선택 조각은 edl이 없어 재생이 막혀 있었다.
+      // 이 경로는 재생(playItem)일 뿐 선택 토글이 아니므로 활성 상태를 절대 바꾸지 않는다 —
+      // edl이 비면 조각 자체 구간(anchor)으로 재생만 시켜준다.
+      if (spansSec.length === 0 && it.anchor_end_ms !== undefined
+          && it.anchor_end_ms > (it.anchor_start_ms ?? 0)) {
+        spansSec = [[(it.anchor_start_ms ?? 0) / 1000, it.anchor_end_ms / 1000]];
+      }
+      if (spansSec.length > 0) {
+        // [#20 잔여 2026-07-19] 플레이창 제목 = 조각번호(A1·D3)만. place("집안" 등 다른 단어) 금지.
+        onPlayItem({ videoUrl: it.video_url, spans: spansSec,
+                     fragmentId: it.fragment_id, label: fragNo || undefined });
+        return;
+      }
+    }
+    loadItem(it, true);
+  }, [onPlayItem, edlSpansOf, loadItem]);
 
   const rafRef = useRef<number | null>(null);
   const resumeRef = useRef(false);
@@ -505,21 +544,11 @@ const LedgerPage: React.FC<LedgerPageProps> = ({ programId: propProgramId, embed
     hiddenRef.current?.focus({ preventScroll: true });
   }, []);
 
-  const stripPlace = (stage: string | null | undefined, heading: string | null) => {
-    if (!stage) return null;
-    if (!heading) return stage;
-    const prefix = `(${heading}.`;
-    if (!stage.startsWith(prefix)) return stage;
-    const rest = stage.slice(prefix.length).replace(/^\s+/, "");
-    return rest === ")" ? null : `(${rest}`;
-  };
 
   const Caret = () => (
     <span className="inline-block w-px h-[1.05em] align-[-0.15em] mx-[0.5px]"
       style={{ background: "hsl(220,9%,90%)", animation: "ccutBlink 1s step-end infinite" }} />
   );
-
-  let sceneNo = 0;
 
   return (
     <div className={embedded ? "" : "min-h-screen"}
@@ -527,7 +556,10 @@ const LedgerPage: React.FC<LedgerPageProps> = ({ programId: propProgramId, embed
                       : { background: "hsl(228, 12%, 10%)", color: "hsl(220, 9%, 87%)" }}>
       <style>{`@keyframes ccutBlink{50%{opacity:0}}`}</style>
 
-      <header className="max-w-2xl mx-auto px-6 pt-5 pb-1 flex items-baseline" style={{ fontFamily: SANS }}>
+      {/* [#21-c 2026-07-19] 우측 정렬 — 임베디드 전사는 max-w-2xl 제거. 좌측(px-2 → x=572)은
+          원본맵 첫 조각(573)과 이미 정렬, 우측은 max-w-2xl(672px 캡)이 1236에서 잘려 원본맵
+          패널 우측선(1272)보다 36px 짧던 것을 컬럼 전폭으로 넓혀 우측선 일치. */}
+      <header className={`${embedded ? "px-2" : "max-w-2xl mx-auto px-6"} pt-5 pb-1 flex items-baseline`} style={{ fontFamily: SANS }}>
         {embedded ? (
           <span className="text-[17px] font-semibold">{data?.program_name ?? ""}</span>
         ) : (
@@ -548,35 +580,49 @@ const LedgerPage: React.FC<LedgerPageProps> = ({ programId: propProgramId, embed
         )}
       </header>
 
-      <main className={embedded ? "max-w-2xl mx-auto px-6 pb-8" : "max-w-2xl mx-auto px-6 pb-28"}
+      <main className={embedded ? "px-2 pb-8" : "max-w-2xl mx-auto px-6 pb-28"}
         style={{ fontFamily: SANS }}>
         {!programId && !embedded && <p className="pt-20 text-center text-sm opacity-50">위의 제목을 눌러 대본을 고르세요.</p>}
 
-        {scenes.map((sc) => {
-          sceneNo += 1;
+        {sourceGroups.map((grp) => {
+          // [#4 전사 전체화] 구획 헤더 = 원본영상 임시명(X영상) 하나뿐. S#n 장소 헤더 폐기.
+          // 라벨을 모르면(sourceLabels 미주입) 대제목을 안 그린다 — 틀린 값보다 침묵.
+          // [#21 타이포 극단 재단 2026-07-19] 섹션 간격 최소화(mt-6→mt-1). 제호는 본문과
+          // 동일 폰트·행간(text-[15px] leading-[1.7]) — 굵기(bold)로만 구분, 크게 띄우던
+          // 제호 여백(mt-10 mb-2) 제거. 전사가 한 호흡으로 촘촘히 읽히게.
           return (
-            <section key={sceneNo} className="mt-6">
-              <h2 className="mb-1 text-[15px] font-semibold select-none opacity-70">
-                S#{sceneNo}.{sc.heading ? ` ${sc.heading}` : ""}
-              </h2>
+            <section key={grp.sourceId} className="mt-1">
+              {grp.label && (
+                <h1 className="mt-2 mb-0 text-[15px] leading-[1.7] font-bold select-none opacity-90">
+                  {grp.label}영상
+                </h1>
+              )}
               <p className="text-[15px] leading-[1.7]">
-                {sc.items.map((it) => {
+                {grp.items.map((it, itemIdx) => {
+                  // [#20 잔여] 조각번호 = 소스라벨 + 그룹내 순번(A1·D3…) — 조각맵 번호와 동일.
+                  const fragNo = grp.label ? `${grp.label}${itemIdx + 1}` : "";
                   const isActive = activeItem === it.timeline_item_id;
                   const isEditing = editing?.itemId === it.timeline_item_id;
                   const selected = it.selected !== false;
                   const dimmed = playerOpen && !isActive && !isEditing;
-                  const stage = stripPlace(it.stage_direction, sc.heading);
                   const hallu = it.warnings?.includes("non_korean");
                   const hasExcl = (it.excluded_ranges?.length ?? 0) > 0;
                   const canEdit = !!(it.words && it.words.length);
-                  const textOpacity = selected ? 1 : 0.34;
+                  const textColor = fragmentTextColor(selected);
                   return (
                     <span
                       key={it.timeline_item_id}
                       onClick={(e) => {
                         if (isEditing) return;
                         if (e.detail >= 2) { if (canEdit) enterEdit(it, 0); }
-                        else toggleItem(it);
+                        else {
+                          // [A-4] 원본맵 동기화 — 강조는 활성/비활성 토글과 무관하게 항상.
+                          if (it.fragment_id && it.source_id) onItemFocus?.(it.fragment_id, it.source_id);
+                          // [#17 클릭 분리 2026-07-19] 텍스트조각 1클릭 = 활성/비활성 토글만.
+                          // 재생(미니창)은 전사 앞 플레이 아이콘(아래 <Play> 버튼)에서만 — 클릭마다
+                          // 창이 뜨던 동작 제거(playItem 호출 삭제). 더블클릭=편집 진입은 유지.
+                          toggleItem(it);
+                        }
                       }}
                       className="group/span rounded-[3px] transition-colors duration-150 px-[1px]"
                       style={{
@@ -584,13 +630,13 @@ const LedgerPage: React.FC<LedgerPageProps> = ({ programId: propProgramId, embed
                         opacity: dimmed ? 0.4 : 1,
                         // hover 시 조각이 '일어난다' — 다른 글자보다 약간 밝은 배경
                         background: isEditing ? "hsl(228,14%,15%)" : isActive ? "hsl(230,14%,16%)" : selected ? undefined : "hsl(228,10%,12%)",
-                        color: `rgba(231,232,236,${textOpacity})`,
+                        color: textColor,
                       }}
                       onMouseEnter={(e) => { if (!isEditing && !isActive) e.currentTarget.style.background = "hsl(228,13%,14%)"; }}
                       onMouseLeave={(e) => { if (!isEditing && !isActive) e.currentTarget.style.background = selected ? "" : "hsl(228,10%,12%)"; }}
                     >
                       <span className="inline-flex align-[0.05em] opacity-0 group-hover/span:opacity-80 transition-opacity mr-1">
-                        <button type="button" onClick={(e) => { e.stopPropagation(); playItem(it); }}
+                        <button type="button" onClick={(e) => { e.stopPropagation(); playItem(it, fragNo); }}
                           className="px-0.5 opacity-70 hover:opacity-100" title="재생"><Play size={11} /></button>
                       </span>
                       {/* off 배지 — 폭 0 앵커 + absolute 오버레이(재생 슬롯 위). 줄박스 폭·높이 기여 0 = 토글해도 리플로우 없음 */}
@@ -599,8 +645,8 @@ const LedgerPage: React.FC<LedgerPageProps> = ({ programId: propProgramId, embed
                           <span className="absolute text-[10px] opacity-70 whitespace-nowrap" style={{ left: "-1.35em", top: "-0.95em" }}>off</span>
                         </span>
                       )}
-                      {stage && <span>{stage} </span>}
-                      {!stage && hallu && <span>(장면이 이어진다.) </span>}
+                      {/* [#18 근본 2026-07-19] 지문(stage_direction, VL "병원" 등 장소 번역)
+                          표시 제거 — 조각 텍스트의 진실 원천은 클램프 words 하나. 원문 밖 단어 0. */}
                       {hallu && (
                         <button type="button"
                           onClick={(e) => { e.stopPropagation(); setShowOriginal(showOriginal === it.timeline_item_id ? null : it.timeline_item_id); }}
@@ -637,7 +683,11 @@ const LedgerPage: React.FC<LedgerPageProps> = ({ programId: propProgramId, embed
                           ))
                         ) : <span>{it.dialogue} </span>
                       )}
-                      {!it.dialogue && !stage && !hallu && <span>(조용한 장면.) </span>}
+                      {/* [#18 근본] 무음(words·dialogue 둘 다 없음) = 계층 공통 마커 하나.
+                          [#21-c 2026-07-19] 색 계약 위반 교정 — opacity-40 하드코딩 제거.
+                          무음도 일반 조각과 같은 규칙: 부모 색(활성=흰색 rgba1 / 비활성=회색 rgba0.34)을
+                          그대로 상속. 마커 자체 opacity가 곱연산으로 활성=0.4·비활성=0.136 이중감광되던 것 제거. */}
+                      {!(it.words && it.words.length) && !it.dialogue && <span>(무음) </span>}
 
                       {hasExcl && !isEditing && (
                         <button type="button"
@@ -681,7 +731,11 @@ const LedgerPage: React.FC<LedgerPageProps> = ({ programId: propProgramId, embed
         onCompositionEnd={(e) => { handleTyped(e.currentTarget.value); e.currentTarget.value = ""; }}
         onBlur={() => { if (editing) commitEdit(); }}
         className="fixed opacity-0 w-px h-px pointer-events-none" style={{ left: -9999, top: 0 }}
-        aria-hidden
+        // [가 a11y] aria-hidden 제거 — 이 input은 IME/키 수신 위해 프로그램적으로
+        // 포커스를 받는다. 포커스 가능 요소의 aria-hidden이 콘솔 경고 원인이었다.
+        // inert는 포커스를 막아 기능이 깨지므로, 탭 순서 제외(tabIndex=-1)+라벨로 대체.
+        tabIndex={-1}
+        aria-label="대본 편집 입력"
       />
 
       {/* 저장 실패 표시 — 침묵 금지 (원인 문구 포함) */}
@@ -713,16 +767,19 @@ const LedgerPage: React.FC<LedgerPageProps> = ({ programId: propProgramId, embed
         </div>
       )}
 
-      {/* 플로팅 플레이어 — 양축 상한 */}
-      <div className={`fixed bottom-5 right-5 z-30 transition-all duration-300 ${playerOpen ? "opacity-100 translate-y-0" : "opacity-0 translate-y-3 pointer-events-none"}`}>
-        <div className="rounded-xl overflow-hidden shadow-2xl inline-block" style={{ background: "#000" }}>
-          <video ref={videoRef} onPlay={onPlay} onPlaying={onPlaying} onSeeked={onSeeked} onTimeUpdate={onPlaybackTimeUpdate} onPause={stopRaf} onEnded={stopRaf} controls className="block"
-            style={{ maxWidth: "min(360px, 40vw)", maxHeight: "48vh", width: "auto", height: "auto" }} />
+      {/* 플로팅 플레이어 — 양축 상한. [oracle #5 수정] onPlayItem(공용 미니창 위임)이 있으면
+          이 내부 플레이어를 렌더하지 않는다 — 두 창 공존(복사)을 하나로 통일(Track B 완결). */}
+      {!onPlayItem && (
+        <div className={`fixed bottom-5 right-5 z-30 transition-all duration-300 ${playerOpen ? "opacity-100 translate-y-0" : "opacity-0 translate-y-3 pointer-events-none"}`}>
+          <div className="rounded-xl overflow-hidden shadow-2xl inline-block" style={{ background: "#000" }}>
+            <video ref={videoRef} onPlay={onPlay} onPlaying={onPlaying} onSeeked={onSeeked} onTimeUpdate={onPlaybackTimeUpdate} onPause={stopRaf} onEnded={stopRaf} controls className="block"
+              style={{ maxWidth: "min(360px, 40vw)", maxHeight: "48vh", width: "auto", height: "auto" }} />
+          </div>
+          <button type="button" onClick={closePlayer}
+            className="absolute -top-2.5 -right-2.5 w-6 h-6 rounded-full text-[11px] leading-none shadow-md hover:scale-110 transition-transform"
+            style={{ background: "hsl(230,10%,25%)", color: "hsl(40,20%,85%)" }} title="닫기">✕</button>
         </div>
-        <button type="button" onClick={closePlayer}
-          className="absolute -top-2.5 -right-2.5 w-6 h-6 rounded-full text-[11px] leading-none shadow-md hover:scale-110 transition-transform"
-          style={{ background: "hsl(230,10%,25%)", color: "hsl(40,20%,85%)" }} title="닫기">✕</button>
-      </div>
+      )}
     </div>
   );
 };

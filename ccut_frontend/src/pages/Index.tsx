@@ -4,6 +4,11 @@ import CenterPanel from "@/components/CenterPanel";
 import OriginalPanorama from "@/components/OriginalPanorama";
 import FragmentMap from "@/components/FragmentMap";
 import ReservedFragments from "@/components/ReservedFragments";
+import LedgerPage from "@/pages/LedgerPage";
+import FragmentMiniPlayer from "@/components/FragmentMiniPlayer";
+// [dev ESM 안전] 타입 전용 import는 반드시 `import type` — 혼합 import는 esbuild가 못 벗겨
+// 런타임에 존재하지 않는 named export(interface)를 요청해 모듈 에러가 난다(build는 통과).
+import type { MiniPlayTarget } from "@/components/FragmentMiniPlayer";
 import { useWorkspaceLayout } from "@/hooks/useWorkspaceLayout";
 import { useProposalState } from "@/hooks/useProposalState";
 import { useStoryGate } from "@/hooks/useStoryGate";
@@ -13,6 +18,7 @@ import { AccountPanel } from "@/components/AccountPanel";
 import { TrashPanel } from "@/components/TrashPanel";
 import { SettingsPanel } from "@/components/SettingsPanel";
 import { SingleFragmentEditor } from "@/components/SingleFragmentEditor";
+import { isStoryMode } from "@/lib/storyMode";
 // [GHOST 소각 #4·5] 구 2조각 PBE(PrecisionBoundaryEditor) 완전 소각 — 타입·주석 렌더 포함. 복원은 git 이력.
 
 
@@ -101,6 +107,57 @@ const Index: React.FC = () => {
   // [STORY-GATE P3] 승인 전에는 PBE(조각 정밀편집) 진입을 막는다 (S2).
   // 게이트 OFF면 awaitingApproval=false → 현행과 동일.
   const storyGate = useStoryGate(activeNavItem, appState === "complete");
+  // [#22 모든 편집 진입은 스토리로 2026-07-19] '다시 편집'(SNS·아카이브)로 들어온 프로젝트는
+  // 이미 승인 상태여도 편집(A/B)으로 직행하지 않고 스토리 단계로 연다. 강제 story 모드는
+  // '재편집 세션'이 지속되는 동안만 — (a) 다른 프로젝트로 이동, (b) 이후 사용자가 새로 승인,
+  // (c) 재작업으로 실제 stale 전환(#8-a) 되면 해제. 재작업 시 승인 stale은 #8-a가 처리.
+  const [reEditProgramId, setReEditProgramId] = useState<string | null>(null);
+  const reEditSessionStartRef = useRef<number>(0);
+  useEffect(() => {
+    if (!reEditProgramId) return;
+    if (reEditProgramId !== activeNavItem) { setReEditProgramId(null); return; }   // (a)
+    const at = storyGate.story?.approved?.approved_at;
+    if (at && new Date(at).getTime() > reEditSessionStartRef.current) setReEditProgramId(null); // (b) 새 승인
+  }, [reEditProgramId, activeNavItem, storyGate.story?.approved?.approved_at]);
+  const navigateToProject = useCallback((id: string, reEdit?: boolean) => {
+    if (reEdit) { reEditSessionStartRef.current = Date.now(); setReEditProgramId(id); }
+    setActiveNavItem(id);
+  }, [setActiveNavItem]);
+
+  // [STORY-TRACK-A A-1] 우측창 스토리 모드 = 게이트 승인 전(또는 재편집 진입) + 원고 존재.
+  const activeReEdit = reEditProgramId === activeNavItem;
+  const rightStoryMode = isStoryMode(storyGate.story?.story_state, activeReEdit)
+    && (storyGate.story?.item_count ?? 0) > 0;
+
+  // [STORY-TRACK-C C-3] 조각맵:보류맵 세로 분할 비율(조각맵 몫 0..1). 기존 ccut_center_width와
+  // 동일 localStorage 방식. 편집 단계도 마지막 조정 존중(§9) — 값은 단계 무관 공유.
+  const [mapHoldSplit, setMapHoldSplit] = useState<number>(() => {
+    try { const v = parseFloat(localStorage.getItem("ccut_map_hold_split") || ""); if (v >= 0.15 && v <= 0.85) return v; } catch { /* 손상값 무시 */ }
+    return 0.7;
+  });
+  useEffect(() => { try { localStorage.setItem("ccut_map_hold_split", String(mapHoldSplit)); } catch { /* quota 무시 */ } }, [mapHoldSplit]);
+  const mapHoldAreaRef = useRef<HTMLDivElement>(null);
+  const startMapHoldDrag = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    const area = mapHoldAreaRef.current;
+    if (!area) return;
+    const onMove = (ev: MouseEvent) => {
+      const rect = area.getBoundingClientRect();
+      if (rect.height <= 0) return;
+      const ratio = (ev.clientY - rect.top) / rect.height;   // 조각맵 몫
+      setMapHoldSplit(Math.max(0.15, Math.min(0.85, ratio)));
+    };
+    const onUp = () => {
+      document.removeEventListener("mousemove", onMove);
+      document.removeEventListener("mouseup", onUp);
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+    };
+    document.addEventListener("mousemove", onMove);
+    document.addEventListener("mouseup", onUp);
+    document.body.style.cursor = "row-resize";
+    document.body.style.userSelect = "none";
+  }, []);
 
   // [#38] 보류맵 좌표도 제안별 구성 정보 (버킷 별칭은 displayProposalId 정의 뒤에)
   const [holdPositionsByProposal, setHoldPositionsByProposal] = useState<Record<"A" | "B", Record<string, { x: number; y: number }>>>({ A: {}, B: {} });
@@ -388,6 +445,26 @@ const Index: React.FC = () => {
     }
     return videoService.saveProjectState(programId, { ui_state: JSON.stringify({ ...unknown, ...snapshot }) });
   }, [OWNED_UI_FIELDS, setStoryPlan]);
+
+  // [#8-a STORY-GATE-SYNC 2026-07-19] 제안 채택(committedProposalId) 및 그 채택된 안의
+  // 조각 구성이 바뀔 때(같은 모드로 재생성된 경우 포함) ui_state를 즉시 저장한다 — 기존엔
+  // 내보내기 완료(Index.tsx onExportDone) 시점에만 저장돼, 새 제안을 만들고 확정해도
+  // story-gate가 구 승인을 계속 유효로 보는 구멍이 있었다(승인 없이 EDIT 진입).
+  // 트리거를 committedProposalId 값 변화만으로 두면, 같은 안(B)을 유지한 채 재생성됐을 때
+  // (조각 구성만 바뀜) 저장이 재발동하지 않아 낡은 조각 목록이 저장되는 사례를 실측했다 —
+  // 그래서 채택된 모드의 key_fragments 지문까지 비교 키에 포함한다.
+  const committedSnapshotSigRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!committedProposalId) return;
+    const keyFrags = (proposals as any)?.[committedProposalId]?.key_fragments;
+    if (!keyFrags) return;
+    const sig = `${committedProposalId}:${JSON.stringify(keyFrags)}`;
+    if (committedSnapshotSigRef.current === sig) return;
+    committedSnapshotSigRef.current = sig;
+    if (activeNavItem && activeNavItem.startsWith("proj_")) {
+      saveUiStateMerged(activeNavItem, buildUiSnapshot()).catch(() => {});
+    }
+  }, [committedProposalId, proposals, activeNavItem, saveUiStateMerged, buildUiSnapshot]);
 
   const {
     resetAnalysisState,
@@ -1099,7 +1176,9 @@ const Index: React.FC = () => {
                   const gens: any[] = [];
                   for (const en of tl.entries) {
                     syncedTimelineIdsRef.current.add(en.client_id);
-                    if (en.kind === "message" && en.payload) msgs.push(en.payload);
+                    // [C 증발 방어] 재수화 메시지는 항상 확정 상태 — 혹 isInterpreting=true가
+                    // 실린 payload가 있어도(중단 세션 잔재) 스피너로 숨지 않게 강제 해제.
+                    if (en.kind === "message" && en.payload) msgs.push({ ...en.payload, isInterpreting: false });
                     else if (en.kind === "generation" && en.payload) gens.push(en.payload);
                   }
                   if (msgs.length) {
@@ -1379,20 +1458,40 @@ const Index: React.FC = () => {
 
   // Resize effect moved to useWorkspaceLayout
 
+  // [STORY-TRACK-B] 조각 단위 공용 미니 플레이창 상태·핸들러 — handleEditFragmentClick보다
+  // 먼저 선언(TDZ 방지: 아래 useCallback이 이걸 deps로 참조). A/B 듀얼 무접촉, sec canonical.
+  const [miniTarget, setMiniTarget] = useState<MiniPlayTarget | null>(null);
+  const playImageFragmentInMini = useCallback((f: Fragment) => {
+    const af = f as any;
+    const sid = af.source_id ?? f.source_video;
+    const url = af.video_url
+      ?? (sourceEntries ?? []).find((e) => e.source_id === sid)?.video_url;
+    if (!url) return;
+    // sec 변환(canonical): sec 우선, frame은 ÷30 폴백 (CenterPanel readFragmentStartSec 규약).
+    const startSec = Number(af.start_sec ?? af.start_time ?? af.start ?? ((f.start_frame ?? 0) / 30));
+    const endRaw = Number(af.end_sec ?? af.end_time ?? af.end ?? ((f.end_frame ?? 0) / 30));
+    const endSec = endRaw > startSec ? endRaw : startSec + 1;
+    setMiniTarget({ videoUrl: url, spans: [[startSec, endSec]],
+                    fragmentId: f.fragment_id, label: af.display_id || undefined });
+  }, [sourceEntries]);
+
   const handleEditFragmentClick = useCallback(
     (f: Fragment) => {
       if (selectedFragment && getUid(selectedFragment) === getUid(f)) {
         setSelectedFragment(null);
         setHighlightedPanoramaFrag(null);
         setExpandedFragment(null);
+        setMiniTarget(null);  // [B-2] 재클릭 해제 시 미니 창도 닫는다
       } else {
         setSelectedFragment(f);
         setActiveSource(f.source_video);
         setHighlightedPanoramaFrag(getUid(f));
         setExpandedFragment(null);
+        // [B-2/B-3] 이미지조각 클릭 → 공용 미니 창에서 그 조각 재생(A/B 듀얼 아님) + 원본맵 강조.
+        playImageFragmentInMini(f);
       }
     },
-    [selectedFragment]
+    [selectedFragment, playImageFragmentInMini]
   );
 
   // [2-2b] 조각편집 진입 (단일 조각 1개).
@@ -1644,6 +1743,18 @@ const Index: React.FC = () => {
     [selectedFragment]
   );
 
+  // [STORY-TRACK-A A-4] 텍스트조각(우측 스토리 에디터) 클릭 → 원본맵 "나 여기있어".
+  // source_id로 원본맵 소스를 맞추고(라벨 변환), fragment_id로 그 조각 강조.
+  const handleTextFragmentFocus = useCallback(
+    (fragmentId: string, sourceId: string) => {
+      const label = (sourceEntries ?? []).find((e) => e.source_id === sourceId)?.label;
+      if (label) setActiveSource(label);
+      setHighlightedPanoramaFrag(fragmentId);
+    },
+    [sourceEntries, setActiveSource]
+  );
+
+  // [STORY-TRACK-B] 조각 단위 공용 미니 플레이창 — 텍스트·이미지 어디서 클릭해도 이 창 하나.
   const handleReservedClick = useCallback(
     (f: Fragment) => {
       if (selectedFragment && getUid(selectedFragment) === getUid(f)) {
@@ -2404,6 +2515,14 @@ const Index: React.FC = () => {
     });
   }, []);
 
+  const handleRestoreProposalEntry = useCallback((id: string) => {
+    if (activeNavItem && activeNavItem.startsWith("proj_")) {
+      reEditSessionStartRef.current = Date.now();
+      setReEditProgramId(activeNavItem);
+    }
+    restoreProposalEntry(id);
+  }, [activeNavItem, restoreProposalEntry]);
+
   const handleBackgroundClick = useCallback((e: React.MouseEvent) => {
     const target = e.target as HTMLElement;
     if (target.closest(".fragment-tile")) return;
@@ -2457,14 +2576,14 @@ const Index: React.FC = () => {
           <SettingsPanel />
         ) : activeNavItem === "archive" ? (
           <ArchivePanel
-            onNavigateToProject={(id) => setActiveNavItem(id)}
+            onNavigateToProject={navigateToProject}
             onRenameProject={(id, newName) => {
               setProjects((prev) => prev.map((p) => (p.id === id ? { ...p, name: newName } : p)));
             }}
           />
         ) : activeNavItem === "upload" ? (
           <SnsUploadPanel
-            onNavigateToProject={(id) => setActiveNavItem(id)}
+            onNavigateToProject={navigateToProject}
             onRenameProject={(id, newName) => {
               setProjects((prev) => prev.map((p) => (p.id === id ? { ...p, name: newName } : p)));
             }}
@@ -2488,6 +2607,7 @@ const Index: React.FC = () => {
             analyzeMessage={analyzeMessage}
             analysisLogs={analysisLogs}
             proposals={proposals}
+            reEditActive={activeReEdit}
             sourceFragments={sourceFragments}
             sourceId={currentSourceId}
             videoUrl={currentVideoUrl}
@@ -2506,7 +2626,7 @@ const Index: React.FC = () => {
             exportClips={physicalClips}
             storyPlan={storyPlan}
             onStoryPlanConfirm={setStoryPlan}
-            onStoryEditStateChanged={() => { refreshEditStatesRef.current(); void refreshLedgerEdl(); }}
+            onStoryEditStateChanged={() => { refreshEditStatesRef.current(); void refreshLedgerEdl(); void storyGate.reload(); setStoryLedgerRefreshNonce((n) => n + 1); }}
             storyRefreshNonce={storyLedgerRefreshNonce}
             sourceEntries={sourceEntries}
             programId={activeNavItem}
@@ -2521,7 +2641,7 @@ const Index: React.FC = () => {
             }}
             proposalHistory={proposalHistory}
             activeProposalEntryId={activeProposalEntryId}
-            onRestoreProposalEntry={restoreProposalEntry}
+            onRestoreProposalEntry={handleRestoreProposalEntry}
             onIntake={(a) => { intakeRef.current = a; }}
             onRequestAddVideos={
               activeNavItem && activeNavItem.startsWith("proj_")
@@ -2555,7 +2675,10 @@ const Index: React.FC = () => {
             />
           </div>
 
-          <div className="flex-1 flex flex-col gap-2 p-2 overflow-hidden min-w-0">
+          {/* [#3+#13 재시공 2026-07-19] pb-0 — 이 컬럼의 p-2 바닥 패딩(8px)이 보류맵을
+              viewport 하단에서 8px 띄우던 '공중부양'의 실제 원인(부모 높이 체인). 바닥만
+              패딩 제거해 보류맵이 창 밑변에 dock되게 한다(상·좌·우 패딩은 유지). */}
+          <div className="flex-1 flex flex-col gap-2 p-2 pb-0 overflow-hidden min-w-0">
             <input ref={appendInputRef} type="file" accept="video/*" multiple className="hidden" onChange={handleAppendFiles} />
             <OriginalPanorama
               activeSource={activeSource}
@@ -2591,41 +2714,78 @@ const Index: React.FC = () => {
               }
             />
 
-            <div className="flex-1 overflow-y-auto">
-              <FragmentMap
-                fragments={resolvedFragments}
-                onFragmentsChange={handleFragmentsReorder}
-                selectedFragmentId={selectedFragment ? getUid(selectedFragment) : null}
-                expandedFragmentId={expandedFragment}
-                onFragmentClick={handleEditFragmentClick}
-                onEditFragment={handleSingleFragmentEdit}
-                onFragmentDoubleClick={handleEditFragmentDoubleClick}
-                onExcludeFragment={handleExcludeFromEdit}
-                onRestoreFragment={handleRestoreFromHold}
-                onSourceRestore={handleAddFromSource}
-                onMoveToHold={handleMoveToHold}
-                onTrashRestore={handleRestoreToEdit}
-                onBoundaryClick={handleOpenBoundaryEditor}
-                sourceVideoUrls={Object.fromEntries(
-                  (sourceEntries ?? []).map(e => [e.source_id, e.video_url]).filter(([, v]) => v)
+            {/* [STORY-TRACK-C C-3][#3+#13 DOCK-CONTRACT 2026-07-19] 조각맵·보류맵 세로 분할
+                영역 — 사이 리사이저로 비율 조절, localStorage 지속(ccut_map_hold_split).
+                STORY·EDIT 양 단계 모두 보류맵·리사이저 상주(§계약: 하단 고정, 리사이저는
+                top 경계만 이동, 패널 자체는 항상 컨테이너 하단에 붙는다 — flex-col 레이아웃이라
+                마지막 자식의 bottom은 곧 컨테이너 bottom). 이전엔 편집 단계에서만 렌더돼
+                스토리 단계에서 보류맵이 아예 사라지는 게 결함이었다. */}
+            <div ref={mapHoldAreaRef} className="flex-1 flex flex-col gap-1.5 overflow-hidden min-h-0">
+              <div className="overflow-y-auto min-h-0"
+                   style={{ flexGrow: mapHoldSplit, flexBasis: 0 }}>
+                {/* [STORY-TRACK-A A-1/A-2/A-3] 스토리 단계 = 조각맵 자리에 텍스트조각 에디터.
+                    편집 단계 = 이미지 조각맵. 같은 아이 옷만 다름(뒤 식별자 동일). */}
+                {rightStoryMode ? (
+                  <LedgerPage
+                    key={`rightledger_${activeNavItem}_${storyLedgerRefreshNonce}`}
+                    embedded
+                    programId={activeNavItem ?? undefined}
+                    onEditStateChanged={() => { refreshEditStatesRef.current(); void refreshLedgerEdl(); void storyGate.reload(); setStoryLedgerRefreshNonce((n) => n + 1); }}
+                    onItemFocus={handleTextFragmentFocus}
+                    onPlayItem={setMiniTarget}
+                    sourceLabels={Object.fromEntries(
+                      (sourceEntries ?? []).map((e) => [e.source_id, e.label]).filter(([, l]) => l)
+                    )}
+                  />
+                ) : (
+                  <FragmentMap
+                    fragments={resolvedFragments}
+                    onFragmentsChange={handleFragmentsReorder}
+                    selectedFragmentId={selectedFragment ? getUid(selectedFragment) : null}
+                    expandedFragmentId={expandedFragment}
+                    onFragmentClick={handleEditFragmentClick}
+                    onEditFragment={handleSingleFragmentEdit}
+                    onFragmentDoubleClick={handleEditFragmentDoubleClick}
+                    onExcludeFragment={handleExcludeFromEdit}
+                    onRestoreFragment={handleRestoreFromHold}
+                    onSourceRestore={handleAddFromSource}
+                    onMoveToHold={handleMoveToHold}
+                    onTrashRestore={handleRestoreToEdit}
+                    onBoundaryClick={handleOpenBoundaryEditor}
+                    sourceVideoUrls={Object.fromEntries(
+                      (sourceEntries ?? []).map(e => [e.source_id, e.video_url]).filter(([, v]) => v)
+                    )}
+                  />
                 )}
-              />
-            </div>
+              </div>
 
-            <ReservedFragments
-              fragments={reservedFragments}
-              selectedFragmentId={selectedFragment ? getUid(selectedFragment) : null}
-              onFragmentClick={handleReservedClick}
-              onRestoreFragment={handleRestoreFromHold}
-              onDeleteFragment={handleDeleteFromHold}
-              deletedFragments={deletedFragments}
-              onRestoreToHold={handleRestoreToHold}
-              onRestoreToEdit={handleRestoreToEdit}
-              onEmptyTrash={handleEmptyTrash}
-              holdPositions={holdPositions}
-              onHoldPositionsChange={setHoldPositions}
-              onDropToHold={handleDropToHold}
-            />
+              {/* [#3+#13 DOCK-CONTRACT] 보류맵·리사이저 상주 — STORY·EDIT 양 단계 공통.
+                  STORY 단계에선 reservedFragments가 비어 있을 수 있으나(그쪽 "빼기"는
+                  LedgerPage 자체 excluded_items 별도 계약), 패널 자체는 접힌 채로도 항상 존재
+                  해야 한다는 게 이번 계약. ReservedFragments는 빈 배열을 이미 안전하게 그린다. */}
+              <div onMouseDown={startMapHoldDrag}
+                   className="flex-shrink-0 h-2 cursor-row-resize group flex items-center justify-center rounded hover:bg-primary/10 transition-colors"
+                   title="조각맵·보류맵 크기 조절">
+                <div className="w-10 h-[3px] rounded-full bg-border/50 group-hover:bg-primary/50 transition-colors" />
+              </div>
+              <div className="overflow-y-auto min-h-0"
+                   style={{ flexGrow: 1 - mapHoldSplit, flexBasis: 0 }}>
+                <ReservedFragments
+                  fragments={reservedFragments}
+                  selectedFragmentId={selectedFragment ? getUid(selectedFragment) : null}
+                  onFragmentClick={handleReservedClick}
+                  onRestoreFragment={handleRestoreFromHold}
+                  onDeleteFragment={handleDeleteFromHold}
+                  deletedFragments={deletedFragments}
+                  onRestoreToHold={handleRestoreToHold}
+                  onRestoreToEdit={handleRestoreToEdit}
+                  onEmptyTrash={handleEmptyTrash}
+                  holdPositions={holdPositions}
+                  onHoldPositionsChange={setHoldPositions}
+                  onDropToHold={handleDropToHold}
+                />
+              </div>
+            </div>
           </div>
         </>
       )}
@@ -2637,6 +2797,8 @@ const Index: React.FC = () => {
         contractState={sfeContractState}
         onApply={handleSingleFragmentApply}
       />
+      {/* [STORY-TRACK-B] 조각 단위 공용 미니 플레이창 — 텍스트·이미지 클릭 공용. 창 1개. */}
+      <FragmentMiniPlayer target={miniTarget} onClose={() => setMiniTarget(null)} />
     </div>
   );
 };

@@ -16,8 +16,9 @@ import { FragSearchPanel } from "@/components/views/FragSearchPanel";
 import { ComposerSection } from "@/components/views/ComposerSection";
 import { DEBUG_LOG } from "@/utils/debugFlags";
 // [STORY-GATE P3] 승인 전에는 편집 결과물 대신 '원고'를 무대에 세운다.
-import LedgerPage from "@/pages/LedgerPage";
 import { useStoryGate } from "@/hooks/useStoryGate";
+import { fragmentTranscriptText, FRAGMENT_TEXT_FONT, FRAGMENT_TEXT_ACTIVE_COLOR } from "@/lib/fragmentText";
+import { isStoryMode } from "@/lib/storyMode";
 
 import type { AppState, SourceEntry } from "@/types";
 
@@ -73,6 +74,23 @@ function physicalClipToFragment(clip: PhysicalClip): Fragment {
   } as any;
 }
 
+interface StoryLedgerItem {
+  timeline_item_id: string;
+  selected?: boolean;
+  removed?: boolean;
+  missing?: unknown;
+  place?: string | null;
+  source_title?: string | null;
+  source_id?: string | null;
+  words?: Array<{ w: string }> | null;
+  dialogue?: string | null;
+}
+
+interface StoryLedgerResponse {
+  ok?: boolean;
+  items?: StoryLedgerItem[];
+}
+
 interface CenterPanelProps {
   selectedFragment: Fragment | null;
   selectedSource: string;
@@ -91,6 +109,8 @@ interface CenterPanelProps {
   videoUrl?: string | null;
   sources?: any[];
   proposals?: any;
+  /** [#22-b] 재편집 세션 — 이 프로젝트를 '다시 편집'으로 열었는가. 중앙도 스토리 상태 강제. */
+  reEditActive?: boolean;
   committedProposalId?: string | null;
   // [#28 재생원 일원화] 조각맵에 현재 깔린 제안(committed ?? selected) — 그 제안의 라이브 재생은
   // fragments prop(조각맵 파생)만 쓴다. 화면과 재생은 같은 진실 (헌장 §5).
@@ -346,6 +366,7 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
   analysisLogs,
   videoUrl,
   proposals,
+  reEditActive,
   committedProposalId,
   displayProposalId,
   onPlaybackNotice,
@@ -381,8 +402,9 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
 
   // [LAYOUT] A/B 편집제안 세로 아코디언 — 기본 둘 다 접힘, 클릭 시 하나만 펼침
   const [expandedProposal, setExpandedProposal] = useState<"A" | "B" | null>(null);
-  // [지난 제안] 인라인 '그 자리' 재생 — { entryId, A|B }. 무대 이동/스크롤 점프 없음.
-  const [inlinePlay, setInlinePlay] = useState<{ id: string; key: "A" | "B" } | null>(null);
+  // [#19 스토리박스] 승인 전(story mode) 제안 세대를 채팅 흐름에 경량 스토리박스로 상주시킨다.
+  // 기본 접힘(append-only 이력이 쌓여도 흐름이 스캔 가능하게 — E 판단). 헤더 클릭으로 펼침.
+  const [openStoryBox, setOpenStoryBox] = useState<string | null>(null);
   // toggleProposal / playProposal / 기본 B 펼침 효과는 재생 의존성(previewUrl·startSeq 등)
   // 정의 이후(하단)에 배치한다. (여기서 참조하면 TDZ)
   const [consultationInput, setConsultationInput] = useState("");
@@ -395,11 +417,48 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
   const [storyApproveError, setStoryApproveError] = useState<string | null>(null);
   // 승인 전에는 편집 UI(무대 A/B·Export·지난 제안)를 일절 내지 않는다 (S2)
   const hideEditUI = storyGate.loading || (storyGate.enabled && !storyGate.approved);
+
+  // [#19-b 심판 2026-07-19] 중앙 '활성 세대'의 단일 표현 판정값(자리싸움 종식). 활성 세대는
+  // 스토리카드 또는 A/B 무대 하나뿐 — 판정 기준은 이 값 하나. hideEditUI(승인상태)는 A/B를
+  // 번갈아 확정하면 approved↔review로 왕복해 표현이 오락가락하던 잔재라 판정에서 뺀다.
+  //   story 카드 = 한 번도 승인 안 된 원고(story_draft) 또는 재편집 세션(#22-b).
+  //   A/B 무대 = 승인했다가 A/B 비교로 어긋난 review·승인(approved) — A↔B 왕복에 불변.
+  const centerShowStory = isStoryMode(storyGate.story?.story_state, !!reEditActive)
+    && !!programId && (!!proposals || (storyGate.story?.item_count ?? 0) > 0);
   useEffect(() => {
     if (storyRefreshNonceRef.current === storyRefreshNonce) return;
     storyRefreshNonceRef.current = storyRefreshNonce;
+    void storyGate.reload();
     setStoryViewKey((k) => k + 1);
-  }, [storyRefreshNonce]);
+  }, [storyGate.reload, storyRefreshNonce]);
+  // [STORY-TRACK-A A-5] 중앙 채팅창 = 표현(보기)만. 편집은 우측 조각맵으로 이전됐고,
+  // 여기선 '활성 텍스트조각만' 읽기전용으로 보여준다(스토리 카드). 단일 진실(/ledger)
+  // 공유 — 우측에서 활성/비활성 바꾸면 storyRefreshNonce/storyViewKey로 여기도 갱신.
+  const [activeStoryItems, setActiveStoryItems] = useState<Array<{ id: string; label: string; text: string }>>([]);
+  useEffect(() => {
+    if (!programId || !centerShowStory || (storyGate.story?.item_count ?? 0) === 0) {
+      setActiveStoryItems([]);
+      return;
+    }
+    let dead = false;
+    fetch(`/api/ledger/${encodeURIComponent(programId)}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d: StoryLedgerResponse | null) => {
+        if (dead || !d?.ok) return;
+        const rows = (d.items ?? [])
+          .filter((it) => it.selected !== false && !it.removed && !it.missing)
+          .map((it) => ({
+            // [#18 근본 2026-07-19] 단일 진실 공용 함수만 쓴다 — 지문(stage_direction, "병원" 등
+            // VL 장소 번역)을 절대 폴백으로 섞지 않는다. 조각 텍스트 = 클램프 words 하나.
+            id: it.timeline_item_id,
+            label: it.place ? `S· ${it.place}` : (it.source_title ?? it.source_id ?? ""),
+            text: fragmentTranscriptText(it),
+          }));
+        setActiveStoryItems(rows);
+      })
+      .catch(() => { if (!dead) setActiveStoryItems([]); });
+    return () => { dead = true; };
+  }, [programId, centerShowStory, storyGate.story?.item_count, storyViewKey, storyRefreshNonce]);
   // [UI-①] 업로드 스테이징 (null=비활성)
   const [stagedFiles, setStagedFiles] = useState<StagedMeta[] | null>(null);
   // [PERSON-PALETTE] 이름을 물어볼 얼굴 군집 + 방금 저장한 이름 안내
@@ -527,10 +586,18 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
     dispatchCommand(text);
   }, [consultationInput, dispatchCommand, resetConsultationTextarea]);
 
-  // Auto scroll for consultation chat — 메시지·제안 세대·무대 전환 모두에서 최신으로 흐름
+  // [F 스크롤 앵커] 새 메시지/새 제안 세대가 실제로 '늘어날' 때만 하단으로 흐른다.
+  // 과거 제안 소환(activeProposalEntryId 변경)은 스크롤을 끌어내리지 않는다 — 무대가
+  // 중간 슬롯으로 이동하는데 하단으로 튕기던 '흘러내림'을 절단. 소환 고지 메시지는
+  // length 증가로 자연히 하단 정렬(그건 최신 사건이므로 정상).
+  const _prevChatLenRef = useRef({ msgs: 0, gens: 0 });
   useEffect(() => {
-    chatEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
-  }, [storyPlan?.messages?.length, proposalHistory.length, activeProposalEntryId]);
+    const msgs = storyPlan?.messages?.length ?? 0;
+    const gens = proposalHistory.length;
+    const grew = msgs > _prevChatLenRef.current.msgs || gens > _prevChatLenRef.current.gens;
+    _prevChatLenRef.current = { msgs, gens };
+    if (grew) chatEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+  }, [storyPlan?.messages?.length, proposalHistory.length]);
 
   const setActivePlayerSafe = useCallback((player: "A" | "B" | null) => {
     activePlayerRef.current = player;
@@ -1405,13 +1472,6 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
     playProposal(key); // 직접 클릭(제스처)이라 브라우저가 재생 허용
   }, [playProposal]);
 
-  // [A/B 제안] 한 제안 pair의 대표 썸네일(첫 조각) — 지난 제안 카드에도 사용.
-  const getPairPoster = useCallback((pair: any, key: "A" | "B") => {
-    const p = pair?.[key];
-    const firstFragId = p?.key_fragments?.[0] ?? p?.sequence?.[0]?.fragment_id ?? p?.sequence?.[0] ?? p?.resolved_aliases?.[0]?.source_fragment_id;
-    const fromFrag = firstFragId ? allSourceFragments.find((f: any) => f.fragment_id === firstFragId) : null;
-    return fromFrag?.thumbnail?.thumbnail_url ?? (fromFrag as any)?.thumbnail_url ?? p?.resolved_aliases?.[0]?.thumbnail_url ?? undefined;
-  }, [allSourceFragments]);
 
   // [A/B 제안] 최신 제안(새 proposal_id)이 오면 항상 B를 먼저 크게 펼친다.
   const lastProposalIdRef = useRef<string | null>(null);
@@ -1618,10 +1678,11 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
                           ? "bg-[#161618] border border-white/5 text-foreground/90 rounded-tr-none"
                           : "bg-secondary/10 border border-border/5 text-foreground/90 rounded-tl-none"
                       }`}>
-                        {item.msg.isInterpreting && (
-                          <div className="flex items-center gap-2 mb-2 text-primary/60">
+                        {/* [S-1] 스피너는 첫 토큰 전까지만 — say가 차오르기 시작하면 소거 */}
+                        {item.msg.isInterpreting && !item.msg.text && (
+                          <div className="flex items-center gap-2 text-primary/60">
                             <Loader2 size={14} className="animate-spin" />
-                            <span className="text-[11px] font-medium animate-pulse">AI 해석 중...</span>
+                            <span className="text-[11px] font-medium animate-pulse">듣고 있어요…</span>
                           </div>
                         )}
                         {item.msg.text}
@@ -1637,63 +1698,59 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
                 ) : item.entry.id === activeProposalEntryId ? (
                 // [FLOW-STAGE] 활성 제안 = 무대 슬롯. 무대(플레이어+내보내기)가 portal로 이 자리에 선다.
                 <div key={`stage_${item.entry.id}`} ref={setStageSlot} className="w-full flex flex-col items-center space-y-4" />
-                ) : hideEditUI ? (
-                // [STORY-GATE P3 / S2] 승인 전에는 '지난 제안'(이전 세대 A/B 편집물)도 내지 않는다.
-                // 렌더된 결과를 보여주는 순간 "승인 전 편집 없음"이 깨진다.
-                null
                 ) : (
-                <div key={`pair_${item.entry.id}`} className="flex justify-start animate-in fade-in duration-500">
-                  <div className="flex gap-4 max-w-[85%]">
-                    <div className="w-8 h-8 rounded-lg flex-shrink-0 flex items-center justify-center mt-1 bg-primary/10 text-primary">
-                      <Play size={14} />
-                    </div>
-                    <div className="flex flex-col gap-1.5 items-start">
-                      <div className="px-5 py-3.5 rounded-2xl rounded-tl-none bg-secondary/10 border border-border/5 flex flex-col gap-2 min-w-[260px]">
-                        <span className="text-[10px] font-black tracking-widest uppercase text-muted-foreground/60">지난 제안</span>
-                        <div className="flex flex-col gap-1.5">
-                          {(["A", "B"] as const).map((k) => {
-                            const thumb = getPairPoster(item.entry.pair, k);
-                            const open = inlinePlay?.id === item.entry.id && inlinePlay?.key === k;
-                            const rawPreview = (item.entry.pair?.[k] as any)?.preview_url;
-                            const previewSrc = rawPreview ? normalizeMediaUrl(rawPreview) : null;
-                            return (
-                              <div key={k} className="flex flex-col gap-1.5">
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    videoRefA.current?.pause();
-                                    videoRefB.current?.pause();
-                                    setInlinePlay(open ? null : { id: item.entry.id, key: k });
-                                  }}
-                                  className={`flex items-center gap-2 rounded-lg px-1.5 py-1 -mx-1.5 text-left transition-colors ${open ? "bg-white/[0.05]" : "hover:bg-white/[0.03]"}`}
-                                  title="여기서 크게 재생"
-                                >
-                                  <span className="relative w-12 h-8 flex-shrink-0 rounded overflow-hidden bg-black/30 flex items-center justify-center group/pt">
-                                    {thumb ? <img src={thumb} className="w-full h-full object-cover" draggable={false} /> : <Play size={12} className="text-white/40" />}
-                                    <span className={`absolute top-0 left-0 px-1 rounded-br text-[9px] font-black leading-tight ${k === "A" ? "bg-primary/70 text-primary-foreground" : "bg-ccut-indigo/80 text-white"}`}>{k}</span>
-                                    <span className="absolute inset-0 flex items-center justify-center bg-black/35 opacity-0 group-hover/pt:opacity-100 transition-opacity"><Play size={12} className="text-white" /></span>
-                                  </span>
-                                  <span className="min-w-0 flex-1 text-[12px] text-foreground/80 truncate">{item.entry.pair?.[k]?.title ?? (k === "A" ? "시장형 편집" : "사용자친화형 편집")}</span>
-                                  <ChevronDown size={13} className={`flex-shrink-0 text-muted-foreground/50 transition-transform ${open ? "rotate-180" : ""}`} />
-                                </button>
-                                {open && (
-                                  previewSrc ? (
-                                    <video src={previewSrc} controls autoPlay className="w-full rounded-xl bg-black border border-white/8" style={{ maxHeight: 360 }} />
-                                  ) : (
-                                    <div className="w-full rounded-xl bg-black/40 border border-white/8 py-6 text-center text-[11px] text-muted-foreground/60">
-                                      이 지난 제안은 미리보기 영상이 없습니다. 아래 '이 제안 다시 열기'로 무대에서 재생하세요.
-                                    </div>
-                                  )
+                // [#19가 통일 2026-07-19] 과거 원고 세대는 승인 전·후(story·edit) 모양 불변 —
+                // 항상 같은 스토리박스로 상주한다(옛 '지난 제안' 고스트카드 폐지). '렌더된 편집
+                // 결과'(A/B 미리보기 영상)는 여기 내지 않는다. 원고 메타(조각 수) + '재작업' 버튼만.
+                // 클릭=그 원고 소환(재작업 진입).
+                (() => {
+                  const pair = item.entry.pair as any;
+                  const primary = pair?.B ?? pair?.A;
+                  const fragCount = (primary?.key_fragments?.length ?? primary?.sequence?.length ?? 0);
+                  const isOpen = openStoryBox === item.entry.id;
+                  const when = new Date(item.entry.ts).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+                  return (
+                    <div key={`storybox_${item.entry.id}`} className="flex justify-start animate-in fade-in duration-500">
+                      <div className="flex gap-4 max-w-[85%]">
+                        <div className="w-8 h-8 rounded-lg flex-shrink-0 flex items-center justify-center mt-1 bg-primary/10 text-primary">
+                          <BookOpen size={16} />
+                        </div>
+                        <div className="flex flex-col gap-1.5 items-start">
+                          <div className="rounded-2xl rounded-tl-none bg-secondary/10 border border-border/5 min-w-[240px] overflow-hidden">
+                            <button
+                              type="button"
+                              onClick={() => setOpenStoryBox(isOpen ? null : item.entry.id)}
+                              className="w-full flex items-center gap-2 px-4 py-3 text-left hover:bg-white/[0.02] transition-colors"
+                              title={isOpen ? "접기" : "펼치기"}
+                            >
+                              <span className="text-[10px] font-black tracking-widest uppercase text-muted-foreground/60">지난 원고</span>
+                              <span className="text-[12px] text-foreground/80">{fragCount}조각</span>
+                              <ChevronDown size={13} className={`ml-auto flex-shrink-0 text-muted-foreground/50 transition-transform ${isOpen ? "rotate-180" : ""}`} />
+                            </button>
+                            {isOpen && (
+                              <div className="px-4 pb-3.5 pt-0.5 flex flex-col gap-2 border-t border-border/5">
+                                <span className="text-[11px] text-muted-foreground/70 pt-2">
+                                  이 원고를 불러와 이어서 다시 다듬을 수 있어요.
+                                </span>
+                                {onRestoreProposalEntry && (
+                                  <button
+                                    type="button"
+                                    onClick={() => onRestoreProposalEntry(item.entry.id)}
+                                    className="self-start flex items-center gap-1.5 rounded-lg border border-primary/25 bg-primary/10 px-2.5 py-1 text-[11px] font-semibold text-primary hover:bg-primary/20 transition-colors"
+                                    title="이 원고를 조각맵·무대로 불러와 재작업합니다"
+                                  >
+                                    <Play size={11} /> 이 원고로 재작업
+                                  </button>
                                 )}
                               </div>
-                            );
-                          })}
+                            )}
+                          </div>
+                          <span className="text-[10px] text-muted-foreground/40 px-1">{when}</span>
                         </div>
                       </div>
-                      <span className="text-[10px] text-muted-foreground/40 px-1">{new Date(item.entry.ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
                     </div>
-                  </div>
-                </div>
+                  );
+                })()
                 ))}
             </div>
 
@@ -2338,10 +2395,8 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
           </>
         );
 
-        // [STORY-GATE P3] 승인 전에는 무대(편집 결과물 A/B·Export)를 내지 않고 '원고'를 낸다.
-        //   게이트 OFF면 showStory=false → stageContent 그대로 (현행 바이트 동일, I-4).
-        const showStory = hideEditUI && !!programId
-          && (!!proposals || (storyGate.story?.item_count ?? 0) > 0);
+        // [#19-b 심판] 활성 세대 표현 = 단일 판정값(centerShowStory) 하나. A/B 왕복 불변.
+        const showStory = centerShowStory;
         const storyContent = (
           <div className="w-full max-w-[800px] rounded-2xl border border-white/8 bg-white/[0.02] overflow-hidden">
             {/* [S5] 2차 집중분석이 끝나도 원고를 자동으로 갈아치우지 않는다 — 알림만. */}
@@ -2354,8 +2409,30 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
                 <span className="ml-auto text-foreground/40">지금 보고 계신 원고는 그대로 둡니다.</span>
               </div>
             )}
+            {/* [STORY-TRACK-A A-5] 편집기는 우측 조각맵으로 이전. 중앙은 활성 텍스트조각만
+                읽기전용으로 표현한다(스토리 카드). 편집은 여기서 못 한다 — 우측에서. */}
             {(storyGate.story?.item_count ?? 0) > 0 ? (
-              <LedgerPage key={storyViewKey} programId={programId ?? undefined} embedded onEditStateChanged={onStoryEditStateChanged} />
+              <div className="px-5 py-4 flex flex-col gap-2 max-h-[46vh] overflow-y-auto">
+                <div className="flex items-center gap-2 mb-1">
+                  <BookOpen size={13} className="text-primary/70" />
+                  <span className="text-[11px] font-bold tracking-wider uppercase text-muted-foreground/60">이야기 (고른 장면)</span>
+                  <span className="ml-auto text-[11px] text-muted-foreground/40">우측 조각맵에서 고르고 빼세요</span>
+                </div>
+                {activeStoryItems.length > 0 ? (
+                  activeStoryItems.map((it, i) => (
+                    // [#21 잔여] 조각 텍스트 폰트·사이즈를 우측 전사와 완전 동일하게
+                    // (FRAGMENT_TEXT_FONT · 15px · leading 1.7). 화면 내 모든 조각 텍스트 동일 폰트.
+                    <div key={it.id} className="flex gap-2.5 text-[15px] leading-[1.7]" style={{ fontFamily: FRAGMENT_TEXT_FONT }}>
+                      <span className="flex-shrink-0 text-[11px] font-mono text-primary/50 mt-0.5">{i + 1}</span>
+                      <p className="text-foreground/85">{it.text || <span className="italic" style={{ color: FRAGMENT_TEXT_ACTIVE_COLOR }}>(무음)</span>}</p>
+                    </div>
+                  ))
+                ) : (
+                  <p className="py-6 text-center text-[13px] text-foreground/40">
+                    아직 고른 장면이 없어요. 우측 조각맵에서 원하는 전사를 눌러 담아주세요.
+                  </p>
+                )}
+              </div>
             ) : (
               <p className="px-6 py-10 text-center text-[13px] text-foreground/45">
                 이야기를 엮고 있습니다…
@@ -2373,7 +2450,10 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
                       r.status === 409 ? "그새 원고가 바뀌었습니다. 다시 보고 승인해 주세요."
                       : r.status === 503 ? "승인 원장(story_approval)이 아직 이 DB에 없습니다 — Cutover 필요."
                       : "승인하지 못했습니다.");
-                    else setStoryApproveError(null);
+                    else {
+                      setStoryApproveError(null);
+                      onStoryEditStateChanged?.();
+                    }
                   }}
                   className="ml-auto shrink-0 px-3 py-1.5 rounded-lg text-[12px] font-semibold bg-primary/80 text-primary-foreground hover:bg-primary transition-colors">
                   이 이야기로 갑니다
