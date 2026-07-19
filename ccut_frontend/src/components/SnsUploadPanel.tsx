@@ -32,7 +32,7 @@ const PLATFORM_INFO: Record<string, string> = {
 };
 
 export const SnsUploadPanel: React.FC<{
-  onNavigateToProject?: (id: string) => void;
+  onNavigateToProject?: (id: string, reEdit?: boolean) => void;
   onRenameProject?: (id: string, newName: string) => void;
 }> = ({ onNavigateToProject, onRenameProject }) => {
   const [exports, setExports] = useState<ExportRecord[]>([]);
@@ -254,7 +254,7 @@ export const SnsUploadPanel: React.FC<{
                     </button>
                     {ex.program_id && (
                       <button
-                        onClick={() => onNavigateToProject?.(ex.program_id!)}
+                        onClick={() => onNavigateToProject?.(ex.program_id!, true)}
                         className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-white/5 hover:bg-white/10 text-foreground/70 text-xs font-medium transition-colors border border-border/15"
                       >
                         <Edit3 size={13} />

@@ -235,3 +235,29 @@
   background: transparent;
   border: 0;
 }
+
+/* [#9 미니플레이어 커스텀 진행바] 잡을 수 있는 작은 흰 thumb */
+.mini-seekbar {
+  -webkit-appearance: none;
+  appearance: none;
+  outline: none;
+}
+.mini-seekbar::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 11px;
+  height: 11px;
+  border-radius: 9999px;
+  background: #fff;
+  box-shadow: 0 0 3px rgba(0, 0, 0, 0.5);
+  cursor: pointer;
+}
+.mini-seekbar::-moz-range-thumb {
+  width: 11px;
+  height: 11px;
+  border-radius: 9999px;
+  background: #fff;
+  border: 0;
+  box-shadow: 0 0 3px rgba(0, 0, 0, 0.5);
+  cursor: pointer;
+}

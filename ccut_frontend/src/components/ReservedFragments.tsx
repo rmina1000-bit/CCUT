@@ -320,7 +320,11 @@ const ReservedFragments: React.FC<ReservedFragmentsProps> = ({
   return (
     <>
       <div
-        className="relative bg-card/50 rounded-lg overflow-hidden border border-border/20"
+        /* [#3+#13 3차 2026-07-19] min-h-full — 카드가 부모(보류맵 패널) 높이를 최소로 채운다.
+           높이 지정이 없어 내용(min-h-[220px] board)만큼만 커지던 게 큰 화면에서 카드가
+           위쪽에 뜨고 아래가 비는 '공중부양'의 실제 원인이었다(패딩 아님). min-h-full이면
+           내용이 적어도 바닥까지 내려가고(dock), 많으면 커져 부모가 스크롤한다. */
+        className="relative bg-card/50 rounded-lg overflow-hidden border border-border/20 min-h-full"
         onDragOver={handleDragOverHold}
         onDrop={(e) => {
           // 보류맵 자체 드래그 (reserve-restore)는 보류맵이 받지 않음
