@@ -42,7 +42,7 @@ SPECULATIVE_DRAFT = os.getenv("CCUT_SPECULATIVE", "0") in ("1", "true", "True")
 import threading as _threading
 _OLLAMA_LOCK = _threading.Lock()
 _SERIALIZE = os.getenv("CCUT_OLLAMA_SERIALIZE", "1") not in ("0", "false", "False")
-_SINGLE_CONFIRM_PROMPT_VERSION = "judge_lean_v1"
+_SINGLE_CONFIRM_PROMPT_VERSION = "judge_lean_v3_scene_speech_context"
 _SINGLE_CONFIRM_CACHE = {}
 _PLAN_CACHE = {}  # [R2-A 후속] plan_edit 결과 캐시 (A/B 이중 호출 중복 제거, CCUT_SINGLE_CACHE 가역)
 
@@ -66,11 +66,71 @@ def load_bundles(con, source_id, desc_max=240, tr_max=120):
     for fid, s, e, desc, tr in cur.fetchall():
         bundles.append({
             "fid": fid,
+            "source_id": source_id,
             "start": round(s or 0.0, 1),
             "end": round(e or 0.0, 1),
             "scene": (desc or "")[:desc_max].replace("\n", " ").strip(),
             "speech": (tr or "")[:tr_max].replace("\n", " ").strip(),
         })
+    return bundles
+
+
+def _load_context_for_sources(con, source_ids):
+    ids = []
+    for sid in source_ids or []:
+        sid = (sid or "").strip()
+        if sid and sid not in ids:
+            ids.append(sid)
+    if not ids:
+        return {"project": None, "sources": {}}
+    ph = ",".join("?" for _ in ids)
+    sources = {}
+    try:
+        for sid, title, shot_date in con.execute(
+            f"SELECT source_id, title, shot_date FROM sources WHERE source_id IN ({ph})",
+            ids,
+        ):
+            sources[sid] = {
+                "title": _prompt_field(title, 80),
+                "shot_date": shot_date,
+                "notes": [],
+            }
+    except Exception:
+        sources = {sid: {"title": "", "shot_date": None, "notes": []} for sid in ids}
+    try:
+        for sid, note in con.execute(
+            f"SELECT target_id, text FROM narrative_notes "
+            f"WHERE target_kind='source' AND target_id IN ({ph}) ORDER BY note_id",
+            ids,
+        ):
+            if sid in sources and len(sources[sid]["notes"]) < 4:
+                sources[sid]["notes"].append(_prompt_field(note, 80))
+    except Exception:
+        pass
+    project = None
+    try:
+        rows = list(con.execute(
+            f"SELECT DISTINCT ps.program_id, p.name "
+            f"FROM project_sources ps JOIN programs p ON p.program_id=ps.program_id "
+            f"WHERE ps.source_id IN ({ph})",
+            ids,
+        ))
+        if len(rows) == 1:
+            project = {"program_id": rows[0][0], "name": _prompt_field(rows[0][1], 80)}
+    except Exception:
+        project = None
+    return {"project": project, "sources": sources}
+
+
+def _apply_context_to_bundles(bundles, context):
+    sources = (context or {}).get("sources") or {}
+    project = (context or {}).get("project")
+    for b in bundles or []:
+        sid = b.get("source_id")
+        if sid in sources:
+            b["source_context"] = sources[sid]
+        if project:
+            b["project_context"] = project
     return bundles
 
 
@@ -1157,17 +1217,155 @@ def _golden_fewshot_block(theme, max_examples=6):
     return "확정 예시:\n" + "\n".join(lines) + "\n"
 
 
+def _prompt_field(value, max_len):
+    text = " ".join(str(value or "").replace("\n", " ").split()).strip()
+    return text[:max_len]
+
+
+def _context_block_for_chunk(chunk):
+    project = next((b.get("project_context") for b in chunk if b.get("project_context")), None)
+    source_rows = []
+    seen = set()
+    for b in chunk:
+        sid = b.get("source_id")
+        if not sid or sid in seen:
+            continue
+        seen.add(sid)
+        ctx = b.get("source_context") if isinstance(b.get("source_context"), dict) else {}
+        if ctx:
+            source_rows.append({
+                "source_id": sid,
+                "title": ctx.get("title"),
+                "shot_date": ctx.get("shot_date"),
+                "notes": ctx.get("notes") or [],
+            })
+    if not project and not source_rows:
+        return ""
+    return json.dumps({"project": project, "sources": source_rows[:8]}, ensure_ascii=False)
+
+
+def _bundle_context_text(bundle):
+    parts = []
+    project = bundle.get("project_context") if isinstance(bundle.get("project_context"), dict) else {}
+    source = bundle.get("source_context") if isinstance(bundle.get("source_context"), dict) else {}
+    if project.get("name"):
+        parts.append(str(project.get("name")))
+    if source.get("title"):
+        parts.append(str(source.get("title")))
+    for note in source.get("notes") or []:
+        if note:
+            parts.append(str(note))
+    return " ".join(parts)
+
+
+def _compact_match_text(text):
+    return re.sub(r"\s+", "", str(text or "").lower())
+
+
+def _context_matches_theme(bundle, theme):
+    ctx = _compact_match_text(_bundle_context_text(bundle))
+    if not ctx:
+        return False
+    terms = [theme]
+    try:
+        terms.extend(_get_theme_aliases(theme))
+    except Exception:
+        pass
+    for term in terms:
+        t = _compact_match_text(term)
+        if len(t) >= 2 and t in ctx:
+            return True
+    return False
+
+
+def _local_contradicts_theme(bundle, theme):
+    local = f'{bundle.get("scene") or ""} {bundle.get("speech") or ""}'
+    t = _compact_match_text(theme)
+    if len(t) < 2 or t not in _compact_match_text(local):
+        return False
+    return any(marker in local for marker in ("아님", "아니", "없음", "없는", "not "))
+
+
 def _build_judge_lean(theme, chunk):
     """[속도] 판정 전용 lean 프롬프트 — 출력은 {n,t}만(why/recheck 제거 = 생성 토큰↓).
     경계 판단은 산문 규칙 대신 골든 케이스 few-shot 예시(golden_cases.json)로 전달."""
-    lines = [f'{i}. {b["scene"] or "(없음)"}' for i, b in enumerate(chunk, 1)]
+    lines = []
+    for i, b in enumerate(chunk, 1):
+        scene = _prompt_field(b.get("scene"), 240) or "(none)"
+        speech = _prompt_field(b.get("speech"), 120) or "(none)"
+        lines.append(f"{i}. scene: {scene} | speech: {speech}")
+    context_block = _context_block_for_chunk(chunk)
     return (
         f"각 조각이 테마 '{theme}'에 해당하면 t=true, 아니면 t=false. "
-        "장면 태그에 분명한 근거가 없으면 false(추측 금지).\n"
+        "scene/speech/상위맥락 중 분명한 근거가 없으면 false(추측 금지).\n"
+        "각 조각 입력은 scene(시각)과 speech(Whisper 전사)이다. 둘을 함께 보되, 근거 없는 추측은 금지한다.\n"
+        + (f"상위맥락(영상/프로젝트)은 약한 가중치다. source note처럼 명시된 상위 진실은 근거가 될 수 있지만, scene/speech와 충돌하면 덮어쓰지 말라:\n{context_block}\n" if context_block else "")
         + _golden_fewshot_block(theme)
         + '오직 JSON: {"items":[{"n":번호,"t":true}]}\n'
         "조각:\n" + "\n".join(lines)
     )
+
+
+def _build_fragment_decision_prompt(theme, bundle, project_context=None):
+    meta = {
+        "fid": bundle.get("fid"),
+        "source_id": bundle.get("source_id"),
+        "time": f'{bundle.get("start")}~{bundle.get("end")}s',
+        "theme": theme,
+    }
+    if project_context:
+        meta["project_context"] = project_context
+    payload = {
+        "scene": _prompt_field(bundle.get("scene"), 240),
+        "speech": _prompt_field(bundle.get("speech"), 120),
+        "source_context": bundle.get("source_context"),
+        "project_context": bundle.get("project_context"),
+        "meta": meta,
+    }
+    return (
+        "You are CCUT's fragment meaning judge. Decide a short fragment name and meaning from sensors only.\n"
+        "Use scene, speech, and meta together. Do not invent people, objects, dialogue, or intent not present in input.\n"
+        "Return JSON only with this schema: "
+        '{"name":"short Korean noun phrase","meaning":"one Korean sentence","evidence":["scene: ...","speech: ...","meta: ..."]}\n'
+        "Input:\n" + json.dumps(payload, ensure_ascii=False)
+    )
+
+
+def _sensor_evidence(bundle):
+    evidence = []
+    scene = _prompt_field((bundle or {}).get("scene"), 120)
+    speech = _prompt_field((bundle or {}).get("speech"), 120)
+    if scene:
+        evidence.append(f"scene: {scene}")
+    if speech:
+        evidence.append(f"speech: {speech}")
+    if bundle:
+        evidence.append(
+            f'meta: fid={bundle.get("fid")} source_id={bundle.get("source_id")} '
+            f'time={bundle.get("start")}~{bundle.get("end")}s'
+        )
+    return evidence[:4]
+
+
+def _sanitize_fragment_decision(raw, bundle=None):
+    if not isinstance(raw, dict):
+        return None
+    name = _prompt_field(raw.get("name"), 40)
+    meaning = _prompt_field(raw.get("meaning"), 160)
+    if not name or not meaning:
+        return None
+    return {"name": name, "meaning": meaning, "evidence": _sensor_evidence(bundle)}
+
+
+def _decide_fragment_name_meaning(theme, bundle, project_context=None):
+    prompt = _build_fragment_decision_prompt(theme, bundle, project_context=project_context)
+    try:
+        return _sanitize_fragment_decision(
+            _ollama_json(prompt, timeout=45, temperature=0),
+            bundle=bundle,
+        )
+    except Exception as e:
+        return {"name": None, "meaning": None, "evidence": [], "error": str(e)}
 
 
 def _requery_indoor_signal(scene, aliases, fid=None):
@@ -1284,12 +1482,20 @@ def _judge_one_chunk(theme_ko, chunk, chunk_no):
         it = by_n.get(j, {})
         raw_t = bool(it.get("t"))
         normalized_t = _normalize_judge_theme_decision(theme_ko, b["scene"], raw_t, fid=b["fid"])
+        context_applied = False
+        context_reason = None
+        if not normalized_t and _context_matches_theme(b, theme_ko) and not _local_contradicts_theme(b, theme_ko):
+            normalized_t = True
+            context_applied = True
+            context_reason = "source_context"
         results.append({
             "fid": b["fid"], "time": f'{b["start"]}~{b["end"]}s',
             "scene": b["scene"],
             "is_theme": normalized_t,
             "batch_raw_is_theme": raw_t,
             "requery_applied": bool(normalized_t and not raw_t),
+            "context_applied": context_applied,
+            "context_reason": context_reason,
             "confidence": None, "recheck": False, "reason": None,
         })
     return results
@@ -1299,7 +1505,7 @@ _BATCH_JUDGE_CACHE = {}  # [SPEED-②] 조각 단위 배치판단 캐시 — 영
 
 
 def _batch_cache_key(theme_ko, b):
-    return (b.get("fid"), theme_ko, _scene_sensor_hash(b.get("scene")),
+    return (b.get("fid"), theme_ko, _bundle_sensor_hash(b),
             HUB_MODEL, _SINGLE_CONFIRM_PROMPT_VERSION, _golden_state_sig())
 
 
@@ -1385,6 +1591,13 @@ def _scene_sensor_hash(scene):
     return hashlib.sha256(normalized.encode("utf-8")).hexdigest()[:16]
 
 
+def _bundle_sensor_hash(bundle):
+    scene = _prompt_field(bundle.get("scene"), 240).lower()
+    speech = _prompt_field(bundle.get("speech"), 120).lower()
+    context = _prompt_field(_bundle_context_text(bundle), 320).lower()
+    return hashlib.sha256(f"scene:{scene}\nspeech:{speech}\ncontext:{context}".encode("utf-8")).hexdigest()[:16]
+
+
 def _golden_state_sig():
     """[AUDIT-⑽] golden_cases.json 변경 시 캐시 무효화용 서명 (mtime+size).
     골든 추가/수정이 재시작 없이도 판정 캐시에 반영되게 한다."""
@@ -1399,7 +1612,7 @@ def _single_cache_key(theme_ko, bundle):
     return (
         bundle.get("fid"),
         theme_ko,
-        _scene_sensor_hash(bundle.get("scene")),
+        _bundle_sensor_hash(bundle),
         HUB_MODEL,
         _SINGLE_CONFIRM_PROMPT_VERSION,
         _golden_state_sig(),
@@ -1575,8 +1788,10 @@ def plan_edit(source_ids, instruction_text, batch=8, verbose=True,
     con = sqlite3.connect(DB_PATH)
     bundles = []
     fid_to_source = {}
+    _source_context = _load_context_for_sources(con, source_ids)
     for sid in source_ids:
         _loaded = load_bundles(con, sid)
+        _apply_context_to_bundles(_loaded, _source_context)
         bundles.extend(_loaded)
         for _b in _loaded:
             _fid = _b.get("fid")
@@ -1637,7 +1852,7 @@ def plan_edit(source_ids, instruction_text, batch=8, verbose=True,
     _plan_key = None
     if _plan_cache_on:
         _pool_sig = hashlib.sha256(
-            "|".join(sorted(f'{b["fid"]}:{_scene_sensor_hash(b.get("scene"))}' for b in bundles)).encode("utf-8")
+            "|".join(sorted(f'{b["fid"]}:{_bundle_sensor_hash(b)}' for b in bundles)).encode("utf-8")
         ).hexdigest()[:16]
         _plan_key = (("prepass1", os.getenv("CCUT_TAG_PREPASS", "1")),
                      tuple(source_ids), theme, is_exclude, intent.get("count"),
@@ -1763,9 +1978,28 @@ def plan_edit(source_ids, instruction_text, batch=8, verbose=True,
                     f"judge_kept={len(kept_fids)}, ledger_kept={len(ledger_kept)}, total={len(kept)}}}"
                 )
     keep = []
+    _bundle_by_fid = {b.get("fid"): b for b in bundles}
+    _decision_enabled = os.getenv("CCUT_QWEN_FRAGMENT_DECISION", "1") not in ("0", "false", "False")
+    try:
+        _decision_max = max(0, int(os.getenv("CCUT_FRAGMENT_DECISION_MAX", "3")))
+    except Exception:
+        _decision_max = 3
+    _decision_count = 0
     for j in kept:
         _entry = {"fid": j["fid"], "time": j["time"], "scene": j["scene"],
                   "why": j.get("reason")}
+        _bundle = _bundle_by_fid.get(j["fid"])
+        if _bundle and _bundle.get("speech"):
+            _entry["speech"] = _bundle.get("speech")
+        if _decision_enabled and _decision_count < _decision_max and _bundle:
+            _decision = _decide_fragment_name_meaning(
+                theme,
+                _bundle,
+                project_context={"mode": "exclude" if is_exclude else "keep"},
+            )
+            if _decision:
+                _entry["qwen_decision"] = _decision
+                _decision_count += 1
         for _k in (
             "evidence_text",
             "rubric_evidence_hits",
