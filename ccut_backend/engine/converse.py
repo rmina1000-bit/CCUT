@@ -18,15 +18,21 @@
   chat_summary는 이 모듈(규칙 층)이 쓴다. 스키마 변경 없음.
 """
 import json
+import datetime
 import os
 import re
 import sqlite3
+from zoneinfo import ZoneInfo
 
 from engine import hub
 from engine import revision as _rev
 from engine import timeline_store
 
 _ACTIONS = ("run_proposal", "revise", "retrigger", "clear_intent", "answer", "clarify")
+
+
+def _now_kst():
+    return datetime.datetime.now(ZoneInfo("Asia/Seoul")).strftime("%Y-%m-%d %H:%M:%S KST")
 
 
 def _rubric_enabled():
@@ -188,7 +194,8 @@ def state_snapshot(program_id, current_view=None):
     current_view(현재 화면 조각맵의 라이브 SF 목록)를 진실로 삼는다 — 소환·편집으로
     화면이 DB 최신과 어긋난 상태에서도 큐원이 실제 화면을 본다. DB proposals는
     A/B 존재·소스 폴백 용도로만 남긴다."""
-    snap = {"proposals": {}, "pool": 0, "active_intent": None,
+    snap = {"proposals": {}, "pool": 0, "source_count": 0,
+            "now": _now_kst(), "active_intent": None,
             "target_length": None, "count_pref": None, "current": None}
     cv = current_view or {}
     if isinstance(cv, dict) and cv.get("count") is not None:
@@ -219,6 +226,9 @@ def state_snapshot(program_id, current_view=None):
         snap["pool"] = con.execute(
             "SELECT COUNT(*) FROM semantic_fragments WHERE source_id IN "
             "(SELECT source_id FROM project_sources WHERE program_id=?)",
+            (program_id,)).fetchone()[0]
+        snap["source_count"] = con.execute(
+            "SELECT COUNT(*) FROM project_sources WHERE program_id=?",
             (program_id,)).fetchone()[0]
         # [S-4] 소스별 조각 수 — "조각 몇개?" 메타질문에 숫자로 즉답할 재료
         snap["per_source"] = [
@@ -251,7 +261,8 @@ def state_snapshot(program_id, current_view=None):
 def _snap_block(snap):
     per = snap.get("per_source") or []
     # [S-4] 원본 수와 조각 수를 분리 명시 — "영상 4개"를 조각 수로 오답하던 사건 차단
-    pool_line = (f"원본 영상 {len(per)}개 · 조각(장면) 총 {snap['pool']}개"
+    source_count = snap.get("source_count", len(per))
+    pool_line = (f"원본 영상 {source_count}개 · 조각(장면) 총 {snap['pool']}개"
                  + (f" (소스별 {', '.join(str(n) for _s, n in per)}개)" if per else ""))
     # [D+E] '지금 안'은 라이브 current(화면 조각맵)를 진실로. 없으면 제안 없음.
     cur = snap.get("current")
@@ -260,7 +271,13 @@ def _snap_block(snap):
         now_line = f"지금 화면 안({m}안) {cur['count']}조각 {cur['duration']}초"
     else:
         now_line = "제안 아직 없음(전체 조각에서 고를 차례)"
-    lines = [pool_line, now_line]
+    gauge_line = (
+        f"계기판: source_count={source_count}(원본 영상 수), "
+        f"semantic_fragment_count={snap['pool']}(분석 조각/장면 수), "
+        f"edited_visible_count={(cur or {}).get('count') if cur else '없음'}(현재 화면 편집·표시 조각 수), "
+        f"now={snap.get('now')}(KST 로컬 시계)"
+    )
+    lines = [pool_line, now_line, gauge_line]
     if snap.get("active_intent"):
         lines.append(f"적용 중 기준: {snap['active_intent']}")
     if snap.get("target_length"):
@@ -298,7 +315,11 @@ def build_decide_prompt(user_text, hist, snap):
         "복잡한 요청에도 2~3문장까지 (설교·장황 금지). 인사·감사·짧은 반응에는 "
         "한 문장으로만 답하고 편집 이야기를 먼저 꺼내지 마라.\n"
         "3. 사용자의 문장을 그대로 되풀이하지 마라 — 네가 이해한 바를 네 말로.\n"
-        "4. 상태 질문(왜/몇 개/뭐가)에는 [상태]의 숫자로 설명하고 다음 선택지를 하나 제시하라 (action=answer).\n"
+        "4. 상태 질문(왜/몇 개/뭐가)에는 [상태]의 계기판 숫자로만 답하라 (action=answer). "
+        "'오늘/날짜/시간/몇 일'은 now=KST 로컬 시계만 읽어 답하라. "
+        "'영상 몇 개/원본 몇 개'는 source_count=원본 영상 수만 답하고 조각 수를 섞지 마라. "
+        "'조각 몇 개/장면 몇 개/분석 조각'은 semantic_fragment_count와 edited_visible_count를 구분해 답하라. "
+        "'지금 안/현재 화면/편집된 조각'은 edited_visible_count만 답하라.\n"
         "5. 위임(니가 알아서/적당히/맡길게)이면 [상태]를 보고 네가 기준·개수를 정해 "
         "run_proposal 하고, 말로는 네 계획을 밝혀라. 절대 되묻지 마라.\n"
         "6. 분량 요구(여러 개로/길게/짧게/N분/N개)는 count·target_length 숫자로 옮겨 담아라.\n"
@@ -313,6 +334,12 @@ def build_decide_prompt(user_text, hist, snap):
         '{"action":"answer","params":{}}\n'
         "전체 조각은 26개예요(원본 영상 7개를 장면 단위로 나눈 수). 지금 안에는 그중 "
         "3개를 골라 두었습니다.\n"
+        "사용자: 영상 몇 개야?\n"
+        '{"action":"answer","params":{}}\n'
+        "원본 영상은 7개입니다.\n"
+        "사용자: 조각 몇 개야?\n"
+        '{"action":"answer","params":{}}\n'
+        "분석 조각은 26개이고, 지금 화면 안에는 3조각이 있습니다.\n"
         "사용자: 조각은 왜 3개만이야?\n"
         '{"action":"answer","params":{}}\n'
         "지금 기준에 확실히 맞는 조각만 남겨서 3개가 됐어요. 기준을 넓히거나 개수를 "
