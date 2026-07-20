@@ -28,6 +28,20 @@ DB_PATH = os.path.join(BACKEND_DIR, "ccut_app.db")
 
 OLLAMA_URL = os.getenv("CCUT_OLLAMA_URL", "http://127.0.0.1:11434")
 HUB_MODEL = os.getenv("CCUT_HUB_MODEL", os.getenv("CCUT_CMD_MODEL", "qwen2.5:7b-instruct"))
+# [QWEN-R2 STAGE B 국장 결정 2026-07-18] 서빙 전환 보류 — Ollama 유지 + num_ctx 16384
+# 명시(실측 KV 896MiB·VRAM 예산 내) + keep_alive 연장(콜드 재로드 +6.5s 실측 관리).
+# 전 호출 단일 ctx 유지 — 요청별 num_ctx가 다르면 Ollama가 러너를 재적재한다(스왑 비용).
+OLLAMA_NUM_CTX = int(os.getenv("CCUT_OLLAMA_NUM_CTX", "16384"))
+OLLAMA_KEEP_ALIVE = os.getenv("CCUT_OLLAMA_KEEP_ALIVE", "30m")
+# [⑨ 투기 연결부 — OFF 고정(국장 결정)] Ollama는 draft 미지원(B 실측: 효과 0)이라
+# 이 플래그는 연결부일 뿐 동작하지 않는다. llama-server 전환 시 이 지점에서 배선.
+SPECULATIVE_DRAFT = os.getenv("CCUT_SPECULATIVE", "0") in ("1", "true", "True")
+# [⑧ 직렬화] 판사·추출·대화·VL 계열이 같은 GPU를 공유 — hub 경유 호출을 전부 한 줄로
+# 세운다 (기본 ON, CCUT_OLLAMA_SERIALIZE=0 가역). VL 워커(qwen_vl_visual_worker)는
+# 별도 모듈 호출이라 이 락 밖 — 스왑 겹침은 판사/대화 쪽을 세워서 완화한다.
+import threading as _threading
+_OLLAMA_LOCK = _threading.Lock()
+_SERIALIZE = os.getenv("CCUT_OLLAMA_SERIALIZE", "1") not in ("0", "false", "False")
 _SINGLE_CONFIRM_PROMPT_VERSION = "judge_lean_v1"
 _SINGLE_CONFIRM_CACHE = {}
 _PLAN_CACHE = {}  # [R2-A 후속] plan_edit 결과 캐시 (A/B 이중 호출 중복 제거, CCUT_SINGLE_CACHE 가역)
@@ -69,47 +83,67 @@ def _ollama_json(prompt: str, timeout: int = 60, temperature: float = 0) -> dict
         "prompt": prompt,
         "stream": False,
         "format": "json",
-        "keep_alive": "10m",
-        "options": {"temperature": temperature, "num_predict": 1024},
+        "keep_alive": OLLAMA_KEEP_ALIVE,
+        "options": {"temperature": temperature, "num_predict": 1024,
+                    "num_ctx": OLLAMA_NUM_CTX},
     }).encode("utf-8")
     req = urllib.request.Request(
         OLLAMA_URL + "/api/generate", data=body,
         headers={"Content-Type": "application/json"},
     )
-    with urllib.request.urlopen(req, timeout=timeout) as resp:
-        data = json.loads(resp.read().decode("utf-8"))
+    if _SERIALIZE:
+        with _OLLAMA_LOCK:
+            with urllib.request.urlopen(req, timeout=timeout) as resp:
+                data = json.loads(resp.read().decode("utf-8"))
+    else:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
     return json.loads(data.get("response", "{}") or "{}")
 
 
 def _ollama_stream(prompt: str, timeout: int = 60, temperature: float = 0.7,
-                   num_predict: int = 512):
+                   num_predict: int = 512, top_p: float = None, top_k: int = None):
     """[F2 스트리밍] 토큰 단위 생성기 — /api/generate stream=true (NDJSON).
-    format 미지정(자유 텍스트) — 대화 reply 전용. 판사/추출(format:json) 경로 무접촉."""
+    format 미지정(자유 텍스트) — 대화 reply 전용. 판사/추출(format:json) 경로 무접촉.
+    [⑥ 샘플링] 대화 프로파일(top_p/top_k)은 호출측이 명시 — 판사 결정론과 분리.
+    [⑧ 직렬화] 스트림 전체가 락 구간 — 생성 중 판사/추출이 끼어들지 않는다."""
+    opts = {"temperature": temperature, "num_predict": num_predict,
+            "num_ctx": OLLAMA_NUM_CTX}
+    if top_p is not None:
+        opts["top_p"] = top_p
+    if top_k is not None:
+        opts["top_k"] = top_k
     body = json.dumps({
         "model": HUB_MODEL,
         "prompt": prompt,
         "stream": True,
-        "keep_alive": "10m",
-        "options": {"temperature": temperature, "num_predict": num_predict},
+        "keep_alive": OLLAMA_KEEP_ALIVE,
+        "options": opts,
     }).encode("utf-8")
     req = urllib.request.Request(
         OLLAMA_URL + "/api/generate", data=body,
         headers={"Content-Type": "application/json"},
     )
-    with urllib.request.urlopen(req, timeout=timeout) as resp:
-        for line in resp:
-            line = line.strip()
-            if not line:
-                continue
-            try:
-                data = json.loads(line.decode("utf-8"))
-            except Exception:
-                continue
-            chunk = data.get("response") or ""
-            if chunk:
-                yield chunk
-            if data.get("done"):
-                break
+    if _SERIALIZE:
+        _OLLAMA_LOCK.acquire()
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            for line in resp:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    data = json.loads(line.decode("utf-8"))
+                except Exception:
+                    continue
+                chunk = data.get("response") or ""
+                if chunk:
+                    yield chunk
+                if data.get("done"):
+                    break
+    finally:
+        if _SERIALIZE:
+            _OLLAMA_LOCK.release()
 
 
 def _build_prompt(theme_ko, theme_en, chunk):
@@ -205,6 +239,7 @@ _VOCAB_GUARD = ("배경음악", "배경 음악")
 _NUM_KO = {"한": 1, "두": 2, "세": 3, "네": 4, "다섯": 5, "여섯": 6,
            "일곱": 7, "여덟": 8, "아홉": 9, "열": 10}
 _EXCLUDE_MARK = ("빼", "제외", "말고", "없이", "줄여", "줄이", "덜")  # [R-b①] 감축 동사 = exclude 극성
+_RUBRIC_EXCLUDE_MARK_EXTRA = ("없는", "없게", "없도록", "제외한")
 
 
 def _det_count(t):
@@ -353,17 +388,32 @@ _COMPOUND_VOCAB_EXTRA = [
 ]
 _CLAUSE_MARKS = ("제외하고", "빼고", "말고", "없이", "남기고", "그리고", "하고",
                  ",", ".", "+", "/", "랑", "와", "과", "인데", "지만", "보다")
+_RUBRIC_COMPOUND_VOCAB_EXTRA = ("물",)
+_RUBRIC_CLAUSE_MARK_EXTRA = ("없는", "없게", "없도록")
+
+
+def _active_exclude_marks():
+    return _EXCLUDE_MARK + (_RUBRIC_EXCLUDE_MARK_EXTRA if _rubric_enabled() else ())
+
+
+def _active_clause_marks():
+    return _CLAUSE_MARKS + (_RUBRIC_CLAUSE_MARK_EXTRA if _rubric_enabled() else ())
+
+
+def _active_compound_vocab_extra():
+    return _COMPOUND_VOCAB_EXTRA + (list(_RUBRIC_COMPOUND_VOCAB_EXTRA) if _rubric_enabled() else [])
 
 
 def _split_clauses(t):
     """극성 경계('빼고','남기고' 등)와 접속 기호에서 문장을 절로 분리."""
-    parts = re.split("(" + "|".join(re.escape(m) for m in _CLAUSE_MARKS) + ")", t)
+    marks = _active_clause_marks()
+    parts = re.split("(" + "|".join(re.escape(m) for m in marks) + ")", t)
     clauses, buf = [], ""
     for part in parts:
         if not part:
             continue
         buf += part
-        if part in _CLAUSE_MARKS:
+        if part in marks:
             clauses.append(buf.strip())
             buf = ""
     if buf.strip():
@@ -399,6 +449,12 @@ def _compound_enabled():
     return os.getenv("CCUT_COMPOUND_INTENT", "1") not in ("0", "false", "False")
 
 
+def _rubric_enabled():
+    # [RUBRIC-1] 기본 OFF — 켜지기 전까진 아래 plan_edit의 compound-exclude 보정
+    # 코드가 아예 실행되지 않는다(기존 동작 100% 무변).
+    return os.getenv("CCUT_RUBRIC_ENABLED") in ("1", "true", "True")
+
+
 def parse_compound_intent(t, vocab=None):
     """한 문장 안의 keep/exclude 를 절 단위로 분리 판정.
     반환: {keep_terms:[], exclude_terms:[], keep_clauses:[], count, found}
@@ -410,7 +466,7 @@ def parse_compound_intent(t, vocab=None):
         t = t.replace(_adv, " ")
     if vocab is None:
         # 인물 이름/애칭도 절 단위 극성 대상("정은한는 빼고 한미숙 위주로")
-        vocab = sorted(set(_THEME_VOCAB) | set(_COMPOUND_VOCAB_EXTRA) | set(_named_persons()),
+        vocab = sorted(set(_THEME_VOCAB) | set(_active_compound_vocab_extra()) | set(_named_persons()),
                        key=len, reverse=True)
     keep_terms, exclude_terms, keep_clauses = [], [], []
     for clause in _split_clauses(t):
@@ -418,7 +474,7 @@ def parse_compound_intent(t, vocab=None):
         if not hits:
             continue
         # 'A보다' = A를 뒤로 미룸(감점) → exclude 취급 (sim v3와 동일)
-        local_excl = any(m in clause for m in _EXCLUDE_MARK) or clause.endswith("보다")
+        local_excl = any(m in clause for m in _active_exclude_marks()) or clause.endswith("보다")
         target = exclude_terms if local_excl else keep_terms
         for h in hits:
             if h not in target:
@@ -525,11 +581,341 @@ def _scene_alias_hits(scene, aliases):
     return [a for a in aliases if a and a.lower() in text]
 
 
+_RUBRIC_TEXT_ALIASES = {
+    "딸기": ("strawberry",),
+    "박수": ("clapping", "applause", "applaud"),
+    "아빠": ("father", "dad"),
+    "케이크": ("cake",),
+    "촛불": ("candle",),
+    "식당": ("restaurant", "dining"),
+    "놀이공원": ("amusement park", "theme park"),
+}
+
+
+_RUBRIC_ABSTRACT_KEEP_ALIASES = {
+    "풍경": ("풍경", "경치", "landscape", "scenery", "scenic", "panorama", "view"),
+    "경치": ("경치", "풍경", "landscape", "scenery", "scenic", "panorama", "view"),
+}
+
+
+def _evidence_text(item):
+    parts = [
+        item.get("scene"),
+        item.get("speech"),
+        item.get("evidence_text"),
+        item.get("search_text"),
+    ]
+    semantic = item.get("semantic") if isinstance(item.get("semantic"), dict) else {}
+    intelligence = item.get("intelligence") if isinstance(item.get("intelligence"), dict) else {}
+    parts.extend([
+        semantic.get("transcript"),
+        semantic.get("description"),
+        intelligence.get("transcript"),
+        intelligence.get("visual_desc"),
+    ])
+    return " ".join(str(p) for p in parts if p)
+
+
+def _rubric_term_aliases(term):
+    aliases = [str(term or "").strip()]
+    aliases.extend(_RUBRIC_TEXT_ALIASES.get(str(term or "").strip(), ()))
+    seen = set()
+    out = []
+    for alias in aliases:
+        key = alias.lower()
+        if alias and key not in seen:
+            seen.add(key)
+            out.append(alias)
+    return tuple(out)
+
+
+def _rubric_evidence_hits(term, item):
+    text = _evidence_text(item).lower()
+    return [a for a in _rubric_term_aliases(term) if a.lower() in text]
+
+
+def _rubric_abstract_evidence_hits(term, item):
+    aliases = _RUBRIC_ABSTRACT_KEEP_ALIASES.get(str(term or "").strip(), ())
+    text = _evidence_text(item).lower()
+    return [a for a in aliases if a.lower() in text]
+
+
+def _rubric_guard_abstract_judged(theme, judged, bundles, verbose=True):
+    if str(theme or "").strip() not in _RUBRIC_ABSTRACT_KEEP_ALIASES:
+        return judged
+    by_fid = {b.get("fid"): b for b in bundles}
+    guarded = []
+    dropped = 0
+    for item in judged:
+        if not item.get("is_theme"):
+            guarded.append(item)
+            continue
+        bundle = by_fid.get(item.get("fid")) or item
+        hits = _rubric_abstract_evidence_hits(theme, bundle)
+        if hits:
+            item["rubric_abstract_hits"] = hits
+            guarded.append(item)
+            continue
+        dropped += 1
+        item = dict(item)
+        item["is_theme"] = False
+        item["rubric_abstract_guard"] = "no_explicit_evidence"
+        item["reason"] = "rubric abstract evidence guard"
+        guarded.append(item)
+    if dropped and verbose:
+        print(
+            f"[RUBRIC-1 ABSTRACT-GUARD] keep={theme!r} "
+            f"dropped={dropped} no_explicit_evidence"
+        )
+    return guarded
+
+
+_RUBRIC_RRF_K = 60
+
+
+def _rubric_bm25_tokens(text):
+    tokens = []
+    for raw in re.findall(r"[0-9A-Za-z가-힣]+", str(text or "").lower()):
+        if not raw:
+            continue
+        tokens.append(raw)
+        if re.search(r"[가-힣]", raw):
+            max_n = min(4, len(raw))
+            for n in range(2, max_n + 1):
+                for i in range(0, len(raw) - n + 1):
+                    tokens.append(raw[i:i + n])
+    return tokens
+
+
+def _rubric_query_tokens(term):
+    aliases = []
+    aliases.extend(_rubric_term_aliases(term))
+    aliases.extend(_aliases_for_theme(term))
+    seen_alias = set()
+    tokens = []
+    seen_token = set()
+    for alias in aliases:
+        key = str(alias or "").strip().lower()
+        if not key or key in seen_alias:
+            continue
+        seen_alias.add(key)
+        for tok in _rubric_bm25_tokens(key):
+            if tok not in seen_token:
+                seen_token.add(tok)
+                tokens.append(tok)
+    return tokens
+
+
+def _rubric_bm25_rank(term, bundles):
+    query_tokens = _rubric_query_tokens(term)
+    if not query_tokens or not bundles:
+        return [], {"query_tokens": query_tokens, "top": []}
+
+    import math
+    from collections import Counter
+
+    docs = []
+    df = {}
+    total_len = 0
+    for b in bundles:
+        tokens = _rubric_bm25_tokens(_evidence_text(b))
+        counts = Counter(tokens)
+        docs.append({"bundle": b, "counts": counts, "length": len(tokens)})
+        total_len += len(tokens)
+        for tok in set(tokens):
+            df[tok] = df.get(tok, 0) + 1
+
+    n_docs = len(docs)
+    avg_len = (total_len / n_docs) if n_docs else 0.0
+    k1 = 1.5
+    b_param = 0.75
+    ranked = []
+    for doc in docs:
+        score = 0.0
+        matched = []
+        length = doc["length"] or 1
+        for tok in query_tokens:
+            freq = doc["counts"].get(tok, 0)
+            if not freq:
+                continue
+            denom = freq + k1 * (1 - b_param + b_param * (length / (avg_len or 1.0)))
+            idf = math.log(1 + (n_docs - df.get(tok, 0) + 0.5) / (df.get(tok, 0) + 0.5))
+            score += idf * (freq * (k1 + 1)) / denom
+            matched.append(tok)
+        if score > 0:
+            bundle = doc["bundle"]
+            ranked.append({
+                "fid": bundle.get("fid"),
+                "score": score,
+                "matched_tokens": matched,
+                "bundle": bundle,
+            })
+    ranked.sort(key=lambda x: (-x["score"], str(x["fid"] or "")))
+    diag = {
+        "query_tokens": query_tokens,
+        "top": [
+            {
+                "fid": r["fid"],
+                "score": round(r["score"], 4),
+                "matched_tokens": r["matched_tokens"][:8],
+            }
+            for r in ranked[:8]
+        ],
+    }
+    return ranked, diag
+
+
+def _rubric_rrf_fuse(rankings, k=_RUBRIC_RRF_K):
+    fused = {}
+    sources = {}
+    for source_name, ranked_fids in rankings:
+        for idx, fid in enumerate(ranked_fids, 1):
+            if not fid:
+                continue
+            fused[fid] = fused.get(fid, 0.0) + 1.0 / (k + idx)
+            sources.setdefault(fid, []).append(source_name)
+    return [
+        {"fid": fid, "rrf": score, "sources": sources.get(fid, [])}
+        for fid, score in sorted(fused.items(), key=lambda x: (-x[1], str(x[0])))
+    ]
+
+
+def _rubric_bundle_keep_item(bundle, reason, extra=None):
+    item = {
+        "fid": bundle["fid"],
+        "time": f'{bundle["start"]}~{bundle["end"]}s',
+        "scene": bundle["scene"],
+        "speech": bundle.get("speech"),
+        "evidence_text": bundle.get("evidence_text") or _evidence_text(bundle),
+        "is_theme": True,
+        "reason": reason,
+    }
+    if extra:
+        item.update(extra)
+    return item
+
+
+def _rubric_hybrid_keep(theme, deterministic_keep, judged, bundles, count=None, verbose=True):
+    bundle_by_fid = {b.get("fid"): b for b in bundles}
+    deterministic_by_fid = {
+        b.get("fid"): b for b in deterministic_keep if b.get("fid")
+    }
+    judged_true = [j for j in judged if j.get("is_theme") and j.get("fid")]
+    judged_by_fid = {j.get("fid"): j for j in judged_true}
+    bm25_ranked, bm25_diag = _rubric_bm25_rank(theme, bundles)
+    bm25_by_fid = {r["fid"]: r for r in bm25_ranked if r.get("fid")}
+
+    fused = _rubric_rrf_fuse([
+        ("bm25", [r["fid"] for r in bm25_ranked]),
+        ("llm", [j["fid"] for j in judged_true]),
+        ("evidence", [b["fid"] for b in deterministic_keep if b.get("fid")]),
+    ])
+    if not fused:
+        return [], {
+            "bm25": bm25_diag,
+            "rrf_top": [],
+            "selected": [],
+            "selected_count": 0,
+        }
+
+    selected = fused
+    if isinstance(count, int) and count > 0:
+        selected = selected[:count]
+    kept = []
+    for fused_item in selected:
+        fid = fused_item["fid"]
+        if fid in deterministic_by_fid:
+            b = deterministic_by_fid[fid]
+            hits = b.get("rubric_evidence_hits") or _rubric_evidence_hits(theme, b)
+            kept.append(_rubric_bundle_keep_item(
+                b, "rubric hybrid bm25/evidence match",
+                {
+                    "rubric_evidence_hits": hits,
+                    "rubric_rrf": round(fused_item["rrf"], 6),
+                    "rubric_rrf_sources": fused_item["sources"],
+                },
+            ))
+            continue
+        if fid in bm25_by_fid:
+            b = bm25_by_fid[fid]["bundle"]
+            kept.append(_rubric_bundle_keep_item(
+                b, "rubric hybrid bm25 match",
+                {
+                    "rubric_bm25_score": round(bm25_by_fid[fid]["score"], 6),
+                    "rubric_bm25_tokens": bm25_by_fid[fid]["matched_tokens"][:8],
+                    "rubric_rrf": round(fused_item["rrf"], 6),
+                    "rubric_rrf_sources": fused_item["sources"],
+                },
+            ))
+            continue
+        if fid in judged_by_fid:
+            item = dict(judged_by_fid[fid])
+            item["rubric_rrf"] = round(fused_item["rrf"], 6)
+            item["rubric_rrf_sources"] = fused_item["sources"]
+            kept.append(item)
+            continue
+        b = bundle_by_fid.get(fid)
+        if b:
+            kept.append(_rubric_bundle_keep_item(
+                b, "rubric hybrid fallback",
+                {
+                    "rubric_rrf": round(fused_item["rrf"], 6),
+                    "rubric_rrf_sources": fused_item["sources"],
+                },
+            ))
+
+    diag = {
+        "bm25": bm25_diag,
+        "rrf_top": [
+            {
+                "fid": item["fid"],
+                "rrf": round(item["rrf"], 6),
+                "sources": item["sources"],
+            }
+            for item in fused[:8]
+        ],
+        "selected": [item.get("fid") for item in kept],
+        "selected_count": len(kept),
+    }
+    if verbose:
+        print(
+            f"[RUBRIC-1 HYBRID] keep={theme!r} "
+            f"bm25={len(bm25_ranked)} llm={len(judged_true)} "
+            f"evidence={len(deterministic_keep)} selected={len(kept)} "
+            f"count={count}"
+        )
+    return kept, diag
+
+
+def _rubric_keep_prepass(theme, bundles, verbose=True):
+    matched = []
+    remaining = []
+    for b in bundles:
+        hits = _rubric_evidence_hits(theme, b)
+        if hits:
+            enriched = dict(b)
+            enriched["evidence_text"] = _evidence_text(b)
+            enriched["rubric_evidence_hits"] = hits
+            matched.append(enriched)
+        else:
+            remaining.append(b)
+    if matched and verbose:
+        print(
+            f"[RUBRIC-1 EVIDENCE-PREPASS] keep={theme!r} "
+            f"matched={len(matched)} judge_rest={len(remaining)}"
+        )
+    return matched, remaining
+
+
 def _self_check_item(theme, is_exclude, item):
     scene = _scene_text(item)
-    text = scene.lower()
+    evidence = (_evidence_text(item) or scene) if _rubric_enabled() else scene
+    text = evidence.lower()
     aliases = _aliases_for_theme(theme)
-    has_theme = _scene_has_any(scene, aliases)
+    has_theme = (
+        (_rubric_enabled() and bool(item.get("rubric_evidence_hits")))
+        or _scene_has_any(evidence, aliases)
+    )
 
     if theme == "실내":
         has_indoor = _scene_has_any(scene, _INDOOR_POSITIVE)
@@ -1128,7 +1514,7 @@ def _confirm_keep_candidates_single(theme_ko, judged, bundles):
 
 
 def plan_edit(source_ids, instruction_text, batch=8, verbose=True,
-              candidate_fragment_ids=None):
+              candidate_fragment_ids=None, rubric=None):
     """[P3a] 명령+조각풀 → 편집계획. 분해 파이프라인:
       1) extract_intent: 명령 → {keep,exclude,count} (분류만)
       2) judge_theme(테마): 클립별 keep/exclude (검증된 P1 판단)
@@ -1140,7 +1526,32 @@ def plan_edit(source_ids, instruction_text, batch=8, verbose=True,
     """
     if isinstance(source_ids, str):
         source_ids = [source_ids]
-    intent = extract_intent(instruction_text)
+    supplied_rubric = None
+    if rubric and _rubric_enabled():
+        try:
+            from engine import edit_rubric as _edit_rubric
+            supplied_rubric = _edit_rubric.EditRubric.from_qwen_json(
+                rubric, raw_goal=instruction_text
+            )
+            _mentioned_count = _det_count(instruction_text or "")
+            if supplied_rubric.count is not None:
+                supplied_rubric.count = _mentioned_count
+        except Exception as _rubric_err:
+            supplied_rubric = None
+            if verbose:
+                print(f"[RUBRIC-1][WARN] supplied rubric rejected ({_rubric_err})")
+    if supplied_rubric is not None:
+        _rk = supplied_rubric.required_keep_terms()
+        _rx = supplied_rubric.required_exclude_terms()
+        intent = {"keep": (_rk[0] if _rk else None),
+                  "exclude": (_rx[0] if _rx else None),
+                  "count": supplied_rubric.count,
+                  "keep_terms": list(_rk),
+                  "exclude_terms": list(_rx),
+                  "keep_clauses": [instruction_text] if _rk else []}
+    else:
+        intent = extract_intent(instruction_text)
+
     if verbose:
         print(f"[QWEN_ROUTE] route=hub_plan model={HUB_MODEL}")
         print(f"[HUB-PLAN] intent={intent}")
@@ -1234,8 +1645,11 @@ def plan_edit(source_ids, instruction_text, batch=8, verbose=True,
                      ("ledger", _ledger_sig,
                       hashlib.sha256(_ledger_text.encode("utf-8")).hexdigest()[:12])
                      if _ledger_enabled else None,
-                     ("compound", tuple(_compound["keep_terms"]), tuple(_compound["exclude_terms"]))
-                     if _compound else None)
+                      ("compound", tuple(_compound["keep_terms"]), tuple(_compound["exclude_terms"]))
+                      if _compound else None,
+                      ("rubric", hashlib.sha256(
+                          json.dumps(supplied_rubric.to_dict(), ensure_ascii=False, sort_keys=True).encode("utf-8")
+                      ).hexdigest()[:16]) if supplied_rubric is not None else None)
         _hit = _PLAN_CACHE.get(_plan_key)
         if _hit is not None:
             if verbose:
@@ -1251,6 +1665,8 @@ def plan_edit(source_ids, instruction_text, batch=8, verbose=True,
     # keep·exclude 양분기 대칭: scene 태그 "(인물:테마)"/"(장소:테마)" 정확 일치 = is_theme 확정,
     # 판사는 태그 부재 조각만 심사. CCUT_TAG_PREPASS=0으로 가역(기본 ON).
     _prepass = []
+    _rubric_prepass = []
+    _rubric_hybrid_diag = None
     _judge_bundles = bundles
     if os.getenv("CCUT_TAG_PREPASS", "1") not in ("0", "false", "False"):
         _tag_re = re.compile(r"\((?:인물|장소):" + re.escape(theme) + r"\)")
@@ -1265,7 +1681,15 @@ def plan_edit(source_ids, instruction_text, batch=8, verbose=True,
                     # [§5] 규칙이 제외한 조각은 목록 원시로 남긴다 (조용한 제외 금지)
                     for _b in _prepass:
                         print(f"[R-a PREPASS] excluded {_b['fid']} (태그 정확 일치)")
+    if supplied_rubric is not None and not is_exclude:
+        _rubric_prepass, _judge_bundles = _rubric_keep_prepass(
+            theme, _judge_bundles, verbose=verbose
+        )
     judged = _judge_batch(theme, _judge_bundles, batch=_jbatch)
+    if supplied_rubric is not None and not is_exclude:
+        judged = _rubric_guard_abstract_judged(
+            theme, judged, _judge_bundles, verbose=verbose
+        )
     if verbose:
         print(f"[HUB-PLAN] judged {len(judged)}frags batch={_jbatch} "
               f"calls={(len(judged) + _jbatch - 1) // _jbatch} time={_t.time() - _t0:.1f}s")
@@ -1275,9 +1699,19 @@ def plan_edit(source_ids, instruction_text, batch=8, verbose=True,
         tag = f"exclude '{theme}'"
     else:
         _confirm_keep_candidates_single(theme, judged, _judge_bundles)
-        kept = [{"fid": b["fid"], "time": f'{b["start"]}~{b["end"]}s', "scene": b["scene"],
-                 "is_theme": True, "reason": "태그 정확 일치(규칙)"} for b in _prepass] \
-               + [j for j in judged if j["is_theme"]]
+        if supplied_rubric is not None:
+            kept, _rubric_hybrid_diag = _rubric_hybrid_keep(
+                theme,
+                list(_prepass) + list(_rubric_prepass),
+                judged,
+                bundles,
+                count=intent.get("count"),
+                verbose=verbose,
+            )
+        else:
+            kept = [{"fid": b["fid"], "time": f'{b["start"]}~{b["end"]}s', "scene": b["scene"],
+                     "is_theme": True, "reason": "태그 정확 일치(규칙)"} for b in _prepass] \
+                   + [j for j in judged if j["is_theme"]]
         tag = f"keep '{theme}'"
     if _ledger_enabled:
         if is_exclude:
@@ -1328,12 +1762,67 @@ def plan_edit(source_ids, instruction_text, batch=8, verbose=True,
                     f"-> OUTPUT{{hit={json.dumps(hit_sources, ensure_ascii=False)}, "
                     f"judge_kept={len(kept_fids)}, ledger_kept={len(ledger_kept)}, total={len(kept)}}}"
                 )
-    keep = [{"fid": j["fid"], "time": j["time"], "scene": j["scene"],
-             "why": j.get("reason")} for j in kept]
+    keep = []
+    for j in kept:
+        _entry = {"fid": j["fid"], "time": j["time"], "scene": j["scene"],
+                  "why": j.get("reason")}
+        for _k in (
+            "evidence_text",
+            "rubric_evidence_hits",
+            "rubric_bm25_score",
+            "rubric_bm25_tokens",
+            "rubric_rrf",
+            "rubric_rrf_sources",
+        ):
+            if j.get(_k) is not None:
+                _entry[_k] = j.get(_k)
+        keep.append(_entry)
+
+    # [RUBRIC-1, gate=CCUT_RUBRIC_ENABLED 기본 OFF] 복합조건 압축손실 보정.
+    # 실측 병목: 위 theme/is_exclude 단일계(라인 ~1191, "theme = keep or exclude")는
+    # keep과 exclude가 동시에 있어도 하나만 취하고 나머지를 완전히 버린다
+    # ("먹방 빼고 실내만" -> theme=실내만 판정, exclude=먹방은 무시되어 실내+먹방 조각이
+    # 그대로 살아남음). 기존 keep 파이프라인(위)은 전혀 안 건드리고, 그 결과 위에
+    # exclude 조건으로 별도 판정해 위반 조각만 걸러내는 층을 얹는다. gate OFF면
+    # rubric은 None이고 이 블록 전체가 no-op — 기존 keep 리스트 그대로 내려간다.
+    rubric = None
+    _rubric_excl_removed = 0
+    _rubric_violations = []
+    if _rubric_enabled():
+        from engine import edit_rubric as _edit_rubric
+        rubric = supplied_rubric or _edit_rubric.EditRubric.from_intent(intent, raw_goal=instruction_text)
+        if rubric.is_compound() and not is_exclude:
+            for _excl_theme in rubric.required_exclude_terms():
+                _kept_fids = {k["fid"] for k in keep}
+                _excl_pool = [b for b in bundles if b["fid"] in _kept_fids]
+                if not _excl_pool:
+                    continue
+                _excl_judged = _judge_batch(_excl_theme, _excl_pool, batch=_jbatch)
+                _excl_violate_fids = {j["fid"] for j in _excl_judged if j["is_theme"]}
+                if _excl_violate_fids:
+                    _rubric_excl_removed += len(_excl_violate_fids)
+                    if verbose:
+                        print(f"[RUBRIC-1] compound exclude 보정: keep-theme={theme!r} 대비 "
+                              f"exclude={_excl_theme!r} 위반 {len(_excl_violate_fids)}건 제거")
+                    keep = [k for k in keep if k["fid"] not in _excl_violate_fids]
+
     self_check = self_check_selection(
         theme, is_exclude, keep, judged=judged,
         judge_mode="batch+single" if not is_exclude else None,
     )
+    if rubric is not None:
+        # [RUBRIC-1] self_check가 압축 theme 대신 채점표를 보게 — required exclude
+        # 위반이 (드물게) 여전히 남아있는지 최종 확인해 rubric_check로 별도 첨부.
+        # 기존 self_check_selection 결과(위)는 수정하지 않고 나란히 붙인다.
+        self_check["rubric_check"] = {
+            "enabled": True,
+            "is_compound": rubric.is_compound(),
+            "compound_exclude_removed": _rubric_excl_removed,
+            "required_exclude_terms": rubric.required_exclude_terms(),
+            "required_keep_terms": rubric.required_keep_terms(),
+            "remaining_violations": _rubric_violations,
+            "status": "FAIL" if _rubric_violations else "PASS",
+        }
     # [4b §5 고지] 번역이 실제 사용된 판이면 self_check에 실어 화면까지 흘린다(조건 2)
     if intent.get("translated"):
         self_check["translated"] = intent["translated"]
@@ -1342,6 +1831,10 @@ def plan_edit(source_ids, instruction_text, batch=8, verbose=True,
              "self_check": self_check}
     if _ledger_meta is not None:
         _plan["ledger"] = _ledger_meta
+    if _rubric_hybrid_diag is not None:
+        _plan["rubric_retrieval"] = _rubric_hybrid_diag
+    if rubric is not None:
+        _plan["rubric"] = rubric.to_dict()
     if _plan_cache_on and _plan_key is not None:
         import copy as _copy
         if len(_PLAN_CACHE) >= 32:  # [AUDIT-⑽] 무제한 증식 방지 (FIFO)

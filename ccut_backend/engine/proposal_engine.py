@@ -87,7 +87,8 @@ class ProposalEngine:
                 from engine import hub as _hub
                 _plan_a = _hub.plan_edit(
                     list(source_ids), _a_intent_text,
-                    candidate_fragment_ids=(intent or {}).get("candidate_fragment_ids"))
+                    candidate_fragment_ids=(intent or {}).get("candidate_fragment_ids"),
+                    rubric=(intent or {}).get("rubric"))
                 _market_ledger = _plan_a.get("ledger")
                 # keep=0(honest-empty)도 그대로 전달 — 명령이 있는데 keep 밖 조각이
                 # A안에 혼입되면 안 되므로 빈 집합이면 A안도 빈 시퀀스가 된다.
@@ -97,8 +98,14 @@ class ProposalEngine:
 
         # 1. Mode A (Market) 생성
         print("[PROPOSAL ENGINE] Creating Market Proposal (A)...")
+        # [R2-3 다] 대화 조각 수(requested_count)는 A·B 대칭 적용 — 단, 사용자가 한쪽만
+        # 지정("A는 그대로"/"B만")한 경우 intent.count_scope로 단측 분기(기본 both).
+        _req_count = (intent or {}).get("requested_count")
+        _count_scope = str((intent or {}).get("count_scope") or "both").upper()
+        _a_req_count = _req_count if _count_scope in ("BOTH", "A") else None
         p_a = self._create_market_proposal(project_id, fragments, target_len, source_ids,
-                                           hub_keep_ids=_market_keep_ids, hub_ledger=_market_ledger)
+                                           hub_keep_ids=_market_keep_ids, hub_ledger=_market_ledger,
+                                           requested_count=_a_req_count)
         
         # 2. Mode B (User) 생성
         print("[PROPOSAL ENGINE] Creating User Proposal (B)...")
@@ -328,8 +335,9 @@ class ProposalEngine:
                     f["thumbnail_url"] = f"/static/thumbnails/{fid}.jpg"
 
     def _create_market_proposal(self, source_id, fragments, target_len, source_ids=None, overlap_ids=None,
-                                hub_keep_ids=None, hub_ledger=None):
-        """A: Market Mode (대중적 호속력)"""
+                                hub_keep_ids=None, hub_ledger=None, requested_count=None):
+        """A: Market Mode (대중적 호속력). [R2-3 다] requested_count가 오면 A도 그 수를
+        목표 상한으로 존중 — 대화 count가 B에만 적용되던 A/B 비대칭 절단."""
         # [R2-A] 사용자 명령이 있을 때만 hub keep 집합으로 pool을 좁힌 뒤 market_score 정렬.
         # hub_keep_ids=None(명령 없음/hub off)이면 기존 전체 pool 경로 그대로.
         if hub_keep_ids is not None:
@@ -360,6 +368,12 @@ class ProposalEngine:
             _base = source_count * 2 if is_fast_path else source_count * 3
             _cap  = 40 if is_fast_path else 60
             max_frags = min(max(_base, 6), _cap)
+
+        # [R2-3 다] 대화 count가 있으면 A도 그 수를 목표 상한으로 — B와 대칭.
+        # 풀보다 크게 요구하면 풀 크기로 클램프(honest). 길이(target_len) 컷과 병행.
+        if isinstance(requested_count, int) and requested_count > 0:
+            max_frags = min(requested_count, len(fragments)) or max_frags
+            print(f"[P4 MARKET][다] requested_count={requested_count} -> max_frags={max_frags}")
 
         print(f"[PROPOSAL ENGINE][R2] Market max_frags={max_frags} "
               f"source_count={source_count} is_fast_path={is_fast_path} "
@@ -593,7 +607,8 @@ class ProposalEngine:
                 from engine import hub as _hub
                 _plan = _hub.plan_edit(
                     list(source_ids), intent_text,
-                    candidate_fragment_ids=(intent or {}).get("candidate_fragment_ids"))
+                    candidate_fragment_ids=(intent or {}).get("candidate_fragment_ids"),
+                    rubric=(intent or {}).get("rubric"))
                 _hub_ledger = _plan.get("ledger")
                 _keep_ids = {k.get("fid") for k in (_plan.get("keep") or []) if k.get("fid")}
                 if _keep_ids:
@@ -642,6 +657,16 @@ class ProposalEngine:
         # 손발1) count → 조각 개수 강제 (결정론적)
         if isinstance(_cmd.get("count"), int):
             _count_override = _cmd["count"]
+
+        # [QWEN-R2 C-⑤] 대화로 조정한 조각 수(requested_count) — 큐원이 제안, 규칙이
+        # 범위 검증 후 여기서 집행. 명령문 count(위)가 있으면 그것이 우선(더 구체적 지시).
+        # [R2-3 다] count_scope='A'(A만 지정)면 B는 적용 안 함 — 단측 분기 유지.
+        _b_scope = str((intent or {}).get("count_scope") or "both").upper()
+        if _count_override is None and _b_scope in ("BOTH", "B"):
+            _rc = (intent or {}).get("requested_count")
+            if isinstance(_rc, (int, float)) and 1 <= int(_rc) <= 40:
+                _count_override = int(_rc)
+                print(f"[C-⑤ COUNT] requested_count={_count_override} scope={_b_scope} (대화 조정 적용)")
 
         def _theme_maps(_query):
             """테마 쿼리 → (full{fid:sem 컷없음}, cut{fid:sem>noise}, by_source{sid:sem})."""
@@ -1164,6 +1189,10 @@ class ProposalEngine:
                         _item["scene"] = _planned.get("scene")
                     if _planned.get("time"):
                         _item["time"] = _planned.get("time")
+                    if _planned.get("evidence_text"):
+                        _item["evidence_text"] = _planned.get("evidence_text")
+                    if _planned.get("rubric_evidence_hits"):
+                        _item["rubric_evidence_hits"] = _planned.get("rubric_evidence_hits")
                     _check_items.append(_item)
                 proposal_self_check = _hub.self_check_selection(
                     _hub_self_check_context.get("theme"),

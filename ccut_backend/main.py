@@ -4240,7 +4240,8 @@ async def settings_gates():
     keys = ["CCUT_HUB_PLAN", "CCUT_AUTO_REINDEX", "CCUT_SINGLE_CACHE",
             "CCUT_LEGACY_NARRATIVE", "CCUT_REVISION", "CCUT_QUALITY_LOG",
             "CCUT_PERSON_REQUERY", "CCUT_LEDGER_KEEP", "MIRROR_ENABLED",
-            "CCUT_COMPOUND_INTENT", "EDIT_CONTRACT_V2", "CCUT_STORY_GATE"]
+            "CCUT_COMPOUND_INTENT", "EDIT_CONTRACT_V2", "CCUT_STORY_GATE",
+            "CCUT_RUBRIC_ENABLED"]
     return {"status": "OK", "gates": {k: os.getenv(k) or "" for k in keys}}
 
 
@@ -4392,6 +4393,173 @@ async def route_edit_intent_stream_api(req: EditIntentRouteRequest):
         print(f"[F2-TTFT] path=stream total_ms={int((_time.time() - t0) * 1000)} "
               f"reply_len={len(final_text)}")
         yield _sse({"type": "final", "result": r})
+
+    return StreamingResponse(gen(), media_type="text/event-stream")
+
+
+class ConverseRequest(BaseModel):
+    project_id: Optional[str] = None
+    source_ids: list = []
+    input_text: str
+    selected_proposal_id: Optional[str] = None
+    fragment_labels: dict = {}
+    # [R2-2 D+E] 현재 화면 조각맵 라이브 요약 {mode,count,duration,proposal_id} —
+    # 스냅샷의 '지금 안'을 DB 최신이 아니라 이 값(화면 진실)으로 채운다.
+    current_view: dict = {}
+
+
+# [QWEN-R2 C] det 사다리 '확실 매칭'만 즉답 채택 — 나머지(open_theme·되묻기·자유그물)는
+# 큐원 판단으로. 고지/사실 계열은 det 문구 그대로(숫자 정확성·보안), 편집 계열은 발화권 이전.
+# [S-5] pace("길게/짧게/템포")는 det 채택 제외 — 분량은 큐원 ⑤(count·target_length
+# 숫자화)가 담당한다. det pace가 params 없이 재제안만 돌려 분량이 불변하던 우회 절단.
+_DET_FINAL_KINDS = {
+    "intent_clear", "retrigger", "show", "fragment_labels",
+    "fragment_labels_unavailable", "fragment_labels_empty", "fragment_labels_unknown",
+    "honest_no_frame_trim", "honest_restore_hint", "self_intro",
+    "revision", "person", "person_alias", "vocab", "confirm"}
+_DET_EDIT_KINDS = {"intent_clear", "retrigger", "revision", "person", "person_alias",
+                   "vocab", "confirm"}
+_NEW_TO_OLD_ACTION = {"revise": "revise_current", "clear_intent": "intent_clear",
+                      "answer": "answer_only", "clarify": "ask_clarification"}
+
+
+@app.post("/chat/converse/stream")
+async def chat_converse_stream(req: ConverseRequest):
+    """[QWEN-R2 왕복 계약] 발화 → (det 확실 매칭 즉답 | 큐원 {action,params,say})
+    → 검증 → say 스트림. SSE: meta → token* → final. final.result는 구 route-edit
+    계약과 동형(action 구명칭) — 프론트 소비부 호환."""
+    import json as _json
+    from fastapi.responses import StreamingResponse
+    from engine.intent_router import route_edit_intent
+    from engine import converse as _cv
+
+    def _sse(obj):
+        return "data: " + _json.dumps(obj, ensure_ascii=False) + "\n\n"
+
+    def gen():
+        import time as _time
+        t0 = _time.time()
+        pid = req.project_id or "default_project"
+        direct = _cv.rubric_direct_decision(req.input_text)
+        if direct:
+            action = direct["action"]
+            params = direct["params"]
+            old = _NEW_TO_OLD_ACTION.get(action, action)
+            r = {"status": "OK", "action": old,
+                 "reply": direct["say"], "confidence": 0.95,
+                 "via": "rubric_direct",
+                 "matched": direct.get("matched") or {"kind": "rubric_direct"},
+                 "normalized_instruction": params.get("instruction"),
+                 "params": params}
+            _cv.persist_decision(pid, action, params)
+            print(f"[F2-TTFT] path=rubric-direct first_out_ms={int((_time.time() - t0) * 1000)} "
+                  f"action={action} params={_json.dumps(params, ensure_ascii=False)}")
+            yield _sse({"type": "meta", "action": old,
+                        "params": params, "via": "rubric_direct"})
+            yield _sse({"type": "token", "text": direct["say"]})
+            yield _sse({"type": "final", "result": r})
+            return
+        # ── 결정론 프리패스 (회귀 금지선: 확실 매칭 즉답 생존) ──
+        det = route_edit_intent(
+            source_ids=req.source_ids, input_text=req.input_text,
+            recent_messages=None, selected_proposal_id=req.selected_proposal_id,
+            fragment_labels=req.fragment_labels, allow_llm=False)
+        kind = str((det.get("matched") or {}).get("kind") or "")
+        is_person_composite = (det.get("matched") or {}).get("type") == "person"
+        adopt = (kind in _DET_FINAL_KINDS or is_person_composite
+                 or det.get("action") in ("show_fragments", "ask_include_archive"))
+        # [D12 결함 절단] 의문문·긴 복합문 속 부분매칭("왜 3개만...?"의 '3개'→count)은
+        # det 확신이 아니다 — 편집 계열 채택을 물리고 큐원이 뜻을 읽는다.
+        # 앵커 정규식 계열(intent_clear·retrigger)과 고지/사실 계열은 가드 밖.
+        _t = (req.input_text or "").strip()
+        if adopt and (("?" in _t or "？" in _t or len(_t) > 40)
+                      and (kind in ("revision", "person", "person_alias",
+                                    "vocab", "pace", "confirm")
+                           or is_person_composite)):
+            print(f"[QWEN-R2] det 오채택 가드: kind={kind} q/long -> 큐원 위임")
+            adopt = False
+        if adopt:
+            r = dict(det)
+            # [R2-3 다] det vocab이 잡은 조각 수(matched.count)를 params.count로 표면화 —
+            # 평문 "8개로"가 det 경로로 가도 프론트 requested_count로 이어져 A·B 대칭 적용.
+            _mc = (det.get("matched") or {}).get("count")
+            if isinstance(_mc, int) and 1 <= _mc <= 40:
+                r.setdefault("params", {})["count"] = _mc
+            print(f"[F2-TTFT] path=det-final first_out_ms={int((_time.time() - t0) * 1000)} "
+                  f"action={r.get('action')} kind={kind}")
+            if kind in _DET_EDIT_KINDS:
+                # [④ 발화권 이전] 결정은 규칙 즉답, 접수 발화는 모델 스트림 (실패=det 문구)
+                yield _sse({"type": "meta", "action": r.get("action"), "via": "det"})
+                say = None
+                for ev, payload in _cv.ack_say_stream(req.input_text, r.get("reply") or "", kind):
+                    if ev == "token":
+                        yield _sse({"type": "token", "text": payload})
+                    elif ev == "done":
+                        say = payload
+                if say:
+                    r["reply"] = say
+                yield _sse({"type": "final", "result": r})
+            else:
+                yield _sse({"type": "final", "result": r})
+            return
+        # ── 큐원 판단 (이력+상태 주입, 헤더 검증, say 스트림) ──
+        final = None
+        first_ms = None
+        for ev, payload in _cv.decide_stream(pid, req.input_text,
+                                             current_view=req.current_view):
+            if ev == "meta":
+                old = _NEW_TO_OLD_ACTION.get(payload["action"], payload["action"])
+                yield _sse({"type": "meta", "action": old,
+                            "params": payload["params"],
+                            "via": payload.get("via") or "qwen"})
+            elif ev == "token":
+                if first_ms is None:
+                    first_ms = int((_time.time() - t0) * 1000)
+                    print(f"[F2-TTFT] path=converse first_token_ms={first_ms}")
+                yield _sse({"type": "token", "text": payload})
+            else:
+                final = payload
+        action = final["action"]
+        params = final["params"]
+        r = {"status": "OK", "action": _NEW_TO_OLD_ACTION.get(action, action),
+             "reply": final["say"], "confidence": 0.8, "via": "qwen",
+             "matched": {"kind": f"converse_{action}"},
+             "normalized_instruction": (params.get("instruction") or None)
+             if action == "run_proposal" else None,
+             "params": params}
+        if action == "revise":
+            r["revision"] = params
+        print(f"[F2-TTFT] path=converse total_ms={int((_time.time() - t0) * 1000)} "
+              f"action={action} params={_json.dumps(params, ensure_ascii=False)}")
+        yield _sse({"type": "final", "result": r})
+
+    return StreamingResponse(gen(), media_type="text/event-stream")
+
+
+class ResultSayRequest(BaseModel):
+    project_id: str
+    facts: str
+
+
+@app.post("/chat/result-say/stream")
+async def chat_result_say_stream(req: ResultSayRequest):
+    """[QWEN-R2 결과 재주입] 집행 결과 사실 → 큐원 완료 발화 스트림.
+    숫자는 주입 사실만 — 위생 위반·실패 시 abort(프론트가 사실 문구 폴백)."""
+    import json as _json
+    from fastapi.responses import StreamingResponse
+    from engine import converse as _cv
+
+    def _sse(obj):
+        return "data: " + _json.dumps(obj, ensure_ascii=False) + "\n\n"
+
+    def gen():
+        say = None
+        for ev, payload in _cv.result_say_stream(req.project_id, req.facts):
+            if ev == "token":
+                yield _sse({"type": "token", "text": payload})
+            elif ev == "done":
+                say = payload
+        yield _sse({"type": "final", "say": say})
 
     return StreamingResponse(gen(), media_type="text/event-stream")
 
