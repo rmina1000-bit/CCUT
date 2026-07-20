@@ -393,6 +393,19 @@ const Index: React.FC = () => {
 // logProposalPair moved to useProposalState
 
   // [#38] 스냅샷은 제안별 전체(byProposal)를 저장 — 같은 필드명, 값 형태만 승격 (하위호환 읽기는 재수화에서)
+  const getProposalBaseKeyFragments = useCallback((proposal: any): string[] | undefined => {
+    const rawSeq =
+      Array.isArray(proposal?.resolved_aliases) && proposal.resolved_aliases.length > 0
+        ? proposal.resolved_aliases
+        : Array.isArray(proposal?.sequence) && proposal.sequence.length > 0
+          ? proposal.sequence
+          : null;
+    const ids = rawSeq
+      ?.map((item: any) => item?.fragment_id || item?.proposal_fragment_id || item?.id)
+      .filter(Boolean);
+    return ids && ids.length > 0 ? ids : proposal?.key_fragments;
+  }, []);
+
   const buildUiSnapshot = useCallback(() => ({
     reservedFragments: reservedByProposal,
     holdPositions: holdPositionsByProposal,
@@ -400,6 +413,14 @@ const Index: React.FC = () => {
     selectedProposalId,
     activeSource,
     deletedFragments: deletedByProposal,
+    proposalsIds: proposals ? {
+      A: (proposals as any).A?.proposal_id,
+      B: (proposals as any).B?.proposal_id,
+    } : undefined,
+    proposalsBaseKeyFragments: proposals ? {
+      A: getProposalBaseKeyFragments((proposals as any).A),
+      B: getProposalBaseKeyFragments((proposals as any).B),
+    } : undefined,
     proposalsKeyFragments: proposals ? {
       A: (proposals as any).A?.key_fragments,
       B: (proposals as any).B?.key_fragments,
@@ -408,7 +429,7 @@ const Index: React.FC = () => {
       A: (proposals as any).A?.customEditFragments,
       B: (proposals as any).B?.customEditFragments,
     } : undefined,
-  }), [reservedByProposal, holdPositionsByProposal, committedProposalId, selectedProposalId, activeSource, deletedByProposal, proposals]);
+  }), [reservedByProposal, holdPositionsByProposal, committedProposalId, selectedProposalId, activeSource, deletedByProposal, proposals, getProposalBaseKeyFragments]);
 
   // [#30 merge-저장 — 원칙 "모르는 것을 지우지 않는다" (국장 승인 2026-07-17)]
   // 클라 소유 필드(아래 목록)는 스냅샷이 덮어쓰고, 그 외(서버 소유·미지 — 예: paperCutOrder)는
@@ -416,7 +437,8 @@ const Index: React.FC = () => {
   // merge가 되살리면 #1(스냅샷 부활)의 재림 — 소유 필드는 절대 병합하지 않는다.
   const OWNED_UI_FIELDS = useMemo(() => new Set([
     "reservedFragments", "holdPositions", "committedProposalId", "selectedProposalId",
-    "activeSource", "deletedFragments", "proposalsKeyFragments", "proposalsCustomFragments",
+    "activeSource", "deletedFragments", "proposalsIds", "proposalsBaseKeyFragments",
+    "proposalsKeyFragments", "proposalsCustomFragments",
   ]), []);
   const saveUiStateMerged = useCallback(async (programId: string, snapshot: Record<string, any>) => {
     let unknown: Record<string, any> = {};
@@ -1252,18 +1274,60 @@ const Index: React.FC = () => {
                     const next: any = { ...prev };
                     for (const mode of ["A", "B"] as const) {
                       if (!next[mode]) continue;
+                      const currentKeys = Array.isArray(next[mode].key_fragments)
+                        ? [...next[mode].key_fragments]
+                        : [];
+                      const currentKeySet = new Set(currentKeys.map((id: unknown) => String(id)));
+                      const currentProposalId = String(next[mode].proposal_id ?? "");
+                      const snapProposalId = snap.proposalsIds?.[mode];
+                      const proposalSnapshotMatches = !!snapProposalId && String(snapProposalId) === currentProposalId;
+                      const snapshotIdsMatchCurrent = (ids: unknown): boolean =>
+                        Array.isArray(ids) &&
+                        ids.length === currentKeys.length &&
+                        ids.every((id) => currentKeySet.has(String(id)));
+                      const baseSnapshotMatches = snapshotIdsMatchCurrent(snap.proposalsBaseKeyFragments?.[mode]);
                       if (snap.proposalsKeyFragments?.[mode] !== undefined) {
                         const snapKF = snap.proposalsKeyFragments[mode];
+                        const canApplyKeySnapshot =
+                          (proposalSnapshotMatches && baseSnapshotMatches) ||
+                          currentKeys.length === 0 ||
+                          snapshotIdsMatchCurrent(snapKF);
                         // [HONEST-EMPTY GUARD] 빈 스냅샷은 사용자 편집이 아니라 빈 제안의 잔상.
                         // DB에 실제 조각이 있는 제안을 빈 배열로 덮지 않는다 (Hollyhock 사례).
                         if (Array.isArray(snapKF) && snapKF.length === 0 && (next[mode].key_fragments?.length ?? 0) > 0) {
                           DEBUG_LOG && console.warn("[Hydration] skip empty key_fragments snapshot for", mode);
+                        } else if (!canApplyKeySnapshot) {
+                          DEBUG_LOG && console.warn("[Hydration] skip stale key_fragments snapshot for", mode, {
+                            currentProposalId,
+                            snapProposalId: snapProposalId ?? null,
+                            currentCount: currentKeys.length,
+                            snapshotCount: Array.isArray(snapKF) ? snapKF.length : null,
+                          });
                         } else {
                           next[mode] = { ...next[mode], key_fragments: snapKF };
                         }
                       }
                       if (snap.proposalsCustomFragments?.[mode] !== undefined) {
-                        next[mode] = { ...next[mode], customEditFragments: snap.proposalsCustomFragments[mode] };
+                        const snapCustom = snap.proposalsCustomFragments[mode];
+                        const snapCustomIds = Array.isArray(snapCustom)
+                          ? snapCustom
+                              .map((f: any) => f?.fragment_id || f?.fragment_uid || f?.proposal_fragment_id || f?.id)
+                              .filter(Boolean)
+                          : [];
+                        const canApplyCustomSnapshot =
+                          (proposalSnapshotMatches && baseSnapshotMatches) ||
+                          currentKeys.length === 0 ||
+                          snapshotIdsMatchCurrent(snapCustomIds);
+                        if (!snapCustom || canApplyCustomSnapshot) {
+                          next[mode] = { ...next[mode], customEditFragments: snapCustom };
+                        } else {
+                          DEBUG_LOG && console.warn("[Hydration] skip stale custom fragments snapshot for", mode, {
+                            currentProposalId,
+                            snapProposalId: snapProposalId ?? null,
+                            currentCount: currentKeys.length,
+                            snapshotCount: snapCustomIds.length,
+                          });
+                        }
                       }
                     }
                     return next;

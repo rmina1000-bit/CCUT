@@ -91,10 +91,12 @@ function stateForRoot(
     const want = preferredItemIdFor?.(fid);
     return byParent.find((s) => s.timeline_item_id === want) ?? byParent[0];
   }
+  const want = preferredItemIdFor?.(fid);
   const aS = toMs(Number(root.orig_start_sec ?? root.start_sec ?? root.start_time ?? root.start ?? 0));
   const aE = toMs(Number(root.orig_end_sec ?? root.end_sec ?? root.end_time ?? root.end ?? 0));
   return states.find(
-    (s) => s.source_id === root.source_id
+    (s) => (!want || s.timeline_item_id === want || s.carried_from_item_id === want)
+      && s.source_id === root.source_id
       && Math.abs(s.anchor_start_ms - aS) <= 10 && Math.abs(s.anchor_end_ms - aE) <= 10,
   );
 }
