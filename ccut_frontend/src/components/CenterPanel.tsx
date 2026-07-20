@@ -659,6 +659,14 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
     [sourceEntries, sourceFragments]
   );
 
+  const isProposalEmpty = useCallback((proposal: any): boolean => {
+    if (!proposal) return false;
+    const keyCount = Array.isArray(proposal.key_fragments) ? proposal.key_fragments.length : null;
+    const sequenceCount = Array.isArray(proposal.sequence) ? proposal.sequence.length : null;
+    if (keyCount === 0) return true;
+    return keyCount === null && sequenceCount === 0;
+  }, []);
+
   const sourceLabelMap = useMemo(() => {
     const map: Record<string, string> = {};
     sourceEntries?.forEach((e) => {
@@ -846,34 +854,35 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
   const getVideoUrlForProposal = useCallback(
     (proposalKey: "A" | "B"): string | null => {
       const p = proposals?.[proposalKey];
+      if (isProposalEmpty(p)) return null;
       // [R1 #34] sequence(객체 배열) 폴백 절단 — key_fragments가 비면 null.
       // 조각맵이 비었으면 비었다고 말한다. 옛 시퀀스를 꺼내오지 않는다 (#3·#28 계열, 헌장 §5).
       const firstFragId = p?.key_fragments?.[0];
       if (!firstFragId) return null;
       return getVideoUrlForFrag(firstFragId);
     },
-    [proposals, getVideoUrlForFrag]
+    [proposals, getVideoUrlForFrag, isProposalEmpty]
   );
 
   // [PROPOSAL_PREVIEW] proposal.preview_url 우선, 없으면 fragment URL fallback
   // 만약 현재 제안서가 확정되어 편집 중(committedProposalId)이거나, 이미 편집한 상태(customEditFragments 존재)인 경우
   // preview_url을 무시하고 dynamic sequence로 재생하도록 강제
-  const previewUrlA: string | null = (proposals?.A as any)?.preview_url && committedProposalId !== "A" && !(proposals?.A as any)?.customEditFragments
+  const previewUrlA: string | null = !isProposalEmpty(proposals?.A) && (proposals?.A as any)?.preview_url && committedProposalId !== "A" && !(proposals?.A as any)?.customEditFragments
     ? normalizeMediaUrl((proposals.A as any).preview_url)
     : null;
-  const previewUrlB: string | null = (proposals?.B as any)?.preview_url && committedProposalId !== "B" && !(proposals?.B as any)?.customEditFragments
+  const previewUrlB: string | null = !isProposalEmpty(proposals?.B) && (proposals?.B as any)?.preview_url && committedProposalId !== "B" && !(proposals?.B as any)?.customEditFragments
     ? normalizeMediaUrl((proposals.B as any).preview_url)
     : null;
 
   // [RENDER-LOOP-A1] 메모이즈 — onTimeUpdate→setProposalTime 재렌더마다 getVideoUrlForProposal
   // (→getVideoUrlForFrag+console.log)이 재실행되어 로그 폭주·메인스레드 점유하던 핫패스 차단.
   const playerVideoUrlA = useMemo(
-    () => previewUrlA ?? getVideoUrlForProposal("A") ?? videoUrl ?? null,
-    [previewUrlA, getVideoUrlForProposal, videoUrl]
+    () => isProposalEmpty(proposals?.A) ? null : previewUrlA ?? getVideoUrlForProposal("A") ?? videoUrl ?? null,
+    [previewUrlA, getVideoUrlForProposal, videoUrl, proposals, isProposalEmpty]
   );
   const playerVideoUrlB = useMemo(
-    () => previewUrlB ?? getVideoUrlForProposal("B") ?? videoUrl ?? null,
-    [previewUrlB, getVideoUrlForProposal, videoUrl]
+    () => isProposalEmpty(proposals?.B) ? null : previewUrlB ?? getVideoUrlForProposal("B") ?? videoUrl ?? null,
+    [previewUrlB, getVideoUrlForProposal, videoUrl, proposals, isProposalEmpty]
   );
 
   const buildSeqFrags = useCallback(
@@ -916,6 +925,7 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
 
       const p = proposals?.[proposalKey];
       if (!p) return [];
+      if (isProposalEmpty(p)) return [];
 
       // 조각맵에 깔리지 않은(비표시) 제안의 비교 재생 — 저장본 시퀀스 사용은 정당.
       const cachedFrags = (p as any)?.customEditFragments;
@@ -939,7 +949,7 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
         .map((id) => allSourceFragments.find((f) => f.fragment_id === id))
         .filter(Boolean) as Fragment[];
     },
-    [proposals, allSourceFragments, committedProposalId, displayProposalId, fragments, exportClips, programId]
+    [proposals, allSourceFragments, committedProposalId, displayProposalId, fragments, exportClips, programId, isProposalEmpty]
   );
 
 
@@ -1419,6 +1429,7 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
   const getProposalPoster = useCallback(
     (key: "A" | "B") => {
       const p = proposals?.[key];
+      if (isProposalEmpty(p)) return undefined;
       const firstFragId = p?.key_fragments?.[0] ?? p?.sequence?.[0];
       if (!firstFragId) return undefined;
 
@@ -1434,7 +1445,7 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
       // 3차: 없으면 undefined — 브라우저 첫 프레임 자동 표시
       return undefined;
     },
-    [proposals, allSourceFragments]
+    [proposals, allSourceFragments, isProposalEmpty]
   );
 
   const handleProposalPreview = useCallback(
@@ -1890,12 +1901,12 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
                 }
               }}
             >
-              {(playerVideoUrlA ?? videoUrl) ? (
+              {playerVideoUrlA ? (
                 <>
                   <video
                     ref={videoRefA}
                     style={{ opacity: isSrcLoadingA ? 0 : 1, transition: 'opacity 0.05s' }}
-                    src={playerSrcA ?? playerVideoUrlA ?? videoUrl ?? undefined}
+                    src={playerSrcA ?? playerVideoUrlA ?? undefined}
                     poster={getProposalPoster("A")}
                     className="w-full h-full object-contain bg-black"
                     onPlay={(e) => {
@@ -2165,12 +2176,12 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
                 }
               }}
             >
-              {(playerVideoUrlB ?? videoUrl) ? (
+              {playerVideoUrlB ? (
                 <>
                   <video
                     ref={videoRefB}
                     style={{ opacity: isSrcLoadingB ? 0 : 1, transition: 'opacity 0.05s' }}
-                    src={playerSrcB ?? playerVideoUrlB ?? videoUrl ?? undefined}
+                    src={playerSrcB ?? playerVideoUrlB ?? undefined}
                     poster={getProposalPoster("B")}
                     className="w-full h-full object-contain bg-black"
                     onPlay={(e) => {
