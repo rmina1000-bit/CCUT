@@ -5,6 +5,7 @@ from .db_models import SourceTable, FragmentTable, DecisionTable, ProgramTable, 
 import uuid
 import datetime
 import os
+import json
 
 Base.metadata.create_all(bind=engine)
 
@@ -639,11 +640,24 @@ class BAMSManager:
         delete/insert 모두 program_id 기준이라 레거시 단건(program_id IS NULL)을 건드리지 않음."""
         with SessionLocal() as db:
             from archive.db_models import ProposalTable, ExportInputTable
+            old_rows = db.query(ProposalTable).filter_by(program_id=program_id).all()
+            incoming_has_sequence = any(self._proposal_sequence_count(p) > 0 for p in (proposals or []))
+            existing_has_sequence = any(self._proposal_sequence_count(r) > 0 for r in old_rows)
+            if not incoming_has_sequence and existing_has_sequence:
+                print(
+                    f"[PROJECT-PROPOSAL-GUARD] empty incoming proposals skipped: "
+                    f"program_id={program_id} preserved={len(old_rows)}"
+                )
+                return {
+                    "saved": False,
+                    "guarded": True,
+                    "reason": "EMPTY_PROJECT_PROPOSAL_WRITE_SKIPPED",
+                    "preserved_count": len(old_rows),
+                }
             # [FK-GUARD] 삭제 대상 proposals를 참조하는 export_input의 FK를 먼저 끊어
             # FOREIGN KEY 제약 위반(=export 이력이 있는 프로젝트의 재제안 저장 실패)을 방지.
             # export 기록 자체는 보존하고 proposal 링크만 해제(NULL)한다.
-            _old_ids = [r.proposal_id for r in
-                        db.query(ProposalTable.proposal_id).filter_by(program_id=program_id).all()]
+            _old_ids = [r.proposal_id for r in old_rows]
             if _old_ids:
                 db.query(ExportInputTable).filter(ExportInputTable.proposal_id.in_(_old_ids)).update(
                     {ExportInputTable.proposal_id: None}, synchronize_session=False)
@@ -663,6 +677,42 @@ class BAMSManager:
                 )
                 db.add(db_p)
             db.commit()
+            return {"saved": True, "guarded": False}
+
+    @staticmethod
+    def _proposal_sequence_count(proposal):
+        if isinstance(proposal, dict):
+            seq = proposal.get("sequence")
+        else:
+            seq = getattr(proposal, "sequence", None)
+        if isinstance(seq, str):
+            try:
+                seq = json.loads(seq)
+            except Exception:
+                seq = []
+        return len(seq) if isinstance(seq, list) else 0
+
+    def get_project_proposals_latest(self, program_id: str):
+        with SessionLocal() as db:
+            from archive.db_models import ProposalTable
+            rows = db.query(ProposalTable).filter_by(program_id=program_id).all()
+            latest_by_mode = {}
+            for r in rows:
+                key = r.mode or "?"
+                cur = latest_by_mode.get(key)
+                r_time = r.created_at or datetime.datetime.min
+                cur_time = cur.created_at or datetime.datetime.min if cur else datetime.datetime.min
+                if cur is None or r_time > cur_time:
+                    latest_by_mode[key] = r
+            return [{
+                "proposal_id": r.proposal_id,
+                "mode": r.mode,
+                "sequence": r.sequence,
+                "duration": r.duration,
+                "proposal_reason": r.proposal_reason,
+                "confidence": r.confidence,
+                "fallback_reason": r.fallback_reason,
+            } for r in sorted(latest_by_mode.values(), key=lambda row: row.mode or "")]
 
     def get_proposals(self, source_id: str):
         """[STEP 6] 저장된 모든 제안 조회"""

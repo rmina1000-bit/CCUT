@@ -2383,36 +2383,50 @@ async def post_generate_project_proposals(req: ProjectProposalRequest):
             print(f"[RERANKER][ERROR] Failed to rerank project proposals: {rank_err}")
 
         # [B-3b-3] inject·rerank 후 program_id 기준 저장 — GET 복원(filter_by program_id)과 맞물림
-        bams.save_project_proposals(project_id, proposals)
+        _save_result = bams.save_project_proposals(project_id, proposals)
+        _proposal_save_guarded = bool(isinstance(_save_result, dict) and _save_result.get("guarded"))
+        if _proposal_save_guarded:
+            proposals = bams.get_project_proposals_latest(project_id)
+            source_usage = {}
+            for _p in proposals:
+                for _s in (_p.get("sequence") or []):
+                    sid = _s.get("source_id", "UNKNOWN")
+                    source_usage[sid] = source_usage.get(sid, 0) + 1
+            warnings.append({
+                "reason": _save_result.get("reason", "EMPTY_PROJECT_PROPOSAL_WRITE_SKIPPED"),
+                "message": "빈 제안 결과가 기존 프로젝트 제안을 덮지 않도록 저장을 건너뛰었습니다.",
+                "preserved_count": _save_result.get("preserved_count"),
+            })
 
         # [조각 이력] 채택(adopted) 사건 기록 — 제안이 나중에 교체·purge돼도
         # "이 조각이 이 프로젝트 제안에 채택됐다"는 사실은 스냅샷으로 영속. 비차단.
-        try:
-            from engine import fragment_vault as _fvE
-            from database import SessionLocal as _SLe
-            with _SLe() as _dbe:
-                _pg = _dbe.query(ProgramTable).filter_by(program_id=project_id).first()
-                _pgname = _pg.name if _pg else None
-            _pnames = None
-            _events = []
-            for _p in (proposals or []):
-                _pid = _p.get("proposal_id")
-                _mode = _p.get("mode")
-                for _s in (_p.get("sequence") or []):
-                    _events.append({
-                        "source_id": _s.get("source_id"),
-                        "start": _s.get("start"), "end": _s.get("end"),
-                        "fragment_id": _s.get("fragment_id"),
-                        "event_kind": "adopted", "ref_id": _pid or f"{project_id}_{_mode}",
-                        "program_id": project_id, "program_name": _pgname,
-                        "proposal_id": _pid,
-                        "proposal_name": (f"{_pgname} · {_mode}안" if _pgname and _mode else None),
-                        "detail": {"mode": _mode},
-                    })
-            _n = _fvE.record_events(_events)
-            print(f"[VAULT-EVENT] adopted 기록: +{_n} (제안 {len(proposals or [])}건)")
-        except Exception as _ve:
-            print(f"[VAULT-EVENT] adopted 기록 실패 (비차단): {_ve}")
+        if not _proposal_save_guarded:
+            try:
+                from engine import fragment_vault as _fvE
+                from database import SessionLocal as _SLe
+                with _SLe() as _dbe:
+                    _pg = _dbe.query(ProgramTable).filter_by(program_id=project_id).first()
+                    _pgname = _pg.name if _pg else None
+                _pnames = None
+                _events = []
+                for _p in (proposals or []):
+                    _pid = _p.get("proposal_id")
+                    _mode = _p.get("mode")
+                    for _s in (_p.get("sequence") or []):
+                        _events.append({
+                            "source_id": _s.get("source_id"),
+                            "start": _s.get("start"), "end": _s.get("end"),
+                            "fragment_id": _s.get("fragment_id"),
+                            "event_kind": "adopted", "ref_id": _pid or f"{project_id}_{_mode}",
+                            "program_id": project_id, "program_name": _pgname,
+                            "proposal_id": _pid,
+                            "proposal_name": (f"{_pgname} · {_mode}안" if _pgname and _mode else None),
+                            "detail": {"mode": _mode},
+                        })
+                _n = _fvE.record_events(_events)
+                print(f"[VAULT-EVENT] adopted 기록: +{_n} (제안 {len(proposals or [])}건)")
+            except Exception as _ve:
+                print(f"[VAULT-EVENT] adopted 기록 실패 (비차단): {_ve}")
 
         # [B-4] 프로젝트-소스 다대다 기록 (project_sources upsert, 멱등). 실패해도 응답엔 영향 없음
         try:
