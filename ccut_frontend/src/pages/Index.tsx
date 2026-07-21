@@ -2175,7 +2175,8 @@ const Index: React.FC = () => {
           return {
             fragment_id: fragId,
             fragment_uid: fragId,
-            source_video: s.source_video || matchSource?.source_video || activeSource,
+            // [STATE-DRIFT 수리 2026-07-22] 폴백 사슬에 원본ID가 흘러들지 않게 — 문자 라벨만 채택.
+            source_video: [s.source_video, matchSource?.source_video, activeSource].find((v) => typeof v === "string" && /^[A-Z]{1,2}$/.test(v)) || activeSource,
             source_id: s.source_id || matchSource?.source_id || currentSourceId,
             display_id: matchSource?.display_id || (s.display_id && !/^\d+$/.test(s.display_id) && !s.display_id.startsWith("?") ? s.display_id : undefined),
             // [DISPLAY-NAME] 시퀀스 즉시표시 경로에도 권위 이름 통과
@@ -2351,7 +2352,8 @@ const Index: React.FC = () => {
             display_name: sourceFragment?.display_name,
             selection_state: "S" as SelectionState,
             status: "committed" as FragmentStatus,
-            source_video: sourceLabel || alias.source_id || "",
+            // [STATE-DRIFT 수리 2026-07-22] source_id 폴백 제거 — source_video엔 문자 라벨만.
+            source_video: sourceLabel || "",
             source_id: alias.source_id,
             start_time: startSec,
             end_time: endSec,

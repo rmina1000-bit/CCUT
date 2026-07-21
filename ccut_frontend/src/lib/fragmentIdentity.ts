@@ -191,6 +191,15 @@ export function assignShortDisplayIds(fragments: Fragment[]): Fragment[] {
         if (f.status === "removed") return f;
 
         const src = f.source_video || "";
+        // [LABEL-DRIFT 방어선 2026-07-22] source_video는 '소스 문자 라벨'(A~Z, AA~)이어야 한다.
+        //   원본ID(SRC_...) 등 비규격이 흘러들면 "SRC_XXX1" 오염 라벨을 조용히 만들지 말고,
+        //   경고로 근원을 관찰 가능하게 하고 display_id 부여를 건너뛴다(규격 위반 출력 차단).
+        if (src && !/^[A-Z]{1,2}$/.test(src)) {
+            if (typeof console !== "undefined") {
+                console.warn(`[LABEL-DRIFT] source_video가 문자 라벨 규격이 아님: "${src}" (fid=${f.fragment_id}) — display_id 부여 건너뜀. 근원(source_id 대입 등) 점검 필요.`);
+            }
+            return f;
+        }
         const root = f.root_fragment_uid ?? getUid(f);
         const rootToIdx = rootIndexBySource.get(src);
         if (!rootToIdx) return f;

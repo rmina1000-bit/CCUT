@@ -52,14 +52,16 @@ function readFragmentDurationSec(fragment: any): number {
   return Math.max(readFragmentEndSec(fragment) - readFragmentStartSec(fragment), 0.001);
 }
 
-function physicalClipToFragment(clip: PhysicalClip): Fragment {
+function physicalClipToFragment(clip: PhysicalClip, sourceLabelMap: Record<string, string> = {}): Fragment {
   const start = clip.start_sec;
   const end = clip.end_sec;
   return {
     fragment_id: clip.fragment_id,
     fragment_uid: (clip as any).clip_of ?? clip.display_id ?? `${clip.fragment_id}_${clip.order}`,
     source_id: clip.source_id,
-    source_video: clip.source_id,
+    // [STATE-DRIFT 수리 2026-07-22] source_video는 '소스 문자 라벨'이어야 한다(원본ID 금지).
+    //   sourceLabelMap(source_id→라벨)로 문자를 얻는다. 미매핑이면 ""(방어선이 경고).
+    source_video: sourceLabelMap[clip.source_id] || "",
     display_id: clip.display_id ?? (clip as any).clip_of ?? clip.fragment_id,
     start_sec: start,
     end_sec: end,
@@ -920,7 +922,7 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
         exportClips.length > 0 &&
         proposalKey === (committedProposalId ?? "B");
       if (backendEdlApplies) {
-        return exportClips.map(physicalClipToFragment);
+        return exportClips.map((c) => physicalClipToFragment(c, sourceLabelMap));
       }
 
       const p = proposals?.[proposalKey];
