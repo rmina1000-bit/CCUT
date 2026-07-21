@@ -460,8 +460,18 @@ def route_edit_intent(source_ids=None, input_text="", recent_messages=None,
     #    fragment_labels(라벨→조각ID)로 해석해 그 조각들만 후보로 실행한다.
     #    모르는 라벨은 실행하지 않고 정직 보고 (날조 실행 사건 봉쇄: "정은한..." 지어내기).
     _label_hits = _re.findall(r"[A-Za-z]{1,2}\d{1,3}", t)
-    if _label_hits and _re.search(r"만으로|으로만|만 가지고|편집|골라|구성|묶|모아|합쳐|넣|빼|제외|말고|없이", t):
-        _lmap = {str(k).upper(): v for k, v in (fragment_labels or {}).items()}
+    _lmap = {str(k).upper(): v for k, v in (fragment_labels or {}).items()}
+    # [관문C 2026-07-21 라이브RED 수리] "G1만"의 bare '만'은 트리거 목록(만으로|만 가지고…) 밖이라
+    #   결정론 사다리를 못 잡고 Qwen 단계로 새, 라이브에서 "G1은 몇 번째?"로 되물었다(RED).
+    #   해결은 트리거 하드코딩 증식이 아니라 계기판 사실: 히트한 라벨이 실제 fragment_labels에
+    #   있을 때만(_real_hits), 그 라벨 뒤 한정조사(만/들만/번만)를 '그 라벨만 유지' 교정으로 해석.
+    #   실재 않는 라벨(G99)·포맷토큰(MP4)은 _real_hits에서 빠져 발화 불가 → 기존 진실 불변(C3).
+    #   사실 없이 표면형을 나열하지 않으므로 라우터 증식이 아니다(관문B 계기판의 연장).
+    _real_hits = [h for h in _label_hits if h.upper() in _lmap]
+    _label_only = any(_re.search(_re.escape(h) + r"\s*(?:들|번)?만", t) for h in _real_hits)
+    if _label_hits and (
+            _re.search(r"만으로|으로만|만 가지고|편집|골라|구성|묶|모아|합쳐|넣|빼|제외|말고|없이", t)
+            or _label_only):
         _asked = []
         for _h in _label_hits:  # 순서 보존 + 중복 제거
             _u = _h.upper()
