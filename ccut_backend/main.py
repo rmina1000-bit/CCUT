@@ -12,6 +12,7 @@ except Exception:
 import time
 import uuid
 import logging
+import re
 from pathlib import Path
 from typing import Optional
 
@@ -4342,6 +4343,106 @@ class EditIntentRouteRequest(BaseModel):
     fragment_labels: dict = {}
 
 
+def _xl_source_label(n: int) -> str:
+    s = ""
+    while True:
+        s = chr(65 + (n % 26)) + s
+        n = n // 26 - 1
+        if n < 0:
+            return s
+
+
+def _project_fragment_labels(project_id: str | None) -> dict:
+    if not project_id:
+        return {}
+    try:
+        from database import SessionLocal
+        with SessionLocal() as db:
+            links = (
+                db.query(ProjectSourceTable)
+                .filter_by(program_id=project_id)
+                .order_by(ProjectSourceTable.display_order)
+                .all()
+            )
+            out = {}
+            for idx, link in enumerate(links):
+                src_label = _xl_source_label(idx)
+                frags = bams.get_semantic_fragments(link.source_id)
+                if not frags:
+                    frags = bams.get_fragments_by_source(link.source_id)
+                roots = []
+                for f in sorted(frags or [], key=lambda x: float(x.get("start") or x.get("start_sec") or x.get("start_time") or 0)):
+                    fid = str(f.get("fragment_id") or "").replace("_L", "").replace("_R", "")
+                    fid = re.sub(r"_M\d*$", "", fid)
+                    if fid and fid not in roots:
+                        roots.append(fid)
+                for pos, fid in enumerate(roots, 1):
+                    out[f"{src_label}{pos}"] = fid
+            return out
+    except Exception as e:
+        print(f"[ROUTE-EDIT][WARN] project fragment label gauge failed ({e})")
+        return {}
+
+
+def _merged_fragment_labels(req: EditIntentRouteRequest) -> dict:
+    project_labels = _project_fragment_labels(req.project_id)
+    client_labels = {str(k).upper(): v for k, v in (req.fragment_labels or {}).items() if v}
+    return {**project_labels, **client_labels}
+
+
+def _unknown_fragment_label_route(input_text: str, labels: dict) -> dict | None:
+    t = (input_text or "").strip()
+    hits = re.findall(r"[A-Za-z]{1,2}\d{1,3}", t)
+    if not hits or not labels:
+        return None
+    known = {str(k).upper() for k in labels.keys()}
+    unknown = []
+    for h in hits:
+        u = h.upper()
+        if u not in known and re.match(r"^[A-Z]\d{1,3}$", u):
+            unknown.append(u)
+    label_only = any(re.search(re.escape(u) + r"\s*(?:들|번)?만", t, re.IGNORECASE) for u in unknown)
+    if not unknown or not label_only:
+        return None
+    avail = ", ".join(sorted(known)[:12])
+    return {
+        "status": "OK",
+        "action": "ask_clarification",
+        "normalized_instruction": None,
+        "reply": f"{', '.join(unknown)}은 지금 조각맵에 없는 번호예요. 현재 있는 조각: {avail}{'…' if len(known) > 12 else ''}. 다시 지정해 주시겠어요?",
+        "confidence": 0.9,
+        "matched": {"kind": "fragment_labels_unknown", "unknown": unknown},
+        "via": "deterministic",
+    }
+
+
+def _rubric_direct_route(input_text: str) -> dict | None:
+    try:
+        from engine import converse as _cv
+        direct = _cv.rubric_direct_decision(input_text)
+    except Exception as e:
+        print(f"[ROUTE-EDIT][WARN] rubric_direct failed ({e})")
+        return None
+    if not direct:
+        return None
+    params = direct.get("params") or {}
+    r = {
+        "status": "OK",
+        "action": "run_proposal",
+        "normalized_instruction": params.get("instruction"),
+        "reply": direct.get("say") or "네, 그 조건으로 골라볼게요.",
+        "confidence": 0.95,
+        "matched": direct.get("matched") or {"kind": "rubric_direct"},
+        "via": "rubric_direct",
+        "params": params,
+    }
+    if params.get("rubric"):
+        r["rubric"] = params.get("rubric")
+    if params.get("count"):
+        r["count"] = params.get("count")
+    return r
+
+
 @app.post("/intent/route-edit")
 async def route_edit_intent_api(req: EditIntentRouteRequest):
     """[INTENT-ROUTER] 종업원 — 프론트 메뉴판 정규식을 대체. 프론트는 말을 거의
@@ -4351,11 +4452,25 @@ async def route_edit_intent_api(req: EditIntentRouteRequest):
     from engine.intent_router import route_edit_intent
 
     def _run():
-        return route_edit_intent(
-            source_ids=req.source_ids, input_text=req.input_text,
-            recent_messages=req.recent_messages,
-            selected_proposal_id=req.selected_proposal_id,
-            fragment_labels=req.fragment_labels)
+        labels = _merged_fragment_labels(req)
+        r = (
+            _unknown_fragment_label_route(req.input_text, labels)
+            or _rubric_direct_route(req.input_text)
+            or route_edit_intent(
+                source_ids=req.source_ids, input_text=req.input_text,
+                recent_messages=req.recent_messages,
+                selected_proposal_id=req.selected_proposal_id,
+                fragment_labels=labels)
+        )
+        # [관문D 2026-07-21 국장승인] 라벨교정 실행 시 조각 판단근거(scene·speech·context)를
+        #   route 응답에 노출 — chat이 쓰는 엔드포인트가 route-edit이므로 여기 실어야 화면 도달.
+        if isinstance(r, dict) and r.get("candidate_fragment_ids"):
+            try:
+                from engine.converse import _candidate_evidence
+                r["candidate_evidence"] = _candidate_evidence(r["candidate_fragment_ids"])
+            except Exception as _e:
+                print(f"[ROUTE-EDIT][WARN] candidate_evidence 실패 ({_e})")
+        return r
 
     return await asyncio.get_event_loop().run_in_executor(None, _run)
 
@@ -4377,11 +4492,24 @@ async def route_edit_intent_stream_api(req: EditIntentRouteRequest):
 
     def gen():
         t0 = _time.time()
-        r = route_edit_intent(
-            source_ids=req.source_ids, input_text=req.input_text,
-            recent_messages=req.recent_messages,
-            selected_proposal_id=req.selected_proposal_id,
-            fragment_labels=req.fragment_labels, defer_chat=True)
+        labels = _merged_fragment_labels(req)
+        r = (
+            _unknown_fragment_label_route(req.input_text, labels)
+            or _rubric_direct_route(req.input_text)
+            or route_edit_intent(
+                source_ids=req.source_ids, input_text=req.input_text,
+                recent_messages=req.recent_messages,
+                selected_proposal_id=req.selected_proposal_id,
+                fragment_labels=labels, defer_chat=True)
+        )
+        # [관문D 2026-07-21 국장승인] 라벨교정 실행 시 조각 판단근거(scene·speech·context)를
+        #   route 응답에 노출 — chat이 쓰는 엔드포인트가 route-edit이므로 여기 실어야 화면 도달.
+        if isinstance(r, dict) and r.get("candidate_fragment_ids"):
+            try:
+                from engine.converse import _candidate_evidence
+                r["candidate_evidence"] = _candidate_evidence(r["candidate_fragment_ids"])
+            except Exception as _e:
+                print(f"[ROUTE-EDIT][WARN] candidate_evidence 실패 ({_e})")
         sc = r.pop("_stream_chat", None)
         if not sc:
             # 결정론/편집 분류 — 완성 응답이 이미 있다. 즉답 1건 (스트리밍 불요 경로)
@@ -4520,7 +4648,8 @@ async def chat_converse_stream(req: ConverseRequest):
         final = None
         first_ms = None
         for ev, payload in _cv.decide_stream(pid, req.input_text,
-                                             current_view=req.current_view):
+                                             current_view=req.current_view,
+                                             fragment_labels=req.fragment_labels):
             if ev == "meta":
                 old = _NEW_TO_OLD_ACTION.get(payload["action"], payload["action"])
                 yield _sse({"type": "meta", "action": old,
@@ -4541,6 +4670,12 @@ async def chat_converse_stream(req: ConverseRequest):
              "normalized_instruction": (params.get("instruction") or None)
              if action == "run_proposal" else None,
              "params": params}
+        # [관문C 2026-07-20 stash이식] 라벨 교정 후보를 프론트로 흘려 실행층이 keep.
+        if params.get("candidate_fragment_ids"):
+            r["candidate_fragment_ids"] = params.get("candidate_fragment_ids")
+        # [관문D 2026-07-20] candidate 판단 근거(scene·speech·context)를 응답에 노출.
+        if params.get("candidate_evidence"):
+            r["candidate_evidence"] = params.get("candidate_evidence")
         if action == "revise":
             r["revision"] = params
         print(f"[F2-TTFT] path=converse total_ms={int((_time.time() - t0) * 1000)} "

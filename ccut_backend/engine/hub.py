@@ -1326,7 +1326,7 @@ def _build_fragment_decision_prompt(theme, bundle, project_context=None):
         "You are CCUT's fragment meaning judge. Decide a short fragment name and meaning from sensors only.\n"
         "Use scene, speech, and meta together. Do not invent people, objects, dialogue, or intent not present in input.\n"
         "Return JSON only with this schema: "
-        '{"name":"short Korean noun phrase","meaning":"one Korean sentence","evidence":["scene: ...","speech: ...","meta: ..."]}\n'
+        '{"name":"short Korean noun phrase","meaning":"one Korean sentence","evidence":["scene: ...","speech: ...","context: ...","meta: ..."]}\n'
         "Input:\n" + json.dumps(payload, ensure_ascii=False)
     )
 
@@ -1339,6 +1339,11 @@ def _sensor_evidence(bundle):
         evidence.append(f"scene: {scene}")
     if speech:
         evidence.append(f"speech: {speech}")
+    # [관문D 2026-07-20 stash이식] context 근거 노출 — project명·source제목·notes.
+    #   있을 때만 추가(지어내기 0). speech·scene·context 3종 근거를 얇게 드러낸다.
+    context_text = _prompt_field(_bundle_context_text(bundle or {}), 180)
+    if context_text:
+        evidence.append(f"context: {context_text}")
     if bundle:
         evidence.append(
             f'meta: fid={bundle.get("fid")} source_id={bundle.get("source_id")} '

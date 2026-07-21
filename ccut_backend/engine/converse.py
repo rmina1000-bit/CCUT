@@ -188,7 +188,19 @@ def load_history(program_id, n=_RECENT_TURNS):
     return {"summary": summary, "messages": msgs, "total_messages": total_msgs}
 
 
-def state_snapshot(program_id, current_view=None):
+def _clean_fragment_labels(fragment_labels):
+    # [관문C 2026-07-20 stash이식] 프론트 라벨맵 위생검사 —
+    #   대문자 1~2자+숫자(G1) 형태만, 값 있는 것만. Qwen이 볼 계기판 재료.
+    clean = {}
+    for label, fid in (fragment_labels or {}).items():
+        lab = str(label or "").upper().strip()
+        val = str(fid or "").strip()
+        if re.fullmatch(r"[A-Z]{1,2}\d{1,3}", lab) and val:
+            clean[lab] = val
+    return clean
+
+
+def state_snapshot(program_id, current_view=None, fragment_labels=None):
     """상태 스냅샷 — 조각풀·직전 의도·분량 설정. 전부 read-only.
     [R2-2 D+E] '지금 안'의 조각 수·구성은 DB 직전 생성분이 아니라 프론트가 보낸
     current_view(현재 화면 조각맵의 라이브 SF 목록)를 진실로 삼는다 — 소환·편집으로
@@ -196,7 +208,8 @@ def state_snapshot(program_id, current_view=None):
     A/B 존재·소스 폴백 용도로만 남긴다."""
     snap = {"proposals": {}, "pool": 0, "source_count": 0,
             "now": _now_kst(), "active_intent": None,
-            "target_length": None, "count_pref": None, "current": None}
+            "target_length": None, "count_pref": None, "current": None,
+            "fragment_labels": _clean_fragment_labels(fragment_labels)}
     cv = current_view or {}
     if isinstance(cv, dict) and cv.get("count") is not None:
         snap["current"] = {
@@ -277,6 +290,10 @@ def _snap_block(snap):
         f"edited_visible_count={(cur or {}).get('count') if cur else '없음'}(현재 화면 편집·표시 조각 수), "
         f"now={snap.get('now')}(KST 로컬 시계)"
     )
+    labels = snap.get("fragment_labels") or {}
+    if labels:
+        _lab_keys = ", ".join(sorted(labels.keys()))
+        gauge_line = gauge_line + f", fragment_labels=[{_lab_keys}](조각맵 타일 라벨—이 목록의 라벨만 유효)"
     lines = [pool_line, now_line, gauge_line]
     if snap.get("active_intent"):
         lines.append(f"적용 중 기준: {snap['active_intent']}")
@@ -301,7 +318,9 @@ def build_decide_prompt(user_text, hist, snap):
         "- run_proposal: 새 기준으로 조각을 골라 편집안 생성. params: "
         '{"instruction":"무엇을 고를지 기준(빈 문자열이면 직전 기준 유지)",'
         '"count":조각수(정수,선택),"target_length":초(정수,선택),'
-        '"count_scope":"both|A|B(분량을 A·B 둘 다=both(기본), 한쪽만이면 A 또는 B)"}\n'
+        '"count_scope":"both|A|B(분량을 A·B 둘 다=both(기본), 한쪽만이면 A 또는 B)",'
+        '"candidate_labels":["G1","G3"](선택 — 계기판 fragment_labels에 있는 라벨만. '
+        '"G1만"/"G2랑 G4만"처럼 라벨을 콕 집으면 그 라벨만 남긴다)}\n'
         "- revise: 지금 안에서 국소 수정만. params: "
         '{"op":"remove_ordinal|set_count|remove_theme","index":0부터(첫번째=0,마지막=-1),'
         '"count":정수,"theme":"명사","target_mode":"A|B"}\n'
@@ -330,6 +349,12 @@ def build_decide_prompt(user_text, hist, snap):
         "10. 감정·잡담·인사·안부에는 [상태]의 조각 수·길이 숫자를 나열하지 마라 — "
         "먼저 사람으로서 공감하고, 편집 얘기는 사용자가 원할 때만. 조각 수 질문일 때만 숫자를 답한다.\n"
         "[예시 — 숫자는 예시일 뿐, 답은 항상 [상태]의 실제 값으로]\n"
+        "사용자: G1만\n"
+        '{"action":"run_proposal","params":{"instruction":"","candidate_labels":["G1"],"count":1}}\n'
+        "G1 조각만 남겨서 다시 구성해볼게요.\n"
+        "사용자: G2랑 G4만\n"
+        '{"action":"run_proposal","params":{"instruction":"","candidate_labels":["G2","G4"]}}\n'
+        "G2, G4만 골라서 구성해볼게요.\n"
         "사용자: 지금 조각이 몇개야?\n"
         '{"action":"answer","params":{}}\n'
         "전체 조각은 26개예요(원본 영상 7개를 장면 단위로 나눈 수). 지금 안에는 그중 "
@@ -388,6 +413,23 @@ def validate_decision(d, snap):
         if len(instr) > 120 or "?" in instr:
             return "clarify", {}, "instruction 오염(질문꼴/과장)"
         out["instruction"] = instr  # 빈 문자열 = 직전 기준 승계
+        # [관문C 2026-07-20 stash이식] 라벨 교정("G1만") 실행 —
+        #   Qwen candidate_labels를 계기판 fragment_labels로 검증해 조각ID로 변환.
+        #   목록에 없는 라벨(G99)이 하나라도 있으면 clarify (조용한 오답·날조 금지).
+        label_map = snap.get("fragment_labels") or {}
+        labels = params.get("candidate_labels")
+        if isinstance(labels, list) and labels:
+            picked, unknown = [], []
+            for label in labels[:40]:
+                lab = str(label or "").upper().strip()
+                fid = label_map.get(lab)
+                if fid:
+                    picked.append(fid)
+                else:
+                    unknown.append(lab)
+            if unknown or not picked:
+                return "clarify", {}, f"unknown candidate labels {unknown!r}"
+            out["candidate_fragment_ids"] = list(dict.fromkeys(picked))
         c = params.get("count")
         if isinstance(c, (int, float)) and 1 <= int(c) <= 40:
             out["count"] = int(c)
@@ -421,13 +463,52 @@ def validate_decision(d, snap):
 
 # ---------------------------------------------------------------- ③ 판단+발화 스트림
 
-def decide_stream(program_id, user_text, write=True, current_view=None):
+def _candidate_evidence(fragment_ids):
+    """[관문D 2026-07-20] 결정된 candidate 조각의 판단 근거(scene·speech·context)를
+    결정론적으로 조회해 응답에 노출. 모델 무관 — hub._sensor_evidence(DB 번들)만 사용.
+    번들 없으면 그 조각은 근거 없음(빈 리스트) — 지어내기 0."""
+    out = {}
+    fids = [str(f) for f in (fragment_ids or []) if f]
+    if not fids:
+        return out
+    try:
+        con = sqlite3.connect("file:" + hub.DB_PATH.replace("\\", "/") + "?mode=ro",
+                              uri=True)
+    except Exception as e:
+        print(f"[CONVERSE][WARN] candidate_evidence DB 열기 실패 ({e})")
+        return {fid: [] for fid in fids}
+    try:
+        qs = ",".join("?" * len(fids))
+        by_src = {}
+        for fid, sid in con.execute(
+                f"SELECT fragment_id, source_id FROM semantic_fragments "
+                f"WHERE fragment_id IN ({qs})", fids):
+            by_src.setdefault(sid, []).append(fid)
+        ctx = hub._load_context_for_sources(con, list(by_src.keys())) if by_src else {}
+        for sid, sfids in by_src.items():
+            bundles = hub.load_bundles(con, sid)
+            hub._apply_context_to_bundles(bundles, ctx)
+            bmap = {b.get("fid"): b for b in bundles}
+            for fid in sfids:
+                b = bmap.get(fid)
+                out[fid] = hub._sensor_evidence(b) if b else []
+    except Exception as e:
+        print(f"[CONVERSE][WARN] candidate_evidence 실패 ({e})")
+    finally:
+        con.close()
+    for fid in fids:
+        out.setdefault(fid, [])
+    return out
+
+
+def decide_stream(program_id, user_text, write=True, current_view=None, fragment_labels=None):
     """생성기: ('meta', {...}) → ('token', str)* → ('done', {...}).
     첫 줄 JSON 헤더는 규칙이 파싱·검증, 둘째 줄부터 say를 그대로 흘린다.
     위생 위반(중문·정체 노출) 감지 시 중단 → 고정 문구 강등.
     current_view: 프론트가 보낸 현재 화면 조각맵 라이브 요약(D+E)."""
     hist = load_history(program_id)
-    snap = state_snapshot(program_id, current_view=current_view)
+    snap = state_snapshot(program_id, current_view=current_view,
+                          fragment_labels=fragment_labels)
     prompt = build_decide_prompt(user_text, hist, snap)
     header = None
     action = params = None
@@ -479,6 +560,10 @@ def decide_stream(program_id, user_text, write=True, current_view=None):
             header = {}
         if header:
             action, params, _why = validate_decision(header, snap)
+            # [관문D 2026-07-20] 결정된 candidate 조각의 판단 근거를 응답에 얇게 노출.
+            if params.get("candidate_fragment_ids"):
+                params["candidate_evidence"] = _candidate_evidence(
+                    params.get("candidate_fragment_ids"))
             say = ""
         else:
             action, params = "answer", {}

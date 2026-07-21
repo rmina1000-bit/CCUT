@@ -71,6 +71,7 @@ type ConsultationDecision = {
   normalizedInstruction?: string;
   // [ARCHIVE P1] archive_query가 추린 후보 조각 (인물+장소 교집합) — hub가 이만 판정
   candidateFragmentIds?: string[];
+  rubric?: any;
   // [ARCHIVE B] 아카이브 포함 승인 시 프로젝트에 연결할 소스
   includeSourceIds?: string[];
 };
@@ -566,6 +567,9 @@ export const useProposalState = (
     // [INTENT-ROUTER] 메뉴판 철거 — 해석은 백엔드 종업원(/intent/route-edit)이 한다.
     // 프론트는 빈 입력만 막고 말을 거의 그대로 보낸다. 서버 불가 시에만 구 메뉴판 폴백(가역성).
     let consultationDecision: ConsultationDecision;
+    // [관문D 2026-07-21 스코프수리] route는 아래 try 블록 지역변수라 try 밖(852 확정점)에서 못 쓴다.
+    //   근거를 함수 스코프 변수로 승격 — try 안(route 유효)에서 담아 852에서 참조.
+    let candidateEvidence: Record<string, string[]> | undefined;
     try {
       // [조각 라벨 지정 편집 2026-07-06] 조각맵 타일 라벨(display_id "K1")→조각ID 매핑 동봉 —
       // "K1,K4,K6만으로 편집해줘"를 백엔드가 정확한 조각 후보로 해석할 수 있게.
@@ -740,9 +744,11 @@ export const useProposalState = (
           : isRetrigger ? (activeIntentRef.current ? "inherit" : "inherit_empty")
           : "content",
         candidateFragmentIds: route.candidate_fragment_ids || undefined,
+        rubric: route.rubric || route.params?.rubric || undefined,
         // [ARCHIVE B] "응, 포함해줘" 승인 시 종업원이 지정한 아카이브 소스
         includeSourceIds: route.include_source_ids || undefined,
       };
+      candidateEvidence = route.candidate_evidence;
     } catch (e: any) {
       console.warn("[INTENT-ROUTER] 서버 라우팅 실패 → 구 메뉴판 폴백:", e?.message);
       consultationDecision = buildConsultationReply(text, storyPlan.messages ?? []);
@@ -849,7 +855,7 @@ export const useProposalState = (
         confirmation_status: nextStatus === "confirmed" ? "confirmed" : prev.confirmation_status,
         user_notes: text,
         messages: (prev.messages ?? []).map((m: any) => 
-          m.id === aiMsgId ? { ...m, text: finalAiText, isInterpreting: false } : m
+          m.id === aiMsgId ? { ...m, text: finalAiText, isInterpreting: false, candidate_evidence: candidateEvidence } : m
         ),
       };
     });
@@ -894,9 +900,11 @@ export const useProposalState = (
       // [#49 (a) 2단 절단 — 구판 `normalizedInstruction || text`가 재실행 명령을 의도로 승격시키던 지점]
       // 내용 지시만 원문 폴백을 갖고, 승계/해제는 decision이 확정한 값(승계 의도 또는 "")을 그대로 쓴다.
       const intentKind = consultationDecision.intentKind ?? "content";
-      const inputText = intentKind === "content"
-        ? (consultationDecision.normalizedInstruction || text)
-        : (consultationDecision.normalizedInstruction ?? "");
+      const inputText = consultationDecision.candidateFragmentIds?.length
+        ? ""
+        : intentKind === "content"
+          ? (consultationDecision.normalizedInstruction || text)
+          : (consultationDecision.normalizedInstruction ?? "");
       if (intentKind === "content" && inputText.trim()) activeIntentRef.current = inputText; // 의도 갱신
       if (intentKind === "clear") activeIntentRef.current = null;                            // 의도 해제
       console.log("[CONSULTATION_NL_SUBMIT]\n" + JSON.stringify({
@@ -913,7 +921,8 @@ export const useProposalState = (
         // [ARCHIVE P1] 종업원이 추린 교집합 후보 — 백엔드 hub가 이 조각들만 판정
         ...(consultationDecision.candidateFragmentIds?.length
           ? { candidate_fragment_ids: consultationDecision.candidateFragmentIds }
-          : {})
+          : {}),
+        ...(consultationDecision.rubric ? { rubric: consultationDecision.rubric } : {})
       };
 
       const payload = {

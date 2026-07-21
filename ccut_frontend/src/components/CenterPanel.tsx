@@ -1722,6 +1722,27 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
                         )}
                         {item.msg.text}
                       </div>
+                      {/* [관문D 2026-07-21] 큐원 판단근거(대사·장면·맥락) 얇게 표시 — 없으면 "근거 없음" */}
+                      {item.msg.sender === "ai" && (item.msg as any).candidate_evidence && Object.keys((item.msg as any).candidate_evidence).length > 0 && (
+                        <div className="px-4 py-2 rounded-xl bg-secondary/5 border border-border/5 text-[11px] text-muted-foreground/70 space-y-1.5 max-w-full">
+                          {Object.entries((item.msg as any).candidate_evidence).map(([fid, lines]: any) => {
+                            const ev = (lines as string[]).filter((l) => !l.startsWith("meta:"));
+                            return (
+                              <div key={fid} className="space-y-0.5">
+                                {ev.length === 0 ? (
+                                  <div className="italic text-muted-foreground/40">근거 없음</div>
+                                ) : ev.map((l: string, i: number) => {
+                                  const label = l.startsWith("speech:") ? "대사" : l.startsWith("scene:") ? "장면" : l.startsWith("context:") ? "맥락" : "";
+                                  const val = l.replace(/^(speech|scene|context):\s*/, "").slice(0, 80);
+                                  return (
+                                    <div key={i}><span className="text-primary/50 mr-1">✓ {label}</span>{val}</div>
+                                  );
+                                })}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
                       {/* [SHOW] 조회 결과 카드 — 사람 말 명칭(제목·시간), 클릭=그 자리 재생 */}
                       {(item.msg as any).kind === "search_results" && Array.isArray((item.msg as any).results) && (item.msg as any).results.length > 0 && (
                         <SearchResultCards results={(item.msg as any).results} />

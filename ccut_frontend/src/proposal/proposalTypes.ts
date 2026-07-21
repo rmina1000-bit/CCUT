@@ -69,6 +69,8 @@ export type ConsultationMessage = {
   sender: "ai" | "user";
   text: string;
   timestamp: number;
+  // [관문D 2026-07-21] 큐원 판단근거 {fragment_id: ["scene: ...","speech: ...","context: ...","meta: ..."]}
+  candidate_evidence?: Record<string, string[]>;
 };
 
 export type StoryPlanPreview = {
