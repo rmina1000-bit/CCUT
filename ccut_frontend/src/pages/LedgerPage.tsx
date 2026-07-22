@@ -122,6 +122,7 @@ const LedgerPage: React.FC<LedgerPageProps> = ({ programId: propProgramId, embed
   const videoRef = useRef<HTMLVideoElement>(null);
   const hiddenRef = useRef<HTMLInputElement>(null);
   const playRef = useRef<{ spans: MsRange[]; idx: number } | null>(null);
+  const mirrorLedgerEnterRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     if (embedded) return;  // 워크스페이스 안에서는 프로젝트 선택기가 없다 (부모가 정한다)
@@ -144,6 +145,17 @@ const LedgerPage: React.FC<LedgerPageProps> = ({ programId: propProgramId, embed
       .catch(() => { setData(null); setEdlClips([]); });
   }, [programId]);
   useEffect(() => { reload(); }, [reload]);
+  useEffect(() => {
+    if (!programId || !embedded) return;
+    const key = `${programId}:embedded`;
+    if (mirrorLedgerEnterRef.current.has(key)) return;
+    mirrorLedgerEnterRef.current.add(key);
+    recordMirrorEvent({
+      event_kind: "continue",
+      project_id: programId,
+      origin: "LEDGER_EMBEDDED",
+    });
+  }, [programId, embedded]);
 
   // [#4 전사 전체화 2026-07-19] 장소(place) 기반 장면 그룹핑 폐기. 구획은 원본영상(source)
   // 단위 하나뿐 — 업로드순(sourceLabels 라벨 A,B,C…= main.py display_order)으로 그룹 정렬,
