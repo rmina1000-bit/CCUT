@@ -44,6 +44,7 @@ class ProposalEngine:
         [STEP 10-I.5.24] 여러 소스의 조각 Pool에서 A/B 제안 생성
         """
         print(f"[PROPOSAL ENGINE] generate_proposals_from_fragments ENTER: proj={project_id}, sources={source_ids}")
+        self._p3_recommended_order = None
         
         if not fragments:
             print("[PROPOSAL ENGINE] No fragments provided")
@@ -225,8 +226,22 @@ class ProposalEngine:
             for p in proposals:
                 try:
                     _before = [str(f.get("source_id"))[-4:] for f in p["sequence"]]
-                    p["sequence"] = self.arrange_fragments(p["sequence"])
+                    _baseline_sequence = self.arrange_fragments(p["sequence"])
+                    _before_fids = [f.get("fragment_id") for f in _baseline_sequence]
+                    _p3_arrange_on = os.getenv("CCUT_P3_ARRANGE", "").strip().upper() == "ON"
+                    if _p3_arrange_on:
+                        p["sequence"] = self.arrange_fragments(
+                            p["sequence"],
+                            recommended_order=self._p3_recommended_order,
+                        )
+                    else:
+                        p["sequence"] = _baseline_sequence
                     _after = [str(f.get("source_id"))[-4:] for f in p["sequence"]]
+                    _after_fids = [f.get("fragment_id") for f in p["sequence"]]
+                    print(
+                        f"[P3ARR {'ON' if _p3_arrange_on else 'OFF'}] mode={p.get('mode')} "
+                        f"source_ids={source_ids} before={_before_fids} after={_after_fids}"
+                    )
                     print(f"[DIRECTOR_LAYER_V0] {p.get('mode')} src reorder: {_before} -> {_after}")
                 except Exception as arr_err:
                     print(f"[DIRECTOR_LAYER_V0][ERROR] arrange failed ({p.get('mode')}): {arr_err}")
@@ -295,6 +310,37 @@ class ProposalEngine:
         last = min(block_list, key=lambda b: b["tail_m"])            # Quiet-End: 가장 잔잔한 블록을 끝에
         others = sorted([b for b in block_list if b is not last], key=lambda b: -b["mean_m"])
         return [c for b in (others + [last]) for c in b["clips"]]
+
+    def _derive_qwen_recommended_order(self, fragments, direction, emotional_timeline):
+        """Convert Qwen's narrative priority into a fid-only ordering proposal."""
+        priority = getattr(direction, "narrative_priority", None)
+        if priority not in {"dialogue", "action", "emotion", "scenery"}:
+            return None
+
+        emotion_by_fid = {
+            item.get("fragment_id"): float(item.get("intensity", 0.0) or 0.0)
+            for item in (emotional_timeline or [])
+            if isinstance(item, dict) and item.get("fragment_id")
+        }
+
+        def _score(fragment):
+            structural = fragment.get("structural") or {}
+            intelligence = fragment.get("intelligence") or {}
+            if priority == "action":
+                return float(fragment.get("motion_score", 0.0) or 0.0)
+            if priority == "emotion":
+                return emotion_by_fid.get(fragment.get("fragment_id"), 0.0)
+            if priority == "scenery":
+                return 1.0 if structural.get("role") == "scenery" else 0.0
+            transcript = intelligence.get("transcript") or fragment.get("transcript") or ""
+            return float(len(str(transcript).strip()))
+
+        ranked = sorted(
+            enumerate(fragments or []),
+            key=lambda pair: (-_score(pair[1]), pair[0]),
+        )
+        order = [f.get("fragment_id") for _, f in ranked if f.get("fragment_id")]
+        return order or None
 
     def _enrich_sequence_urls(self, seq):
         """[SELF-CONTAINED-SEQ] 시퀀스 조각에 video_url/thumbnail_url 동봉.
@@ -514,7 +560,18 @@ class ProposalEngine:
             # [NARRATIVE_DIRECTOR_REQUEST] is called inside get_narrative_direction()
             adapter = QwenNarrativeAdapter()
             direction = adapter.get_narrative_direction(context_metadata)
-            
+            try:
+                self._p3_recommended_order = self._derive_qwen_recommended_order(
+                    fragments, direction, emotional_timeline
+                )
+                print(
+                    f"[P3ARR QWEN] priority={direction.narrative_priority} "
+                    f"recommended={len(self._p3_recommended_order or [])}"
+                )
+            except Exception as order_err:
+                self._p3_recommended_order = None
+                print(f"[P3ARR QWEN][FALLBACK] recommended_order failed: {order_err}")
+
             # [NARRATIVE_TRANSLATION] is called inside translate_direction()
             translator = QwenNarrativeTranslator()
             constraints = translator.translate_direction(direction)
