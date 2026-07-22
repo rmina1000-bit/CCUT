@@ -133,8 +133,20 @@ def _revision_reply(rev):
     return f"네, {where} '{rev['theme']}' 조각을 빼겠습니다."
 
 
+def _mirror_summary_fact(project_id):
+    project_id = str(project_id or "").strip()
+    if not project_id:
+        return ""
+    try:
+        from mirror_ledger import format_summary_fact_line, summarize_project
+        line = format_summary_fact_line(summarize_project(project_id))
+    except Exception:
+        return ""
+    return (line + "\n") if line else ""
+
+
 def _llm_understand(input_text, recent_messages=None, source_ids=None,
-                    person_vocab=None, defer_chat=False):
+                    person_vocab=None, defer_chat=False, project_id=None):
     """[문맥 종업원 v2 — 국장지시 2026-07-06] 매트릭스가 아니라 문맥으로 판단한다.
     한 번의 호출로 대화/편집/승인/모호를 분류하고, 대화면 그 자리에서 진짜 답을 만든다.
     실제 날짜·작업 상황을 주입해 '오늘 몇일?' 환각(22일 사건)을 봉쇄한다.
@@ -165,9 +177,15 @@ def _llm_understand(input_text, recent_messages=None, source_ids=None,
     work_line = (f"[작업 상황] 이 프로젝트에는 원본 영상 {n_src}개가 올라와 있고, "
                  f"거기서 나눈 조각(장면 단위)이 {n_frag}개다. 원본과 조각은 다른 개념이며, "
                  "이 숫자 외의 작업 수치를 지어내지 마라.\n") if source_ids is not None else ""
+    mirror_line = _mirror_summary_fact(project_id)
+    fact_rule = "위 [지금]/[작업 상황] 수치는 실측값이다 — 날짜·조각·원본 질문은 이 값으로만 답하라.\n"
+    if mirror_line:
+        fact_rule = (
+            "위 [지금]/[작업 상황] 수치는 실측값이다 — 날짜·조각·원본 질문은 이 값으로만 답하라. "
+            "[수첩 요약]은 mirror_ledger의 pass/correction 집계값으로만 읽어라.\n"
+        )
     facts = (f"[지금] {now.year}년 {now.month}월 {now.day}일 {weekday}요일 "
-             f"{now.strftime('%H:%M')}\n" + work_line
-             + "위 [지금]/[작업 상황] 수치는 실측값이다 — 날짜·조각·원본 질문은 이 값으로만 답하라.\n")
+             f"{now.strftime('%H:%M')}\n" + work_line + mirror_line + fact_rule)
     prompt = (
         "너는 CCUT — 영상 편집 스튜디오의 다정한 동료다. 사용자와 자연스럽게 대화하고, "
         "사용자의 말이 편집 지시일 때만 편집 접수로 처리한다.\n"
@@ -349,7 +367,7 @@ def stream_smalltalk(input_text, recent_messages=None, facts=""):
 def route_edit_intent(source_ids=None, input_text="", recent_messages=None,
                       selected_proposal_id=None, allow_llm=True, person_vocab=None,
                       archive_lookup=None, search_lookup=None, fragment_labels=None,
-                      defer_chat=False):
+                      defer_chat=False, project_id=None):
     t = (input_text or "").strip()
     if not t:
         return _resp("ask_clarification", "말씀을 조금만 더 입력해 주세요.", confidence=1.0)
@@ -377,7 +395,8 @@ def route_edit_intent(source_ids=None, input_text="", recent_messages=None,
             r0 = route_edit_intent(source_ids=source_ids, input_text=_prev_user,
                                    recent_messages=None, allow_llm=allow_llm,
                                    person_vocab=person_vocab,
-                                   archive_lookup=archive_lookup)
+                                   archive_lookup=archive_lookup,
+                                   project_id=project_id)
             if r0.get("action") == "ask_include_archive":
                 fids = r0.get("candidate_fragment_ids") or []
                 rr = _resp("run_proposal",
@@ -575,7 +594,7 @@ def route_edit_intent(source_ids=None, input_text="", recent_messages=None,
             and (allow_llm or not _EDIT_MARK_RE.search(t)):
         if allow_llm:
             und = _llm_understand(t, recent_messages, source_ids, person_vocab,
-                                  defer_chat=defer_chat)
+                                  defer_chat=defer_chat, project_id=project_id)
             if und:
                 return und
         # hub 미응답/비활성 — 편집 강요 없이 정직한 수신 확인
@@ -736,7 +755,7 @@ def route_edit_intent(source_ids=None, input_text="", recent_messages=None,
     if vague_re.search(t):
         if allow_llm:
             llm = _llm_understand(t, recent_messages, source_ids, person_vocab,
-                                  defer_chat=defer_chat)
+                                  defer_chat=defer_chat, project_id=project_id)
             if llm:
                 return llm
         return _resp("ask_clarification",
@@ -763,7 +782,7 @@ def route_edit_intent(source_ids=None, input_text="", recent_messages=None,
     # ── 6. 결정론이 전부 놓친 말 → Qwen 종업원 ──
     if allow_llm:
         llm = _llm_understand(t, recent_messages, source_ids, person_vocab,
-                              defer_chat=defer_chat)
+                              defer_chat=defer_chat, project_id=project_id)
         if llm:
             return llm
     # [국장지시 2026-07-06] 못 알아들어도 편집 조건을 강요하지 않는다 — 대화도 정상 경로

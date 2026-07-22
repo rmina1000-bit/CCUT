@@ -200,6 +200,18 @@ def _clean_fragment_labels(fragment_labels):
     return clean
 
 
+def _mirror_summary_fact(project_id):
+    project_id = str(project_id or "").strip()
+    if not project_id:
+        return ""
+    try:
+        from mirror_ledger import format_summary_fact_line, summarize_project
+        line = format_summary_fact_line(summarize_project(project_id))
+    except Exception:
+        return ""
+    return line
+
+
 def state_snapshot(program_id, current_view=None, fragment_labels=None):
     """상태 스냅샷 — 조각풀·직전 의도·분량 설정. 전부 read-only.
     [R2-2 D+E] '지금 안'의 조각 수·구성은 DB 직전 생성분이 아니라 프론트가 보낸
@@ -209,7 +221,8 @@ def state_snapshot(program_id, current_view=None, fragment_labels=None):
     snap = {"proposals": {}, "pool": 0, "source_count": 0,
             "now": _now_kst(), "active_intent": None,
             "target_length": None, "count_pref": None, "current": None,
-            "fragment_labels": _clean_fragment_labels(fragment_labels)}
+            "fragment_labels": _clean_fragment_labels(fragment_labels),
+            "mirror_summary": _mirror_summary_fact(program_id)}
     cv = current_view or {}
     if isinstance(cv, dict) and cv.get("count") is not None:
         snap["current"] = {
@@ -295,6 +308,8 @@ def _snap_block(snap):
         _lab_keys = ", ".join(sorted(labels.keys()))
         gauge_line = gauge_line + f", fragment_labels=[{_lab_keys}](조각맵 타일 라벨—이 목록의 라벨만 유효)"
     lines = [pool_line, now_line, gauge_line]
+    if snap.get("mirror_summary"):
+        lines.append(snap["mirror_summary"])
     if snap.get("active_intent"):
         lines.append(f"적용 중 기준: {snap['active_intent']}")
     if snap.get("target_length"):

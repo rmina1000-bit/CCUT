@@ -4469,7 +4469,7 @@ async def route_edit_intent_api(req: EditIntentRouteRequest):
                 source_ids=req.source_ids, input_text=req.input_text,
                 recent_messages=req.recent_messages,
                 selected_proposal_id=req.selected_proposal_id,
-                fragment_labels=labels)
+                fragment_labels=labels, project_id=req.project_id)
         )
         # [관문D 2026-07-21 국장승인] 라벨교정 실행 시 조각 판단근거(scene·speech·context)를
         #   route 응답에 노출 — chat이 쓰는 엔드포인트가 route-edit이므로 여기 실어야 화면 도달.
@@ -4509,7 +4509,7 @@ async def route_edit_intent_stream_api(req: EditIntentRouteRequest):
                 source_ids=req.source_ids, input_text=req.input_text,
                 recent_messages=req.recent_messages,
                 selected_proposal_id=req.selected_proposal_id,
-                fragment_labels=labels, defer_chat=True)
+                fragment_labels=labels, defer_chat=True, project_id=req.project_id)
         )
         # [관문D 2026-07-21 국장승인] 라벨교정 실행 시 조각 판단근거(scene·speech·context)를
         #   route 응답에 노출 — chat이 쓰는 엔드포인트가 route-edit이므로 여기 실어야 화면 도달.
@@ -4614,7 +4614,7 @@ async def chat_converse_stream(req: ConverseRequest):
         det = route_edit_intent(
             source_ids=req.source_ids, input_text=req.input_text,
             recent_messages=None, selected_proposal_id=req.selected_proposal_id,
-            fragment_labels=req.fragment_labels, allow_llm=False)
+            fragment_labels=req.fragment_labels, allow_llm=False, project_id=pid)
         kind = str((det.get("matched") or {}).get("kind") or "")
         is_person_composite = (det.get("matched") or {}).get("type") == "person"
         adopt = (kind in _DET_FINAL_KINDS or is_person_composite

@@ -162,6 +162,109 @@ def append_event(payload: MirrorEventPayload):
         con.close()
 
 
+def _empty_summary(project_id: Optional[str]):
+    return {
+        "project_id": project_id or None,
+        "total_count": 0,
+        "pass_count": 0,
+        "correction_count": 0,
+        "accept_count": 0,
+        "undo_count": 0,
+        "edit_again_count": 0,
+        "continue_count": 0,
+        "pass_rate": 0.0,
+        "correction_rate": 0.0,
+        "undo_rate": 0.0,
+        "recent_verdicts": [],
+    }
+
+
+def _connect_readonly():
+    con = sqlite3.connect("file:" + DB_PATH.replace("\\", "/") + "?mode=ro",
+                          uri=True, timeout=10)
+    con.row_factory = sqlite3.Row
+    return con
+
+
+def summarize_project(project_id: str, recent_limit: int = 5):
+    project_id = _clean_text(project_id)
+    if not project_id:
+        return _empty_summary(None)
+    recent_limit = max(0, min(int(recent_limit or 0), 10))
+    con = None
+    try:
+        con = _connect_readonly()
+        row = con.execute(
+            f"""SELECT
+                    COUNT(*) AS total_count,
+                    SUM(CASE WHEN verdict='pass' THEN 1 ELSE 0 END) AS pass_count,
+                    SUM(CASE WHEN verdict='correction' THEN 1 ELSE 0 END) AS correction_count,
+                    SUM(CASE WHEN event_kind='accept' THEN 1 ELSE 0 END) AS accept_count,
+                    SUM(CASE WHEN event_kind='undo' THEN 1 ELSE 0 END) AS undo_count,
+                    SUM(CASE WHEN event_kind='edit_again' THEN 1 ELSE 0 END) AS edit_again_count,
+                    SUM(CASE WHEN event_kind='continue' THEN 1 ELSE 0 END) AS continue_count
+                FROM {TABLE}
+                WHERE project_id=?""",
+            (project_id,),
+        ).fetchone()
+        total_count = int((row or {})["total_count"] or 0)
+        pass_count = int((row or {})["pass_count"] or 0)
+        correction_count = int((row or {})["correction_count"] or 0)
+        undo_count = int((row or {})["undo_count"] or 0)
+        recent_rows = con.execute(
+            f"""SELECT verdict, verdict_basis
+                FROM {TABLE}
+                WHERE project_id=?
+                ORDER BY ts DESC, mirror_event_id DESC
+                LIMIT ?""",
+            (project_id, recent_limit),
+        ).fetchall() if recent_limit else []
+        return {
+            "project_id": project_id,
+            "total_count": total_count,
+            "pass_count": pass_count,
+            "correction_count": correction_count,
+            "accept_count": int((row or {})["accept_count"] or 0),
+            "undo_count": undo_count,
+            "edit_again_count": int((row or {})["edit_again_count"] or 0),
+            "continue_count": int((row or {})["continue_count"] or 0),
+            "pass_rate": round(pass_count / total_count, 3) if total_count else 0.0,
+            "correction_rate": round(correction_count / total_count, 3) if total_count else 0.0,
+            "undo_rate": round(undo_count / total_count, 3) if total_count else 0.0,
+            "recent_verdicts": [
+                f"{str(r['verdict'])}:{str(r['verdict_basis'])}"
+                for r in recent_rows
+            ],
+        }
+    except (OSError, sqlite3.Error, KeyError, TypeError, ValueError):
+        return _empty_summary(project_id)
+    finally:
+        if con is not None:
+            con.close()
+
+
+def format_summary_fact_line(summary):
+    total_count = int((summary or {}).get("total_count") or 0)
+    if total_count <= 0:
+        return ""
+    recent = ",".join((summary or {}).get("recent_verdicts") or []) or "none"
+    return (
+        "[수첩 요약] mirror_ledger "
+        f"project_id={(summary or {}).get('project_id')} "
+        f"total={total_count} "
+        f"pass={(summary or {}).get('pass_count', 0)} "
+        f"correction={(summary or {}).get('correction_count', 0)} "
+        f"accept={(summary or {}).get('accept_count', 0)} "
+        f"undo={(summary or {}).get('undo_count', 0)} "
+        f"edit_again={(summary or {}).get('edit_again_count', 0)} "
+        f"continue={(summary or {}).get('continue_count', 0)} "
+        f"pass_rate={(summary or {}).get('pass_rate', 0.0):.3f} "
+        f"correction_rate={(summary or {}).get('correction_rate', 0.0):.3f} "
+        f"undo_rate={(summary or {}).get('undo_rate', 0.0):.3f} "
+        f"recent_verdicts={recent}"
+    )
+
+
 @router.post("/mirror/events")
 async def post_mirror_event(payload: MirrorEventPayload):
     try:
