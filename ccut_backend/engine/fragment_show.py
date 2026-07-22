@@ -91,7 +91,10 @@ def search_show(text, person, project_source_ids, limit=12):
                 found = fragment_search.search(q, top_k=limit * 2)
             except Exception:
                 return None
-            for it in (found or []):
+            items = (found.get("results") or []) if isinstance(found, dict) else (found or [])
+            for it in items:
+                if not isinstance(it, dict):
+                    continue
                 fid = it.get("fragment_id")
                 sf = con.execute(
                     "SELECT source_id, start, end FROM semantic_fragments "

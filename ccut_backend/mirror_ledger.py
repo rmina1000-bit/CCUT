@@ -12,6 +12,9 @@ from pydantic import BaseModel
 BACKEND_DIR = os.path.dirname(os.path.abspath(__file__))
 DB_PATH = os.path.join(BACKEND_DIR, "ccut_app.db")
 TABLE = "mirror_ledger"
+DEFAULT_SUMMARY_EVENT_LIMIT = 10
+MAX_SUMMARY_EVENT_LIMIT = 100
+MS_PER_DAY = 24 * 60 * 60 * 1000
 
 ALLOWED_EVENT_KINDS = {"accept", "undo", "edit_again", "continue"}
 ALLOWED_VERDICTS = {"pass", "correction"}
@@ -165,7 +168,12 @@ def append_event(payload: MirrorEventPayload):
 def _empty_summary(project_id: Optional[str]):
     return {
         "project_id": project_id or None,
+        "ledger_total_count": 0,
         "total_count": 0,
+        "omitted_count": 0,
+        "summary_event_limit": DEFAULT_SUMMARY_EVENT_LIMIT,
+        "summary_window_days": 0,
+        "summary_since_ts": None,
         "pass_count": 0,
         "correction_count": 0,
         "accept_count": 0,
@@ -186,14 +194,60 @@ def _connect_readonly():
     return con
 
 
-def summarize_project(project_id: str, recent_limit: int = 5):
+def _bounded_int(value, default: int, low: int, high: int) -> int:
+    try:
+        number = int(value)
+    except (TypeError, ValueError):
+        number = default
+    return max(low, min(number, high))
+
+
+def _summary_event_limit(max_events=None) -> int:
+    if max_events is None:
+        max_events = os.getenv("CCUT_MIRROR_SUMMARY_MAX_EVENTS")
+    return _bounded_int(max_events, DEFAULT_SUMMARY_EVENT_LIMIT, 1, MAX_SUMMARY_EVENT_LIMIT)
+
+
+def _summary_window_days(window_days=None) -> int:
+    if window_days is None:
+        window_days = os.getenv("CCUT_MIRROR_SUMMARY_WINDOW_DAYS")
+    return _bounded_int(window_days, 0, 0, 3650)
+
+
+def summarize_project(project_id: str, recent_limit: int = 5, max_events=None,
+                      window_days=None, now_ms=None):
     project_id = _clean_text(project_id)
     if not project_id:
         return _empty_summary(None)
     recent_limit = max(0, min(int(recent_limit or 0), 10))
+    event_limit = _summary_event_limit(max_events)
+    window_days = _summary_window_days(window_days)
+    since_ts = None
+    if window_days > 0:
+        now_value = _bounded_int(
+            now_ms,
+            int(datetime.datetime.now().timestamp() * 1000),
+            0,
+            9999999999999,
+        )
+        since_ts = max(0, now_value - (window_days * MS_PER_DAY))
     con = None
     try:
         con = _connect_readonly()
+        ledger_total_count = int(con.execute(
+            f"SELECT COUNT(*) FROM {TABLE} WHERE project_id=?",
+            (project_id,),
+        ).fetchone()[0] or 0)
+        where_sql = "WHERE project_id=?"
+        params = [project_id]
+        if since_ts is not None:
+            where_sql += " AND ts>=?"
+            params.append(since_ts)
+        scoped_sql = (
+            f"SELECT * FROM {TABLE} {where_sql} "
+            "ORDER BY ts DESC, mirror_event_id DESC LIMIT ?"
+        )
+        scoped_params = [*params, event_limit]
         row = con.execute(
             f"""SELECT
                     COUNT(*) AS total_count,
@@ -203,9 +257,8 @@ def summarize_project(project_id: str, recent_limit: int = 5):
                     SUM(CASE WHEN event_kind='undo' THEN 1 ELSE 0 END) AS undo_count,
                     SUM(CASE WHEN event_kind='edit_again' THEN 1 ELSE 0 END) AS edit_again_count,
                     SUM(CASE WHEN event_kind='continue' THEN 1 ELSE 0 END) AS continue_count
-                FROM {TABLE}
-                WHERE project_id=?""",
-            (project_id,),
+                FROM ({scoped_sql})""",
+            scoped_params,
         ).fetchone()
         total_count = int((row or {})["total_count"] or 0)
         pass_count = int((row or {})["pass_count"] or 0)
@@ -213,15 +266,19 @@ def summarize_project(project_id: str, recent_limit: int = 5):
         undo_count = int((row or {})["undo_count"] or 0)
         recent_rows = con.execute(
             f"""SELECT verdict, verdict_basis
-                FROM {TABLE}
-                WHERE project_id=?
+                FROM ({scoped_sql})
                 ORDER BY ts DESC, mirror_event_id DESC
                 LIMIT ?""",
-            (project_id, recent_limit),
+            [*scoped_params, recent_limit],
         ).fetchall() if recent_limit else []
         return {
             "project_id": project_id,
+            "ledger_total_count": ledger_total_count,
             "total_count": total_count,
+            "omitted_count": max(0, ledger_total_count - total_count),
+            "summary_event_limit": event_limit,
+            "summary_window_days": window_days,
+            "summary_since_ts": since_ts,
             "pass_count": pass_count,
             "correction_count": correction_count,
             "accept_count": int((row or {})["accept_count"] or 0),
@@ -248,10 +305,16 @@ def format_summary_fact_line(summary):
     if total_count <= 0:
         return ""
     recent = ",".join((summary or {}).get("recent_verdicts") or []) or "none"
+    ledger_total = int((summary or {}).get("ledger_total_count") or total_count)
+    omitted_count = int((summary or {}).get("omitted_count") or 0)
+    summary_limit = int((summary or {}).get("summary_event_limit") or DEFAULT_SUMMARY_EVENT_LIMIT)
     return (
         "[수첩 요약] mirror_ledger "
         f"project_id={(summary or {}).get('project_id')} "
+        f"ledger_total={ledger_total} "
         f"total={total_count} "
+        f"omitted={omitted_count} "
+        f"summary_limit={summary_limit} "
         f"pass={(summary or {}).get('pass_count', 0)} "
         f"correction={(summary or {}).get('correction_count', 0)} "
         f"accept={(summary or {}).get('accept_count', 0)} "

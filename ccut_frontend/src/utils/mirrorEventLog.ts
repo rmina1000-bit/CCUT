@@ -194,6 +194,19 @@ function persistMirrorVerdict(event: MirrorEventRecord) {
   }).catch(() => {});
 }
 
+export function closeMirrorPendingForProject(
+  projectId?: string | null,
+  origin: "project_switch" | "session_end" = "session_end",
+) {
+  const cleanProjectId = typeof projectId === "string" ? projectId.trim() : "";
+  if (!cleanProjectId || !cleanProjectId.startsWith("proj_")) return null;
+  return recordMirrorEvent({
+    event_kind: "continue",
+    project_id: cleanProjectId,
+    origin,
+  });
+}
+
 export function recordMirrorEvent(input: MirrorEventInput) {
   const ts = typeof input.ts === "number" ? input.ts : Date.now();
   const prior = readStoredEvents();

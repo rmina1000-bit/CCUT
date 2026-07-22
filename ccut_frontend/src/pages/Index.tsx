@@ -56,6 +56,7 @@ import { rebuildFragmentTiles } from "@/utils/fragmentTiles";
 import { toMs } from "@/utils/editContract";
 import { buildExportClipsFromResolvedFragments, type PhysicalClip } from "@/utils/exportClipBuilder";
 import { DEBUG_LOG } from "@/utils/debugFlags";
+import { closeMirrorPendingForProject } from "@/utils/mirrorEventLog";
 
 type PbeContractState = Pick<
   EditStateRow,
@@ -123,6 +124,18 @@ const Index: React.FC = () => {
     if (reEdit) { reEditSessionStartRef.current = Date.now(); setReEditProgramId(id); }
     setActiveNavItem(id);
   }, [setActiveNavItem]);
+  useEffect(() => {
+    if (!activeNavItem || !activeNavItem.startsWith("proj_")) return;
+    const closePending = () => {
+      closeMirrorPendingForProject(activeNavItem, "session_end");
+    };
+    window.addEventListener("pagehide", closePending);
+    window.addEventListener("beforeunload", closePending);
+    return () => {
+      window.removeEventListener("pagehide", closePending);
+      window.removeEventListener("beforeunload", closePending);
+    };
+  }, [activeNavItem]);
 
   // [STORY-TRACK-A A-1 · R8 유령 4호 2026-07-20] 우측창 스토리 모드 = 중앙(centerShowStory)과
   // '완전 동일한 식' storyStageVisible 하나. 판정·후단 조건이 유틸 안에 있어 분열 경로가 없다.
@@ -1070,12 +1083,16 @@ const Index: React.FC = () => {
 
     // [FIX-HYD-A] '진짜 프로젝트 전환'만 클리어 대상. 첫 하이드레이션(마운트/업로드 직후
     // 신규 프로젝트로 activeNavItem 최초 진입)은 전환이 아니므로 방금 분석한 세션을 보존한다.
+    const previousProjectId = previousHydratedProjectRef.current;
     const isRealProjectSwitch =
-      previousHydratedProjectRef.current !== null &&
-      previousHydratedProjectRef.current !== activeNavItem;
+      previousProjectId !== null &&
+      previousProjectId !== activeNavItem;
     // [FIX-HYD-EMPTY] 방금 업로드로 생성한 프로젝트면 fetch-전 클리어 스킵(분석 세션 보존). 표식은 1회 소비.
     const isJustCreated = justCreatedProjectRef.current === activeNavItem;
     if (isJustCreated) justCreatedProjectRef.current = null;
+    if (isRealProjectSwitch && !isJustCreated) {
+      closeMirrorPendingForProject(previousProjectId, "project_switch");
+    }
     previousHydratedProjectRef.current = activeNavItem;
     if (isRealProjectSwitch && !isJustCreated) setIsSwitchingProject(true);
 
