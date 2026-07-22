@@ -11,6 +11,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { Play } from "lucide-react";
 import { videoService } from "@/services/videoService";
 import { FRAGMENT_TEXT_FONT, fragmentTextColor, FRAGMENT_EXCLUDED_STYLE } from "@/lib/fragmentText";
+import { recordMirrorEvent } from "@/utils/mirrorEventLog";
 
 type MsRange = [number, number];
 const PLAYBACK_STOP_EPS_MS = 6;
@@ -430,9 +431,19 @@ const LedgerPage: React.FC<LedgerPageProps> = ({ programId: propProgramId, embed
   const undoRemove = useCallback(async () => {
     if (!undoInfo) return;
     const r = await postEdit(undoInfo.item, { excluded_ranges: [], removed: false, command_type: "RESTORE" });
-    if (r?.ok) { setSaveError(null); onEditStateChanged?.(); setUndoInfo(null); reload(); }
+    if (r?.ok) {
+      recordMirrorEvent({
+        event_kind: "undo",
+        project_id: programId,
+        fragment_id: undoInfo.item.fragment_id,
+        timeline_item_id: undoInfo.item.timeline_item_id,
+        command_type: "RESTORE",
+        origin: "TEXT_EDITOR",
+      });
+      setSaveError(null); onEditStateChanged?.(); setUndoInfo(null); reload();
+    }
     else reportEditFailure(r);
-  }, [undoInfo, postEdit, reload, onEditStateChanged, reportEditFailure]);
+  }, [undoInfo, postEdit, reload, onEditStateChanged, reportEditFailure, programId]);
 
   // ── 워드식 글자 편집 ──────────────────────────────────────────────
   const enterEdit = useCallback((it: ScriptItem, caret = 0) => {

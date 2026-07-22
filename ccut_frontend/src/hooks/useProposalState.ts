@@ -8,6 +8,7 @@ import { videoService } from "@/services/videoService";
 import { assignShortDisplayIds, recalcDisplayIds } from "@/lib/fragmentIdentity";
 import { storyGateEnabled } from "@/hooks/useStoryGate";  // [STORY-GATE P3/S3] 완료 문구 분기
 import { DEBUG_LOG } from "@/utils/debugFlags";
+import { recordMirrorEvent } from "@/utils/mirrorEventLog";
 
 /**
  * [STEP 10-K-C1-R39] Frontend Commit-Time Sequence Guard
@@ -182,17 +183,23 @@ export const useProposalState = (
     }, []);
 
   const restoreProposalEntry = useCallback((id: string) => {
-    setProposalHistory((prev) => {
-      const entry = prev.find((h) => h.id === id);
-      if (entry) {
-        DEBUG_LOG && console.log("[FLOW] restore proposal entry:", id);
-        setProposals(entry.pair);
-        setActiveProposalEntryId(id);
-        setSelectedProposalId(null);
-      }
-      return prev;
-    });
-  }, []);
+    const entry = proposalHistory.find((h) => h.id === id);
+    if (entry) {
+      DEBUG_LOG && console.log("[FLOW] restore proposal entry:", id);
+      setProposals(entry.pair);
+      setActiveProposalEntryId(id);
+      setSelectedProposalId(null);
+      recordMirrorEvent({
+        event_kind: "edit_again",
+        project_id: projectId || "default_project",
+        proposal_ids: {
+          A: (entry.pair as any)?.A?.proposal_id,
+          B: (entry.pair as any)?.B?.proposal_id,
+        },
+        proposal_history_id: id,
+      });
+    }
+  }, [projectId, proposalHistory]);
 
   const logProposalPair = useCallback(
     (pair: Record<"A" | "B", Proposal>, label: string) => {
@@ -279,7 +286,13 @@ export const useProposalState = (
 
     setSelectedProposalId(id);
     setCommittedProposalId(id);
-  }, [proposals]);
+    recordMirrorEvent({
+      event_kind: "accept",
+      project_id: projectId || "default_project",
+      proposal_id: (proposals[mode] as any)?.proposal_id,
+      proposal_slot: id,
+    });
+  }, [proposals, projectId]);
 
   const handleReproposal = useCallback(
     async (nextDirection: Direction | string) => {
@@ -304,8 +317,8 @@ export const useProposalState = (
         instructionText,
         sourceCount: orderedSourceIds.length,
         existingProposals: proposals ? {
-          A: proposals.A?.proposal_id,
-          B: proposals.B?.proposal_id
+          A: (proposals.A as any)?.proposal_id,
+          B: (proposals.B as any)?.proposal_id
         } : "none"
       }, null, 2));
 
@@ -326,6 +339,16 @@ export const useProposalState = (
         user_intent: userIntent,
         refresh: true
       };
+      const targetProposalSlot = selectedProposalId || committedProposalId;
+      const targetProposal = targetProposalSlot === "A" || targetProposalSlot === "B"
+        ? (proposals as any)?.[targetProposalSlot]
+        : null;
+      recordMirrorEvent({
+        event_kind: "edit_again",
+        project_id: projectId || "default_project",
+        proposal_id: targetProposal?.proposal_id,
+        proposal_slot: targetProposalSlot || undefined,
+      });
 
       // [REPROPOSAL_PROJECT_REQUEST] Console Log
       console.log("[REPROPOSAL_PROJECT_REQUEST]\n" + JSON.stringify({
@@ -336,6 +359,7 @@ export const useProposalState = (
       }, null, 2));
 
       try {
+        const proposalStartedAt = Date.now();
         const proposalData = await videoService.requestProjectProposals(
           projectId || "default_project",
           orderedSourceIds,
@@ -343,6 +367,7 @@ export const useProposalState = (
           userIntent,
           true
         );
+        const proposalTotalMs = Date.now() - proposalStartedAt;
 
         if (proposalData && proposalData.proposals) {
           const generatedProposals: Record<"A" | "B", any> = {} as any;
@@ -402,6 +427,15 @@ export const useProposalState = (
           setProposals(generatedProposals);
           setSelectedProposalId(generatedProposals.B ? "B" : "A");
           setCommittedProposalId(null);
+          recordMirrorEvent({
+            event_kind: "qwen_complete",
+            project_id: projectId || "default_project",
+            proposal_ids: {
+              A: generatedProposals.A?.proposal_id,
+              B: generatedProposals.B?.proposal_id,
+            },
+            total_ms: proposalTotalMs,
+          });
         } else {
           console.warn("[Reproposal] No proposals returned from server");
         }
@@ -416,6 +450,8 @@ export const useProposalState = (
       projectId,
       orderedSourceIds,
       storyPlan,
+      selectedProposalId,
+      committedProposalId,
       setProposals,
       setSelectedProposalId,
       setCommittedProposalId
@@ -570,6 +606,8 @@ export const useProposalState = (
     // [관문D 2026-07-21 스코프수리] route는 아래 try 블록 지역변수라 try 밖(852 확정점)에서 못 쓴다.
     //   근거를 함수 스코프 변수로 승격 — try 안(route 유효)에서 담아 852에서 참조.
     let candidateEvidence: Record<string, string[]> | undefined;
+    let mirrorRouteTotalMs: number | undefined;
+    let mirrorResolveMs: number | undefined;
     try {
       // [조각 라벨 지정 편집 2026-07-06] 조각맵 타일 라벨(display_id "K1")→조각ID 매핑 동봉 —
       // "K1,K4,K6만으로 편집해줘"를 백엔드가 정확한 조각 후보로 해석할 수 있게.
@@ -594,6 +632,7 @@ export const useProposalState = (
       // [F2 스트리밍] 스트림 우선 — 대화 reply가 토큰 단위로 즉시 차오른다.
       // 스트림 실패 시 기존 일괄 엔드포인트로 폴백 (무언 실패 금지, 계약 동일).
       let route: any;
+      let routeTotalMs: number | undefined;
       const _f2T0 = Date.now();
       try {
         route = await videoService.routeEditIntentStream(routePayload, (accum: string) => {
@@ -603,12 +642,17 @@ export const useProposalState = (
               m.id === aiMsgId ? { ...m, text: accum, isInterpreting: true } : m),
           } : prev);
         });
-        console.log(`[F2-TTFT front] stream total_ms=${Date.now() - _f2T0}`);
+        routeTotalMs = Date.now() - _f2T0;
+        console.log(`[F2-TTFT front] stream total_ms=${routeTotalMs}`);
       } catch (streamErr: any) {
         console.warn("[F2] 스트림 실패 → 일괄 폴백:", streamErr?.message);
         route = await videoService.routeEditIntent(routePayload);
-        console.log(`[F2-TTFT front] batch total_ms=${Date.now() - _f2T0}`);
+        routeTotalMs = Date.now() - _f2T0;
+        console.log(`[F2-TTFT front] batch total_ms=${routeTotalMs}`);
       }
+      mirrorRouteTotalMs = routeTotalMs;
+      const routeResolveMs = Number(route?.resolveMs ?? route?.resolve_ms);
+      mirrorResolveMs = Number.isFinite(routeResolveMs) ? routeResolveMs : undefined;
       console.log("[INTENT-ROUTER route]\n" + JSON.stringify({
         action: route.action,
         via: route.via,
@@ -932,6 +976,18 @@ export const useProposalState = (
         user_intent: userIntent,
         refresh: true
       };
+      const activeProposalSlot = selectedProposalId || committedProposalId;
+      const activeProposal = activeProposalSlot === "A" || activeProposalSlot === "B"
+        ? (proposals as any)?.[activeProposalSlot]
+        : null;
+      recordMirrorEvent({
+        event_kind: "edit_again",
+        project_id: projectId || "default_project",
+        proposal_id: activeProposal?.proposal_id,
+        proposal_slot: activeProposalSlot || undefined,
+        route_total_ms: mirrorRouteTotalMs,
+        resolve_ms: mirrorResolveMs,
+      });
 
       console.log("[INTENT-ROUTE]\n" + JSON.stringify({
         stage: "proposal_submit",
@@ -976,6 +1032,7 @@ export const useProposalState = (
       }, null, 2));
 
       try {
+        const proposalStartedAt = Date.now();
         const proposalData = await videoService.requestProjectProposals(
           projectId || "default_project",
           effectiveSourceIds,
@@ -983,6 +1040,7 @@ export const useProposalState = (
           userIntent,
           true
         );
+        const proposalTotalMs = Date.now() - proposalStartedAt;
 
         if (proposalData && proposalData.proposals) {
           const generatedProposals: Record<"A" | "B", any> = {} as any;
@@ -1052,6 +1110,15 @@ export const useProposalState = (
           setCommittedProposalId(null);
           setProposals(generatedProposals);
           setSelectedProposalId(generatedProposals.B ? "B" : "A");
+          recordMirrorEvent({
+            event_kind: "qwen_complete",
+            project_id: projectId || "default_project",
+            proposal_ids: {
+              A: generatedProposals.A?.proposal_id,
+              B: generatedProposals.B?.proposal_id,
+            },
+            total_ms: proposalTotalMs,
+          });
 
           // [FLOW/HONEST-EMPTY] 조건에 맞는 조각이 0개면 침묵하지 않고 흐름에 설명을 남긴다.
           // (Hollyhock "실내만" 사례: keep=0 → 조각맵/무대가 비어 고장처럼 보였던 문제)
@@ -1148,6 +1215,7 @@ export const useProposalState = (
     // [#57] revise 타겟 결정이 현재 선택 안을 읽는다 — stale closure로 다른 안을
     // 수정하는 사고 방지 (기존 참조 587·854행도 같은 구멍이었음)
     selectedProposalId,
+    committedProposalId,
     setSelectedProposalId,
     setCommittedProposalId,
     setProposals

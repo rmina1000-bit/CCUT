@@ -19,6 +19,7 @@ import { DEBUG_LOG } from "@/utils/debugFlags";
 import { useStoryGate } from "@/hooks/useStoryGate";
 import { fragmentTranscriptText, FRAGMENT_TEXT_FONT, FRAGMENT_TEXT_STYLE, FRAGMENT_SILENT_STYLE } from "@/lib/fragmentText";
 import { storyStageVisible } from "@/lib/storyMode";
+import { recordMirrorEvent } from "@/utils/mirrorEventLog";
 
 import type { AppState, SourceEntry } from "@/types";
 
@@ -2510,7 +2511,17 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
                       r.status === 409 ? "그새 원고가 바뀌었습니다. 다시 보고 승인해 주세요."
                       : r.status === 503 ? "승인 원장(story_approval)이 아직 이 DB에 없습니다 — Cutover 필요."
                       : "승인하지 못했습니다.");
-                    else setStoryApproveError(null);
+                    else {
+                      recordMirrorEvent({
+                        event_kind: "accept",
+                        project_id: programId,
+                        approval_id: r.body?.approval_id,
+                        sequence_hash: r.body?.sequence_hash,
+                        mode: r.body?.mode,
+                        item_count: r.body?.item_count,
+                      });
+                      setStoryApproveError(null);
+                    }
                     // [R8 유령 3호] 성공·실패(409=그새 원고 바뀜) 모두 원고를 최신으로 — 단일
                     // 소유자(nonce)로 gate 갱신. approve 내부 reload를 뺐으므로 이 발화가 유일 경로.
                     onStoryEditStateChanged?.();
