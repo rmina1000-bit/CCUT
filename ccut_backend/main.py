@@ -406,6 +406,15 @@ app.include_router(story_gate_router)
 from ledger_r0 import router as ledger_router
 app.include_router(ledger_router)
 
+# [MIRROR Phase 2] Deterministic verdict notebook. Writes facts only.
+from mirror_ledger import router as mirror_ledger_router, ensure_schema as _mirror_ledger_ensure_schema
+app.include_router(mirror_ledger_router)
+try:
+    _mirror_ledger_ensure_schema()
+    print("[MIRROR] mirror_ledger table ensured")
+except Exception as _mirror_e:
+    print(f"[MIRROR] schema ensure failed (non-blocking): {_mirror_e}")
+
 # [아카이브 채팅 MVP] read-only 자연어 조회 라우터 — proposal_engine/route-edit와 완전 분리
 from archive_chat_router import router as archive_chat_router, ensure_schema as _archive_chat_ensure_schema
 app.include_router(archive_chat_router)

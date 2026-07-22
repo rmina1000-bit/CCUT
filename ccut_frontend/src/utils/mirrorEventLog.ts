@@ -42,6 +42,7 @@ export const MIRROR_EVENT_STORAGE_KEY = "ccut.mirror.phase0.events";
 
 const MAX_EVENTS = 500;
 const MIRROR_LONG_ELAPSED_MS = 10 * 60 * 1000;
+const MIRROR_LEDGER_ENDPOINT = "/api/mirror/events";
 
 function canUseLocalStorage() {
   return typeof window !== "undefined" && typeof window.localStorage !== "undefined";
@@ -165,6 +166,34 @@ function verdictFor(event: MirrorEventRecord, pending: MirrorEventRecord) {
   return null;
 }
 
+function toMirrorLedgerPayload(event: MirrorEventRecord) {
+  if (!event.project_id || !event.verdict) return null;
+  return compactRecord({
+    project_id: event.project_id,
+    event_kind: event.event_kind,
+    verdict: event.verdict,
+    verdict_basis: event.verdict_basis_event_kind,
+    elapsed_ms: event.verdict_elapsed_ms,
+    ts: event.ts,
+    at: event.at,
+    proposal_id: event.proposal_id,
+    fragment_id: event.fragment_id,
+    timeline_item_id: event.timeline_item_id,
+    verdict_for_pending_id: event.verdict_for_pending_id,
+  });
+}
+
+function persistMirrorVerdict(event: MirrorEventRecord) {
+  const payload = toMirrorLedgerPayload(event);
+  if (!payload || typeof fetch === "undefined") return;
+  void fetch(MIRROR_LEDGER_ENDPOINT, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+    keepalive: true,
+  }).catch(() => {});
+}
+
 export function recordMirrorEvent(input: MirrorEventInput) {
   const ts = typeof input.ts === "number" ? input.ts : Date.now();
   const prior = readStoredEvents();
@@ -202,6 +231,7 @@ export function recordMirrorEvent(input: MirrorEventInput) {
 
   const event = compactRecord(base);
   console.log("[MIRROR_EVENT] " + JSON.stringify(event));
+  persistMirrorVerdict(event);
 
   if (!canUseLocalStorage()) return event;
   try {
