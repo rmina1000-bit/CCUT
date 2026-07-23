@@ -8,7 +8,7 @@
  * 저장은 계약(EXCLUDE_RANGE) 그대로 — 원문 불변, 회색 글자의 시간만 제외.
  */
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Play } from "lucide-react";
+import { ArrowDown, ArrowUp, Check, GripVertical, Play } from "lucide-react";
 import { videoService } from "@/services/videoService";
 import { FRAGMENT_TEXT_FONT, fragmentTextColor, FRAGMENT_EXCLUDED_STYLE } from "@/lib/fragmentText";
 import { recordMirrorEvent } from "@/utils/mirrorEventLog";
@@ -36,6 +36,7 @@ interface ScriptItem {
   video_url?: string;
   missing?: { coords?: boolean };
   selected?: boolean;
+  play_order?: number;
 }
 interface ScriptData {
   ok: boolean;
@@ -100,9 +101,20 @@ interface LedgerPageProps {
   // [#4 SOURCE-TITLE 2026-07-19] source_id -> 임시명(A,B,C…업로드순, 조각맵과 동일 매핑,
   // main.py _xl_label 원본). 전사에서 원본영상이 바뀌는 지점마다 대제목으로 표기한다.
   sourceLabels?: Record<string, string>;
+  storyState?: string | null;
+  onApproveStory?: () => Promise<{ ok: boolean; status: number; body?: any }>;
 }
 
-const LedgerPage: React.FC<LedgerPageProps> = ({ programId: propProgramId, embedded, onEditStateChanged, onItemFocus, onPlayItem, sourceLabels }) => {
+const LedgerPage: React.FC<LedgerPageProps> = ({
+  programId: propProgramId,
+  embedded,
+  onEditStateChanged,
+  onItemFocus,
+  onPlayItem,
+  sourceLabels,
+  storyState,
+  onApproveStory,
+}) => {
   const [programs, setPrograms] = useState<Array<{ program_id: string; name: string }>>([]);
   const [programId, setProgramId] = useState<string>(() =>
     propProgramId || new URLSearchParams(window.location.search).get("program") || ""
@@ -119,10 +131,35 @@ const LedgerPage: React.FC<LedgerPageProps> = ({ programId: propProgramId, embed
   const [showOriginal, setShowOriginal] = useState<string | null>(null);
   const [editing, setEditing] = useState<Editing | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [approvalError, setApprovalError] = useState<string | null>(null);
+  const [approving, setApproving] = useState(false);
+  const [draggedItemId, setDraggedItemId] = useState<string | null>(null);
+  const [dragOverItemId, setDragOverItemId] = useState<string | null>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const hiddenRef = useRef<HTMLInputElement>(null);
   const playRef = useRef<{ spans: MsRange[]; idx: number } | null>(null);
   const mirrorLedgerEnterRef = useRef<Set<string>>(new Set());
+
+  const approveCurrentStory = useCallback(async () => {
+    if (!onApproveStory || approving) return;
+    setApproving(true);
+    setApprovalError(null);
+    try {
+      const result = await onApproveStory();
+      if (!result.ok) {
+        setApprovalError(
+          result.status === 409 ? "원고가 바뀌었습니다. 다시 확인해 주세요."
+          : result.status === 503 ? "승인 원장을 사용할 수 없습니다."
+          : "승인하지 못했습니다."
+        );
+      }
+      onEditStateChanged?.();
+    } catch {
+      setApprovalError("승인하지 못했습니다.");
+    } finally {
+      setApproving(false);
+    }
+  }, [onApproveStory, onEditStateChanged, approving]);
 
   useEffect(() => {
     if (embedded) return;  // 워크스페이스 안에서는 프로젝트 선택기가 없다 (부모가 정한다)
@@ -157,23 +194,24 @@ const LedgerPage: React.FC<LedgerPageProps> = ({ programId: propProgramId, embed
     });
   }, [programId, embedded]);
 
-  // [#4 전사 전체화 2026-07-19] 장소(place) 기반 장면 그룹핑 폐기. 구획은 원본영상(source)
-  // 단위 하나뿐 — 업로드순(sourceLabels 라벨 A,B,C…= main.py display_order)으로 그룹 정렬,
-  // 그룹 안은 조각 시작시간순(ledger가 source_id,start 순으로 주므로 소스 내부는 이미 정렬됨).
-  // ledger API는 7개 소스 77조각 전부 반환(missing.coords=0 실측) — 표시 계층이 전량을 낸다.
+  // Preserve the saved Story Item order. A source heading starts again only when the source changes.
   const sourceGroups = useMemo(() => {
-    const bySource = new Map<string, ScriptItem[]>();
-    for (const it of data?.items ?? []) {
-      if (it.missing?.coords) continue;
+    const groups: Array<{ sourceId: string; label: string | null; items: ScriptItem[] }> = [];
+    const available = (data?.items ?? []).filter((it) => !it.missing?.coords);
+    const selected = available
+      .filter((it) => it.selected !== false)
+      .sort((a, b) => (a.play_order ?? Number.MAX_SAFE_INTEGER) - (b.play_order ?? Number.MAX_SAFE_INTEGER));
+    const unselected = available.filter((it) => it.selected === false);
+    for (const it of [...selected, ...unselected]) {
       const sid = it.source_id ?? "__unknown__";
-      if (!bySource.has(sid)) bySource.set(sid, []);
-      bySource.get(sid)!.push(it);
+      const current = groups[groups.length - 1];
+      if (!current || current.sourceId !== sid) {
+        groups.push({ sourceId: sid, label: sourceLabels?.[sid] ?? null, items: [it] });
+      } else {
+        current.items.push(it);
+      }
     }
-    // 업로드순 = 라벨 순(A<B<…<G). 라벨 없으면 뒤로.
-    const labelOf = (sid: string) => sourceLabels?.[sid] ?? "￿" + sid;
-    return Array.from(bySource.entries())
-      .map(([sid, items]) => ({ sourceId: sid, label: sourceLabels?.[sid] ?? null, items }))
-      .sort((a, b) => labelOf(a.sourceId).localeCompare(labelOf(b.sourceId)));
+    return groups;
   }, [data, sourceLabels]);
 
   const lostCount = useMemo(
@@ -403,6 +441,80 @@ const LedgerPage: React.FC<LedgerPageProps> = ({ programId: propProgramId, embed
     return res.json();
   }, [programId, data?.mode]);
 
+  const reorderItem = useCallback(async (sourceId: string, targetId: string) => {
+    const items = data?.items ?? [];
+    const fromIdx = items.findIndex((it) => it.timeline_item_id === sourceId);
+    const targetIdx = items.findIndex((it) => it.timeline_item_id === targetId);
+    if (fromIdx < 0 || targetIdx < 0 || fromIdx === targetIdx) return;
+
+    const next = [...items];
+    const [moved] = next.splice(fromIdx, 1);
+    const insertIdx = fromIdx < targetIdx ? targetIdx - 1 : targetIdx;
+    next.splice(insertIdx, 0, moved);
+    const selectedItems = items
+      .filter((it) => !it.missing?.coords && it.selected !== false)
+      .sort((a, b) => (a.play_order ?? Number.MAX_SAFE_INTEGER) - (b.play_order ?? Number.MAX_SAFE_INTEGER));
+    const selectedIds = selectedItems.map((it) => it.fragment_id);
+    if (moved.selected !== false && items[targetIdx]?.selected !== false) {
+      const selectedFrom = selectedItems.findIndex((it) => it.timeline_item_id === sourceId);
+      const selectedTarget = selectedItems.findIndex((it) => it.timeline_item_id === targetId);
+      if (selectedFrom >= 0 && selectedTarget >= 0) {
+        const [selectedMoved] = selectedIds.splice(selectedFrom, 1);
+        selectedIds.splice(selectedTarget, 0, selectedMoved);
+      }
+    }
+    setData((current) => current ? { ...current, items: next } : current);
+    try {
+      const result = await saveOrder(next, selectedIds);
+      if (!result?.ok) {
+        setData((current) => current ? { ...current, items } : current);
+        setSaveError(result?.message ?? result?.error ?? "순서를 저장하지 못했습니다.");
+        return;
+      }
+      setSaveError(null);
+      onEditStateChanged?.();
+      reload();
+    } catch {
+      setData((current) => current ? { ...current, items } : current);
+      setSaveError("순서를 저장하지 못했습니다.");
+    }
+  }, [data?.items, saveOrder, onEditStateChanged, reload]);
+
+  const handleItemDragStart = useCallback((e: React.DragEvent, it: ScriptItem) => {
+    e.dataTransfer.effectAllowed = "move";
+    e.dataTransfer.setData("text/plain", it.timeline_item_id);
+    setDraggedItemId(it.timeline_item_id);
+  }, []);
+
+  const handleItemDrop = useCallback((e: React.DragEvent, target: ScriptItem) => {
+    e.preventDefault();
+    const sourceId = e.dataTransfer.getData("text/plain");
+    setDraggedItemId(null);
+    setDragOverItemId(null);
+    if (sourceId) void reorderItem(sourceId, target.timeline_item_id);
+  }, [reorderItem]);
+
+  const moveItemByOffset = useCallback((it: ScriptItem, offset: -1 | 1) => {
+    const items = data?.items ?? [];
+    const peers = items.filter((item) => (item.selected !== false) === (it.selected !== false));
+    if (it.selected !== false) {
+      peers.sort((a, b) => (a.play_order ?? Number.MAX_SAFE_INTEGER) - (b.play_order ?? Number.MAX_SAFE_INTEGER));
+    }
+    const currentIdx = peers.findIndex((item) => item.timeline_item_id === it.timeline_item_id);
+    const target = peers[currentIdx + offset];
+    if (currentIdx < 0 || !target) return;
+    void reorderItem(it.timeline_item_id, target.timeline_item_id);
+  }, [data?.items, reorderItem]);
+
+  const canMoveItem = useCallback((it: ScriptItem, offset: -1 | 1) => {
+    const peers = (data?.items ?? []).filter((item) => (item.selected !== false) === (it.selected !== false));
+    if (it.selected !== false) {
+      peers.sort((a, b) => (a.play_order ?? Number.MAX_SAFE_INTEGER) - (b.play_order ?? Number.MAX_SAFE_INTEGER));
+    }
+    const currentIdx = peers.findIndex((item) => item.timeline_item_id === it.timeline_item_id);
+    return currentIdx >= 0 && currentIdx + offset >= 0 && currentIdx + offset < peers.length;
+  }, [data?.items]);
+
   const toggleItem = useCallback(async (it: ScriptItem) => {
     const items = data?.items ?? [];
     const nextSelected = it.selected === false;
@@ -601,10 +713,22 @@ const LedgerPage: React.FC<LedgerPageProps> = ({ programId: propProgramId, embed
             {data.stringout_count ?? data.items?.length ?? 0} / {data.selected_count ?? 0} · {fmtClock(data.running_ms)}
           </span>
         )}
+        {embedded && onApproveStory && storyState !== "story_approved" && (data?.selected_count ?? 0) > 0 && (
+          <button
+            type="button"
+            disabled={approving}
+            onClick={approveCurrentStory}
+            className="ml-3 inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-2 text-[12px] font-semibold text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-wait disabled:opacity-60"
+          >
+            <Check size={14} />
+            {approving ? "승인 중" : "이 이야기로 갑니다"}
+          </button>
+        )}
       </header>
 
       <main className={embedded ? "px-2 pb-8" : "max-w-2xl mx-auto px-6 pb-28"}
         style={{ fontFamily: SANS }}>
+        {approvalError && <p className="pb-2 text-right text-[11px] text-destructive" role="alert">{approvalError}</p>}
         {!programId && !embedded && <p className="pt-20 text-center text-sm opacity-50">위의 제목을 눌러 대본을 고르세요.</p>}
 
         {sourceGroups.map((grp) => {
@@ -614,7 +738,7 @@ const LedgerPage: React.FC<LedgerPageProps> = ({ programId: propProgramId, embed
           // 동일 폰트·행간(text-[15px] leading-[1.7]) — 굵기(bold)로만 구분, 크게 띄우던
           // 제호 여백(mt-10 mb-2) 제거. 전사가 한 호흡으로 촘촘히 읽히게.
           return (
-            <section key={grp.sourceId} className="mt-1">
+            <section key={`${grp.sourceId}:${grp.items[0]?.timeline_item_id ?? "empty"}`} className="mt-1">
               {grp.label && (
                 <h1 className="mt-2 mb-0 text-[15px] leading-[1.7] font-bold select-none opacity-90">
                   {grp.label}영상
@@ -635,6 +759,15 @@ const LedgerPage: React.FC<LedgerPageProps> = ({ programId: propProgramId, embed
                   return (
                     <span
                       key={it.timeline_item_id}
+                      data-story-item-id={it.timeline_item_id}
+                      data-fragment-id={it.fragment_id}
+                      onDragOver={(e) => {
+                        e.preventDefault();
+                        e.dataTransfer.dropEffect = "move";
+                        setDragOverItemId(it.timeline_item_id);
+                      }}
+                      onDrop={(e) => handleItemDrop(e, it)}
+                      onDragEnd={() => { setDraggedItemId(null); setDragOverItemId(null); }}
                       onClick={(e) => {
                         if (isEditing) return;
                         if (e.detail >= 2) { if (canEdit) enterEdit(it, 0); }
@@ -650,7 +783,10 @@ const LedgerPage: React.FC<LedgerPageProps> = ({ programId: propProgramId, embed
                       className="group/span rounded-[3px] transition-colors duration-150 px-[1px]"
                       style={{
                         cursor: isEditing ? "text" : "pointer",
-                        opacity: dimmed ? 0.4 : 1,
+                        opacity: draggedItemId === it.timeline_item_id ? 0.4 : dimmed ? 0.4 : 1,
+                        boxShadow: dragOverItemId === it.timeline_item_id && draggedItemId !== it.timeline_item_id
+                          ? "inset 2px 0 hsl(var(--primary))"
+                          : undefined,
                         // hover 시 조각이 '일어난다' — 다른 글자보다 약간 밝은 배경
                         background: isEditing ? "hsl(228,14%,15%)" : isActive ? "hsl(230,14%,16%)" : selected ? undefined : "hsl(228,10%,12%)",
                         color: textColor,
@@ -659,6 +795,29 @@ const LedgerPage: React.FC<LedgerPageProps> = ({ programId: propProgramId, embed
                       onMouseLeave={(e) => { if (!isEditing && !isActive) e.currentTarget.style.background = selected ? "" : "hsl(228,10%,12%)"; }}
                     >
                       <span className="inline-flex align-[0.05em] opacity-0 group-hover/span:opacity-80 transition-opacity mr-1">
+                        <span
+                          draggable={!isEditing}
+                          onDragStart={(e) => handleItemDragStart(e, it)}
+                          onDragEnd={() => { setDraggedItemId(null); setDragOverItemId(null); }}
+                          className="inline-flex cursor-grab active:cursor-grabbing"
+                          title="순서 바꾸기"
+                        >
+                          <GripVertical size={11} aria-hidden />
+                        </span>
+                        <button
+                          type="button"
+                          onClick={(e) => { e.stopPropagation(); moveItemByOffset(it, -1); }}
+                          className="px-0.5 opacity-70 hover:opacity-100 disabled:opacity-20"
+                          title="한 칸 위로"
+                          disabled={!canMoveItem(it, -1)}
+                        ><ArrowUp size={11} /></button>
+                        <button
+                          type="button"
+                          onClick={(e) => { e.stopPropagation(); moveItemByOffset(it, 1); }}
+                          className="px-0.5 opacity-70 hover:opacity-100 disabled:opacity-20"
+                          title="한 칸 아래로"
+                          disabled={!canMoveItem(it, 1)}
+                        ><ArrowDown size={11} /></button>
                         <button type="button" onClick={(e) => { e.stopPropagation(); playItem(it, fragNo); }}
                           className="px-0.5 opacity-70 hover:opacity-100" title="재생"><Play size={11} /></button>
                       </span>
@@ -668,8 +827,9 @@ const LedgerPage: React.FC<LedgerPageProps> = ({ programId: propProgramId, embed
                           <span className="absolute text-[10px] opacity-70 whitespace-nowrap" style={{ left: "-1.35em", top: "-0.95em" }}>off</span>
                         </span>
                       )}
-                      {/* [#18 근본 2026-07-19] 지문(stage_direction, VL "병원" 등 장소 번역)
-                          표시 제거 — 조각 텍스트의 진실 원천은 클램프 words 하나. 원문 밖 단어 0. */}
+                      {it.stage_direction && (
+                        <span className="italic opacity-65">{it.stage_direction} </span>
+                      )}
                       {hallu && (
                         <button type="button"
                           onClick={(e) => { e.stopPropagation(); setShowOriginal(showOriginal === it.timeline_item_id ? null : it.timeline_item_id); }}
@@ -710,7 +870,7 @@ const LedgerPage: React.FC<LedgerPageProps> = ({ programId: propProgramId, embed
                           [#21-c 2026-07-19] 색 계약 위반 교정 — opacity-40 하드코딩 제거.
                           무음도 일반 조각과 같은 규칙: 부모 색(활성=흰색 rgba1 / 비활성=회색 rgba0.34)을
                           그대로 상속. 마커 자체 opacity가 곱연산으로 활성=0.4·비활성=0.136 이중감광되던 것 제거. */}
-                      {!(it.words && it.words.length) && !it.dialogue && <span>(무음) </span>}
+                      {!(it.words && it.words.length) && !it.dialogue && !it.stage_direction && <span>(무음) </span>}
 
                       {hasExcl && !isEditing && (
                         <button type="button"

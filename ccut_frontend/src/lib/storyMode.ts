@@ -1,19 +1,19 @@
 export const STORY_APPROVED_STATE = "story_approved";
 export const STORY_DRAFT_STATE = "story_draft";
+export const STORY_REVIEW_STATE = "story_review";
 
 /**
  * [R8 유령 1호 2026-07-20] story 진입은 '명시적 신호'만 — 상태 표류로는 진입 불가.
  *   - reEditActive: 재편집 세션(‘다시 편집’·‘이 원고로 재작업’이 세운다) → story 유지
  *   - story_draft: 한 번도 승인 안 된 첫 원고 → story
- * review(승인 후 A/B 확정으로 hash가 바뀐 상태)는 reEditActive일 때만 story다. A/B 미리보기·
- * 확정 왕복이 무대를 스토리로 끌어가던 '심판 과잉'을 봉인한다. 재작업 버튼은 reEditActive를
- * 세우므로 'R7 재작업→story' 성과는 그대로 보존된다.
+ *   - story_review: 승인 뒤 원고 순서가 바뀌어 재승인이 필요한 원고 → story
+ * 승인 지문과 현재 원고가 다르면 렌더가 막히므로, 화면도 같은 상태를 따라야 한다.
  */
 export function isStoryMode(
   storyState: string | null | undefined,
   reEditActive = false
 ): boolean {
-  return reEditActive || storyState === STORY_DRAFT_STATE;
+  return reEditActive || storyState === STORY_DRAFT_STATE || storyState === STORY_REVIEW_STATE;
 }
 
 /**

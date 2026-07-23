@@ -56,7 +56,7 @@ import { rebuildFragmentTiles } from "@/utils/fragmentTiles";
 import { toMs } from "@/utils/editContract";
 import { buildExportClipsFromResolvedFragments, type PhysicalClip } from "@/utils/exportClipBuilder";
 import { DEBUG_LOG } from "@/utils/debugFlags";
-import { closeMirrorPendingForProject } from "@/utils/mirrorEventLog";
+import { closeMirrorPendingForProject, recordMirrorEvent } from "@/utils/mirrorEventLog";
 
 type PbeContractState = Pick<
   EditStateRow,
@@ -2816,6 +2816,21 @@ const Index: React.FC = () => {
                     onEditStateChanged={() => { refreshEditStatesRef.current(); void refreshLedgerEdl(); void storyGate.reload(); setStoryLedgerRefreshNonce((n) => n + 1); }}
                     onItemFocus={handleTextFragmentFocus}
                     onPlayItem={setMiniTarget}
+                    storyState={storyGate.story?.story_state}
+                    onApproveStory={async () => {
+                      const result = await storyGate.approve();
+                      if (result.ok) {
+                        recordMirrorEvent({
+                          event_kind: "accept",
+                          project_id: activeNavItem ?? undefined,
+                          approval_id: result.body?.approval_id,
+                          sequence_hash: result.body?.sequence_hash,
+                          mode: result.body?.mode,
+                          item_count: result.body?.item_count,
+                        });
+                      }
+                      return result;
+                    }}
                     sourceLabels={Object.fromEntries(
                       (sourceEntries ?? []).map((e) => [e.source_id, e.label]).filter(([, l]) => l)
                     )}
