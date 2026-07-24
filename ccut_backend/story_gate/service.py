@@ -44,6 +44,18 @@ def _connect():
     return con
 
 
+def mode_gate_enabled():
+    return os.getenv("CCUT_MODE_GATE", "").strip().upper() == "ON"
+
+
+def _ensure_mode_columns(con):
+    cols = {r["name"] for r in con.execute("PRAGMA table_info(programs)").fetchall()}
+    if "mode_round" not in cols:
+        con.execute("ALTER TABLE programs ADD COLUMN mode_round INTEGER DEFAULT 1")
+    if "mode_reopen_at" not in cols:
+        con.execute("ALTER TABLE programs ADD COLUMN mode_reopen_at TEXT")
+
+
 def compute_hash(mode, fragment_ids) -> str:
     """I-3 대조 기준. 순서가 바뀌면 해시가 바뀐다 (배치도 승인 대상이므로)."""
     raw = f"{mode or ''}|" + "|".join(str(f) for f in (fragment_ids or []))
@@ -133,10 +145,28 @@ def story_state(program_id):
     """{state, sequence_hash, mode, item_count, approved}. 읽기 전용."""
     mode, fids, h = current_story(program_id)
     appr = live_approval(program_id)
+    mode_round = 1
+    mode_reopen_at = None
+    if mode_gate_enabled():
+        con = _connect()
+        try:
+            _ensure_mode_columns(con)
+            row = con.execute(
+                "SELECT mode_round, mode_reopen_at FROM programs WHERE program_id=?",
+                (program_id,),
+            ).fetchone()
+            if row:
+                mode_round = int(row["mode_round"] or 1)
+                mode_reopen_at = row["mode_reopen_at"]
+            con.commit()
+        finally:
+            con.close()
     if not fids:
         state = S_SCANNED
     elif appr is None:
         state = S_DRAFT
+    elif mode_reopen_at and str(mode_reopen_at) > str(appr["approved_at"]):
+        state = S_REVIEW
     elif appr["sequence_hash"] == h:
         state = S_APPROVED
     else:
@@ -146,6 +176,8 @@ def story_state(program_id):
         "sequence_hash": h,
         "mode": mode,
         "item_count": len(fids),
+        "mode_round": mode_round,
+        "mode_reopen_at": mode_reopen_at,
         "sequence_source": sequence_source(program_id),  # ui_state | proposals | none (정직 표기)
         "approved": ({
             "approval_id": appr["approval_id"],
@@ -164,6 +196,30 @@ def is_render_allowed(program_id) -> bool:
     except StoryGateError:
         return False
     return st["story_state"] == S_APPROVED
+
+
+def is_edit_locked(program_id) -> bool:
+    return mode_gate_enabled() and story_state(program_id)["story_state"] == S_APPROVED
+
+
+def reopen_review(program_id):
+    if not mode_gate_enabled():
+        raise StoryGateError("CCUT_MODE_GATE_OFF", "CCUT_MODE_GATE is OFF", http_status=403)
+    now = datetime.datetime.now().isoformat()
+    con = _connect()
+    try:
+        row = con.execute("SELECT program_id FROM programs WHERE program_id=?", (program_id,)).fetchone()
+        if row is None:
+            raise StoryGateError("program_not_found", f"program {program_id} not found", http_status=404)
+        _ensure_mode_columns(con)
+        con.execute(
+            "UPDATE programs SET mode_round=COALESCE(mode_round, 1)+1, mode_reopen_at=? WHERE program_id=?",
+            (now, program_id),
+        )
+        con.commit()
+    finally:
+        con.close()
+    return {"ok": True, "program_id": program_id, **story_state(program_id)}
 
 
 def approve(program_id, sequence_hash, actor="user", running_ms=None, note=None):

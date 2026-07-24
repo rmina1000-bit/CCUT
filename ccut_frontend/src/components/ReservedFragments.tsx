@@ -23,6 +23,7 @@ interface ReservedFragmentsProps {
   holdPositions?: Record<string, { x: number; y: number }>;
   onHoldPositionsChange?: (positions: Record<string, { x: number; y: number }>) => void;
   onDropToHold?: (fid: string, position?: { x: number; y: number }) => void;
+  compactLabels?: boolean;
 }
 
 type DragMode = "idle" | "pending" | "internal" | "external";
@@ -44,6 +45,7 @@ const ReservedFragments: React.FC<ReservedFragmentsProps> = ({
   holdPositions = {},
   onHoldPositionsChange,
   onDropToHold,
+  compactLabels,
 }) => {
   const boardRef = useRef<HTMLDivElement>(null);
   const trashZoneRef = useRef<HTMLDivElement>(null);
@@ -432,12 +434,13 @@ const ReservedFragments: React.FC<ReservedFragmentsProps> = ({
                   }}
                   widthScale={0.5}
                   variant="reserved"
+                  compactLabelOnly={compactLabels}
                 />
               </div>
             );
           })}
 
-          <div ref={trashZoneRef} className="absolute bottom-2 right-2 z-40">
+          <div ref={trashZoneRef} className="sticky bottom-2 ml-auto mr-2 z-40 w-fit">
             <div className={`transition-transform duration-150 ${trashHover ? "scale-110" : ""}`}>
               <TrashBin
                 deletedFragments={deletedFragments}
@@ -479,6 +482,7 @@ const ReservedFragments: React.FC<ReservedFragmentsProps> = ({
                 hasActiveSelection={false}
                 widthScale={0.5}
                 variant="reserved"
+                compactLabelOnly={compactLabels}
               />
             </div>
           );

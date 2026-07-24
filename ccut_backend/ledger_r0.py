@@ -16,6 +16,7 @@ import re
 import sqlite3
 
 from fastapi import APIRouter
+from fastapi.responses import JSONResponse
 
 from scenario_text import place_of as _place
 from scenario_text import stage_direction as _stage
@@ -450,6 +451,12 @@ async def get_render_edl(program_id: str):
 @router.post("/ledger/{program_id}/order")
 async def save_ledger_order(program_id: str, payload: dict):
     """Papercut order: save full display order plus active proposal order in ui_state."""
+    try:
+        from story_gate.service import is_edit_locked
+        if is_edit_locked(program_id):
+            return JSONResponse(status_code=409, content={"ok": False, "error": "story_approved_edit_locked"})
+    except Exception:
+        pass
     con = _connect()
     try:
         prow = con.execute(

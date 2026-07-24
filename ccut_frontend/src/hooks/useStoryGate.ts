@@ -16,9 +16,15 @@ export interface StoryInfo {
   sequence_hash: string;
   mode: string | null;
   item_count: number;
+  mode_round?: number;
+  mode_reopen_at?: string | null;
   approved: { approval_id: number; sequence_hash: string; approved_at: string;
               actor: string; stale: boolean } | null;
 }
+
+type ApproveOptions = {
+  beforeFetch?: () => Promise<void> | void;
+};
 
 // 게이트 값은 서버 기동 중 안 바뀐다 → 세션당 1회만 묻는다.
 let gatePromise: Promise<boolean> | null = null;
@@ -45,6 +51,11 @@ export const approveStory = (programId: string, sequenceHash: string) =>
     body: JSON.stringify({ sequence_hash: sequenceHash, actor: "user" }),
   }).then(async (r) => ({ ok: r.ok, status: r.status, body: await r.json().catch(() => ({})) }));
 
+export const reopenStory = (programId: string) =>
+  fetch(`/api/story/${encodeURIComponent(programId)}/reopen`, {
+    method: "POST",
+  }).then(async (r) => ({ ok: r.ok, status: r.status, body: await r.json().catch(() => ({})) }));
+
 /**
  * @param programId 현재 열려 있는 프로젝트
  * @param active    이 화면이 원고를 볼 수 있는 상태인지(분석 완료 등). false면 폴링 안 함.
@@ -61,6 +72,7 @@ export function useStoryGate(programId?: string | null, active = true) {
   // 띄운 요청'의 응답만 화면에 반영한다. 늦게 도착한 응답이 최신을 덮어 화면이 흔들리던
   // ('취객 흔들림') 경로를 봉인. 매 fetch 직전 ++, 응답 도착 시 순번이 최신이 아니면 폐기.
   const reqSeqRef = useRef(0);
+  const approve409CountRef = useRef(0);
 
   useEffect(() => {
     let dead = false;
@@ -120,15 +132,49 @@ export function useStoryGate(programId?: string | null, active = true) {
     if (staleHash) { viewingHashRef.current = staleHash; setStaleHash(null); }
   }, [staleHash]);
 
-  const approve = useCallback(async () => {
+  const approve = useCallback(async (options?: ApproveOptions) => {
     if (!programId || !story) return { ok: false, status: 0, body: {} };
-    const res = await approveStory(programId, story.sequence_hash);
+    await options?.beforeFetch?.();
+    const fresh = await fetchStory(programId);
+    if (!fresh?.sequence_hash) return { ok: false, status: 0, body: { error: "story_refresh_failed" } };
+    setStory(fresh);
+    viewingHashRef.current = fresh.sequence_hash;
+    setStaleHash(null);
+    const res = await approveStory(programId, fresh.sequence_hash);
+    if (res.status === 409) {
+      approve409CountRef.current += 1;
+      const latest = await fetchStory(programId);
+      if (latest) {
+        setStory(latest);
+        viewingHashRef.current = latest.sequence_hash;
+        setStaleHash(null);
+      }
+      return {
+        ...res,
+        body: {
+          ...(res.body || {}),
+          user_message:
+            approve409CountRef.current >= 2
+              ? "구성이 계속 바뀌고 있습니다. 잠시 뒤 다시 눌러 주세요."
+              : "구성이 방금 바뀌어 새로 확인했습니다. 다시 눌러 주세요.",
+          halted: approve409CountRef.current >= 2,
+        },
+      };
+    }
+    approve409CountRef.current = 0;
     // [R8 유령 3호 2026-07-20] 승인 후 원고 새로고침은 '단일 소유자'(nonce 경유)에게 맡긴다 —
     // 여기서 직접 reload하지 않는다. 호출자(CenterPanel)가 성공·실패(409=그새 바뀜) 모두
     // onStoryEditStateChanged를 발화 → Index가 nonce를 올려 중앙 gate를 1회만 갱신한다.
     // (기존: approve 내부 reload + nonce reload = 같은 gate 이중 발사 → stale 겹침의 씨앗.)
     return res;
   }, [programId, story]);
+
+  const reopen = useCallback(async () => {
+    if (!programId) return { ok: false, status: 0, body: {} };
+    const res = await reopenStory(programId);
+    if (res.ok && res.body) setStory(res.body as StoryInfo);
+    return res;
+  }, [programId]);
 
   return {
     ready: gateReady && storyReady,
@@ -142,6 +188,7 @@ export function useStoryGate(programId?: string | null, active = true) {
     hasNewerStory: !!staleHash,
     adoptLatest,
     approve,
+    reopen,
     reload,
   };
 }

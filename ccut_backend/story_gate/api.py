@@ -8,7 +8,7 @@ from fastapi import APIRouter
 from fastapi.responses import JSONResponse
 
 from . import gate
-from .service import StoryGateError, approve, history, story_state
+from .service import StoryGateError, approve, history, reopen_review, story_state
 
 router = APIRouter()
 
@@ -43,6 +43,15 @@ async def post_approve(program_id: str, payload: dict = None):
             running_ms=body.get("running_ms"),
             note=body.get("note"),
         )
+    except StoryGateError as e:
+        return JSONResponse(status_code=e.http_status,
+                            content={"ok": False, "error": e.code, "message": e.message, **e.extra})
+
+
+@router.post("/story/{program_id}/reopen")
+async def post_reopen(program_id: str):
+    try:
+        return reopen_review(program_id)
     except StoryGateError as e:
         return JSONResponse(status_code=e.http_status,
                             content={"ok": False, "error": e.code, "message": e.message, **e.extra})

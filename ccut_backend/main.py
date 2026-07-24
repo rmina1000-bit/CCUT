@@ -13,6 +13,7 @@ import time
 import uuid
 import logging
 import re
+import json
 from pathlib import Path
 from typing import Optional
 
@@ -246,6 +247,10 @@ try:
     import sqlite3 as _sq3
     _con0 = _sq3.connect(str(Path(__file__).parent / "ccut_app.db"))
     _nl.ensure_schema(_con0)
+    _cols0 = {r[1] for r in _con0.execute("PRAGMA table_info(sources)").fetchall()}
+    if "display_name" not in _cols0:
+        _con0.execute("ALTER TABLE sources ADD COLUMN display_name TEXT")
+        _con0.commit()
     _con0.close()
     _nl.backfill_shot_dates()
     _nl.backfill_intake_notes_from_timeline()
@@ -2235,6 +2240,7 @@ async def get_project_sources(project_id: str):
             collected_sources.append({
                 "source_id": sid,
                 "label": label,
+                "display_name": getattr(src, "display_name", None),
                 "title": src.title,  # [DISPLAY-NAME] 라벨(A,B..)↔원본 제목 연결
                 "video_url": vurl,
                 "fragments": frags,
@@ -4265,7 +4271,7 @@ async def settings_gates():
             "CCUT_LEGACY_NARRATIVE", "CCUT_REVISION", "CCUT_QUALITY_LOG",
             "CCUT_PERSON_REQUERY", "CCUT_LEDGER_KEEP", "MIRROR_ENABLED",
             "CCUT_COMPOUND_INTENT", "EDIT_CONTRACT_V2", "CCUT_STORY_GATE",
-            "CCUT_RUBRIC_ENABLED"]
+            "CCUT_RUBRIC_ENABLED", "CCUT_MODE_GATE"]
     return {"status": "OK", "gates": {k: os.getenv(k) or "" for k in keys}}
 
 
@@ -4798,6 +4804,19 @@ class ProjectStateRequest(BaseModel):
 async def save_project_state(program_id: str, req: ProjectStateRequest, db: Session = Depends(get_db)):
     """[B-4] 작업상태 영속(A=전부): active_mode/chat/reserve/ui. None인 필드는 미변경."""
     import datetime
+    if req.ui_state is not None and os.getenv("CCUT_MODE_GATE", "").strip().upper() == "ON":
+        try:
+            if story_service.is_edit_locked(program_id):
+                old_row = db.query(ProgramTable).filter_by(program_id=program_id).first()
+                old_ui = json.loads(old_row.ui_state) if old_row and old_row.ui_state else {}
+                new_ui = json.loads(req.ui_state) if req.ui_state else {}
+                locked_keys = ("proposalsKeyFragments", "paperCutOrder", "reservedFragments", "deletedFragments")
+                if any(old_ui.get(k) != new_ui.get(k) for k in locked_keys):
+                    raise HTTPException(status_code=409, detail="story_approved_edit_locked")
+        except HTTPException:
+            raise
+        except Exception:
+            pass
     pg = db.query(ProgramTable).filter_by(program_id=program_id).first()
     if not pg:
         return {"status": "NOT_FOUND", "program_id": program_id}
@@ -4928,13 +4947,13 @@ class SourceNameRequest(BaseModel):
 
 @app.patch("/sources/{source_id}/name")
 async def rename_source(source_id: str, req: SourceNameRequest, db: Session = Depends(get_db)):
-    """[SOURCE] 원본 영상 이름(title) 변경."""
+    """[SOURCE] 원본 영상 표시 이름(display_name) 변경."""
     s = db.query(SourceTable).filter_by(source_id=source_id).first()
     if not s:
         return {"status": "NOT_FOUND", "source_id": source_id}
-    s.title = (req.name or "").strip() or s.title
+    s.display_name = (req.name or "").strip() or None
     db.commit()
-    return {"status": "SUCCESS", "source_id": source_id, "title": s.title}
+    return {"status": "SUCCESS", "source_id": source_id, "title": s.title, "display_name": s.display_name}
 
 
 @app.delete("/sources/{source_id}")

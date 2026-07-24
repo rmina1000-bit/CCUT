@@ -49,6 +49,9 @@ class ProposalEngine:
         """
         print(f"[PROPOSAL ENGINE] generate_proposals_from_fragments ENTER: proj={project_id}, sources={source_ids}")
         self._p3_recommended_order = None
+        composition_locked = self._composition_locked(project_id)
+        if composition_locked:
+            story_context = {**(story_context or {}), "composition_locked": True}
         fragments = self._prepare_quality_fragments(fragments)
         
         if not fragments:
@@ -148,8 +151,8 @@ class ProposalEngine:
         # [STEP 10-K-C1-R37] 최종 시퀀스 하드 가드 적용 (어떠한 경우에도 연속 구간 허용 금지)
         p_a["sequence"] = guards.hard_guard_final_sequence(p_a["sequence"])
         p_b["sequence"] = guards.hard_guard_final_sequence(p_b["sequence"])
-        _applied_a = self._apply_quality_technique(p_a, story_context)
-        _applied_b = self._apply_quality_technique(p_b, story_context)
+        _applied_a = None if composition_locked else self._apply_quality_technique(p_a, story_context)
+        _applied_b = None if composition_locked else self._apply_quality_technique(p_b, story_context)
         if _applied_a:
             p_a["applied_technique"] = _applied_a
         if _applied_b:
@@ -233,7 +236,7 @@ class ProposalEngine:
             print(f"[HUMAN_REALITY_SCORE][ERROR] Failed to evaluate human reality score: {hrs_err}")
 
         # [DIRECTOR_LAYER_V0] 배치 재설계 (selection 불변, 순서만). hard_guard 글로벌정렬을 source-lock으로 덮는다.
-        if getattr(self, "ARRANGE_ENABLED", False):
+        if getattr(self, "ARRANGE_ENABLED", False) and not composition_locked:
             for p in proposals:
                 try:
                     _before = [str(f.get("source_id"))[-4:] for f in p["sequence"]]
@@ -277,6 +280,13 @@ class ProposalEngine:
 
     def _flag_on(self, name):
         return os.getenv(name, "").strip().upper() == "ON"
+
+    def _composition_locked(self, project_id):
+        try:
+            from story_gate.service import is_edit_locked
+            return bool(is_edit_locked(project_id))
+        except Exception:
+            return False
 
     def _normalize_role(self, role):
         role_map = {
@@ -736,17 +746,20 @@ class ProposalEngine:
             # [NARRATIVE_DIRECTOR_REQUEST] is called inside get_narrative_direction()
             adapter = QwenNarrativeAdapter()
             direction = adapter.get_narrative_direction(context_metadata)
-            try:
-                self._p3_recommended_order = self._derive_qwen_recommended_order(
-                    fragments, direction, emotional_timeline
-                )
-                print(
-                    f"[P3ARR QWEN] priority={direction.narrative_priority} "
-                    f"recommended={len(self._p3_recommended_order or [])}"
-                )
-            except Exception as order_err:
+            if (story_context or {}).get("composition_locked"):
                 self._p3_recommended_order = None
-                print(f"[P3ARR QWEN][FALLBACK] recommended_order failed: {order_err}")
+            else:
+                try:
+                    self._p3_recommended_order = self._derive_qwen_recommended_order(
+                        fragments, direction, emotional_timeline
+                    )
+                    print(
+                        f"[P3ARR QWEN] priority={direction.narrative_priority} "
+                        f"recommended={len(self._p3_recommended_order or [])}"
+                    )
+                except Exception as order_err:
+                    self._p3_recommended_order = None
+                    print(f"[P3ARR QWEN][FALLBACK] recommended_order failed: {order_err}")
 
             # [NARRATIVE_TRANSLATION] is called inside translate_direction()
             translator = QwenNarrativeTranslator()

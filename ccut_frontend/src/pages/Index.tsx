@@ -19,6 +19,7 @@ import { TrashPanel } from "@/components/TrashPanel";
 import { SettingsPanel } from "@/components/SettingsPanel";
 import { SingleFragmentEditor } from "@/components/SingleFragmentEditor";
 import { storyStageVisible } from "@/lib/storyMode";
+import { fragmentTranscriptText } from "@/lib/fragmentText";
 // [GHOST 소각 #4·5] 구 2조각 PBE(PrecisionBoundaryEditor) 완전 소각 — 타입·주석 렌더 포함. 복원은 git 이력.
 
 
@@ -108,6 +109,8 @@ const Index: React.FC = () => {
   // [STORY-GATE P3] 승인 전에는 PBE(조각 정밀편집) 진입을 막는다 (S2).
   // 게이트 OFF면 awaitingApproval=false → 현행과 동일.
   const storyGate = useStoryGate(activeNavItem, appState === "complete");
+  const uiStateSaveRef = useRef<Promise<unknown> | null>(null);
+  const [compositionNotice, setCompositionNotice] = useState<string | null>(null);
   // [#22 모든 편집 진입은 스토리로 2026-07-19] '다시 편집'(SNS·아카이브)로 들어온 프로젝트는
   // 이미 승인 상태여도 편집(A/B)으로 직행하지 않고 스토리 단계로 연다. 강제 story 모드는
   // '재편집 세션'이 지속되는 동안만 — (a) 다른 프로젝트로 이동, (b) 이후 사용자가 새로 승인,
@@ -141,6 +144,23 @@ const Index: React.FC = () => {
   // '완전 동일한 식' storyStageVisible 하나. 판정·후단 조건이 유틸 안에 있어 분열 경로가 없다.
   const activeReEdit = reEditProgramId === activeNavItem;
   const rightStoryMode = storyStageVisible(storyGate.story, activeReEdit);
+  const [modeGateOn, setModeGateOn] = useState(false);
+  const [fragmentFace, setFragmentFace] = useState<"image" | "text">("image");
+  useEffect(() => {
+    let dead = false;
+    fetch("/api/settings/gates")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (dead) return;
+        const raw = d?.gates?.CCUT_MODE_GATE ?? import.meta.env.VITE_CCUT_MODE_GATE ?? "";
+        setModeGateOn(String(raw).trim().toUpperCase() === "ON");
+      })
+      .catch(() => {
+        if (!dead) setModeGateOn(String(import.meta.env.VITE_CCUT_MODE_GATE ?? "").trim().toUpperCase() === "ON");
+      });
+    return () => { dead = true; };
+  }, []);
+  const modeEditLocked = modeGateOn && storyGate.story?.story_state === "story_approved" && !activeReEdit;
 
   // [STORY-TRACK-C C-3] 조각맵:보류맵 세로 분할 비율(조각맵 몫 0..1). 기존 ccut_center_width와
   // 동일 localStorage 방식. 편집 단계도 마지막 조정 존중(§9) — 값은 단계 무관 공유.
@@ -171,6 +191,40 @@ const Index: React.FC = () => {
     document.body.style.cursor = "row-resize";
     document.body.style.userSelect = "none";
   }, []);
+
+  const handleApproveComposition = useCallback(async () => {
+    setCompositionNotice(null);
+    const result = await storyGate.approve({
+      beforeFetch: async () => {
+        const pending = uiStateSaveRef.current;
+        if (pending) await pending.catch(() => {});
+      },
+    });
+    if (result.ok) {
+      recordMirrorEvent({
+        event_kind: "accept",
+        project_id: activeNavItem ?? undefined,
+        approval_id: result.body?.approval_id,
+        sequence_hash: result.body?.sequence_hash,
+        mode: result.body?.mode,
+        item_count: result.body?.item_count,
+      });
+      await storyGate.reload();
+    } else if (result.status === 409) {
+      setCompositionNotice(result.body?.user_message || result.body?.message || "구성이 방금 바뀌어 새로 확인했습니다. 다시 눌러 주세요.");
+    }
+  }, [activeNavItem, storyGate]);
+
+  const handleReopenComposition = useCallback(async () => {
+    const ok = window.confirm("편집값은 보존됩니다. 빠진 조각의 값은 남고, 이음매 값은 다시 확인이 필요할 수 있습니다.");
+    if (!ok) return;
+    const result = await storyGate.reopen();
+    if (result.ok) {
+      reEditSessionStartRef.current = Date.now();
+      setReEditProgramId(activeNavItem);
+      await storyGate.reload();
+    }
+  }, [activeNavItem, storyGate]);
 
   // [#38] 보류맵 좌표도 제안별 구성 정보 (버킷 별칭은 displayProposalId 정의 뒤에)
   const [holdPositionsByProposal, setHoldPositionsByProposal] = useState<Record<"A" | "B", Record<string, { x: number; y: number }>>>({ A: {}, B: {} });
@@ -356,6 +410,11 @@ const Index: React.FC = () => {
         display_id: f.display_id || f.fragment_id,
         // [DISPLAY-NAME] 백엔드 단일 권위가 실어준 주이름을 그대로 통과 (프론트 재조립 금지)
         display_name: f.display_name,
+        dialogue: f.dialogue,
+        stage_direction: f.stage_direction,
+        original_text: f.original_text,
+        transcript: f.transcript,
+        description: f.description,
         selection_state: "S" as SelectionState,
         status: "committed" as FragmentStatus,
         source_video: label,
@@ -481,6 +540,15 @@ const Index: React.FC = () => {
     return videoService.saveProjectState(programId, { ui_state: JSON.stringify({ ...unknown, ...snapshot }) });
   }, [OWNED_UI_FIELDS, setStoryPlan]);
 
+  const saveUiStateMergedTracked = useCallback((programId: string, snapshot: Record<string, any>) => {
+    const p = saveUiStateMerged(programId, snapshot);
+    uiStateSaveRef.current = p;
+    p.finally(() => {
+      if (uiStateSaveRef.current === p) uiStateSaveRef.current = null;
+    });
+    return p;
+  }, [saveUiStateMerged]);
+
   // [#8-a STORY-GATE-SYNC 2026-07-19] 제안 채택(committedProposalId) 및 그 채택된 안의
   // 조각 구성이 바뀔 때(같은 모드로 재생성된 경우 포함) ui_state를 즉시 저장한다 — 기존엔
   // 내보내기 완료(Index.tsx onExportDone) 시점에만 저장돼, 새 제안을 만들고 확정해도
@@ -497,9 +565,9 @@ const Index: React.FC = () => {
     if (committedSnapshotSigRef.current === sig) return;
     committedSnapshotSigRef.current = sig;
     if (activeNavItem && activeNavItem.startsWith("proj_")) {
-      saveUiStateMerged(activeNavItem, buildUiSnapshot()).catch(() => {});
+      saveUiStateMergedTracked(activeNavItem, buildUiSnapshot()).catch(() => {});
     }
-  }, [committedProposalId, proposals, activeNavItem, saveUiStateMerged, buildUiSnapshot]);
+  }, [committedProposalId, proposals, activeNavItem, saveUiStateMergedTracked, buildUiSnapshot]);
 
   const {
     resetAnalysisState,
@@ -513,7 +581,7 @@ const Index: React.FC = () => {
     setSelectedProposalId, setCommittedProposalId, setProposals, setDirectionSnapshot,
     resetAnalysisFlow, setActiveNavItem, setNavCollapsed, setProjects,
     activeNavItem, appState, buildUiSnapshot,
-    saveUiState: saveUiStateMerged, // [#30] merge-저장 주입
+    saveUiState: saveUiStateMergedTracked, // [#30] merge-저장 주입
   });
 
   // [B-5-FIX] 저장된 백엔드 proposals → UI proposals 형태 매핑 (복원용, 업로드 매핑과 동일 형태)
@@ -1170,6 +1238,7 @@ const Index: React.FC = () => {
               source_id: src.source_id,
               label: label,
               title: src.title,
+              display_name: src.display_name ?? null,
               video_url: src.video_url,
               fragments: mappedFrags,
               file_size_bytes: src.file_size_bytes || 0,
@@ -1617,6 +1686,16 @@ const Index: React.FC = () => {
     }
   }, [activeNavItem, activeSource]);
 
+  const handleRenameSource = useCallback(async (source: SourceEntry, name: string) => {
+    if (!source?.source_id) return;
+    const res = await videoService.renameSource(source.source_id, name);
+    if (res?.status !== "SUCCESS") return;
+    const displayName = res.display_name ?? name ?? null;
+    setSourceEntries((prev) => prev.map((s) => (
+      s.source_id === source.source_id ? { ...s, display_name: displayName } : s
+    )));
+  }, [setSourceEntries]);
+
   // [EDIT-CONTRACT-B0 IMPL-2b] EDIT_CONTRACT_V2 게이트 — OFF면 아래 전 분기 기존 경로 그대로 (쓰기 0)
   const [editContractV2, setEditContractV2] = useState(false);
   const [editStatesList, setEditStatesList] = useState<EditStateRow[]>([]);
@@ -1625,6 +1704,43 @@ const Index: React.FC = () => {
   const editCtxRef = useRef<{ enabled: boolean; programId: string | null }>({ enabled: false, programId: null });
   const refreshLedgerEdlRef = useRef<(() => Promise<void>) | null>(null);
   const [storyLedgerRefreshNonce, setStoryLedgerRefreshNonce] = useState(0);
+  const [modeStoryTextItems, setModeStoryTextItems] = useState<Array<{
+    fragmentId?: string | null;
+    label?: string;
+    dialogue?: string;
+    stageDirection?: string;
+  }>>([]);
+  useEffect(() => {
+    if (!modeGateOn || !activeNavItem || !activeNavItem.startsWith("proj_")) {
+      setModeStoryTextItems([]);
+      return;
+    }
+    let dead = false;
+    fetch(`/api/ledger/${encodeURIComponent(activeNavItem)}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (dead || !d?.ok) return;
+        const perSource = new Map<string, number>();
+        const rows = ((d.items ?? []) as any[])
+          .filter((it) => it.selected !== false && !it.removed && !it.missing)
+          .sort((a, b) => (a.play_order ?? Number.MAX_SAFE_INTEGER) - (b.play_order ?? Number.MAX_SAFE_INTEGER))
+          .map((it) => {
+            const source = sourceEntries.find((s) => s.source_id === it.source_id);
+            const sourceLabel = source?.label || "";
+            const n = (perSource.get(sourceLabel) ?? 0) + 1;
+            if (sourceLabel) perSource.set(sourceLabel, n);
+            return {
+              fragmentId: it.fragment_id ?? null,
+              label: sourceLabel ? `${sourceLabel}${n}` : "",
+              dialogue: fragmentTranscriptText(it),
+              stageDirection: String(it.stage_direction ?? "").trim(),
+            };
+          });
+        setModeStoryTextItems(rows);
+      })
+      .catch(() => { if (!dead) setModeStoryTextItems([]); });
+    return () => { dead = true; };
+  }, [modeGateOn, activeNavItem, sourceEntries, storyLedgerRefreshNonce]);
   useEffect(() => { fetchGateEnabled().then(setEditContractV2); }, []);
   useEffect(() => { editCtxRef.current = { enabled: editContractV2, programId: activeNavItem }; }, [editContractV2, activeNavItem]);
   const refreshEditStates = useCallback(async (): Promise<EditStateRow[]> => {
@@ -1817,11 +1933,16 @@ const Index: React.FC = () => {
       if (selectedFragment && getUid(selectedFragment) === getUid(f)) {
         setSelectedFragment(null);
         setHighlightedPanoramaFrag(null);
+        setMiniTarget(null);
       } else {
         setSelectedFragment(f);
+        const label = (sourceEntries ?? []).find((e) => e.source_id === (f as any).source_id)?.label || f.source_video;
+        if (label) setActiveSource(label);
+        setHighlightedPanoramaFrag(getUid(f));
+        playImageFragmentInMini(f);
       }
     },
-    [selectedFragment]
+    [selectedFragment, sourceEntries, playImageFragmentInMini]
   );
 
   // [STORY-TRACK-A A-4] 텍스트조각(우측 스토리 에디터) 클릭 → 원본맵 "나 여기있어".
@@ -1834,6 +1955,25 @@ const Index: React.FC = () => {
     },
     [sourceEntries, setActiveSource]
   );
+
+  const handleCenterStoryFragmentFocus = useCallback((fragmentId: string | null) => {
+    if (!fragmentId) {
+      setHighlightedPanoramaFrag(null);
+      return;
+    }
+    const all = [
+      ...(editFragments ?? []),
+      ...(sourceEntries ?? []).flatMap((e) => e.fragments ?? []),
+    ];
+    const frag = all.find((f: any) => getUid(f) === fragmentId || f.fragment_id === fragmentId);
+    if (frag) {
+      setSelectedFragment(frag);
+      const label = (sourceEntries ?? []).find((e) => e.source_id === (frag as any).source_id)?.label || (frag as any).source_video;
+      if (label) setActiveSource(label);
+      playImageFragmentInMini(frag);
+    }
+    setHighlightedPanoramaFrag(fragmentId);
+  }, [editFragments, sourceEntries, setSelectedFragment, setActiveSource, setHighlightedPanoramaFrag, playImageFragmentInMini]);
 
   // [STORY-TRACK-B] 조각 단위 공용 미니 플레이창 — 텍스트·이미지 어디서 클릭해도 이 창 하나.
   const handleReservedClick = useCallback(
@@ -2033,12 +2173,8 @@ const Index: React.FC = () => {
     (f: Fragment, insertAt?: number) => {
       if (!committedProposalId || !proposals) return;
 
-      const copyId = `${f.fragment_id}_copy_${Date.now()}`;
       const newFrag: Fragment = {
         ...f,
-        fragment_id: copyId,
-        fragment_uid: copyId,
-        display_id: f.display_id ? `${f.display_id}+` : `${f.fragment_id}+`,
         excluded: false,
       };
 
@@ -2059,7 +2195,7 @@ const Index: React.FC = () => {
         if (!proposal) return pPrev;
         const keys = [...proposal.key_fragments];
         const idx = insertAt !== undefined ? Math.min(insertAt, keys.length) : keys.length;
-        keys.splice(idx, 0, copyId);
+        keys.splice(idx, 0, getUid(newFrag));
         return {
           ...pPrev,
           [target]: {
@@ -2709,6 +2845,9 @@ const Index: React.FC = () => {
             exportClips={physicalClips}
             storyPlan={storyPlan}
             onStoryPlanConfirm={setStoryPlan}
+            activeStoryFragmentId={selectedFragment ? getUid(selectedFragment) : highlightedPanoramaFrag}
+            modeGateEnabled={modeGateOn}
+            onActiveFragmentChange={handleCenterStoryFragmentFocus}
             onStoryEditStateChanged={() => { refreshEditStatesRef.current(); void refreshLedgerEdl(); void storyGate.reload(); setStoryLedgerRefreshNonce((n) => n + 1); }}
             storyRefreshNonce={storyLedgerRefreshNonce}
             sourceEntries={sourceEntries}
@@ -2718,7 +2857,7 @@ const Index: React.FC = () => {
               // [FIX-EXPORT-UISTATE] 내보내기 완료 시 ui_state 저장
               if (activeNavItem && activeNavItem.startsWith("proj_")) {
                 // [#30] merge-저장 — 모르는 것을 지우지 않는다
-                saveUiStateMerged(activeNavItem, buildUiSnapshot()).catch(() => {});
+                saveUiStateMergedTracked(activeNavItem, buildUiSnapshot()).catch(() => {});
               }
               setActiveNavItem("upload");
             }}
@@ -2778,6 +2917,8 @@ const Index: React.FC = () => {
               onBoundaryClick={(leftFragId, rightFragId) => handleOpenBoundaryEditor(leftFragId, rightFragId, "center")}
               onAddSource={() => appendInputRef.current?.click()}
               onRemoveSource={handleRemoveSource}
+              onRenameSource={handleRenameSource}
+              compactLabels={modeGateOn}
               sourceFragments={
                 sourceEntries.length > 0
                   ? sourceEntries.find((e) => e.label === activeSource)?.fragments ?? []
@@ -2789,6 +2930,7 @@ const Index: React.FC = () => {
                     source_id: e.source_id,
                     label: e.label,
                     title: e.title,
+                    display_name: e.display_name,
                     video_url: e.video_url,
                   }))
                   : currentSourceId
@@ -2805,10 +2947,10 @@ const Index: React.FC = () => {
                 스토리 단계에서 보류맵이 아예 사라지는 게 결함이었다. */}
             <div ref={mapHoldAreaRef} className="flex-1 flex flex-col gap-1.5 overflow-hidden min-h-0">
               <div className="overflow-y-auto min-h-0"
-                   style={{ flexGrow: mapHoldSplit, flexBasis: 0 }}>
+                   style={{ flexGrow: modeEditLocked ? 1 : mapHoldSplit, flexBasis: 0 }}>
                 {/* [STORY-TRACK-A A-1/A-2/A-3] 스토리 단계 = 조각맵 자리에 텍스트조각 에디터.
                     편집 단계 = 이미지 조각맵. 같은 아이 옷만 다름(뒤 식별자 동일). */}
-                {rightStoryMode ? (
+                {rightStoryMode && !modeGateOn ? (
                   <LedgerPage
                     key={`rightledger_${activeNavItem}_${storyLedgerRefreshNonce}`}
                     embedded
@@ -2818,7 +2960,13 @@ const Index: React.FC = () => {
                     onPlayItem={setMiniTarget}
                     storyState={storyGate.story?.story_state}
                     onApproveStory={async () => {
-                      const result = await storyGate.approve();
+                      setCompositionNotice(null);
+                      const result = await storyGate.approve({
+                        beforeFetch: async () => {
+                          const pending = uiStateSaveRef.current;
+                          if (pending) await pending.catch(() => {});
+                        },
+                      });
                       if (result.ok) {
                         recordMirrorEvent({
                           event_kind: "accept",
@@ -2828,6 +2976,8 @@ const Index: React.FC = () => {
                           mode: result.body?.mode,
                           item_count: result.body?.item_count,
                         });
+                      } else if (result.status === 409) {
+                        setCompositionNotice(result.body?.user_message || result.body?.message || "구성이 방금 바뀌어 새로 확인했습니다. 다시 눌러 주세요.");
                       }
                       return result;
                     }}
@@ -2844,15 +2994,24 @@ const Index: React.FC = () => {
                     onFragmentClick={handleEditFragmentClick}
                     onEditFragment={handleSingleFragmentEdit}
                     onFragmentDoubleClick={handleEditFragmentDoubleClick}
-                    onExcludeFragment={handleExcludeFromEdit}
-                    onRestoreFragment={handleRestoreFromHold}
-                    onSourceRestore={handleAddFromSource}
-                    onMoveToHold={handleMoveToHold}
-                    onTrashRestore={handleRestoreToEdit}
+                    onExcludeFragment={modeEditLocked ? () => {} : handleExcludeFromEdit}
+                    onRestoreFragment={modeEditLocked ? () => {} : handleRestoreFromHold}
+                    onSourceRestore={modeEditLocked ? () => {} : handleAddFromSource}
+                    onMoveToHold={modeEditLocked ? () => {} : handleMoveToHold}
+                    onTrashRestore={modeEditLocked ? () => {} : handleRestoreToEdit}
                     onBoundaryClick={handleOpenBoundaryEditor}
                     sourceVideoUrls={Object.fromEntries(
                       (sourceEntries ?? []).map(e => [e.source_id, e.video_url]).filter(([, v]) => v)
                     )}
+                    modeGateEnabled={modeGateOn}
+                    compositionLocked={modeEditLocked}
+                    fragmentFace={fragmentFace}
+                    onFragmentFaceChange={setFragmentFace}
+                    onApproveComposition={handleApproveComposition}
+                    onReopenComposition={handleReopenComposition}
+                    compositionNotice={compositionNotice}
+                    modeRound={storyGate.story?.mode_round ?? 1}
+                    storyTextItems={modeStoryTextItems}
                   />
                 )}
               </div>
@@ -2861,11 +3020,14 @@ const Index: React.FC = () => {
                   STORY 단계에선 reservedFragments가 비어 있을 수 있으나(그쪽 "빼기"는
                   LedgerPage 자체 excluded_items 별도 계약), 패널 자체는 접힌 채로도 항상 존재
                   해야 한다는 게 이번 계약. ReservedFragments는 빈 배열을 이미 안전하게 그린다. */}
+              {!modeEditLocked && (
               <div onMouseDown={startMapHoldDrag}
                    className="flex-shrink-0 h-2 cursor-row-resize group flex items-center justify-center rounded hover:bg-primary/10 transition-colors"
                    title="조각맵·보류맵 크기 조절">
                 <div className="w-10 h-[3px] rounded-full bg-border/50 group-hover:bg-primary/50 transition-colors" />
               </div>
+              )}
+              {!modeEditLocked && (
               <div className="overflow-y-auto min-h-0"
                    style={{ flexGrow: 1 - mapHoldSplit, flexBasis: 0 }}>
                 <ReservedFragments
@@ -2881,8 +3043,10 @@ const Index: React.FC = () => {
                   holdPositions={holdPositions}
                   onHoldPositionsChange={setHoldPositions}
                   onDropToHold={handleDropToHold}
+                  compactLabels={modeGateOn}
                 />
               </div>
+              )}
             </div>
           </div>
         </>
