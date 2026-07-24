@@ -70,6 +70,10 @@ HIGH_HOOK_KEYWORDS = [
 ]
 
 
+def _quality_flag_on(name: str) -> bool:
+    return os.getenv(name, "").strip().upper() == "ON"
+
+
 def transcribe_full_then_split(model, video_path: str, fragments: list) -> dict:
     """영상 전체 한 번 전사 후 조각별 분리 및 원본 세그먼트 보존.
 
@@ -230,12 +234,14 @@ def classify_role(
     word_count   = len(safe_t.split())
     has_emphasis = any(kw in safe_t for kw in HIGH_HOOK_KEYWORDS)
 
+    hook_threshold = 0.55 if _quality_flag_on("CCUT_Q_ROLE") else 0.62
+
     # 1. 앞 30% + hook 높음 = Hook
-    if position_pct < 0.30 and hook_score >= 0.62:
+    if position_pct < 0.30 and hook_score >= hook_threshold:
         return "Hook"
 
     # 2. 뒤 55% + hook 높음 = Payoff
-    if position_pct > 0.55 and hook_score >= 0.62:
+    if position_pct > 0.55 and hook_score >= hook_threshold:
         return "Payoff"
 
     # 3. 끝 15% = Closing
@@ -356,4 +362,3 @@ def log_hook_distribution(source_id: str, fragments: list):
         print(f"[hook-log] 저장 완료: {log_path}")
     except Exception as e:
         print(f"[hook-log] 저장 실패 (무시): {e}")
-

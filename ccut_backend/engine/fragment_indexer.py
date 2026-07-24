@@ -133,11 +133,17 @@ def load_semantic_fragment_rows(con, source_filter=None):
             joined = " ".join(p for p in parts if p).strip()
             if joined:
                 transcript = (str(transcript) + " " + joined).strip() if transcript else joined
+        hook_score = stru.get("hook_score")
+        if hook_score is None:
+            hook_score = sem.get("hook_score")
+        if hook_score is None:
+            hook_score = stru.get("edit_value")
+
         rows[fid] = {
             "fragment_id": fid, "source_id": sid,
             "start": s or 0.0, "end": e or 0.0, "duration": dur or 0.0,
             "role": stru.get("role"),
-            "hook_score": float(stru.get("edit_value") or 0.0),  # 우선순위 정렬용
+            "hook_score": float(hook_score or 0.0),
             "transcript": transcript,
             "motion_score": 0.0, "keyframe": None,
         }

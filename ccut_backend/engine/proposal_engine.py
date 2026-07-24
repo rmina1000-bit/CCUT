@@ -1,6 +1,9 @@
 import os
+import sqlite3
 import uuid
 import engine.proposal_guards as guards
+
+from engine.story_template_resolver import StoryTemplateResolver
 
 class ProposalEngine:
     """
@@ -9,6 +12,7 @@ class ProposalEngine:
     """
     def __init__(self, bams):
         self.bams = bams
+        self._technique_resolver = None
 
     def generate_proposals(self, source_id: str):
         print(f"[PROPOSAL ENGINE] generate_proposals ENTER: {source_id}")
@@ -45,6 +49,7 @@ class ProposalEngine:
         """
         print(f"[PROPOSAL ENGINE] generate_proposals_from_fragments ENTER: proj={project_id}, sources={source_ids}")
         self._p3_recommended_order = None
+        fragments = self._prepare_quality_fragments(fragments)
         
         if not fragments:
             print("[PROPOSAL ENGINE] No fragments provided")
@@ -143,6 +148,12 @@ class ProposalEngine:
         # [STEP 10-K-C1-R37] 최종 시퀀스 하드 가드 적용 (어떠한 경우에도 연속 구간 허용 금지)
         p_a["sequence"] = guards.hard_guard_final_sequence(p_a["sequence"])
         p_b["sequence"] = guards.hard_guard_final_sequence(p_b["sequence"])
+        _applied_a = self._apply_quality_technique(p_a, story_context)
+        _applied_b = self._apply_quality_technique(p_b, story_context)
+        if _applied_a:
+            p_a["applied_technique"] = _applied_a
+        if _applied_b:
+            p_b["applied_technique"] = _applied_b
 
         _debug_seq("AFTER_A", p_a["sequence"])
         _debug_seq("AFTER_B", p_b["sequence"])
@@ -263,6 +274,171 @@ class ProposalEngine:
 
     # [DIRECTOR_LAYER_V0] config 플래그 — False면 기존 배치(hard_guard 글로벌정렬) 유지
     ARRANGE_ENABLED = True
+
+    def _flag_on(self, name):
+        return os.getenv(name, "").strip().upper() == "ON"
+
+    def _normalize_role(self, role):
+        role_map = {
+            "hook": "hook",
+            "payoff": "payoff",
+            "closing": "closing",
+            "context": "context",
+        }
+        return role_map.get(str(role or "").strip().lower())
+
+    def _get_fragment_index_signals(self, fragment_ids):
+        if not fragment_ids:
+            return {}
+        backend_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+        db_path = os.path.join(backend_dir, "ccut_app.db")
+        placeholders = ",".join("?" for _ in fragment_ids)
+        query = (
+            f'SELECT fragment_id, hook_score, scene_type, motion_score, visual_desc, transcript, role '
+            f'FROM fragment_index WHERE fragment_id IN ({placeholders})'
+        )
+        try:
+            con = sqlite3.connect(db_path)
+            con.row_factory = sqlite3.Row
+            rows = con.execute(query, fragment_ids).fetchall()
+            con.close()
+        except Exception as exc:
+            print(f"[QUALITY_SIGNALS][WARN] fragment_index lookup failed: {exc}")
+            return {}
+        return {
+            row["fragment_id"]: {
+                "hook_score": row["hook_score"],
+                "scene_type": row["scene_type"],
+                "motion_score": row["motion_score"],
+                "visual_desc": row["visual_desc"],
+                "transcript": row["transcript"],
+                "role": row["role"],
+            }
+            for row in rows
+        }
+
+    def _prepare_quality_fragments(self, fragments):
+        q_signals = self._flag_on("CCUT_Q_SIGNALS")
+        q_role = self._flag_on("CCUT_Q_ROLE")
+        if not q_signals and not q_role:
+            return fragments
+
+        from engine.ai_engine import classify_role
+
+        fragment_ids = [f.get("fragment_id") for f in fragments if f.get("fragment_id")]
+        signal_map = self._get_fragment_index_signals(fragment_ids)
+        total_by_source = {}
+        for frag in fragments:
+            sid = frag.get("source_id")
+            end = float(frag.get("end", frag.get("end_time", 0.0)) or 0.0)
+            total_by_source[sid] = max(total_by_source.get(sid, 0.0), end)
+
+        prepared = []
+        for frag in fragments:
+            item = dict(frag)
+            structural = dict(item.get("structural") or {})
+            intelligence = dict(item.get("intelligence") or {})
+            signal = signal_map.get(item.get("fragment_id")) or {}
+
+            if q_signals:
+                if signal.get("hook_score") is not None:
+                    intelligence["hook_score"] = float(signal["hook_score"])
+                    item["hook_score"] = float(signal["hook_score"])
+                if signal.get("transcript") and not intelligence.get("transcript"):
+                    intelligence["transcript"] = signal["transcript"]
+                if signal.get("scene_type") is not None:
+                    structural["scene_type"] = signal["scene_type"]
+                    item["scene_type"] = signal["scene_type"]
+                if signal.get("motion_score") is not None:
+                    item["motion_score"] = float(signal["motion_score"])
+                if signal.get("visual_desc"):
+                    item["visual_desc"] = signal["visual_desc"]
+
+            if q_role:
+                hook_score = intelligence.get("hook_score")
+                if hook_score is None:
+                    hook_score = signal.get("hook_score")
+                hook_score = float(hook_score or 0.0)
+                transcript = intelligence.get("transcript") or signal.get("transcript") or item.get("transcript") or ""
+                start = float(item.get("start", item.get("start_time", 0.0)) or 0.0)
+                end = float(item.get("end", item.get("end_time", start)) or start)
+                role = self._normalize_role(
+                    classify_role(
+                        {
+                            "start_time": start,
+                            "duration": max(end - start, 0.0),
+                        },
+                        total_by_source.get(item.get("source_id"), max(end, 1.0)),
+                        hook_score,
+                        transcript,
+                    )
+                )
+                if role in {"hook", "payoff", "closing"}:
+                    structural["role"] = role
+
+            item["structural"] = structural
+            if intelligence:
+                item["intelligence"] = intelligence
+            prepared.append(item)
+
+        return prepared
+
+    def _get_technique_resolver(self):
+        if self._technique_resolver is None:
+            self._technique_resolver = StoryTemplateResolver()
+        return self._technique_resolver
+
+    def _apply_quality_technique(self, proposal, story_context):
+        if not self._flag_on("CCUT_Q_TECHNIQUES"):
+            return None
+        technique_ids = list((story_context or {}).get("editing_technique_ids") or [])
+        if "hook_first" not in technique_ids:
+            return None
+        sequence = list(proposal.get("sequence") or [])
+        if len(sequence) <= 1:
+            return None
+
+        resolver = self._get_technique_resolver()
+        technique = resolver.techniques.get("hook_first") or {}
+        threshold = float((technique.get("engine_effect") or {}).get("opening_hook_threshold", 0.8))
+
+        def _hook_score(fragment):
+            intelligence = fragment.get("intelligence") or {}
+            value = intelligence.get("hook_score")
+            if value is None:
+                value = fragment.get("hook_score")
+            try:
+                return float(value or 0.0)
+            except Exception:
+                return 0.0
+
+        hook_candidates = [
+            frag
+            for frag in sequence
+            if str((frag.get("structural") or {}).get("role") or "").strip().lower() == "hook"
+        ]
+        if hook_candidates:
+            reordered = hook_candidates + [
+                frag for frag in sequence
+                if str((frag.get("structural") or {}).get("role") or "").strip().lower() != "hook"
+            ]
+            if [frag.get("fragment_id") for frag in reordered] == [frag.get("fragment_id") for frag in sequence]:
+                return "hook_first"
+            proposal["sequence"] = reordered
+            proposal.setdefault("proposal_reason", {})["applied_technique"] = "hook_first"
+            return "hook_first"
+        else:
+            best_idx, best_fragment = max(
+                enumerate(sequence),
+                key=lambda pair: (_hook_score(pair[1]), -pair[0]),
+            )
+            if _hook_score(best_fragment) < threshold:
+                return None
+            if best_idx == 0:
+                return "hook_first"
+            proposal["sequence"] = [best_fragment] + [frag for idx, frag in enumerate(sequence) if idx != best_idx]
+            proposal.setdefault("proposal_reason", {})["applied_technique"] = "hook_first"
+            return "hook_first"
 
     def arrange_fragments(self, sequence, recommended_order=None):
         """[DIRECTOR_LAYER_V0] 선택된 조각의 '순서만' 재배치 (selection 불변).
