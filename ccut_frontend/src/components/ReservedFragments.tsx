@@ -338,8 +338,14 @@ const ReservedFragments: React.FC<ReservedFragmentsProps> = ({
 
   return (
     <>
+      {/* [HOLDMAP-LAYOUT-01 2026-07-25] min-h-full 복원 — 카드가 부모(보류 슬롯) 높이를
+          최소로 채운다. 이 클래스는 2cb0831b에 있었고 d86ccf8f(보류맵 원본 복원)에서 함께
+          사라졌다. 없으면 카드 높이가 내용(min-h-[220px] board)만큼만 잡혀, 슬롯이 그보다
+          클 때 아래가 죽는다 — 실측: 슬롯 236px / 카드 222px → 하단 14px 공중부양.
+          board의 h-full이 이 카드 높이를 참조하므로, 여기 한 층만 고치면 보드까지 함께 찬다.
+          (좌표 저장·자유배치 로직 무접촉) */}
       <div
-        className="relative bg-card/50 rounded-lg overflow-hidden border border-border/20"
+        className="relative bg-card/50 rounded-lg overflow-hidden border border-border/20 min-h-full flex flex-col"
         onDragOver={handleDragOverHold}
         onDrop={(e) => {
           // 보류맵 자체 드래그 (reserve-restore)는 보류맵이 받지 않음
@@ -405,7 +411,11 @@ const ReservedFragments: React.FC<ReservedFragmentsProps> = ({
 
         <div
           ref={boardRef}
-          className="relative min-h-[220px] h-full select-none overflow-visible"
+          /* [HOLDMAP-LAYOUT-01] min-h-[220px] → min-h-0. 220px 하한이 슬롯보다 클 때
+             (실측: viewport 820 → 슬롯 182 / 보드 220) 카드가 슬롯을 넘어서 하단 정합이
+             깨졌다. 조각맵↔보류맵 비율은 리사이저(mapHoldSplit·localStorage 지속)가
+             이미 사용자 손에 있으므로, 보드는 '남은 세로 공간을 그대로' 채운다. */
+          className="relative min-h-0 flex-1 select-none overflow-visible"
           style={{
             cursor:
               dragMode === "internal" ? "grabbing" :
