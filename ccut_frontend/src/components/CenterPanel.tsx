@@ -1086,8 +1086,19 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
       // 절단 (헌장 §5 — 화면과 재생은 같은 진실). 빈 조각맵이면 빈 배열 — 옛 시퀀스 부활 금지.
       // 내부 제외 정밀 스킵: 타일 동봉 spans_ms(05723b0f, ms 정수)를 소비해 span당 재생
       // 항목 1개로 전개 — 근사 후퇴 없음 (e96d8d18 스킵·끝정지·재재생 자산 보존).
+      // [SEQFRAGS-INV-02 국장 결정 (가)] 편집 상태는 **스토리에 속한다** — A도 B도 같은 편집을 받는다.
+      //   구판은 `proposalKey === (displayProposalId ?? committedProposalId)` 로 갈라서 선택된 안만
+      //   편집 반영본으로 재생하고 나머지는 저장본(anchor 좌표)으로 재생했다.
+      //   실측(Merope A idx7 SF_BC1A6C): 저장본 13.21~31.2 를 연속 재생 — 트림(15.35~29.31) 무시,
+      //   내부 제외 2구간 부활. 같은 잣대로 A/B를 비교할 수 없고 A를 확정하면 편집이 사라진다.
+      //   ★저장본에 좌표를 굽지 않는다(진실 이중화 금지) — 재생 시점에 조각맵 상태에서 파생한다.
+      const tiles = (fragments ?? []).filter((f) => !f.excluded);
+      if (tiles.length > 0) {
+        return tiles.flatMap(expandTileToItems);
+      }
+      // 빈 조각맵: 표시 중인 안은 옛 시퀀스 부활 금지(헌장 §5) — 빈 배열 그대로.
       if (proposalKey === (displayProposalId ?? committedProposalId)) {
-        return (fragments ?? []).filter((f) => !f.excluded).flatMap(expandTileToItems);
+        return [];
       }
 
       // 조각맵에 깔리지 않은(비표시) 제안 중 확정본은 서버 EDL 클립으로 재생 (기존 경로 보존).
