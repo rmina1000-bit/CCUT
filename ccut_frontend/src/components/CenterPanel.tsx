@@ -422,6 +422,30 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
   const videoRefA = useRef<HTMLVideoElement>(null);
   const videoRefB = useRef<HTMLVideoElement>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
+  // [CHATSCROLL-FIX-01] 표준 채팅 규칙 — 사용자가 하단 근처에 있을 때만 따라간다.
+  //   구판은 새 내용이 늘어나면 무조건 chatEnd로 흘러내렸다(:673 block:"end").
+  //   실측: 중간(S1=1200, 남은거리 2272)에서 새 메시지 1건 -> +2193px 하단 점프.
+  //   위로 올려 읽는 중에는 끌어내리지 않고 '새 내용' 버튼만 띄운다.
+  const chatScrollRef = useRef<HTMLDivElement>(null);
+  const CHAT_BOTTOM_SLACK = 120; // 하단 근접 판정(px)
+  const chatAtBottomRef = useRef(true);
+  const [chatHasNew, setChatHasNew] = useState(false);
+  const isChatNearBottom = useCallback(() => {
+    const el = chatScrollRef.current;
+    if (!el) return true;                                   // 아직 없음 = 따라가도 무해
+    if (el.scrollHeight <= el.clientHeight + 4) return true; // 스크롤 자체가 없음 = 항상 하단
+    return el.scrollHeight - el.scrollTop - el.clientHeight <= CHAT_BOTTOM_SLACK;
+  }, []);
+  const handleChatScroll = useCallback(() => {
+    const near = isChatNearBottom();
+    chatAtBottomRef.current = near;
+    if (near) setChatHasNew(false);
+  }, [isChatNearBottom]);
+  const scrollChatToBottom = useCallback(() => {
+    chatAtBottomRef.current = true;
+    setChatHasNew(false);
+    chatEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+  }, []);
   const consultationTextareaRef = useRef<HTMLTextAreaElement | null>(null);
 
   const [activePlayer, setActivePlayer] = useState<"A" | "B" | null>(null);
@@ -670,8 +694,18 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
     const gens = proposalHistory.length;
     const grew = msgs > _prevChatLenRef.current.msgs || gens > _prevChatLenRef.current.gens;
     _prevChatLenRef.current = { msgs, gens };
-    if (grew) chatEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
-  }, [storyPlan?.messages?.length, proposalHistory.length]);
+    if (!grew) return;
+    // [CHATSCROLL-FIX-01] 하단 근처일 때만 따라간다 — 위에서 읽는 중이면 알림만.
+    if (chatAtBottomRef.current || isChatNearBottom()) {
+      chatAtBottomRef.current = true;
+      chatEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+    } else {
+      import.meta.env.DEV && console.log("[CHATSCROLL][HOLD]", {
+        msgs, gens, reason: "user_scrolled_up",
+      });
+      setChatHasNew(true);
+    }
+  }, [storyPlan?.messages?.length, proposalHistory.length, isChatNearBottom]);
 
   const setActivePlayerSafe = useCallback((player: "A" | "B" | null) => {
     activePlayerRef.current = player;
@@ -1860,7 +1894,11 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
     }
 
     return (
-      <div className="flex-1 w-full px-4 pt-4 flex flex-col items-center space-y-4 overflow-y-auto no-scrollbar pb-20">
+      <div
+        ref={chatScrollRef}
+        onScroll={handleChatScroll}
+        className="flex-1 w-full px-4 pt-4 flex flex-col items-center space-y-4 overflow-y-auto no-scrollbar pb-20"
+      >
 
         {/* [FRAGMENT-SEARCH] 채팅 자연어 조각 검색 결과 */}
         <FragSearchPanel fragSearch={fragSearch} onClose={() => setFragSearch(null)} />
@@ -2787,6 +2825,20 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
           </>
         );
         return stageSlot ? createPortal(finalContent, stageSlot) : finalContent; })()}
+
+        {/* [CHATSCROLL-FIX-01] 위에서 읽는 중에 새 내용이 오면 끌어내리지 않고 여기로 알린다.
+            sticky라 기존 레이아웃을 건드리지 않는다 (높이 점유 없음). */}
+        {chatHasNew && (
+          <div className="sticky bottom-2 z-30 self-center pointer-events-none">
+            <button
+              type="button"
+              onClick={scrollChatToBottom}
+              className="pointer-events-auto rounded-full border border-white/15 bg-black/70 px-3 py-1 text-[12px] text-white/85 shadow-lg backdrop-blur hover:bg-black/85"
+            >
+              새 내용 ↓
+            </button>
+          </div>
+        )}
 
         {/* [FLOW] 자동 스크롤 목적지 — 흐름의 최신 지점 */}
         <div ref={chatEndRef} />
