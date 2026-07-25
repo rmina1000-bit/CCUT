@@ -988,6 +988,94 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
     [previewUrlB, getVideoUrlForProposal, videoUrl, proposals, isProposalEmpty]
   );
 
+  /**
+   * [SEQFRAGS-INV-01 2번] 타일 1개 -> 재생 항목 N개 전개. **해석과 시퀀스 구성의 분리 중 '전개' 축**.
+   *   조각은 자동 분할되지 않는다(헌장 §6) — 타일은 계속 1개다. 다만 내부 제외(중간삭제)가 있으면
+   *   그 조각을 "생존 구간 수"만큼 이어 틀어야 지운 구간이 다시 들리지 않는다(국장 판정 ①-나, 05723b0f).
+   *   실측(Merope): fragment_edit_state.excluded_ranges_json 이 SF_88B1F4=1구간, SF_BC1A6C=2구간
+   *   -> 슬롯 2개·3개. 11타일이 14슬롯이 되는 유일한 근원이 이것이다(alias 1:N·파생조각·조인 아님).
+   */
+  const expandTileToItems = useCallback((f: any): Fragment[] => {
+    const spans: Array<[number, number]> | null =
+      Array.isArray(f?.spans_ms) && f.spans_ms.length > 1 ? f.spans_ms : null;
+    if (!spans) return [f];   // span 0·1개 = 타일 좌표가 이미 그 구간
+    return spans.map(([s, e]) => ({
+      ...f,
+      start_sec: s / 1000, end_sec: e / 1000,
+      start_time: s / 1000, end_time: e / 1000,
+      start_frame: Math.round((s / 1000) * 30),
+      end_frame: Math.round((e / 1000) * 30),
+      duration: Math.max(1, Math.round(((e - s) / 1000) * 30)),
+    })) as Fragment[];
+  }, []);
+
+  /** 계약 원본(승인 시퀀스)의 fid 순서. 런타임 실측: proposals[X].key_fragments 11건, A·B 동일. */
+  const contractFidsOf = useCallback((proposalKey: "A" | "B"): string[] => {
+    const p = proposals?.[proposalKey] as any;
+    const raw = Array.isArray(p?.key_fragments) ? p.key_fragments
+      : Array.isArray(p?.sequence) ? p.sequence : [];
+    return raw
+      .map((x: any) => String(typeof x === "string" ? x : (x?.fragment_id ?? x?.id ?? "")))
+      .filter(Boolean);
+  }, [proposals]);
+
+  /**
+   * [SEQFRAGS-INV-01 3번] 재생 계층 INV 검산기. 재생 시작 직전 최후 방어선.
+   *   판정 기준은 **고유 fid의 집합과 순서**다 — 슬롯 수가 아니다.
+   *   슬롯 수는 내부 제외 전개로 정당하게 늘 수 있고(위 expandTileToItems), 그걸 위반으로 보면
+   *   사용자가 지운 구간을 되살리게 된다. 그래서 늘어난 슬롯은 위반이 아니라 **명시 신고**한다.
+   *   집합·순서가 어긋나면 계약 원본으로 재구성하고, 해석 실패 조각은 건너뛰되 남긴다.
+   */
+  const enforceSeqContract = useCallback((proposalKey: "A" | "B", frags: Fragment[]): Fragment[] => {
+    const contract = contractFidsOf(proposalKey);
+    if (contract.length === 0) {
+      console.warn(`[SEQ_INV][NO_CONTRACT] ${proposalKey} 계약 원본(key_fragments)이 없어 판정 불가 — 슬롯 ${frags.length} 그대로 재생`);
+      return frags;
+    }
+    // 연속 반복(=전개된 같은 조각)을 접어 고유 fid 순서를 얻는다.
+    const collapsed = frags
+      .map((f: any) => String(f?.fragment_id ?? ""))
+      .filter((id, i, a) => id && (i === 0 || a[i - 1] !== id));
+    const same = collapsed.length === contract.length && collapsed.every((id, i) => id === contract[i]);
+
+    if (same) {
+      if (frags.length !== contract.length) {
+        const per: Record<string, number> = {};
+        frags.forEach((f: any) => {
+          const id = String(f?.fragment_id ?? "");
+          per[id] = (per[id] ?? 0) + 1;
+        });
+        console.log(`[SEQ_INV][EXPAND] ${proposalKey} 내부 제외 전개 — 계약 ${contract.length}조각 / 재생 슬롯 ${frags.length}`,
+          Object.fromEntries(Object.entries(per).filter(([, n]) => n > 1)));
+      }
+      return frags;
+    }
+
+    console.error(`[SEQ_INV][RESTORE] ${proposalKey} 재생 시퀀스가 계약과 다름 — 계약 원본으로 재구성`, {
+      expected_n: contract.length, got_unique_n: collapsed.length, got_slots: frags.length,
+      added: collapsed.filter((id) => !contract.includes(id)).slice(0, 5),
+      removed: contract.filter((id) => !collapsed.includes(id)).slice(0, 5),
+      order_only: collapsed.length === contract.length,
+    });
+
+    const byFid = new Map<string, any>();
+    (fragments ?? []).forEach((f: any) => {
+      const id = String(f?.fragment_id ?? "");
+      if (id && !f.excluded && !byFid.has(id)) byFid.set(id, f);
+    });
+    const missing: string[] = [];
+    const rebuilt = contract.flatMap((fid) => {
+      const tile = byFid.get(fid) ?? allSourceFragments.find((f) => f.fragment_id === fid);
+      if (!tile) { missing.push(fid); return []; }
+      return expandTileToItems(tile);
+    });
+    if (missing.length) {
+      console.warn(`[SEQ_INV][SKIP] ${proposalKey} 계약 조각 해석 실패 ${missing.length}건 — 건너뜀`, missing);
+    }
+    console.log(`[SEQ_INV][RESTORED] ${proposalKey} 고유 ${new Set(rebuilt.map((f: any) => f.fragment_id)).size} / 슬롯 ${rebuilt.length}`);
+    return rebuilt;
+  }, [contractFidsOf, fragments, allSourceFragments, expandTileToItems]);
+
   const buildSeqFrags = useCallback(
     (proposalKey: "A" | "B"): Fragment[] => {
       // [#28 재생원 일원화 (가') 국장 승인 2026-07-17] 조각맵에 깔린 제안의 라이브 재생 =
@@ -999,21 +1087,7 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
       // 내부 제외 정밀 스킵: 타일 동봉 spans_ms(05723b0f, ms 정수)를 소비해 span당 재생
       // 항목 1개로 전개 — 근사 후퇴 없음 (e96d8d18 스킵·끝정지·재재생 자산 보존).
       if (proposalKey === (displayProposalId ?? committedProposalId)) {
-        return (fragments ?? [])
-          .filter((f) => !f.excluded)
-          .flatMap((f: any) => {
-            const spans: Array<[number, number]> | null =
-              Array.isArray(f.spans_ms) && f.spans_ms.length > 1 ? f.spans_ms : null;
-            if (!spans) return [f]; // span 0·1개 = 타일 좌표가 이미 그 구간
-            return spans.map(([s, e]) => ({
-              ...f,
-              start_sec: s / 1000, end_sec: e / 1000,
-              start_time: s / 1000, end_time: e / 1000,
-              start_frame: Math.round((s / 1000) * 30),
-              end_frame: Math.round((e / 1000) * 30),
-              duration: Math.max(1, Math.round(((e - s) / 1000) * 30)),
-            }));
-          });
+        return (fragments ?? []).filter((f) => !f.excluded).flatMap(expandTileToItems);
       }
 
       // 조각맵에 깔리지 않은(비표시) 제안 중 확정본은 서버 EDL 클립으로 재생 (기존 경로 보존).
@@ -1039,20 +1113,34 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
       // [STEP 10-K-C1-R39-R1] resolved_aliases가 있으면 우선적으로 사용하여 가드가 적용된 데이터를 재생에 반영
       const resolved = (p as any).resolved_aliases;
       if (Array.isArray(resolved) && resolved.length > 0) {
-        return resolved
-          .map((item: any) => {
-            const fid = item.fragment_id || item.proposal_fragment_id || item.id;
-            return allSourceFragments.find((f) => f.fragment_id === fid);
-          })
-          .filter(Boolean) as Fragment[];
+        // [SEQFRAGS-INV-01 2번] 조용한 드롭 금지 — 해석 실패는 건너뛰되 반드시 남긴다.
+        const rMissing: string[] = [];
+        const out = resolved.flatMap((item: any) => {
+          const fid = String(item.fragment_id || item.proposal_fragment_id || item.id || "");
+          const hit = allSourceFragments.find((f) => f.fragment_id === fid);
+          if (!hit) { rMissing.push(fid); return []; }
+          return [hit];
+        }) as Fragment[];
+        if (rMissing.length) {
+          console.warn(`[SEQ_INV][SKIP] ${proposalKey} resolved_aliases 해석 실패 ${rMissing.length}건 — 건너뜀`, rMissing);
+        }
+        return out;
       }
 
       const ids: string[] = p.key_fragments ?? p.sequence ?? [];
-      return ids
-        .map((id) => allSourceFragments.find((f) => f.fragment_id === id))
-        .filter(Boolean) as Fragment[];
+      const iMissing: string[] = [];
+      const byIds = ids.flatMap((id) => {
+        const fid = String(typeof id === "string" ? id : ((id as any)?.fragment_id ?? (id as any)?.id ?? ""));
+        const hit = allSourceFragments.find((f) => f.fragment_id === fid);
+        if (!hit) { iMissing.push(fid); return []; }
+        return [hit];
+      }) as Fragment[];
+      if (iMissing.length) {
+        console.warn(`[SEQ_INV][SKIP] ${proposalKey} key_fragments 해석 실패 ${iMissing.length}건 — 건너뜀`, iMissing);
+      }
+      return byIds;
     },
-    [proposals, allSourceFragments, committedProposalId, displayProposalId, fragments, exportClips, programId, isProposalEmpty]
+    [proposals, allSourceFragments, committedProposalId, displayProposalId, fragments, exportClips, programId, isProposalEmpty, expandTileToItems]
   );
 
 
@@ -1293,7 +1381,7 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
   const startSeq = useCallback((player: "A" | "B") => {
     const isA = player === "A";
     const ref = isA ? videoRefA : videoRefB;
-    const frags = buildSeqFrags(player);
+    const frags = enforceSeqContract(player, buildSeqFrags(player));   // [SEQFRAGS-INV-01 3번]
     if (frags.length === 0) {
       // [건3 빈 조각맵 정직 안내 + F1 하나의 강물] 침묵 무반응·옛 시퀀스 폴백 금지 (헌장 §5).
       // 안내는 지휘부 채팅으로 흐른다 (toast 폐지 — 헌장 §3부칙 F1, SEE FAIL 1 수리).
@@ -1354,7 +1442,7 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
       reportSeqProgress(frags[0].fragment_id);
       playFrag("B", frags[0], seqEndBRef);
     }
-  }, [buildSeqFrags, playFrag, stopSeq, reportActiveId, setActivePlayerSafe, displayProposalId, committedProposalId, onPlaybackNotice]);
+  }, [buildSeqFrags, enforceSeqContract, playFrag, stopSeq, reportActiveId, setActivePlayerSafe, displayProposalId, committedProposalId, onPlaybackNotice]);
  
   const reSyncSequence = useCallback((player: "A" | "B", time: number) => {
     const frags = player === "A" ? seqFragsARef.current : seqFragsBRef.current;

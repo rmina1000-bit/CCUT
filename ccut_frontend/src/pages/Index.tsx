@@ -2086,11 +2086,15 @@ const Index: React.FC = () => {
   const [fragmentFocusOrigin, setFragmentFocusOrigin] = useState<"sequence" | "user">("user");
 
   const handleCenterStoryFragmentFocus = useCallback((fragmentId: string | null, origin: "sequence" | "user" = "user") => {
-    setFragmentFocusOrigin(origin);
     if (!fragmentId) {
+      // [SEQFRAGS-INV-01 4-4] 정지·종료 보고(id=null)는 사용자 선택이 아니다 — 출처를 바꾸지 않는다.
+      //   구판은 여기서도 origin을 "user"로 올렸다. selectedFragment는 그대로 남아 있으므로
+      //   시퀀스가 끝나는 순간 focusOrigin만 user로 뒤집혀 조각맵이 마지막 조각으로 1회 따라갔다
+      //   — 실측: BOUNDARY_HIT(seqIdx=10) t=58553 직후 FragmentMap:122 2건(t=58570·58573).
       setHighlightedPanoramaFrag(null);
       return;
     }
+    setFragmentFocusOrigin(origin);
     const all = [
       ...(editFragments ?? []),
       ...(sourceEntries ?? []).flatMap((e) => e.fragments ?? []),
