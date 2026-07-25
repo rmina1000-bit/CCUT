@@ -82,9 +82,16 @@ function hash6(s: string): string {
   return h.toString(16).padStart(6, "0").slice(-6);
 }
 
-/** B0 시대 결정론 발급식: ITEM_{program해시6}_{proposal_id}_{fid}_{occ} (v1.1 §3). */
-export function timelineItemIdFor(programId: string, proposalId: string, fid: string, occ = 0): string {
-  return `ITEM_${hash6(programId)}_${proposalId}_${fid}_${occ}`;
+/**
+ * 결정론 발급식: ITEM_{program해시6}_{fid}_{occ}
+ *
+ * [STORY-LAYER-01 A-1] 제안키를 뺐다 — 스토리는 program 단위 하나이므로 사용본 ID도
+ * 제안과 무관하다. 대사·경계 편집이 A/B 어디서 일어나도 같은 스토리에 쌓인다.
+ * 구판(…_{proposal_id}_…)은 A↔B 전환마다 키가 갈려 edit_state 행이 고아가 됐다(NA/B 분열).
+ * 서버 발급식(ledger_r0.py `item_id`)과 반드시 동일해야 한다.
+ */
+export function timelineItemIdFor(programId: string, fid: string, occ = 0): string {
+  return `ITEM_${hash6(programId)}_${fid}_${occ}`;
 }
 
 /** PBE 적용 payload(segments 초 단위) → excluded_ranges ms (생존 구간 사이 간극). */

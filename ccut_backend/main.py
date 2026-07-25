@@ -9,6 +9,21 @@ try:
 except Exception:
     pass
 
+# [ENV-FIX-01 2026-07-25] 게이트 환경값을 .env에 고정 — 재시작 휘발 차단.
+# 왜 여기인가: 아래 import 사슬이 **모듈 로드 시점에** os.getenv를 읽는다
+# (예: engine/hub.py `SPECULATIVE_DRAFT = os.getenv("CCUT_SPECULATIVE", ...)`).
+# 그래서 어떤 import보다 먼저 실려야 한다.
+# override=False: 이미 프로세스 환경에 있는 값이 이긴다 — 런처(run_backend*.ps1)나
+# 수동 지정이 .env보다 우선. .env는 '아무도 안 정했을 때의 진실'이다.
+# 로더가 없으면 조용히 넘어가지 않고 이유를 찍는다 (침묵 실패 금지, 헌장 §5).
+_ENV_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env")
+try:
+    from dotenv import load_dotenv
+    _env_loaded = load_dotenv(_ENV_PATH, override=False)
+    print(f"[ENV] .env {'loaded' if _env_loaded else 'not found'}: {_ENV_PATH}")
+except Exception as _env_err:
+    print(f"[ENV][WARN] .env 로드 실패 — 프로세스 환경변수만 사용: {_env_err}")
+
 import time
 import uuid
 import logging
@@ -410,6 +425,10 @@ app.include_router(story_gate_router)
 # [LEDGER-1] Text Ledger R0 — 스토리 원고 read API (읽기 전용, DB 무변)
 from ledger_r0 import router as ledger_router
 app.include_router(ledger_router)
+
+# User-triggered fragment-only forced alignment. No background work and no DB writes.
+from precision_alignment.api import router as precision_alignment_router
+app.include_router(precision_alignment_router)
 
 # [MIRROR Phase 2] Deterministic verdict notebook. Writes facts only.
 from mirror_ledger import router as mirror_ledger_router, ensure_schema as _mirror_ledger_ensure_schema
@@ -2285,11 +2304,35 @@ async def get_project_sources(project_id: str):
 async def post_generate_project_proposals(req: ProjectProposalRequest):
     """
     [STEP 10-I.5.24-R1] Multi-Source Project Proposal 생성 (v0.1)
+
+    [GATE-LOOP-01 2-1] 생성 게이트 — 승인 없으면 A/B를 만들지 않는다.
+      제안은 '승인된 스토리를 어떻게 편집할지'다. 승인 전에 만들면 그게 스토리 대신
+      진실이 되어버린다(오늘 정리한 병소의 뿌리). 스토리 씨앗은 분석 결과에서 나온다
+      (story_gate.service.resolve_sequence 3순위) — 제안이 없어도 원고는 뜬다.
+      사용자 이동은 막지 않는다: 거절은 '생성'뿐이고 화면 전환·조회는 그대로다.
     """
     import traceback
     from engine.proposal_engine import ProposalEngine
 
     project_id = req.project_id
+
+    if story_gate.is_enabled():
+        try:
+            _st = story_service.story_state(project_id)
+        except Exception as _e:
+            _st = None
+            print(f"[PROPOSAL][GATE] story_state 조회 실패 — 생성 계속: {_e}")
+        if _st is not None and _st.get("story_state") != "story_approved":
+            print(f"[PROPOSAL][GATE] 승인 전이라 A/B 생성 안 함 "
+                  f"(project={project_id}, story_state={_st.get('story_state')})")
+            return {
+                "status": "STORY_NOT_APPROVED",
+                "project_id": project_id,
+                "story_state": _st.get("story_state"),
+                "item_count": _st.get("item_count"),
+                "proposals": [],
+                "message": "원고를 먼저 승인해 주세요. 승인하면 편집안(A·B)을 만듭니다.",
+            }
     
     # [STEP 10-I.5.27-E6] Stable Dedupe: 순서 보존하며 중복 제거
     raw_source_ids = req.source_ids
@@ -4804,19 +4847,12 @@ class ProjectStateRequest(BaseModel):
 async def save_project_state(program_id: str, req: ProjectStateRequest, db: Session = Depends(get_db)):
     """[B-4] 작업상태 영속(A=전부): active_mode/chat/reserve/ui. None인 필드는 미변경."""
     import datetime
-    if req.ui_state is not None and os.getenv("CCUT_MODE_GATE", "").strip().upper() == "ON":
-        try:
-            if story_service.is_edit_locked(program_id):
-                old_row = db.query(ProgramTable).filter_by(program_id=program_id).first()
-                old_ui = json.loads(old_row.ui_state) if old_row and old_row.ui_state else {}
-                new_ui = json.loads(req.ui_state) if req.ui_state else {}
-                locked_keys = ("proposalsKeyFragments", "paperCutOrder", "reservedFragments", "deletedFragments")
-                if any(old_ui.get(k) != new_ui.get(k) for k in locked_keys):
-                    raise HTTPException(status_code=409, detail="story_approved_edit_locked")
-        except HTTPException:
-            raise
-        except Exception:
-            pass
+    # [GATE-LOOP-01 1번] 승인 후 스토리 변경을 409로 막던 가드 제거.
+    #   구판: 승인 상태에서 story/보류/휴지통이 바뀌면 저장을 거절했다(story_approved_edit_locked).
+    #         사용자의 조작을 차단하는 설계였고, 프론트 잠금(modeEditLocked)과 한 쌍이었다.
+    #   신판: 저장을 받는다. 저장되면 sequence_hash가 승인 지문과 달라지고, story_state가
+    #         approved → review로 내려가 화면이 스토리 단계로 복귀한다(복귀 루프).
+    #         제안(proposals)은 지우지 않는다 — stale로 물러날 뿐이다.
     pg = db.query(ProgramTable).filter_by(program_id=program_id).first()
     if not pg:
         return {"status": "NOT_FOUND", "program_id": program_id}

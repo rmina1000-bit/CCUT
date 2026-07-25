@@ -17,17 +17,11 @@ if (-not (Test-Path $Python))  { $Python = "python" }   # 폴백: PATH의 python
 
 $env:FOR_DISABLE_CONSOLE_CTRL_HANDLER = "T"
 
-# [2026-07-04] 검증 확정 게이트 — supervisor 경유 기동에서도 동일 적용
-# (미설정 시 hub plan/캐시/게이트가 전부 꺼진 옛 경로로 뜸)
-$env:CCUT_HUB_PLAN         = "1"
-$env:CCUT_AUTO_REINDEX     = "1"
-$env:CCUT_SINGLE_CACHE     = "1"
-$env:CCUT_LEGACY_NARRATIVE = "0"
-# [2026-07-04] person-relink 체인 ON — RUNTIME r2 PASS(커밋 ef21bf6e, evalrun 격리
-# 검증: 체인 3줄 완주 + 라이브 불변) 후 국장 지시로 운영 편입.
-$env:CCUT_PERSON_RELINK    = "1"
-# 신규 기능 게이트는 검증 전까지 기본 OFF: CCUT_REVISION / CCUT_QUALITY_LOG /
-# CCUT_PERSON_REQUERY / CCUT_JUDGE_PARALLEL (병렬화는 실측 FAIL로 비활성 유지)
+# [GATE-LOOP-01 0-2 2026-07-25] 게이트 강제 구문 제거 — 유일한 출처는 ccut_backend/.env.
+# 구판은 여기서 5개(HUB_PLAN/AUTO_REINDEX/SINGLE_CACHE/LEGACY_NARRATIVE/PERSON_RELINK)를
+# 세웠고 run_backend.ps1은 4개, run_backend.bat은 0개였다 — 같은 코드가 기동 경로에 따라
+# 다른 제품으로 떴다. 그 값들은 .env로 이관됐다. 여기서 다시 세우면 .env를 이기므로
+# (main.py load_dotenv override=False) 갈림이 부활한다. 세우지 않는다.
 
 function Write-Sup($msg) {
     $line = "[{0}] {1}" -f (Get-Date -Format "yyyy-MM-dd HH:mm:ss"), $msg
@@ -40,15 +34,20 @@ Get-ChildItem $LogDir -Filter "backend_*.log" -ErrorAction SilentlyContinue |
     Remove-Item -Force -ErrorAction SilentlyContinue
 
 # 이미 떠 있으면 중복 기동 방지
-$existing = Get-NetTCPConnection -LocalPort 8000 -State Listen -ErrorAction SilentlyContinue
+# [GATE-LOOP-01 0-2] 포트 수정 8000 → 8011. main.py는 8011로 뜨는데(uvicorn.run port=8011)
+# 가드가 8000을 보고 있어 '이미 떠 있음'을 영영 감지하지 못했다 → 같은 DB에 백엔드 2개가
+# 붙는 경로였다(RUNTIME 격리 규칙 위반, 8011 사건과 같은 종류).
+$BackendPort = 8011
+$existing = Get-NetTCPConnection -LocalPort $BackendPort -State Listen -ErrorAction SilentlyContinue
 if ($existing) {
-    Write-Sup "8000 already listening (pid=$($existing.OwningProcess)). supervisor exit."
+    Write-Sup "$BackendPort already listening (pid=$($existing.OwningProcess)). supervisor exit."
     exit 0
 }
 
 Write-Sup "=== supervisor start ==="
-# 기동 게이트 raw 기록 — 자식(backend)이 이 env를 그대로 상속한다
-Write-Sup "gates: HUB_PLAN=$env:CCUT_HUB_PLAN AUTO_REINDEX=$env:CCUT_AUTO_REINDEX SINGLE_CACHE=$env:CCUT_SINGLE_CACHE LEGACY_NARRATIVE=$env:CCUT_LEGACY_NARRATIVE PERSON_RELINK=$env:CCUT_PERSON_RELINK"
+# [GATE-LOOP-01 0-2] 게이트는 이 스크립트가 세우지 않는다 — ccut_backend/.env가 유일한 출처.
+# 실제로 무엇이 실렸는지는 백엔드 자신이 찍는다 (main.py 의 [ENV] 줄 + GET /settings/gates).
+Write-Sup "gates: (ccut_backend/.env 단일 출처 — 런처는 세우지 않음)"
 $fails = 0
 while ($true) {
     $stamp = Get-Date -Format "yyyyMMdd_HHmmss"

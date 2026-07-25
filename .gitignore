@@ -5,6 +5,11 @@ ccut_frontend/dist/
 lovable_extracted/   # ⚠️ Ignore redundant extracted files
 
 # Backend & Environment
+# [GATE-LOOP-01 0-4 2026-07-25 국장 승인] .env = 게이트 단일 출처(머신별 설정).
+# 커밋하지 않는다 — 기계마다 다르고, 나중에 비밀값이 들어오면 유출 경로가 된다.
+.env
+.env.*
+!.env.example
 .venv/
 **/__pycache__/
 .mypy_cache/

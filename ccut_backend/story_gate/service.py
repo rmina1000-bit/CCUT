@@ -1,10 +1,15 @@
 # -*- coding: utf-8 -*-
 """[STORY-GATE P2] 승인 서비스 — 원고의 현재 지문(sequence_hash), 상태, 승인 기록.
 
-진실원 (P2 정찰 실측):
-  원고 순서 = programs.ui_state 의 proposalsKeyFragments[mode],
-  mode = committedProposalId or selectedProposalId   (ledger_r0.py:113-114 와 동일 규칙)
+진실원 (STORY-LAYER-01 A-1, 국장 승인 2026-07-25):
+  원고 순서 = programs.ui_state 의 story.fids — **program 단위 하나**.
+  A/B는 그 하나의 스토리를 어떻게 편집할지(기법)일 뿐, 각자의 이야기를 갖지 않는다.
+  → 지문(sequence_hash)도 제안축과 무관하다 (compute_hash는 fids만 본다).
   → 승인은 "그 배열을 그 순서로 승인했다"는 기록이다.
+
+  구판(proposalsKeyFragments[mode] = 제안별 스토리)은 폐기됐다. 분석 직후처럼
+  story가 아직 없을 때만 proposals를 '씨앗'으로 읽는다 (사용자가 아무것도 누르기
+  전에도 원고는 떠야 하므로) — 그 순간부터 진실원은 story.fids 하나다.
 
 게이트 OFF일 때 이 모듈은 어떤 DB 쓰기도 하지 않는다 (테이블 생성조차 안 함).
 테이블이 없으면(=Cutover 전 운영 DB) 읽기는 "승인 없음"으로 정직하게 답하고,
@@ -56,19 +61,34 @@ def _ensure_mode_columns(con):
         con.execute("ALTER TABLE programs ADD COLUMN mode_reopen_at TEXT")
 
 
-def compute_hash(mode, fragment_ids) -> str:
-    """I-3 대조 기준. 순서가 바뀌면 해시가 바뀐다 (배치도 승인 대상이므로)."""
-    raw = f"{mode or ''}|" + "|".join(str(f) for f in (fragment_ids or []))
+def compute_hash(fragment_ids) -> str:
+    """I-3 대조 기준. 순서가 바뀌면 해시가 바뀐다 (배치도 승인 대상이므로).
+
+    [STORY-LAYER-01 A-1] 스토리는 program 단위 하나이므로 지문에 제안축(mode)이 없다.
+    구판은 mode를 섞어서 A↔B 전환만으로 승인이 stale이 됐다 — 그게 INV-1/2 위반의 씨앗.
+    """
+    raw = "|".join(str(f) for f in (fragment_ids or []))
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()[:16]
+
+
+def read_story_fids(ui):
+    """[STORY-LAYER-01 A-1] ui_state에서 program 단위 스토리(선택 fids + 순서)를 읽는다."""
+    if not isinstance(ui, dict):
+        return []
+    story = ui.get("story")
+    fids = story.get("fids") if isinstance(story, dict) else None
+    return [str(f) for f in fids if f] if isinstance(fids, list) else []
 
 
 def resolve_sequence(con, program_id):
     """원고의 (mode, fragment_ids, source). 원고를 만드는 단 하나의 규칙 — ledger_r0도 이걸 쓴다.
 
-    1순위 ui_state (프론트가 저장한 화면 진실).
-    2순위 proposals 테이블 폴백 — **분석 직후에는 ui_state가 아직 NULL이다**(실측: Anemone).
+    1순위 ui_state.story.fids — program 단위 스토리(진실원).
+    2순위 proposals 테이블 씨앗 — **분석 직후에는 ui_state가 아직 NULL이다**(실측: Anemone).
       그때도 원고는 떠야 한다. 사용자가 아무것도 누르기 전이 바로 원고를 보여줄 시점이니까.
       추천안은 B(프론트 기본 선택과 동일), 없으면 A.
+
+    반환하는 mode는 '표시용 라벨'일 뿐이다 — 스토리의 정체성이 아니다(지문에 안 들어간다).
     """
     row = con.execute("SELECT ui_state FROM programs WHERE program_id=?", (program_id,)).fetchone()
     if row is None:
@@ -81,7 +101,7 @@ def resolve_sequence(con, program_id):
             while isinstance(ui, str):
                 ui = json.loads(ui)
             mode = ui.get("committedProposalId") or ui.get("selectedProposalId")
-            fids = (ui.get("proposalsKeyFragments") or {}).get(mode) or []
+            fids = read_story_fids(ui)
         except Exception:
             pass
     if fids:
@@ -102,11 +122,32 @@ def resolve_sequence(con, program_id):
                 seq = []
         by_mode[(r["mode"] or "").upper()] = seq or []
     pick = mode if mode in by_mode else ("B" if "B" in by_mode else ("A" if "A" in by_mode else None))
-    if not pick:
-        return mode, [], "none"
-    fids = [s.get("fragment_id") for s in by_mode[pick]
-            if isinstance(s, dict) and s.get("fragment_id")]
-    return pick, fids, ("proposals" if fids else "none")
+    if pick:
+        fids = [s.get("fragment_id") for s in by_mode[pick]
+                if isinstance(s, dict) and s.get("fragment_id")]
+        if fids:
+            return pick, fids, "proposals"
+
+    # [GATE-LOOP-01 2-1] 3순위 — 분석 결과(조각) 시간순.
+    #   왜: 제안(A/B)은 '승인된 스토리의 편집 방식'이므로 승인 전에는 만들지 않는다.
+    #   그러면 스토리의 씨앗이 사라지므로, 씨앗을 제안에서 떼어 분석 결과에 둔다.
+    #   전부 고른 상태에서 사용자가 빼는 방식 — 헌장의 '전사를 보고 고른다'와 같은 방향이다.
+    fids = _program_fragment_fids(con, program_id)
+    return mode, fids, ("fragments" if fids else "none")
+
+
+def _program_fragment_fids(con, program_id):
+    """이 프로그램에 붙은 소스들의 조각 fid — 소스 순서 · 그 안은 시간순."""
+    try:
+        rows = con.execute(
+            'SELECT sf.fragment_id FROM semantic_fragments sf '
+            'JOIN project_sources ps ON ps.source_id = sf.source_id '
+            'WHERE ps.program_id=? ORDER BY ps.display_order, sf.start',
+            (program_id,),
+        ).fetchall()
+    except sqlite3.OperationalError:
+        return []
+    return [r[0] for r in rows if r[0]]
 
 
 def current_story(program_id):
@@ -114,7 +155,7 @@ def current_story(program_id):
     con = _connect()
     try:
         mode, fids, _src = resolve_sequence(con, program_id)
-        return mode, list(fids), compute_hash(mode, fids)
+        return mode, list(fids), compute_hash(fids)
     finally:
         con.close()
 

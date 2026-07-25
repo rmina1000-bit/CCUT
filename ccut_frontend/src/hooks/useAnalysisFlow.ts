@@ -31,12 +31,11 @@ export function useAnalysisFlow() {
   const [highlightedPanoramaFrag, setHighlightedPanoramaFrag] = useState<string | null>(null);
   const [expandedFragment, setExpandedFragment] = useState<string | null>(null);
   const [editFragments, setEditFragments] = useState<Fragment[]>(initialEditFragments);
-  // [#38 — "조각의 속성은 공유, 제안의 구성은 분리"] 보류·휴지통은 제안(A/B)별 구성 정보.
-  // 원료 웅덩이(editFragments)는 공용 유지 — 조각 실물은 하나다 (헌장 §1-9).
-  const [reservedByProposal, setReservedByProposal] = useState<Record<"A" | "B", Fragment[]>>({
-    A: initialReservedFragments, B: initialReservedFragments,
-  });
-  const [deletedByProposal, setDeletedByProposal] = useState<Record<"A" | "B", Fragment[]>>({ A: [], B: [] });
+  // [STORY-LAYER-01 A-1] 보류·휴지통 = 프로젝트 스코프 하나. 스토리가 program 단위 하나이므로
+  // "어디로 뺐다/버렸다"도 하나다. 구판(#38 제안별 {A,B} 버킷)은 A와 B가 서로 다른 이야기를
+  // 갖던 폐기 모델의 잔재 — A/B 전환마다 보류맵이 갈리는 원인이었다.
+  const [reservedFragments, setReservedFragments] = useState<Fragment[]>(initialReservedFragments);
+  const [deletedFragments, setDeletedFragments] = useState<Fragment[]>([]);
   const [appState, setAppState] = useState<AppState>("empty");
   const [sourceFragments, setSourceFragments] = useState<Fragment[]>([]);
   const [currentSourceId, setCurrentSourceId] = useState<string | null>(null);
@@ -49,8 +48,8 @@ export function useAnalysisFlow() {
   const resetAnalysisFlow = useCallback(() => {
     setSourceFragments([]);
     setEditFragments([]);
-    setReservedByProposal({ A: [], B: [] });
-    setDeletedByProposal({ A: [], B: [] });
+    setReservedFragments([]);
+    setDeletedFragments([]);
     setSelectedFragment(null);
     setHighlightedPanoramaFrag(null);
     setExpandedFragment(null);
@@ -67,8 +66,8 @@ export function useAnalysisFlow() {
     highlightedPanoramaFrag, setHighlightedPanoramaFrag,
     expandedFragment, setExpandedFragment,
     editFragments, setEditFragments,
-    reservedByProposal, setReservedByProposal,
-    deletedByProposal, setDeletedByProposal,
+    reservedFragments, setReservedFragments,
+    deletedFragments, setDeletedFragments,
     appState, setAppState,
     sourceFragments, setSourceFragments,
     currentSourceId, setCurrentSourceId,

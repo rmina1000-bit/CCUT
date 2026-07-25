@@ -427,8 +427,17 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
   const storyGate = useStoryGate(programId, appState === "complete");
   const [storyViewKey, setStoryViewKey] = useState(0);       // '반영하기' 누를 때만 원고 재로드 (S5)
   const storyRefreshNonceRef = useRef(storyRefreshNonce);
-  // 승인 전에는 편집 UI(무대 A/B·Export·지난 제안)를 일절 내지 않는다 (S2)
-  const hideEditUI = storyGate.loading || (storyGate.enabled && !storyGate.approved);
+  // [GATE-LOOP-01 2-1] 실재하는 무대 게이트 — 구판 hideEditUI는 정의만 있고 소비처가 0인
+  // dead code였다(FLOWORDER-AUDIT 3-1 실측). 그래서 "승인 전엔 A/B를 내지 않는다"는 계약이
+  // 문서에만 있었고, 판정 전(story=null) 구간엔 A/B가 기본 화면으로 떴다 — 위반 (1)의 원인.
+  // 이제 이 값이 실제로 무대 택일을 지배한다(:finalContent).
+  //   게이트 OFF → 현행 유지(무대)          로딩 중 → 무대 금지(아직 모른다)
+  //   재편집 세션 → 스토리                  그 외 → 승인된 경우에만 무대
+  const editStageAllowed = !storyGate.enabled
+    ? true
+    : storyGate.loading || reEditActive
+      ? false
+      : storyGate.approved;
 
   // [#19-b 심판 2026-07-19 · R8 유령 1·4호 2026-07-20] 중앙 '활성 세대'의 단일 판정값.
   //   story 카드 = 한 번도 승인 안 된 원고(story_draft) 또는 재편집 세션(reEditActive).
@@ -1628,13 +1637,12 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
       return <EmptyProjectView handleUpload={handleUpload} fileInputRef={fileInputRef} handleFileChange={handleFileChange} />;
     }
 
-    // [LOADING] 분석 중이거나, 분석은 끝났어도(complete) 제안이 준비됐는데
-    // 아직 "이 프로젝트는~" 컨설팅 설명(storyPlan)이 생성되기 전이면 로딩을 유지.
-    // proposals 조건으로 무한 로딩(제안 없는 complete) 방지.
-    const showAnalyzingLoader =
-      appState === "analyzing" ||
-      (appState === "complete" && !!proposals && !storyPlan) ||
-      (appState !== "complete" && !!sourceEntries && sourceEntries.length > 0 && !proposals);
+    // [LOADING · GATE-LOOP-01 2-2] 로딩은 '분석 중'일 때만이다.
+    //   구판은 `complete && proposals && !storyPlan`으로도 로더를 띄웠다 — 제안·대화문이
+    //   준비되기를 기다리는 조건이라, 제안을 만들지 않는 승인 전 단계나 대화 기록이 없는
+    //   프로젝트(실측: 깨끗한 프로젝트 proj_3e04c17b1669)가 영구 로딩에 갇혔다.
+    //   목적지는 원고(스토리)이므로 기다릴 이유가 없다.
+    const showAnalyzingLoader = appState === "analyzing";
 
     if (showAnalyzingLoader) {
       return <AnalysisLoadingView analyzeMessage={analyzeMessage} analysisLogs={analysisLogs} analyzeProgress={analyzeProgress} />;
@@ -2485,8 +2493,9 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
           </>
         );
 
-        // [#19-b 심판] 활성 세대 표현 = 단일 판정값(centerShowStory) 하나. A/B 왕복 불변.
-        const showStory = centerShowStory;
+        // [#19-b 심판 · GATE-LOOP-01 2-1] 활성 세대 표현 = 단일 판정값 하나. A/B 왕복 불변.
+        // 무대는 '승인됨'일 때만 선다(editStageAllowed). 그 외 전부 원고 — 판정 전 구간 포함.
+        const showStory = !editStageAllowed;
         const storyContent = (
           <div className="w-full max-w-[800px] rounded-2xl border border-white/8 bg-white/[0.02] overflow-hidden">
             {/* [TRANSCRIPT-POLISH-01] New-story banner is hidden in mode gate view. */}

@@ -37,11 +37,12 @@ interface FragmentMapProps {
   ) => void;
   sourceVideoUrls?: Record<string, string>;
   modeGateEnabled?: boolean;
-  compositionLocked?: boolean;
   fragmentFace?: "image" | "text";
   onFragmentFaceChange?: (face: "image" | "text") => void;
   onApproveComposition?: () => void;
   onReopenComposition?: () => void;
+  /** [GATE-LOOP-01 1번] 승인 여부(잠금 아님). 구성 버튼 택일에만 쓴다 — 조작은 절대 막지 않는다. */
+  storyApproved?: boolean;
   compositionNotice?: string | null;
   modeRound?: number;
   title?: string;
@@ -87,11 +88,11 @@ const FragmentMap: React.FC<FragmentMapProps> = ({
   onBoundaryClick,
   sourceVideoUrls,
   modeGateEnabled,
-  compositionLocked,
   fragmentFace = "image",
   onFragmentFaceChange,
   onApproveComposition,
   onReopenComposition,
+  storyApproved = false,
   compositionNotice,
   modeRound = 1,
   title,
@@ -141,19 +142,14 @@ const FragmentMap: React.FC<FragmentMapProps> = ({
   );
 
   const handleDragStart = useCallback((e: React.DragEvent, frag: Fragment) => {
-    if (compositionLocked) {
-      e.preventDefault();
-      return;
-    }
     const uid = getUid(frag);
     e.dataTransfer.setData("text/plain", uid);
     e.dataTransfer.setData("application/ccut-edit-fragment", JSON.stringify(frag));
     e.dataTransfer.effectAllowed = "move";
     setDraggedId(uid);
-  }, [compositionLocked]);
+  }, []);
 
   const handleDragOver = useCallback((e: React.DragEvent, realIndex: number, totalCount: number) => {
-    if (compositionLocked) return;
     e.preventDefault();
     e.dataTransfer.dropEffect = "move";
 
@@ -169,7 +165,7 @@ const FragmentMap: React.FC<FragmentMapProps> = ({
     } else {
       setDragOverIndex(realIndex === totalCount - 1 ? totalCount : realIndex + 1);
     }
-  }, [compositionLocked, modeGateEnabled, fragmentFace]);
+  }, [modeGateEnabled, fragmentFace]);
 
   // [DROPPOS-FIX A] 원본맵 드롭이 타일이 아닌 컨테이너로 떨어질 때의 삽입 위치 —
   // 커서 좌표를 '선택 타일'(draggable=true, realIndex 정확) 미드포인트와 비교해 산출.
@@ -195,10 +191,6 @@ const FragmentMap: React.FC<FragmentMapProps> = ({
   const handleDrop = useCallback(
     (e: React.DragEvent, targetRealIndex: number) => {
       console.log("[DEBUG] FragmentMap handleDrop types:", e.dataTransfer.types);
-      if (compositionLocked) {
-        e.preventDefault();
-        return;
-      }
       e.preventDefault();
       e.stopPropagation();
       setDragOverIndex(null);
@@ -251,7 +243,7 @@ const FragmentMap: React.FC<FragmentMapProps> = ({
       newFrags.splice(targetRealIndex, 0, moved);
       onFragmentsChange(newFrags);
     },
-    [compositionLocked, fragments, onFragmentsChange, onRestoreFragment, onTrashRestore, onSourceRestore]
+    [fragments, onFragmentsChange, onRestoreFragment, onTrashRestore, onSourceRestore]
   );
 
   const handleDragEnd = useCallback(() => {
@@ -330,7 +322,6 @@ const FragmentMap: React.FC<FragmentMapProps> = ({
     const uid = getUid(f);
     setActiveTextRowId(uid);
     onFragmentClick(f);
-    if (compositionLocked) return;
     if (selected) {
       onFragmentsChange(fragments.filter((fr) => getUid(fr) !== uid));
       onMoveToHold(f);
@@ -426,8 +417,7 @@ const FragmentMap: React.FC<FragmentMapProps> = ({
       <div
         className={`flex flex-col ${title === "" && !showFaceControls ? "" : "bg-card/50 rounded-lg border border-border/20"}`} data-dropzone="fragment-map"
         onDragOver={(e) => {
-          if (compositionLocked) return;
-          const types = e.dataTransfer.types;
+                const types = e.dataTransfer.types;
           if (
             types.includes("application/ccut-fragment-hold") ||
             types.includes("application/ccut-trash-restore") ||
@@ -438,10 +428,6 @@ const FragmentMap: React.FC<FragmentMapProps> = ({
           }
         }}
         onDrop={(e) => {
-          if (compositionLocked) {
-            e.preventDefault();
-            return;
-          }
           const reserveData = e.dataTransfer.getData("application/ccut-reserve-restore");
           if (reserveData) {
             e.preventDefault();
@@ -511,8 +497,11 @@ const FragmentMap: React.FC<FragmentMapProps> = ({
               >
                 이미지 조각
               </button>
+              {/* [GATE-LOOP-01 1번] 버튼 택일 기준을 '잠금'에서 '승인 여부'로 바꿨다.
+                  잠금은 폐지됐고(사용자는 언제든 고칠 수 있다), 이 자리는 단지
+                  "아직 승인 안 했으니 승인하러 가기" / "이미 승인됐으니 다시 고르기"다. */}
               {showCompositionActions && (
-                compositionLocked ? (
+                storyApproved ? (
                   <button type="button" className="px-2 py-1 rounded border border-primary/40 text-[12px]" onClick={onReopenComposition}>
                     조각을 다시 고르기
                   </button>
@@ -544,10 +533,6 @@ const FragmentMap: React.FC<FragmentMapProps> = ({
             setDragOverIndex(fragments.length);
           }}
           onDrop={(e) => {
-            if (compositionLocked) {
-              e.preventDefault();
-              return;
-            }
             e.preventDefault();
             setDragOverIndex(null);
             setDraggedId(null);
@@ -608,7 +593,7 @@ const FragmentMap: React.FC<FragmentMapProps> = ({
 
 
                 <div
-                  draggable={!compositionLocked && selected}
+                  draggable={selected}
                   onDragStart={(e) => handleDragStart(e, f)}
                   onDragOver={(e) => handleDragOver(e, realIndex, fragments.length)}
                   onDrop={(e) => handleDrop(e, realIndex)}
@@ -724,7 +709,7 @@ const FragmentMap: React.FC<FragmentMapProps> = ({
                           hasActiveSelection={!!selectedFragmentId}
                           onClick={() => onFragmentClick(f)}
                           onDoubleClick={() => onFragmentDoubleClick(f)}
-                          onEditFragment={onEditFragment && !compositionLocked ? () => onEditFragment(f) : undefined}
+                          onEditFragment={onEditFragment ? () => onEditFragment(f) : undefined}
                           videoPath={sourceVideoUrls?.[(f as any).source_id] ?? null}
                           compactLabelOnly={modeGateEnabled}
                           widthScale={0.7}

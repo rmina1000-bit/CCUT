@@ -121,8 +121,11 @@ def _recommendation_rows(con, fids):
     return by_fid
 
 
-def _ordered_stringout_fids(ui, mode, selected_fids, all_fids):
-    paper = ((ui.get("paperCutOrder") or {}).get(mode) or []) if isinstance(ui, dict) else []
+def _ordered_stringout_fids(ui, selected_fids, all_fids):
+    """[STORY-LAYER-01 A-1] 표시 순서(스트링아웃)도 program 단위 하나 — storyOrder.
+    구판 paperCutOrder[mode](제안별 순서)는 폐기. 스토리가 하나면 순서도 하나다."""
+    story_order = ui.get("storyOrder") if isinstance(ui, dict) else None
+    paper = [str(f) for f in story_order if f] if isinstance(story_order, list) else []
     base = paper if paper else all_fids
     seen = set()
     ordered = []
@@ -200,7 +203,7 @@ async def get_ledger(program_id: str):
         mode, selected_fids, _seq_src = _resolve_seq(con, program_id)
         ui = _load_ui(prow["ui_state"])
         all_fids = _all_program_fids(con, program_id)
-        fids = _ordered_stringout_fids(ui, mode, selected_fids, all_fids)
+        fids = _ordered_stringout_fids(ui, selected_fids, all_fids)
         selected_set = set(selected_fids)
         play_order_by_fid = {fid: i for i, fid in enumerate(selected_fids)}
         recommendation_by_fid = _recommendation_rows(con, fids)
@@ -208,8 +211,9 @@ async def get_ledger(program_id: str):
         if ui:
             try:
                 # [D8 대응] fid 재발급으로 DB에서 좌표를 잃은 조각의 폴백 —
-                # ui_state 스냅샷(proposalsCustomFragments)의 좌표 (PHASE A: 좌표가 진실)
-                for cf in (ui.get("proposalsCustomFragments") or {}).get(mode) or []:
+                # ui_state 스냅샷(storyFragments)의 좌표 (PHASE A: 좌표가 진실)
+                # [STORY-LAYER-01 A-1] 구성본도 program 단위 하나 (구판 proposalsCustomFragments[mode] 폐기)
+                for cf in (ui.get("storyFragments") or []):
                     if isinstance(cf, dict) and cf.get("fragment_id") is not None:
                         st = cf.get("start_time", cf.get("start_sec"))
                         en = cf.get("end_time", cf.get("end_sec"))
@@ -282,7 +286,10 @@ async def get_ledger(program_id: str):
         for fid in fids:
             occ = occ_seen.get(fid, 0)
             occ_seen[fid] = occ + 1
-            item_id = f"ITEM_{_hash6(program_id)}_{mode}_{fid}_{occ}"
+            # [STORY-LAYER-01 A-1] 사용본 ID에서 제안키 제거 — 대사 편집은 A/B 어디서 해도
+            # 같은 스토리에 쌓인다. 구판 ITEM_{hash6}_{mode}_{fid}_{occ}는 A↔B 전환마다
+            # 키가 갈려 fragment_edit_state 행이 고아가 됐다(NA/B 분열).
+            item_id = f"ITEM_{_hash6(program_id)}_{fid}_{occ}"
             sf = con.execute(
                 'SELECT source_id, start, "end" FROM semantic_fragments WHERE fragment_id=?', (fid,)
             ).fetchone()
@@ -450,13 +457,14 @@ async def get_render_edl(program_id: str):
 
 @router.post("/ledger/{program_id}/order")
 async def save_ledger_order(program_id: str, payload: dict):
-    """Papercut order: save full display order plus active proposal order in ui_state."""
-    try:
-        from story_gate.service import is_edit_locked
-        if is_edit_locked(program_id):
-            return JSONResponse(status_code=409, content={"ok": False, "error": "story_approved_edit_locked"})
-    except Exception:
-        pass
+    """Papercut order: program 단위 스토리 하나에 표시 순서(storyOrder)와 선택 순서(story.fids)를 쓴다.
+
+    [STORY-LAYER-01 A-1] 구판은 제안별(paperCutOrder[mode]/proposalsKeyFragments[mode])로
+    갈라 써서 A와 B가 다른 이야기를 갖게 만들었다. 이제 쓰는 자리는 하나뿐이다.
+    payload.mode는 받아도 스토리를 가르는 데 쓰지 않는다 — 표시 라벨 갱신에만 쓴다.
+    """
+    # [GATE-LOOP-01 1번] 승인 후 순서 변경을 409로 막던 가드 제거 — 순서는 사용자 결정(INV-0).
+    # 바뀌면 지문이 달라져 story_state가 review로 내려가고 화면이 스토리 단계로 복귀한다.
     con = _connect()
     try:
         prow = con.execute(
@@ -473,12 +481,10 @@ async def save_ledger_order(program_id: str, payload: dict):
             return {"ok": False, "error": "empty_order"}
         full_order = [fid for fid in full_order if fid in all_fids]
         selected_order = [fid for fid in selected_order if fid in all_fids]
-        paper = ui.get("paperCutOrder") if isinstance(ui.get("paperCutOrder"), dict) else {}
-        paper[mode] = full_order
-        ui["paperCutOrder"] = paper
-        pk = ui.get("proposalsKeyFragments") if isinstance(ui.get("proposalsKeyFragments"), dict) else {}
-        pk[mode] = selected_order
-        ui["proposalsKeyFragments"] = pk
+        ui["storyOrder"] = full_order
+        story = ui.get("story") if isinstance(ui.get("story"), dict) else {}
+        story["fids"] = selected_order
+        ui["story"] = story
         if not ui.get("selectedProposalId") and not ui.get("committedProposalId"):
             ui["selectedProposalId"] = mode
         con.execute(
@@ -488,7 +494,7 @@ async def save_ledger_order(program_id: str, payload: dict):
         con.commit()
         try:
             from story_gate.service import compute_hash
-            sequence_hash = compute_hash(mode, selected_order)
+            sequence_hash = compute_hash(selected_order)
         except Exception:
             sequence_hash = None
         return {

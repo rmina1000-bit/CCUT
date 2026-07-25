@@ -11,7 +11,7 @@ import FragmentMiniPlayer from "@/components/FragmentMiniPlayer";
 import type { MiniPlayTarget } from "@/components/FragmentMiniPlayer";
 import { useWorkspaceLayout } from "@/hooks/useWorkspaceLayout";
 import { useProposalState } from "@/hooks/useProposalState";
-import { useStoryGate } from "@/hooks/useStoryGate";
+import { useStoryGate, fetchStory } from "@/hooks/useStoryGate";
 import { ArchivePanel } from "@/components/ArchivePanel";
 import { SnsUploadPanel } from "@/components/SnsUploadPanel";
 import { AccountPanel } from "@/components/AccountPanel";
@@ -19,7 +19,7 @@ import { TrashPanel } from "@/components/TrashPanel";
 import { SettingsPanel } from "@/components/SettingsPanel";
 import { SingleFragmentEditor } from "@/components/SingleFragmentEditor";
 import { AppDialog } from "@/components/AppDialog";
-import { storyStageVisible } from "@/lib/storyMode";
+import { storyStageVisible, storyStageBadge } from "@/lib/storyMode";
 import { fragmentTranscriptText } from "@/lib/fragmentText";
 // [GHOST 소각 #4·5] 구 2조각 PBE(PrecisionBoundaryEditor) 완전 소각 — 타입·주석 렌더 포함. 복원은 git 이력.
 
@@ -95,8 +95,8 @@ const Index: React.FC = () => {
     highlightedPanoramaFrag, setHighlightedPanoramaFrag,
     expandedFragment, setExpandedFragment,
     editFragments, setEditFragments,
-    reservedByProposal, setReservedByProposal,
-    deletedByProposal, setDeletedByProposal,
+    reservedFragments, setReservedFragments,
+    deletedFragments, setDeletedFragments,
     appState, setAppState,
     sourceFragments, setSourceFragments,
     currentSourceId, setCurrentSourceId,
@@ -166,7 +166,14 @@ const Index: React.FC = () => {
       });
     return () => { dead = true; };
   }, []);
-  const modeEditLocked = modeGateOn && storyGate.story?.story_state === "story_approved" && !activeReEdit;
+  // [GATE-LOOP-01 1번] modeEditLocked 폐기 — 승인 후에도 사용자를 잠그지 않는다.
+  //   구판: 승인되면 보류맵을 숨기고 조각 편집 핸들러를 () => {} 로 죽였다.
+  //         사용자가 "왜 안 되지"를 겪고, 화면이 임시 페이지처럼 보이던 원인.
+  //   신판: 바꾸는 건 언제나 허용. 바꾸면 sequence_hash가 달라지고 → 백엔드 story_state가
+  //         approved → review로 내려가고 → storyStageVisible이 참이 되어 스토리 단계로 복귀한다.
+  //         A/B는 그때 stale이 되어 화면에서 물러날 뿐, 제안 데이터는 지우지 않는다.
+  //   즉 잠금이 필요 없다. 상태기계가 스스로 되돌아온다 (복귀 루프).
+  //   (단계 배지 storyStage는 committedProposalId 선언 뒤에서 계산 — TDZ 회피)
 
   // [STORY-TRACK-C C-3] 조각맵:보류맵 세로 분할 비율(조각맵 몫 0..1). 기존 ccut_center_width와
   // 동일 localStorage 방식. 편집 단계도 마지막 조정 존중(§9) — 값은 단계 무관 공유.
@@ -198,6 +205,9 @@ const Index: React.FC = () => {
     document.body.style.userSelect = "none";
   }, []);
 
+  // [GATE-LOOP-01 2-1] 승인 후 A/B 생성기. 선언 순서(TDZ) 때문에 ref로 늦게 채운다.
+  const requestProposalsForApprovedStoryRef = useRef<(() => void) | null>(null);
+
   const handleApproveComposition = useCallback(async () => {
     setCompositionNotice(null);
     const result = await storyGate.approve({
@@ -216,6 +226,10 @@ const Index: React.FC = () => {
         item_count: result.body?.item_count,
       });
       await storyGate.reload();
+      // [GATE-LOOP-01 2-1] 승인이 A/B 생성의 방아쇠다. 생성 게이트가 승인 전 생성을
+      // 거절하므로(backend STORY_NOT_APPROVED), 승인된 지금이 만들 시점이다.
+      // 실패해도 승인은 유효 — 이유만 남기고 사용자는 계속 진행할 수 있다.
+      requestProposalsForApprovedStoryRef.current?.();
     } else if (result.status === 409) {
       setCompositionNotice(result.body?.user_message || result.body?.message || "구성이 방금 바뀌어 새로 확인했습니다. 다시 눌러 주세요.");
     }
@@ -236,8 +250,8 @@ const Index: React.FC = () => {
     });
   }, [activeNavItem, storyGate, setAppDialog]);
 
-  // [#38] 보류맵 좌표도 제안별 구성 정보 (버킷 별칭은 displayProposalId 정의 뒤에)
-  const [holdPositionsByProposal, setHoldPositionsByProposal] = useState<Record<"A" | "B", Record<string, { x: number; y: number }>>>({ A: {}, B: {} });
+  // [STORY-LAYER-01 A-1] 보류맵 좌표도 프로젝트 스코프 하나 (구판 제안별 {A,B} 폐기).
+  const [holdPositions, setHoldPositions] = useState<Record<string, { x: number; y: number }>>({});
   const [boundaryHighlightIds, setBoundaryHighlightIds] = useState<string[]>([]);
   // [GHOST 소각 #4] 구 2조각 PBE 상태(editorTarget·pbeWindow·editorOpen) 제거 — 소비자 전무 증명(STEP C)
   const [singleEditOpen, setSingleEditOpen] = useState(false);
@@ -301,32 +315,54 @@ const Index: React.FC = () => {
       : currentSourceId ? [currentSourceId] : []
   );
   // [FLOW] 확정/선택 전에도 조각맵이 비지 않게 — 무대에 선 제안(기본 A)을 따라간다.
+  // [STORY-LAYER-01 A-1] 이 값은 '표시 방식'(어느 편집안을 무대에 세울지)일 뿐이며,
+  // 스토리(조각·순서·대사)를 가르지 않는다. 조각맵·전사·보류맵은 이 값을 참조하지 않는다.
   const displayProposalId = committedProposalId ?? selectedProposalId ?? (proposals ? "A" : null);
 
-  // [#38 — "조각의 속성은 공유, 제안의 구성은 분리"] 표시 제안의 버킷으로 보류·좌표·휴지통을 선택.
-  // 기존 소비처(~20곳)의 호출 계약을 보존하기 위해 옛 이름의 파생 별칭 + 버킷 지향 setter를 제공한다.
-  const proposalBucket: "A" | "B" = displayProposalId === "B" ? "B" : "A";
-  const reservedFragments = reservedByProposal[proposalBucket];
-  const deletedFragments = deletedByProposal[proposalBucket];
-  const holdPositions = holdPositionsByProposal[proposalBucket];
-  const setReservedFragments = useCallback((updater: Fragment[] | ((prev: Fragment[]) => Fragment[])) => {
-    setReservedByProposal((prev) => ({
-      ...prev,
-      [proposalBucket]: typeof updater === "function" ? (updater as any)(prev[proposalBucket]) : updater,
-    }));
-  }, [proposalBucket, setReservedByProposal]);
-  const setDeletedFragments = useCallback((updater: Fragment[] | ((prev: Fragment[]) => Fragment[])) => {
-    setDeletedByProposal((prev) => ({
-      ...prev,
-      [proposalBucket]: typeof updater === "function" ? (updater as any)(prev[proposalBucket]) : updater,
-    }));
-  }, [proposalBucket, setDeletedByProposal]);
-  const setHoldPositions = useCallback((updater: Record<string, { x: number; y: number }> | ((prev: Record<string, { x: number; y: number }>) => Record<string, { x: number; y: number }>)) => {
-    setHoldPositionsByProposal((prev) => ({
-      ...prev,
-      [proposalBucket]: typeof updater === "function" ? (updater as any)(prev[proposalBucket]) : updater,
-    }));
-  }, [proposalBucket]);
+  // [GATE-LOOP-01 3번] 단계 배지 — 상태기계에서 파생만 한다 (배지가 자기 상태를 갖지 않는다).
+  const storyStage = storyStageBadge(storyGate.story?.story_state, committedProposalId, activeReEdit);
+
+
+  // ── [STORY-LAYER-01 A-1] live story = program 단위 하나 ──
+  // storyFids       : 선택된 조각 + 순서 (사용자 결정 — INV-0. AI가 바꾸지 않는다)
+  // storyFragments  : 그 스토리의 구성본(좌표·분할 포함 표시용) — 구판 customEditFragments 대체
+  // 제안(A/B)은 이 하나의 스토리를 '어떻게 편집할지'이므로, 스토리를 소유하지 않는다.
+  const [storyFids, setStoryFids] = useState<string[]>([]);
+  const [storyFragments, setStoryFragments] = useState<Fragment[]>([]);
+  // 이 프로젝트의 ui_state 재수화가 끝났는가 (저장이 복원을 앞질러 덮는 것을 막는 문턱)
+  const [uiRestoredFor, setUiRestoredFor] = useState<string | null>(null);
+
+  // ── [STORY-WRITE-GUARD-01] 스토리 쓰기 가드 ──────────────────────────────
+  // 실측된 병소(재현 완료): 핸들러들이 `applyStory(editFragments 파생)`을 불러
+  //   스토리(선택 9개)가 **조각 웅덩이 전체(330)** 로 치환됐다. 보류 이동 1회로 9 → 329.
+  //   구판은 두 축을 분리해 다뤘다 — 구성본은 next(웅덩이 파생), 선택은 key_fragments.filter().
+  //   A-1에서 그 둘을 next 하나로 합치며 웅덩이가 스토리로 승격됐다.
+  // 가드 1 (축 분리): fids는 **반드시 명시**한다. 생략 시 구성본에서 파생하던 편의 기능을
+  //   없앴다 — 그 편의가 정확히 사고의 통로였다. 호출부는 storyFidsRef에서 파생해야 한다.
+  const storyFidsRef = useRef<string[]>([]);
+  storyFidsRef.current = storyFids;
+  // 가드 2 (출처 표식): 저장은 '사용자 행위'로 만들어진 스토리만. 서버 폴백·씨앗·재수화로
+  //   화면에 올라온 목록은 저장 경로에 진입하지 못한다 (2-1/2-2).
+  const storyOriginRef = useRef<"none" | "ui_state" | "server" | "user">("none");
+
+  /** 사용자 명시 행위로 스토리를 바꾼다 — 저장 허용 표식을 함께 세운다. */
+  const applyStory = useCallback((frags: Fragment[], fids: string[]) => {
+    setStoryFragments(frags);
+    setStoryFids(fids);
+    storyOriginRef.current = "user";
+  }, []);
+  /** 구성본(좌표·분할)만 갱신 — 선택·순서는 건드리지 않는다 (경계 편집 계열). */
+  const applyStoryComposition = useCallback((frags: Fragment[]) => {
+    setStoryFragments(frags);
+  }, []);
+  /** 선택 목록 파생 도우미 — 웅덩이가 아니라 **현재 스토리**에서만 뺀다/넣는다. */
+  const storyFidsWithout = useCallback((uid: string) =>
+    storyFidsRef.current.filter((id) => id !== uid), []);
+  const storyFidsWith = useCallback((uid: string, insertAt?: number) => {
+    const cur = storyFidsRef.current.filter((id) => id !== uid);
+    const idx = insertAt !== undefined ? Math.min(Math.max(insertAt, 0), cur.length) : cur.length;
+    return [...cur.slice(0, idx), uid, ...cur.slice(idx)];
+  }, []);
 
   // [UI-③⑤] 업로드 문진 답변 — storyPlan 생성 시 story_intent/메시지에 주입
   const intakeRef = useRef<{
@@ -474,8 +510,10 @@ const Index: React.FC = () => {
 
 // logProposalPair moved to useProposalState
 
-  // [#38] 스냅샷은 제안별 전체(byProposal)를 저장 — 같은 필드명, 값 형태만 승격 (하위호환 읽기는 재수화에서)
-  const getProposalBaseKeyFragments = useCallback((proposal: any): string[] | undefined => {
+  // [STORY-LAYER-01 A-1] 제안에서 '스토리 씨앗'(조각 순서열)을 뽑는다. 분석 직후 아직 스토리가
+  // 없을 때 단 한 번 쓰인다 — 백엔드 resolve_sequence의 proposals 폴백과 같은 역할이다.
+  // 씨앗이 심어진 뒤부터 진실원은 storyFids 하나이며, 제안은 스토리를 다시 건드리지 않는다.
+  const proposalSeedFids = useCallback((proposal: any): string[] | undefined => {
     const rawSeq =
       Array.isArray(proposal?.resolved_aliases) && proposal.resolved_aliases.length > 0
         ? proposal.resolved_aliases
@@ -488,42 +526,38 @@ const Index: React.FC = () => {
     return ids && ids.length > 0 ? ids : proposal?.key_fragments;
   }, []);
 
+  // [STORY-LAYER-01 A-1] 스냅샷도 program 단위 하나. 스토리(story.fids)와 그 구성본
+  // (storyFragments), 보류·휴지통·좌표가 제안축 없이 저장된다. 백엔드 진실원과 같은 키다
+  // (story_gate/service.py `read_story_fids`, ledger_r0.py `storyOrder`/`storyFragments`).
   const buildUiSnapshot = useCallback(() => ({
-    reservedFragments: reservedByProposal,
-    holdPositions: holdPositionsByProposal,
+    story: { fids: storyFids },
+    storyFragments,
+    reservedFragments,
+    holdPositions,
     committedProposalId,
     selectedProposalId,
     activeSource,
-    deletedFragments: deletedByProposal,
+    deletedFragments,
     proposalsIds: proposals ? {
       A: (proposals as any).A?.proposal_id,
       B: (proposals as any).B?.proposal_id,
     } : undefined,
-    proposalsBaseKeyFragments: proposals ? {
-      A: getProposalBaseKeyFragments((proposals as any).A),
-      B: getProposalBaseKeyFragments((proposals as any).B),
-    } : undefined,
-    proposalsKeyFragments: proposals ? {
-      A: (proposals as any).A?.key_fragments,
-      B: (proposals as any).B?.key_fragments,
-    } : undefined,
-    proposalsCustomFragments: proposals ? {
-      A: (proposals as any).A?.customEditFragments,
-      B: (proposals as any).B?.customEditFragments,
-    } : undefined,
-  }), [reservedByProposal, holdPositionsByProposal, committedProposalId, selectedProposalId, activeSource, deletedByProposal, proposals, getProposalBaseKeyFragments]);
+  }), [storyFids, storyFragments, reservedFragments, holdPositions, committedProposalId, selectedProposalId, activeSource, deletedFragments, proposals]);
 
   // [#30 merge-저장 — 원칙 "모르는 것을 지우지 않는다" (국장 승인 2026-07-17)]
   // 클라 소유 필드(아래 목록)는 스냅샷이 덮어쓰고, 그 외(서버 소유·미지 — 예: paperCutOrder)는
   // 저장 직전 서버 원본을 읽어 보존 병합한다. 경계: 클라가 의도적으로 비운 소유 필드를
   // merge가 되살리면 #1(스냅샷 부활)의 재림 — 소유 필드는 절대 병합하지 않는다.
+  // [STORY-LAYER-01 A-1] storyOrder(표시 순서)는 서버 소유(POST /ledger/{id}/order)이므로
+  // 이 목록에 넣지 않는다 — merge가 보존한다. story.fids는 조각맵·전사의 사용자 결정이라 클라 소유.
   const OWNED_UI_FIELDS = useMemo(() => new Set([
+    "story", "storyFragments",
     "reservedFragments", "holdPositions", "committedProposalId", "selectedProposalId",
-    "activeSource", "deletedFragments", "proposalsIds", "proposalsBaseKeyFragments",
-    "proposalsKeyFragments", "proposalsCustomFragments",
+    "activeSource", "deletedFragments", "proposalsIds",
   ]), []);
   const saveUiStateMerged = useCallback(async (programId: string, snapshot: Record<string, any>) => {
     let unknown: Record<string, any> = {};
+    let serverFidCount: number | null = null;
     try {
       const cur = await videoService.getProjectState(programId);
       if (cur?.ui_state) {
@@ -531,6 +565,8 @@ const Index: React.FC = () => {
         for (const [k, v] of Object.entries(parsed)) {
           if (!OWNED_UI_FIELDS.has(k)) unknown[k] = v;
         }
+        const prevFids = parsed?.story?.fids;
+        if (Array.isArray(prevFids)) serverFidCount = prevFids.length;
       }
     } catch (e) {
       // [#43 (1)] 침묵 금지 — 병합 원본을 못 읽으면 미지 필드(예: paperCutOrder)가 이번 저장에서
@@ -546,6 +582,20 @@ const Index: React.FC = () => {
           messages: [...msgs, { id: `ai_save_merge_fail_${Date.now()}`, sender: "ai" as const, text, timestamp: Date.now() }],
         };
       });
+    }
+    // [STORY-WRITE-GUARD-01 2-3] 급증 안전망 — 사용자 행위로 스토리가 3배 늘 일은 없다.
+    //   실측된 사고: 보류 이동 1회로 9 → 329(조각 웅덩이 전체)로 치환됐다. 원인은 고쳤지만,
+    //   같은 종류의 사고가 다시 나면 **DB에 닿기 전에** 여기서 멈춘다. 조용히 넘기지 않는다.
+    const nextFids = Array.isArray(snapshot?.story?.fids) ? snapshot.story.fids : null;
+    if (nextFids && serverFidCount !== null && serverFidCount > 0
+        && nextFids.length > serverFidCount * 3) {
+      console.error(
+        `[STORY-WRITE-GUARD][REJECT] story.fids 급증 — 저장 거부. `
+        + `program=${programId} before=${serverFidCount} after=${nextFids.length} `
+        + `ratio=${(nextFids.length / serverFidCount).toFixed(1)}x origin=${storyOriginRef.current} `
+        + `first3=[${nextFids.slice(0, 3).join(", ")}]`,
+      );
+      return { status: "REJECTED_STORY_SPIKE" } as any;
     }
     return videoService.saveProjectState(programId, { ui_state: JSON.stringify({ ...unknown, ...snapshot }) });
   }, [OWNED_UI_FIELDS, setStoryPlan]);
@@ -563,34 +613,38 @@ const Index: React.FC = () => {
   const handleHoldPositionsCommit = useCallback((positions: Record<string, { x: number; y: number }>) => {
     setHoldPositions(positions);
     if (!activeNavItem || !activeNavItem.startsWith("proj_")) return;
-    saveUiStateMergedTracked(activeNavItem, {
-      ...buildUiSnapshot(),
-      holdPositions: {
-        ...holdPositionsByProposal,
-        [proposalBucket]: positions,
-      },
-    });
-  }, [activeNavItem, buildUiSnapshot, holdPositionsByProposal, proposalBucket, saveUiStateMergedTracked, setHoldPositions]);
+    // 방금 확정한 좌표가 스냅샷의 (아직 갱신 전) 상태를 이기게 한다 — 프로젝트 스코프 하나.
+    saveUiStateMergedTracked(activeNavItem, { ...buildUiSnapshot(), holdPositions: positions });
+  }, [activeNavItem, buildUiSnapshot, saveUiStateMergedTracked, setHoldPositions]);
 
-  // [#8-a STORY-GATE-SYNC 2026-07-19] 제안 채택(committedProposalId) 및 그 채택된 안의
-  // 조각 구성이 바뀔 때(같은 모드로 재생성된 경우 포함) ui_state를 즉시 저장한다 — 기존엔
-  // 내보내기 완료(Index.tsx onExportDone) 시점에만 저장돼, 새 제안을 만들고 확정해도
-  // story-gate가 구 승인을 계속 유효로 보는 구멍이 있었다(승인 없이 EDIT 진입).
-  // 트리거를 committedProposalId 값 변화만으로 두면, 같은 안(B)을 유지한 채 재생성됐을 때
-  // (조각 구성만 바뀜) 저장이 재발동하지 않아 낡은 조각 목록이 저장되는 사례를 실측했다 —
-  // 그래서 채택된 모드의 key_fragments 지문까지 비교 키에 포함한다.
-  const committedSnapshotSigRef = useRef<string | null>(null);
+  // [#8-a STORY-GATE-SYNC 2026-07-19 · STORY-LAYER-01 A-1] 스토리가 바뀌면 ui_state를 즉시
+  // 저장한다 — 기존엔 내보내기 완료 시점에만 저장돼 story-gate가 구 승인을 계속 유효로 보는
+  // 구멍이 있었다(승인 없이 EDIT 진입). 트리거는 제안 채택이 아니라 **스토리 지문**이다:
+  // 스토리가 program 단위 하나가 되면서 "어느 안을 골랐나"는 스토리 변경이 아니게 됐다.
+  const storySnapshotSigRef = useRef<string | null>(null);
   useEffect(() => {
-    if (!committedProposalId) return;
-    const keyFrags = (proposals as any)?.[committedProposalId]?.key_fragments;
-    if (!keyFrags) return;
-    const sig = `${committedProposalId}:${JSON.stringify(keyFrags)}`;
-    if (committedSnapshotSigRef.current === sig) return;
-    committedSnapshotSigRef.current = sig;
+    if (storyFids.length === 0) return;   // 아직 씨앗 전 — 빈 스토리를 저장해 덮지 않는다
+    // [저장 무결성] 재수화가 끝난 뒤에만 저장한다. 씨앗은 proposals 도착 직후 심어지는데
+    // ui_state 복원은 그보다 늦게 끝나므로, 여기서 기다리지 않으면 아직 복원 전인
+    // committedProposalId/activeSource를 null로 덮어써 사용자의 선택이 조용히 사라진다(실측).
+    if (uiRestoredFor !== activeNavItem) return;
+    // [STORY-WRITE-GUARD-01 2-2] 출처 가드 — 사용자 행위('user')이거나 이미 ui_state에
+    // 있던 스토리('ui_state')만 저장한다. 서버 폴백/제안 파생('server')은 진입 금지.
+    if (storyOriginRef.current !== "user" && storyOriginRef.current !== "ui_state") {
+      console.info(`[STORY-WRITE-GUARD][SKIP] 저장 안 함 — origin=${storyOriginRef.current} (사용자 행위 아님)`);
+      return;
+    }
+    // 지문에 표시 방식(committed/selected)도 넣는다. 스토리를 가르지는 않지만 '사용자가 고른
+    // 편집안'이라 새로고침 후에도 남아야 한다 — 스토리만 보면 A/B 확정이 저장되지 않는다(실측).
+    const sig = JSON.stringify([storyFids, committedProposalId, selectedProposalId]);
+    if (storySnapshotSigRef.current === sig) return;
+    storySnapshotSigRef.current = sig;
     if (activeNavItem && activeNavItem.startsWith("proj_")) {
       saveUiStateMergedTracked(activeNavItem, buildUiSnapshot()).catch(() => {});
     }
-  }, [committedProposalId, proposals, activeNavItem, saveUiStateMergedTracked, buildUiSnapshot]);
+  }, [storyFids, committedProposalId, selectedProposalId, activeNavItem, uiRestoredFor, saveUiStateMergedTracked, buildUiSnapshot]);
+  // 프로젝트가 바뀌면 지문 기준을 새로 잡는다 (다음 프로젝트의 첫 스토리가 저장되도록)
+  useEffect(() => { storySnapshotSigRef.current = null; }, [activeNavItem]);
 
   const {
     resetAnalysisState,
@@ -643,6 +697,30 @@ const Index: React.FC = () => {
     });
     return out;
   }, []);
+
+  // [GATE-LOOP-01 2-1] 승인된 스토리로 A/B를 만든다. 승인 직후 handleApproveComposition이 부른다.
+  // 이 시점에만 백엔드 생성 게이트가 열린다(그 전엔 STORY_NOT_APPROVED로 거절).
+  const requestProposalsForApprovedStory = useCallback(async () => {
+    if (!activeNavItem || !activeNavItem.startsWith("proj_")) return;
+    const sourceIds = (sourceEntries ?? []).map((e) => e.source_id).filter(Boolean);
+    if (sourceIds.length === 0) return;
+    try {
+      const res: any = await videoService.requestProjectProposals(activeNavItem, sourceIds, 60.0);
+      if (res?.status === "STORY_NOT_APPROVED") {
+        console.warn("[PROPOSAL] 승인 직후인데 게이트가 아직 승인 전으로 봄 — 다음 승인에서 재시도", res);
+        return;
+      }
+      if (Array.isArray(res?.proposals) && res.proposals.length > 0) {
+        setProposals(mapBackendProposals(res.proposals));
+        console.info(`[PROPOSAL] 승인 후 A/B 생성 완료 — ${res.proposals.length}건`);
+      } else {
+        console.warn("[PROPOSAL] 승인 후 생성이 제안을 반환하지 않음", res?.status);
+      }
+    } catch (e) {
+      console.error("[PROPOSAL] 승인 후 A/B 생성 실패 — 승인은 유효합니다", e);
+    }
+  }, [activeNavItem, sourceEntries, mapBackendProposals, setProposals]);
+  requestProposalsForApprovedStoryRef.current = requestProposalsForApprovedStory;
 
   // [STEP 10-I.5.27-E7-M2] Debug Log Guard
   const DEBUG_FRAGMENT_MAP = useMemo(() => 
@@ -1200,10 +1278,12 @@ const Index: React.FC = () => {
         setProposals(null);
         setCommittedProposalId(null);
         setSelectedProposalId(null);
-        // [#38] 프로젝트 전환 클리어는 양 버킷 전체
-        setReservedByProposal({ A: [], B: [] });
-        setHoldPositionsByProposal({ A: {}, B: {} });
-        setDeletedByProposal({ A: [], B: [] });
+        // [STORY-LAYER-01 A-1] 프로젝트 전환 클리어 — 스토리·보류·휴지통 모두 program 스코프 하나
+        setStoryFids([]);
+        setStoryFragments([]);
+        setReservedFragments([]);
+        setHoldPositions({});
+        setDeletedFragments([]);
         setCurrentSourceId(null);
         setCurrentVideoUrl(null);
         setSingleEditOpen(false);
@@ -1285,12 +1365,23 @@ const Index: React.FC = () => {
             setCurrentVideoUrl(firstEntry.video_url);
 
             // [B-5-FIX] 저장된 A/B 제안 복원 → 돌아오면 하던 그대로
+            // [GATE-LOOP-01 2-2] appState 의존 방향 교정 — proposals가 아니라 story를 본다.
+            //   구판: `data.proposals.length > 0 ? complete : empty`
+            //         제안이 곧 '작업 화면이 있는가'의 판정이었다. 그래서 (a) 제안이 생기기
+            //         전에는 작업 화면이 없고, (b) 제안이 화면의 주인이 됐다. 승인 관문이
+            //         제안 뒤에 서게 된 뿌리다.
+            //   신판: 재료(조각)와 story_state가 결정한다. 제안은 있으면 무대에 세울 뿐이다.
             if (data.proposals && data.proposals.length > 0) {
               setProposals(mapBackendProposals(data.proposals));
-              setAppState("complete");
-            } else {
-              setAppState("empty");
             }
+            const hasMaterial = restoredEntries.some((e) => (e.fragments?.length ?? 0) > 0);
+            const storyInfo = await fetchStory(activeNavItem);
+            const storyAlive = !!storyInfo && storyInfo.story_state !== "scanned";
+            setAppState(hasMaterial || storyAlive ? "complete" : "empty");
+            console.info(
+              `[APPSTATE] ${activeNavItem}: material=${hasMaterial} story_state=${storyInfo?.story_state ?? "none"} `
+              + `items=${storyInfo?.item_count ?? 0} → ${hasMaterial || storyAlive ? "complete" : "empty"}`,
+            );
 
             // [B-5d] ui_state 스냅샷 복원 (단일 스냅샷 패턴)
             try {
@@ -1352,95 +1443,31 @@ const Index: React.FC = () => {
               }
               if (stateRes && stateRes.ui_state && isMounted) {
                 const snap = JSON.parse(stateRes.ui_state);
-                // [#38 하위호환 읽기 — 유일 지점] 구형(공용 1벌)은 A·B 양쪽 복제로 승격,
-                // 신형({A,B})은 그대로. 마이그레이션 스크립트 불요 — 열 때 자가 승격.
-                const upFrags = (v: any): Record<"A" | "B", Fragment[]> | null => {
-                  if (!v) return null;
-                  if (Array.isArray(v)) return v.length ? { A: v, B: v } : null;
-                  if (Array.isArray(v.A) || Array.isArray(v.B)) return { A: v.A ?? [], B: v.B ?? [] };
-                  return null;
-                };
-                const upPos = (v: any): Record<"A" | "B", Record<string, { x: number; y: number }>> | null => {
-                  if (!v || typeof v !== "object") return null;
-                  // 신형 판별: A/B 키 보유 (조각 uid는 SF_/frag_ 계열이라 충돌 없음)
-                  if (v.A !== undefined || v.B !== undefined) return { A: v.A ?? {}, B: v.B ?? {} };
-                  return { A: v, B: v }; // 구형 평면 Record → 복제 승격
-                };
-                const rf = upFrags(snap.reservedFragments);
-                if (rf) setReservedByProposal(rf);
-                const hp = upPos(snap.holdPositions);
-                if (hp) setHoldPositionsByProposal(hp);
+                // [STORY-LAYER-01 A-1] 복원도 program 스코프 하나. 배열/평면 Record만 받는다.
+                // 구판 {A,B} 버킷은 스토리를 갈랐던 폐기 모델이라 읽지 않는다 — 그 형태로 저장된
+                // 프로젝트는 보류·좌표가 비어서 열린다(국장 승인: 기존 프로젝트 이전 불필요).
+                const asFrags = (v: any): Fragment[] | null => (Array.isArray(v) ? v : null);
+                const asPos = (v: any): Record<string, { x: number; y: number }> | null =>
+                  v && typeof v === "object" && !Array.isArray(v) && v.A === undefined && v.B === undefined ? v : null;
+                const rf = asFrags(snap.reservedFragments);
+                if (rf) setReservedFragments(rf);
+                const hp = asPos(snap.holdPositions);
+                if (hp) setHoldPositions(hp);
                 if (snap.committedProposalId) setCommittedProposalId(snap.committedProposalId);
                 if (snap.selectedProposalId) setSelectedProposalId(snap.selectedProposalId);
                 if (snap.activeSource) setActiveSource(snap.activeSource);
-                const df = upFrags(snap.deletedFragments);
-                if (df) setDeletedByProposal(df);
-                // [수정 6] proposals.key_fragments + customEditFragments 복원
-                // DB proposals 원본 위에 저장된 현재 상태를 덮어씀
-                if (snap.proposalsKeyFragments || snap.proposalsCustomFragments) {
-                  setProposals((prev) => {
-                    if (!prev) return prev;
-                    const next: any = { ...prev };
-                    for (const mode of ["A", "B"] as const) {
-                      if (!next[mode]) continue;
-                      const currentKeys = Array.isArray(next[mode].key_fragments)
-                        ? [...next[mode].key_fragments]
-                        : [];
-                      const currentKeySet = new Set(currentKeys.map((id: unknown) => String(id)));
-                      const currentProposalId = String(next[mode].proposal_id ?? "");
-                      const snapProposalId = snap.proposalsIds?.[mode];
-                      const proposalSnapshotMatches = !!snapProposalId && String(snapProposalId) === currentProposalId;
-                      const snapshotIdsMatchCurrent = (ids: unknown): boolean =>
-                        Array.isArray(ids) &&
-                        ids.length === currentKeys.length &&
-                        ids.every((id) => currentKeySet.has(String(id)));
-                      const baseSnapshotMatches = snapshotIdsMatchCurrent(snap.proposalsBaseKeyFragments?.[mode]);
-                      if (snap.proposalsKeyFragments?.[mode] !== undefined) {
-                        const snapKF = snap.proposalsKeyFragments[mode];
-                        const canApplyKeySnapshot =
-                          (proposalSnapshotMatches && baseSnapshotMatches) ||
-                          currentKeys.length === 0 ||
-                          snapshotIdsMatchCurrent(snapKF);
-                        // [HONEST-EMPTY GUARD] 빈 스냅샷은 사용자 편집이 아니라 빈 제안의 잔상.
-                        // DB에 실제 조각이 있는 제안을 빈 배열로 덮지 않는다 (Hollyhock 사례).
-                        if (Array.isArray(snapKF) && snapKF.length === 0 && (next[mode].key_fragments?.length ?? 0) > 0) {
-                          DEBUG_LOG && console.warn("[Hydration] skip empty key_fragments snapshot for", mode);
-                        } else if (!canApplyKeySnapshot) {
-                          DEBUG_LOG && console.warn("[Hydration] skip stale key_fragments snapshot for", mode, {
-                            currentProposalId,
-                            snapProposalId: snapProposalId ?? null,
-                            currentCount: currentKeys.length,
-                            snapshotCount: Array.isArray(snapKF) ? snapKF.length : null,
-                          });
-                        } else {
-                          next[mode] = { ...next[mode], key_fragments: snapKF };
-                        }
-                      }
-                      if (snap.proposalsCustomFragments?.[mode] !== undefined) {
-                        const snapCustom = snap.proposalsCustomFragments[mode];
-                        const snapCustomIds = Array.isArray(snapCustom)
-                          ? snapCustom
-                              .map((f: any) => f?.fragment_id || f?.fragment_uid || f?.proposal_fragment_id || f?.id)
-                              .filter(Boolean)
-                          : [];
-                        const canApplyCustomSnapshot =
-                          (proposalSnapshotMatches && baseSnapshotMatches) ||
-                          currentKeys.length === 0 ||
-                          snapshotIdsMatchCurrent(snapCustomIds);
-                        if (!snapCustom || canApplyCustomSnapshot) {
-                          next[mode] = { ...next[mode], customEditFragments: snapCustom };
-                        } else {
-                          DEBUG_LOG && console.warn("[Hydration] skip stale custom fragments snapshot for", mode, {
-                            currentProposalId,
-                            snapProposalId: snapProposalId ?? null,
-                            currentCount: currentKeys.length,
-                            snapshotCount: snapCustomIds.length,
-                          });
-                        }
-                      }
-                    }
-                    return next;
-                  });
+                const df = asFrags(snap.deletedFragments);
+                if (df) setDeletedFragments(df);
+                // 스토리 복원 — 진실원 하나(story.fids + storyFragments).
+                // [STORY-WRITE-GUARD-01 2-2] 출처 표식: ui_state에서 온 스토리만 저장 자격이 있다.
+                //   서버 폴백(조각 시간순)·제안 파생으로 화면에 오른 목록은 'server'로 찍어
+                //   저장 경로 진입 자체를 막는다(사용자가 손대면 그때 'user'로 승격).
+                const snapFids = Array.isArray(snap.story?.fids) ? snap.story.fids.map(String) : null;
+                const snapFrags = asFrags(snap.storyFragments);
+                if (snapFids && snapFids.length > 0) {
+                  setStoryFids(snapFids);
+                  if (snapFrags) setStoryFragments(snapFrags);
+                  storyOriginRef.current = "ui_state";
                 }
               }
             } catch (_) {}
@@ -1452,7 +1479,12 @@ const Index: React.FC = () => {
       } catch (err) {
         console.error("[Hydration] Failed to hydrate project sources:", err);
       } finally {
-        if (isMounted) setIsSwitchingProject(false);
+        // 성공·실패·조기반환 무엇이든 '이 프로젝트의 복원 시도는 끝났다' — 이 문턱이 열린 뒤에만
+        // 스토리 저장이 허용된다(복원 전 저장이 committedProposalId를 null로 덮던 병소).
+        if (isMounted) {
+          setUiRestoredFor(activeNavItem);
+          setIsSwitchingProject(false);
+        }
       }
     };
 
@@ -1791,14 +1823,13 @@ const Index: React.FC = () => {
   }, []);
   const refreshEditStatesRef = useRef(refreshEditStates);
   refreshEditStatesRef.current = refreshEditStates;
-  // [R2] 같은 parent에 상태 행이 여럿(NA/B 분열)일 때 표시 파생이 고를 행 = PBE 발급식 그대로.
-  // ref 경유로 identity를 고정해 재수화 effect/memo의 deps를 흔들지 않는다.
-  const preferredPbeItemIdRef = useRef<(fid: string) => string>(() => "");
-  useEffect(() => {
-    preferredPbeItemIdRef.current = (fid: string) =>
-      timelineItemIdFor(editCtxRef.current.programId ?? "", String(committedProposalId ?? "NA"), fid, 0);
-  }, [committedProposalId]);
-  const preferredPbeItemIdFor = useCallback((fid: string) => preferredPbeItemIdRef.current(fid), []);
+  // [R2 · STORY-LAYER-01 A-1] 표시 파생이 고를 상태 행 = 서버·클라 공통 발급식 그대로.
+  // 제안키가 사라져 program+fid로 유일하므로, 구판의 'NA/B 분열'(같은 parent에 여러 행)이
+  // 구조적으로 생기지 않는다. committedProposalId 의존이 없어져 effect 없이 상수 함수다.
+  const preferredPbeItemIdFor = useCallback(
+    (fid: string) => timelineItemIdFor(editCtxRef.current.programId ?? "", fid, 0),
+    [],
+  );
   const editStateForFragment = useCallback((fragment: Fragment): EditStateRow | null => {
     const fid = String((fragment as any).root_fragment_uid ?? (fragment as any).fragment_id ?? getUid(fragment));
     const candidates = Array.from(editStatesRef.current.values()).filter((state) => state.parent_fragment_id === fid);
@@ -1916,8 +1947,8 @@ const Index: React.FC = () => {
           console.error("[EC-V2] edit-state 저장 불가: source_id/program 결손", { fragmentUid, programId });
           return;
         }
-        const proposalKey = String(committedProposalId ?? "NA");
-        const itemId = timelineItemIdFor(programId, proposalKey, rootFid, 0);
+        // [STORY-LAYER-01 A-1] 사용본 ID는 제안과 무관 — 어느 안을 보고 있어도 같은 스토리에 쌓인다.
+        const itemId = timelineItemIdFor(programId, rootFid, 0);
         const known = editStatesRef.current.get(itemId);
         postEditState({
           program_id: programId,
@@ -1938,16 +1969,11 @@ const Index: React.FC = () => {
             return;
           }
           const states = await refreshEditStatesRef.current();
-          const prefer = (fid: string) => timelineItemIdFor(programId, proposalKey, fid, 0);
+          const prefer = (fid: string) => timelineItemIdFor(programId, fid, 0);
           const rebuilt = rebuildFragmentTiles(editFragments as any[], states, prefer) as typeof editFragments;
           setEditFragments(rebuilt);
-          if (committedProposalId && proposals) {
-            setProposals((pPrev) => {
-              if (!pPrev) return pPrev;
-              const target = committedProposalId as "A" | "B";
-              return { ...pPrev, [target]: { ...pPrev[target], customEditFragments: rebuilt } };
-            });
-          }
+          // 경계 편집은 '구성본'만 갱신한다 — 선택·순서(fids)는 사용자 결정이라 건드리지 않는다 (INV-0).
+          applyStoryComposition(rebuilt);
           refreshLedgerEdlRef.current?.();
           setStoryLedgerRefreshNonce((n) => n + 1);
         }).catch((err) => console.error("[EC-V2] edit-state save error:", err));
@@ -2012,21 +2038,10 @@ const Index: React.FC = () => {
         console.error("edit-overlay save error:", err);
       }
 
-      if (committedProposalId && proposals) {
-        setProposals((pPrev) => {
-          if (!pPrev) return pPrev;
-          const target = committedProposalId as "A" | "B";
-          return {
-            ...pPrev,
-            [target]: {
-              ...pPrev[target],
-              customEditFragments: next,
-            },
-          };
-        });
-      }
+      // 경계 편집(레거시 경로)도 구성본만 갱신 — 선택·순서는 사용자 결정 (INV-0).
+      applyStoryComposition(next);
     },
-    [editFragments, committedProposalId, proposals, setProposals]
+    [editFragments]
   );
 
   const handleEditFragmentDoubleClick = useCallback((f: Fragment) => {
@@ -2104,72 +2119,33 @@ const Index: React.FC = () => {
     [selectedFragment]
   );
 
+  // ── [STORY-LAYER-01 A-1] 스토리 구성 핸들러 — 전부 applyStory 하나로 쓴다 ──
+  // 구판은 각자 `committedProposalId`가 있을 때만 `proposals[target].key_fragments`에 썼다.
+  // 그래서 (a) 제안을 확정하기 전 편집은 어디에도 남지 않고, (b) A와 B가 다른 이야기를 가졌다.
   const handleExcludeFromEdit = useCallback((f: Fragment) => {
     const next = editFragments.map((fr) => (getUid(fr) === getUid(f) ? { ...fr, excluded: true } : fr));
     setEditFragments(next);
-    if (committedProposalId && proposals) {
-      setProposals((pPrev) => {
-        if (!pPrev) return pPrev;
-        const target = committedProposalId as "A" | "B";
-        return {
-          ...pPrev,
-          [target]: {
-            ...pPrev[target],
-            customEditFragments: next,
-            key_fragments: next.filter((x) => !x.excluded && x.status !== "removed").map((x) => getUid(x))
-          }
-        };
-      });
-    }
-  }, [editFragments, committedProposalId, proposals, setProposals]);
+    applyStory(next, storyFidsWithout(getUid(f)));
+  }, [editFragments, applyStory, storyFidsWithout]);
 
   const handleRestoreFragment = useCallback((f: Fragment) => {
     const next = editFragments.map((fr) => (getUid(fr) === getUid(f) ? { ...fr, excluded: false } : fr));
     setEditFragments(next);
-    if (committedProposalId && proposals) {
-      setProposals((pPrev) => {
-        if (!pPrev) return pPrev;
-        const target = committedProposalId as "A" | "B";
-        return {
-          ...pPrev,
-          [target]: {
-            ...pPrev[target],
-            customEditFragments: next,
-            key_fragments: next.filter((x) => !x.excluded && x.status !== "removed").map((x) => getUid(x))
-          }
-        };
-      });
-    }
-  }, [editFragments, committedProposalId, proposals, setProposals]);
+    applyStory(next, storyFidsWith(getUid(f)));
+  }, [editFragments, applyStory, storyFidsWith]);
 
   const handleMoveToHold = useCallback(
     (f: Fragment) => {
       setReservedFragments((prev) => appendUniqueByUid(prev, { ...f, excluded: false }));
       const next = removeByUid(editFragments, f);
       setEditFragments(next);
-      if (committedProposalId && proposals) {
-        setProposals((pPrev) => {
-          if (!pPrev) return pPrev;
-          const target = committedProposalId as "A" | "B";
-          const proposal = pPrev[target];
-          if (!proposal) return pPrev;
-          const keys = proposal.key_fragments.filter((k) => k !== getUid(f));
-          return {
-            ...pPrev,
-            [target]: {
-              ...proposal,
-              key_fragments: keys,
-              customEditFragments: next
-            }
-          };
-        });
-      }
+      applyStory(next, storyFidsWithout(getUid(f)));
 
       if (selectedFragment && getUid(selectedFragment) === getUid(f)) {
         setSelectedFragment(null);
       }
     },
-    [appendUniqueByUid, removeByUid, selectedFragment, editFragments, committedProposalId, proposals, setProposals]
+    [appendUniqueByUid, removeByUid, selectedFragment, editFragments, applyStory, storyFidsWithout, setReservedFragments, setSelectedFragment]
   );
 
   const handleDropToHold = useCallback(
@@ -2198,49 +2174,20 @@ const Index: React.FC = () => {
       if (fromEdit) {
         const next = editFragments.filter((f) => getUid(f) !== fid);
         setEditFragments(next);
-        if (committedProposalId && proposals) {
-          setProposals((pPrev) => {
-            if (!pPrev) return pPrev;
-            const target = committedProposalId as "A" | "B";
-            const proposal = pPrev[target];
-            if (!proposal) return pPrev;
-            return {
-              ...pPrev,
-              [target]: {
-                ...proposal,
-                key_fragments: proposal.key_fragments.filter((k) => k !== fid),
-                customEditFragments: next
-              }
-            };
-          });
-        }
+        applyStory(next, storyFidsWithout(fid));
         setDeletedFragments((prev) => appendUniqueByUid(prev, fromEdit));
       }
     },
-    [appendUniqueByUid, editFragments, reservedFragments, committedProposalId, proposals, setProposals]
+    [appendUniqueByUid, editFragments, reservedFragments, applyStory, storyFidsWithout, setDeletedFragments, setReservedFragments]
   );
 
   const handleFragmentsReorder = useCallback(
     (reorderedFrags: Fragment[]) => {
       setEditFragments(reorderedFrags);
-      const newKeyOrder = reorderedFrags.map((f) => f.fragment_id);
-
-      if (!committedProposalId || !proposals) return;
-
-      setProposals((prev) => {
-        if (!prev) return prev;
-        const target = committedProposalId as "A" | "B";
-        return {
-          ...prev,
-          [target]: {
-            ...prev[target],
-            key_fragments: newKeyOrder,
-            customEditFragments: reorderedFrags
-          },
-        };
-      });
+      // 순서는 사용자 결정 그 자체 — 제안 확정 여부와 무관하게 스토리에 남는다.
+      applyStory(reorderedFrags, reorderedFrags.map((f) => f.fragment_id));
     },
-    [committedProposalId, proposals, setProposals]
+    [applyStory]
   );
 
   const handleRestoreFromHold = useCallback(
@@ -2260,33 +2207,13 @@ const Index: React.FC = () => {
         next = arr;
       }
       setEditFragments(next);
-
-      if (committedProposalId && proposals) {
-        setProposals((pPrev) => {
-          if (!pPrev) return pPrev;
-          const target = committedProposalId as "A" | "B";
-          const proposal = pPrev[target];
-          if (!proposal) return pPrev;
-          const keys = proposal.key_fragments.filter((k) => k !== getUid(f));
-          const idx = insertAt !== undefined ? Math.min(insertAt, keys.length) : keys.length;
-          const newKeys = [...keys.slice(0, idx), getUid(f), ...keys.slice(idx)];
-          return {
-            ...pPrev,
-            [target]: {
-              ...proposal,
-              key_fragments: newKeys,
-              customEditFragments: next
-            }
-          };
-        });
-      }
+      applyStory(next, storyFidsWith(getUid(f), insertAt));
     },
-    [removeByUid, editFragments, committedProposalId, proposals, setProposals]
+    [removeByUid, editFragments, applyStory, storyFidsWith, setReservedFragments]
   );
 
   const handleAddFromSource = useCallback(
     (f: Fragment, insertAt?: number) => {
-      const target = displayProposalId as "A" | "B" | null;
       if (editFragments.some((x) => getUid(x) === getUid(f))) return;
 
       const newFrag: Fragment = {
@@ -2304,27 +2231,9 @@ const Index: React.FC = () => {
       }
       setEditFragments(next);
       setReservedFragments((prev) => removeByUid(prev, f));
-
-      if (!target || !proposals) return;
-
-      setProposals((pPrev) => {
-        if (!pPrev) return pPrev;
-        const proposal = pPrev[target];
-        if (!proposal) return pPrev;
-        const keys = [...proposal.key_fragments];
-        const idx = insertAt !== undefined ? Math.min(insertAt, keys.length) : keys.length;
-        keys.splice(idx, 0, getUid(newFrag));
-        return {
-          ...pPrev,
-          [target]: {
-            ...proposal,
-            key_fragments: keys,
-            customEditFragments: next
-          }
-        };
-      });
+      applyStory(next, storyFidsWith(getUid(f), insertAt));
     },
-    [editFragments, displayProposalId, proposals, removeByUid, setProposals]
+    [editFragments, removeByUid, applyStory, storyFidsWith, setReservedFragments]
   );
 
   const handleDeleteFromHold = useCallback(
@@ -2364,209 +2273,69 @@ const Index: React.FC = () => {
         next = arr;
       }
       setEditFragments(next);
-
-      if (committedProposalId && proposals) {
-        setProposals((pPrev) => {
-          if (!pPrev) return pPrev;
-          const target = committedProposalId as "A" | "B";
-          const proposal = pPrev[target];
-          if (!proposal) return pPrev;
-          const keys = proposal.key_fragments.filter((k) => k !== getUid(f));
-          const idx = insertAt !== undefined ? Math.min(insertAt, keys.length) : keys.length;
-          const newKeys = [...keys.slice(0, idx), getUid(f), ...keys.slice(idx)];
-          return {
-            ...pPrev,
-            [target]: {
-              ...proposal,
-              key_fragments: newKeys,
-              customEditFragments: next
-            }
-          };
-        });
-      }
+      applyStory(next, storyFidsWith(getUid(f), insertAt));
     },
-    [removeByUid, editFragments, committedProposalId, proposals, setProposals]
+    [removeByUid, editFragments, applyStory, storyFidsWith, setDeletedFragments]
   );
 
-  // [#23 (가) 병합 — 국장 승인 2026-07-17] 웅덩이 보존 병합: uid 기준으로 복원본이 이기고,
-  // 웅덩이의 나머지 조각은 보존한다. 유령 부활 금지 — 복원본에만 있는 uid(웅덩이에 원료가
-  // 없는 옛 세대 조각)는 편입하지 않는다(#1 재림 차단). 삭제 조각의 표시 부활은 구성층
-  // (key_fragments)이 지배하므로 발생하지 않는다 — 검증으로 실증.
-  const mergeIntoPool = useCallback((pool: Fragment[], restored: Fragment[]): Fragment[] => {
-    if (pool.length === 0) return restored; // 빈 웅덩이 = 미적재 상태(지움 아님) — 종전 동작 유지, 빈 화면 경합 방지
-    const restoredByUid = new Map(restored.map((f) => [getUid(f), f]));
-    return pool.map((f) => restoredByUid.get(getUid(f)) ?? f);
-  }, []);
+  // [#23 (가) 병합] mergeIntoPool 제거 — 유일 소비처가 'A/B 토글 시 각 안의 구성본을 웅덩이에
+  // 재주입'하던 effect였고, 그 재주입이 A와 B가 다른 이야기를 갖게 만든 실행 경로였다.
+  // 스토리가 program 단위 하나가 된 뒤로는 되돌릴 '각 안의 구성본'이 존재하지 않는다.
 
-  // A/B안 토글 시 각 안의 편집 상태(editFragments) 복원
+  // [STORY-WRITE-GUARD-01 2-2] 서버 원고를 화면용으로만 싣는다 (저장 자격 없음).
+  //   ui_state에 스토리가 없는 프로젝트(신규·분석 직후)도 원고가 보여야 한다. 서버가
+  //   resolve_sequence로 답한 목록을 읽어 화면에 세우고, 출처를 'server'로 찍는다.
+  //   'server' 표식이면 저장 effect가 진입을 거부한다 — 폴백이 스토리로 굳는 경로 차단.
   useEffect(() => {
-    if (!committedProposalId || !proposals) return;
+    if (!activeNavItem || !activeNavItem.startsWith("proj_")) return;
+    if (uiRestoredFor !== activeNavItem) return;      // 재수화 끝난 뒤에만
+    if (storyFidsRef.current.length > 0) return;      // 이미 스토리가 있으면 건드리지 않는다
+    let dead = false;
+    (async () => {
+      const res = await fetch(`/api/ledger/${encodeURIComponent(activeNavItem)}`).then((r) => (r.ok ? r.json() : null)).catch(() => null);
+      if (dead || !res?.ok) return;
+      const fids = (res.items ?? [])
+        .filter((it: any) => it.selected && !it.missing)
+        .map((it: any) => String(it.fragment_id));
+      if (fids.length === 0 || storyFidsRef.current.length > 0) return;
+      setStoryFids(fids);
+      storyOriginRef.current = "server";
+      console.info(`[STORY-LOAD] ${activeNavItem}: 서버 원고 ${fids.length}조각 (출처=server · 저장 금지)`);
+    })();
+    return () => { dead = true; };
+  }, [activeNavItem, uiRestoredFor]);
 
-    const target = committedProposalId as "A" | "B";
-    const proposal = proposals[target];
-    if (!proposal) return;
+  // [STORY-WRITE-GUARD-01 2-1] 씨앗(seed) 폐기 — 금지 목록에 명시된 자동 쓰기다.
+  //   구판 씨앗은 제안(A/B)에서 storyFids를 채웠다. 사용자가 고른 적 없는 목록이
+  //   저장 경로로 흘러 '스토리'가 됐다. 이제 원고는 서버가 만든다:
+  //   story_gate.resolve_sequence 가 ui_state → proposals → 조각(시간순) 순으로 답하므로
+  //   씨앗 없이도 원고는 항상 뜬다. 화면은 그것을 '읽기'만 하고, 저장은 사용자 행위에서만.
 
-    if ((proposal as any).customEditFragments) {
-      // [GHOST#1 2a] 스냅샷 직주입 금지 — 순서·구성은 스냅샷을 따르되, 좌표·분할은
-      // edit-state 재파생이 항상 이긴다 (edit-state 무근거 편집 잔상은 표시하지 않는다).
-      // 게이트 OFF·상태 미로드 시엔 종전 그대로 (ref 경유라 effect deps 무변).
-      const snap = (proposal as any).customEditFragments as any[];
-      const states = Array.from(editStatesRef.current.values());
-      // [#23 (가) 처치 1/4] 통째 교체 → 웅덩이 보존 병합 (2a 유지: 좌표·분할은 rebuild 산출이 이김)
-      const restored = editCtxRef.current.enabled && states.length
-        ? (rebuildFragmentTiles(snap, states, preferredPbeItemIdFor) as any[])
-        : (snap as any[]);
-      setEditFragments((prev) => mergeIntoPool(prev, restored));
-    } else {
-      const rawSeq = (proposal as any).resolved_aliases || (proposal as any).sequence || [];
-      if (rawSeq.length > 0) {
-        const initialFrags = rawSeq.map((s: any) => {
-          const fragId = s.proposal_fragment_id || s.fragment_id || s.id;
-          const baseFragId = fragId.replace(/_P\d{3}.*$/, "");
-          const allSourceFrags: Fragment[] = sourceEntries.length > 0
-            ? (sourceEntries as any[]).flatMap((e) => e.fragments ?? [])
-            : sourceFragments;
-          const matchSource = allSourceFrags.find(
-            (sf) =>
-              sf.fragment_id === (s.source_fragment_id || s.fragment_id || fragId) ||
-              sf.fragment_id === baseFragId
-          );
-
-          const startF = s.start_sec !== undefined
-            ? Math.round(s.start_sec * 30)
-            : (s.start !== undefined ? Math.round(s.start * 30) : (matchSource?.start_frame ?? 0));
-          const endF = s.end_sec !== undefined
-            ? Math.round(s.end_sec * 30)
-            : (s.end !== undefined ? Math.round(s.end * 30) : (matchSource?.end_frame ?? 150));
-
-          // [2-2c-Fix2] 초 원본 보존 — 이미 존재하는 초 키에서만. 없으면 undefined. /30 역산 금지.
-          const startSecVal = s.start_sec ?? s.start ?? s.start_time ?? matchSource?.start_time ?? matchSource?.start;
-          const endSecVal   = s.end_sec   ?? s.end   ?? s.end_time   ?? matchSource?.end_time   ?? matchSource?.end;
-
-          return {
-            fragment_id: fragId,
-            fragment_uid: fragId,
-            // [STATE-DRIFT 수리 2026-07-22] 폴백 사슬에 원본ID가 흘러들지 않게 — 문자 라벨만 채택.
-            source_video: [s.source_video, matchSource?.source_video, activeSource].find((v) => typeof v === "string" && /^[A-Z]{1,2}$/.test(v)) || activeSource,
-            source_id: s.source_id || matchSource?.source_id || currentSourceId,
-            display_id: matchSource?.display_id || (s.display_id && !/^\d+$/.test(s.display_id) && !s.display_id.startsWith("?") ? s.display_id : undefined),
-            // [DISPLAY-NAME] 시퀀스 즉시표시 경로에도 권위 이름 통과
-            display_name: (s as any).display_name || matchSource?.display_name,
-            start_frame: startF,
-            end_frame: endF,
-            duration: endF - startF,
-            start_time: startSecVal,
-            end_time: endSecVal,
-            selection_state: "S",
-            excluded: false,
-            thumbnail: s.thumbnail_url || matchSource?.thumbnail,
-            intelligence: matchSource?.intelligence
-          };
-        });
-
-        // 즉시 rawSeq 버전으로 표시 — [#23 (가) 처치 2/4] 웅덩이 보존 병합
-        setEditFragments((prev) => mergeIntoPool(prev, initialFrags));
-
-        // [F-2b-MERGE] overlay 비동기 조회 → mergedFrags를 customEditFragments에 저장
-        // 이렇게 해야 다음 L1395 재실행(A→B→A 전환) 시 overlay가 보존됨
-        const snapSourceId = currentSourceId;
-        if (snapSourceId) {
-          (async () => {
-            if (editCtxRef.current.enabled) {
-              // [EDIT-CONTRACT-B0] ui_state로 복원된 customEditFragments를 덮어쓰지 않는다 — edit-state 권위
-              const states = await refreshEditStatesRef.current();
-              const rebuilt = states.length ? (rebuildFragmentTiles(initialFrags as any[], states, preferredPbeItemIdFor) as any[]) : initialFrags;
-              // [#23 (가) 처치 3/4] 웅덩이 보존 병합 (2a: edit-state 재파생 승리 유지)
-              setEditFragments((prev) => mergeIntoPool(prev, rebuilt as any[]));
-              setProposals((prev) => {
-                if (!prev || !prev[target]) return prev;
-                const existing = (prev[target] as any).customEditFragments;
-                // [GHOST#1 2a] 스냅샷이 신선한 rebuild를 이기지 않는다 —
-                // 순서는 existing 유지, 좌표·분할은 edit-state로 재파생. 상태 미로드 시엔 종전 그대로.
-                const refreshed = states.length
-                  ? (existing?.length ? (rebuildFragmentTiles(existing as any[], states, preferredPbeItemIdFor) as any[]) : rebuilt)
-                  : (existing?.length ? existing : rebuilt);
-                return { ...prev, [target]: { ...prev[target], customEditFragments: refreshed } };
-              });
-              return;
-            }
-            try {
-              const res = await videoService.getEditOverlay(snapSourceId);
-              const overlays: any[] = Array.isArray(res) ? res : [];
-              let mergedFrags: any[] = initialFrags;
-              if (overlays.length > 0) {
-                const overlayMap = new Map(overlays.map((o: any) => [o.fragment_id, o]));
-                let changed = false;
-                const merged = initialFrags.map((fr: any) => {
-                  const o = overlayMap.get(fr.fragment_id ?? getUid(fr));
-                  if (!o) return fr;
-                  if (fr.start_sec === o.effective_start_sec && fr.end_sec === o.effective_end_sec) return fr;
-                  changed = true;
-                  return {
-                    ...fr,
-                    start_sec: o.effective_start_sec,
-                    end_sec: o.effective_end_sec,
-                    start_time: o.effective_start_sec,
-                    end_time: o.effective_end_sec,
-                    trim_applied: true,
-                  };
-                });
-                if (changed) mergedFrags = merged;
-              }
-              // [#23 (가) 처치 4/4] 웅덩이 보존 병합 (게이트 OFF 레거시 overlay 경로)
-              setEditFragments((prev) => mergeIntoPool(prev, mergedFrags as any[]));
-              setProposals((prev) => {
-                if (!prev || !prev[target]) return prev;
-                return {
-                  ...prev,
-                  [target]: {
-                    ...prev[target],
-                    customEditFragments: mergedFrags,
-                  },
-                };
-              });
-            } catch (_) {
-              setProposals((prev) => {
-                if (!prev || !prev[target]) return prev;
-                return {
-                  ...prev,
-                  [target]: { ...prev[target], customEditFragments: initialFrags },
-                };
-              });
-            }
-          })();
-        } else {
-          setProposals((prev) => {
-            if (!prev || !prev[target]) return prev;
-            return {
-              ...prev,
-              [target]: { ...prev[target], customEditFragments: initialFrags },
-            };
-          });
-        }
-      }
-    }
-  }, [committedProposalId]);
-
+  // [STORY-LAYER-01 A-1] 조각맵·전사의 재료는 **스토리**다 — 제안 선택과 무관하다.
+  // 구판은 `if (!displayProposalId || !proposals) return []`로 제안이 없으면 조각을 0개로
+  // 만들었다(=제안을 눌러야 조각이 보이던 원인). 스토리는 program 단위로 항상 존재한다.
+  // 좌표·분할 복원용 alias는 A·B 양쪽을 합친 '프로그램 단위 풀'로 쓴다 — 어느 안을 골랐는지가
+  // 스토리 해석을 바꾸면 안 되므로(INV-1/2), 선택이 아니라 합집합이다.
+  const storyAliasPool = useMemo(() => [
+    ...(((proposals as any)?.A?.resolved_aliases) ?? []),
+    ...(((proposals as any)?.B?.resolved_aliases) ?? []),
+  ], [proposals]);
+  const storyForResolve = useMemo(
+    () => ({ id: "STORY", key_fragments: storyFids, resolved_aliases: storyAliasPool }),
+    [storyFids, storyAliasPool],
+  );
   const resolverResult = useMemo(() => {
-    if (!displayProposalId || !proposals) {
+    if (storyFids.length === 0) {
       if (appState === "complete") {
-        debugFragmentMap("[fragmentmap-debug] No displayProposalId or proposals. displayProposalId:", displayProposalId, "proposals:", !!proposals);
+        debugFragmentMap("[fragmentmap-debug] story empty — storyFids 0 (씨앗 대기)");
       }
       return { resolvedFragments: [], diagnostics: null };
     }
-    const proposal = proposals[displayProposalId as "A" | "B"];
-    const result = resolveProposalFragments(proposal, editFragments, { expandAll: editContractV2 });
-    
+    const result = resolveProposalFragments(storyForResolve as any, editFragments, { expandAll: editContractV2 });
+
     // [STEP 10-I.5.12] Diagnostic Logging
-    debugFragmentMap("[fragmentmap-debug] committedProposalId:", committedProposalId);
-    debugFragmentMap("[fragmentmap-debug] selectedProposalId:", selectedProposalId);
-    debugFragmentMap("[fragmentmap-debug] displayProposalId:", displayProposalId);
-    debugFragmentMap("[fragmentmap-debug] proposals keys:", proposals ? Object.keys(proposals) : null);
-    debugFragmentMap("[fragmentmap-debug] active proposal keys sample:", {
-      count: proposal?.key_fragments?.length || 0,
-      first10: proposal?.key_fragments?.slice(0, 10)
-    });
+    debugFragmentMap("[fragmentmap-debug] storyFids:", { count: storyFids.length, first10: storyFids.slice(0, 10) });
+    debugFragmentMap("[fragmentmap-debug] displayProposalId (표시 방식):", displayProposalId);
     debugFragmentMap("[fragmentmap-debug] editFragments summary:", {
       count: editFragments.length,
       first10Ids: editFragments.slice(0, 10).map(f => f.fragment_id)
@@ -2577,15 +2346,14 @@ const Index: React.FC = () => {
     });
 
     return result;
-  }, [displayProposalId, committedProposalId, selectedProposalId, editFragments, proposals, appState, debugFragmentMap, editContractV2]);
+  }, [storyForResolve, storyFids, editFragments, appState, debugFragmentMap, editContractV2, displayProposalId]);
 
   const isPreviewingSelectedProposal = !!displayProposalId && displayProposalId === selectedProposalId && !committedProposalId;
   const resolvedFragments = useMemo(() => {
     let nextFragments = resolverResult.resolvedFragments;
-    if (displayProposalId && proposals && resolverResult.diagnostics?.missingIds?.length) {
-      const proposal = proposals[displayProposalId as "A" | "B"] as any;
-      const proposalFragIds = proposal?.key_fragments || proposal?.sequence || [];
-      const aliases = proposal?.resolved_aliases || [];
+    if (storyFids.length > 0 && resolverResult.diagnostics?.missingIds?.length) {
+      const proposalFragIds = storyFids;
+      const aliases = storyAliasPool;
       const resolvedByAlias = new Map<string, typeof resolverResult.resolvedFragments[number]>();
 
       for (const fragment of resolverResult.resolvedFragments) {
@@ -2641,7 +2409,7 @@ const Index: React.FC = () => {
               description: "",
             },
             preview_clip_url: null,
-            stable_key: `${proposal?.proposal_id || displayProposalId}_${index}_${id}`,
+            stable_key: `STORY_${index}_${id}`,
           } as any;
         })
         .filter(Boolean);
@@ -2658,7 +2426,16 @@ const Index: React.FC = () => {
       selection_state: "S" as SelectionState,
       status: "committed" as FragmentStatus,
     }));
-  }, [resolverResult, displayProposalId, proposals, sourceEntries, toFullUrl, isPreviewingSelectedProposal, editContractV2, editStatesList]);
+  }, [resolverResult, storyFids, storyAliasPool, sourceEntries, toFullUrl, isPreviewingSelectedProposal, editContractV2, editStatesList, preferredPbeItemIdFor]);
+
+  // [STORY-LAYER-01 A-1] 구성본(storyFragments)이 아직 비어 있으면 현재 파생본을 구성본으로 승격.
+  // 백엔드 좌표 폴백(ledger_r0 `snapshot_coords`)의 재료다 — 구판에서 A/B 토글 effect가
+  // customEditFragments에 initialFrags를 처음 적재해 준 역할을 여기서 대신한다(D8 폴백 유지).
+  // resolver는 storyFragments를 읽지 않으므로 순환하지 않는다.
+  useEffect(() => {
+    if (storyFragments.length > 0 || resolvedFragments.length === 0) return;
+    applyStoryComposition(resolvedFragments as unknown as Fragment[]);
+  }, [resolvedFragments, storyFragments.length, applyStoryComposition]);
 
   const [ledgerEdlClips, setLedgerEdlClips] = useState<PhysicalClip[]>([]);
   const refreshLedgerEdl = useCallback(async () => {
@@ -2742,11 +2519,9 @@ const Index: React.FC = () => {
     setFragmentOverrides(overrides);
   }, [boundaryHighlightIds, editFragments]);
 
+  // [STORY-LAYER-01 A-1] 재료는 스토리(program 단위) — 제안 선택과 무관.
   const filteredFragments = useMemo(() => {
-    if (!displayProposalId || !proposals) return [];
-
-    const proposal = proposals[displayProposalId as "A" | "B"];
-    const proposalFragIds = proposal?.key_fragments || [];
+    const proposalFragIds = storyFids;
     if (proposalFragIds.length === 0) return [];
 
     // 보류탭에 있는 조각은 조각탭에서 제외 (중복 방지)
@@ -2775,7 +2550,7 @@ const Index: React.FC = () => {
       .filter(Boolean) as Fragment[];
 
     return result;
-  }, [displayProposalId, editFragments, proposals, reservedFragments]);
+  }, [storyFids, editFragments, reservedFragments]);
 
   // [GHOST 소각 #4] 구 2조각 편집창 진입 핸들러 — 도달불가 본문(S|S·S|N|S seam 창 구성) 제거,
   // 차단 셸만 유지 (호출자 계약 보존 — 새 편집창 진입은 handleSingleFragmentEdit).
@@ -2890,6 +2665,25 @@ const Index: React.FC = () => {
           await next?.onConfirm?.();
         }}
       />
+      {/* [GATE-LOOP-01 3번] 단계 배지 — "지금 어느 단계인가"를 화면이 말한다.
+          오늘 국장이 스토리 승인 화면을 '임시 페이지'로 오인한 사고의 재발 방지책.
+          storyGate가 켜져 있고 프로젝트가 열려 있을 때만. 상태기계 파생값이라 자기 상태 없음. */}
+      {storyGate.enabled && activeNavItem?.startsWith("proj_") && hasProjectMedia && (
+        <div
+          className="absolute left-1/2 top-2 z-50 -translate-x-1/2 flex items-center gap-2 rounded-full border border-border/30 bg-background/90 px-3 py-1 shadow-sm backdrop-blur"
+          data-story-stage={storyStage.key}
+          title={storyStage.hint}
+        >
+          <span className={`h-1.5 w-1.5 rounded-full ${
+            storyStage.key === "final" ? "bg-emerald-500"
+              : storyStage.key === "awaiting" ? "bg-amber-500"
+              : storyStage.key === "edit_consult" ? "bg-primary"
+              : "bg-muted-foreground/50"}`} />
+          <span className="text-[11px] font-bold tracking-wider text-foreground/80">{storyStage.label}</span>
+          <span className="text-[11px] text-muted-foreground/60">{storyStage.hint}</span>
+        </div>
+      )}
+
       <div className="relative flex-shrink-0" style={{ width: navCollapsed ? 48 : navWidth }}>
         <LeftNav
           activeItem={activeNavItem}
@@ -2992,17 +2786,16 @@ const Index: React.FC = () => {
                 onFragmentPlay={playImageFragmentInMini}
                 onEditFragment={handleSingleFragmentEdit}
                 onFragmentDoubleClick={handleEditFragmentDoubleClick}
-                onExcludeFragment={modeEditLocked ? () => {} : handleExcludeFromEdit}
-                onRestoreFragment={modeEditLocked ? () => {} : handleRestoreFromHold}
-                onSourceRestore={modeEditLocked ? () => {} : handleAddFromSource}
-                onMoveToHold={modeEditLocked ? () => {} : handleMoveToHold}
-                onTrashRestore={modeEditLocked ? () => {} : handleRestoreToEdit}
+                onExcludeFragment={handleExcludeFromEdit}
+                onRestoreFragment={handleRestoreFromHold}
+                onSourceRestore={handleAddFromSource}
+                onMoveToHold={handleMoveToHold}
+                onTrashRestore={handleRestoreToEdit}
                 onBoundaryClick={handleOpenBoundaryEditor}
                 sourceVideoUrls={Object.fromEntries(
                   (sourceEntries ?? []).flatMap(e => [[e.source_id, e.video_url], [e.label, e.video_url]]).filter(([, v]) => v)
                 )}
                 modeGateEnabled={modeGateOn}
-                compositionLocked={modeEditLocked}
                 fragmentFace="text"
                 title=""
                 textScope="all"
@@ -3115,7 +2908,7 @@ const Index: React.FC = () => {
                 스토리 단계에서 보류맵이 아예 사라지는 게 결함이었다. */}
             <div ref={mapHoldAreaRef} className="flex-1 flex flex-col gap-1.5 overflow-hidden min-h-0">
               <div className="overflow-y-auto min-h-0"
-                   style={{ flexGrow: modeEditLocked ? 1 : mapHoldSplit, flexBasis: 0 }}>
+                   style={{ flexGrow: mapHoldSplit, flexBasis: 0 }}>
                 {/* [STORY-TRACK-A A-1/A-2/A-3] 스토리 단계 = 조각맵 자리에 텍스트조각 에디터.
                     편집 단계 = 이미지 조각맵. 같은 아이 옷만 다름(뒤 식별자 동일). */}
                 {rightStoryMode && !modeGateOn ? (
@@ -3164,24 +2957,24 @@ const Index: React.FC = () => {
                     onFragmentPlay={playImageFragmentInMini}
                     onEditFragment={handleSingleFragmentEdit}
                     onFragmentDoubleClick={handleEditFragmentDoubleClick}
-                    onExcludeFragment={modeEditLocked ? () => {} : handleExcludeFromEdit}
-                    onRestoreFragment={modeEditLocked ? () => {} : handleRestoreFromHold}
-                    onSourceRestore={modeEditLocked ? () => {} : handleAddFromSource}
-                    onMoveToHold={modeEditLocked ? () => {} : handleMoveToHold}
-                    onTrashRestore={modeEditLocked ? () => {} : handleRestoreToEdit}
+                    onExcludeFragment={handleExcludeFromEdit}
+                    onRestoreFragment={handleRestoreFromHold}
+                    onSourceRestore={handleAddFromSource}
+                    onMoveToHold={handleMoveToHold}
+                    onTrashRestore={handleRestoreToEdit}
                     onBoundaryClick={handleOpenBoundaryEditor}
                     sourceVideoUrls={Object.fromEntries(
                       (sourceEntries ?? []).flatMap(e => [[e.source_id, e.video_url], [e.label, e.video_url]]).filter(([, v]) => v)
                     )}
                     modeGateEnabled={modeGateOn}
-                    compositionLocked={modeEditLocked}
-                    fragmentFace={fragmentFace}
+                        fragmentFace={fragmentFace}
                     onFragmentFaceChange={setFragmentFace}
                     title={undefined}
                     textButtonLabel="텍스트 조각"
                     textScope="selected"
                     onApproveComposition={handleApproveComposition}
                     onReopenComposition={handleReopenComposition}
+                    storyApproved={storyStage.key === "final" || storyStage.key === "edit_consult"}
                     compositionNotice={compositionNotice}
                     modeRound={storyGate.story?.mode_round ?? 1}
                     sourceFragments={(sourceEntries ?? []).flatMap((e) => e.fragments ?? [])}
@@ -3196,14 +2989,11 @@ const Index: React.FC = () => {
                   STORY 단계에선 reservedFragments가 비어 있을 수 있으나(그쪽 "빼기"는
                   LedgerPage 자체 excluded_items 별도 계약), 패널 자체는 접힌 채로도 항상 존재
                   해야 한다는 게 이번 계약. ReservedFragments는 빈 배열을 이미 안전하게 그린다. */}
-              {!modeEditLocked && (
               <div onMouseDown={startMapHoldDrag}
                    className="flex-shrink-0 h-2 cursor-row-resize group flex items-center justify-center rounded hover:bg-primary/10 transition-colors"
                    title="조각맵·보류맵 크기 조절">
                 <div className="w-10 h-[3px] rounded-full bg-border/50 group-hover:bg-primary/50 transition-colors" />
               </div>
-              )}
-              {!modeEditLocked && (
               <div className="overflow-y-auto min-h-0"
                    style={{ flexGrow: 1 - mapHoldSplit, flexBasis: 0 }}>
                 <ReservedFragments
@@ -3223,7 +3013,6 @@ const Index: React.FC = () => {
                   compactLabels={modeGateOn}
                 />
               </div>
-              )}
             </div>
           </div>
         </>
