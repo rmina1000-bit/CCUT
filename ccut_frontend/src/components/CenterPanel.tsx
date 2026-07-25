@@ -751,6 +751,14 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
   const seqEndBRef = useRef<number>(-1);
   const isSeqBRef = useRef<boolean>(false);
 
+  // [SINGLEPLAY-EXPAND-01] 단일 조각 재생의 구간 큐. **시퀀스 계약(isSeq)과 별개**로 둔다 —
+  //   단일 재생은 isSeq=false·seqIdx=-1 을 유지해야 하므로 시퀀스 refs를 빌려 쓸 수 없다.
+  //   구간 자체는 시퀀스와 같은 expandTileToItems 결과다 (전개 로직 2벌 금지).
+  const singleSegsARef = useRef<Fragment[]>([]);
+  const singleIdxARef = useRef<number>(-1);
+  const singleSegsBRef = useRef<Fragment[]>([]);
+  const singleIdxBRef = useRef<number>(-1);
+
   const seqTotalSecARef = useRef<number>(0);
   const seqElapsedSecARef = useRef<number>(0);
   const seqTotalSecBRef = useRef<number>(0);
@@ -1284,6 +1292,26 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
   // (백그라운드 탭 — 브라우저가 rAF를 정지시키는 환경에서 현행 등가 동작 보존).
   // 중복 발화 봉쇄: 처리 즉시 endRef를 -1로 소거 — 두 트리거 중 먼저 온 쪽만 유효.
   // 착지 = 미달 방향: currentTime >= end - LEAD 에서 끊는다 (지운 말이 들리는 것보다 낫다).
+  /** [CLIP_SWITCH_GUARD — #40 A·B 동형] 구간/조각 전환 중 잔상·seek 중간 프레임 숨김.
+   *  구판은 B 전용 비대칭(:2083)이었음 — A·B는 같은 동작이어야 한다 (국장 판정).
+   *  시퀀스 전환과 단일 재생 구간 전환이 같은 것을 쓴다 (2벌 금지). */
+  const hideUntilSeeked = useCallback((gv: HTMLVideoElement) => {
+    gv.style.opacity = "0";
+    let restored = false;
+    const onSeekedOnce = () => {
+      if (restored) return;
+      restored = true;
+      gv.removeEventListener("seeked", onSeekedOnce);
+      gv.style.opacity = "1";
+    };
+    gv.addEventListener("seeked", onSeekedOnce);
+    setTimeout(() => {
+      if (restored) return;
+      restored = true;
+      gv.style.opacity = "1";
+    }, 400);
+  }, []);
+
   const BOUNDARY_LEAD_SEC = 0.02; // rAF 1주기(≈16.7ms) 예산 — 초과 0 / 미달 ≤20ms
   const handleSpanBoundary = useCallback((player: "A" | "B") => {
     const isA = player === "A";
@@ -1309,25 +1337,7 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
         idxRef.current = nextIdx;
         (isA ? setProposalTimeA : setProposalTimeB)(elapsedRef.current);
         reportSeqProgress(frags[nextIdx].fragment_id);
-        // [CLIP_SWITCH_GUARD — #40 A·B 동형] 조각 전환 중 잔상·seek 중간 프레임 숨김.
-        // 구판은 B 전용 비대칭(:2083)이었음 — A·B는 같은 동작이어야 한다 (국장 판정).
-        {
-          const gv = v;
-          gv.style.opacity = "0";
-          let restored = false;
-          const onSeekedOnce = () => {
-            if (restored) return;
-            restored = true;
-            gv.removeEventListener("seeked", onSeekedOnce);
-            gv.style.opacity = "1";
-          };
-          gv.addEventListener("seeked", onSeekedOnce);
-          setTimeout(() => {
-            if (restored) return;
-            restored = true;
-            gv.style.opacity = "1";
-          }, 400);
-        }
+        hideUntilSeeked(v);
         playFrag(player, frags[nextIdx], endRef);
       } else {
         isSeqRef.current = false;
@@ -1337,10 +1347,29 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
         reportActiveId(null);
       }
     } else {
+      // [SINGLEPLAY-EXPAND-01] 단일 조각도 내부 제외를 건너뛰며 구간을 이어 재생한다.
+      //   같은 조각은 어떻게 재생하든 같게 들려야 한다 — 시퀀스와 같은 전개 결과를 소비한다.
+      //   ★isSeq는 계속 false, seqIdx는 계속 -1 (단일 재생 계약 불변).
+      const segs = isA ? singleSegsARef.current : singleSegsBRef.current;
+      const sIdxRef = isA ? singleIdxARef : singleIdxBRef;
+      const nextS = sIdxRef.current + 1;
+      if (segs.length > 1 && nextS < segs.length) {
+        sIdxRef.current = nextS;
+        import.meta.env.DEV && console.log(`[SINGLE_SEG_${player}]`, {
+          fragment_id: (segs[nextS] as any)?.fragment_id,
+          seg: `${nextS + 1}/${segs.length}`,
+          startSec: readFragmentStartSec(segs[nextS]), endSec: readFragmentEndSec(segs[nextS]),
+        });
+        hideUntilSeeked(v);
+        playFrag(player, segs[nextS], endRef);
+        return;
+      }
+      sIdxRef.current = -1;
+      (isA ? singleSegsARef : singleSegsBRef).current = [];
       v.pause();
       (isA ? setIsPlayingA : setIsPlayingB)(false);
     }
-  }, [playFrag, reportActiveId]);
+  }, [playFrag, reportActiveId, hideUntilSeeked]);
 
   const startBoundaryWatch = useCallback((player: "A" | "B") => {
     const isA = player === "A";
@@ -1369,6 +1398,10 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
       stopBoundaryWatch(player); // [R2] 경계 감시 루프 취소
       (player === "A" ? pendingSeqEndARef : pendingSeqEndBRef).current = null; // [R2] 지연 무장 잔재 소거
       cleanupPendingLoadHandler(player);
+
+      // [SINGLEPLAY-EXPAND-01] 단일 구간 큐도 함께 소거 — 두 재생 방식이 서로 오염되지 않게.
+      (player === "A" ? singleSegsARef : singleSegsBRef).current = [];
+      (player === "A" ? singleIdxARef : singleIdxBRef).current = -1;
 
       if (player === "A") {
         isSeqARef.current = false;
@@ -1579,14 +1612,27 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
 
     setActivePlayerSafe(player);
     reportActiveId(selectedFragment.fragment_id);
-    playFrag(player, selectedFragment, endRef);
+
+    // [SINGLEPLAY-EXPAND-01] 조각의 편집 상태(트림·내부제외)는 재생 방식과 무관하게 적용된다.
+    //   구판은 타일을 통째로 playFrag에 넘겨 외피 1구간(예: 15.35~29.31)으로 재생했다 —
+    //   시퀀스는 3구간인데 클릭 재생만 지운 구간이 들렸다. 같은 전개 함수를 쓴다.
+    const segs = expandTileToItems(selectedFragment as any);
+    (player === "A" ? singleSegsARef : singleSegsBRef).current = segs;
+    (player === "A" ? singleIdxARef : singleIdxBRef).current = 0;
+    if (segs.length > 1) {
+      import.meta.env.DEV && console.log(`[SINGLE_SEG_${player}]`, {
+        fragment_id: (selectedFragment as any)?.fragment_id, seg: `1/${segs.length}`,
+        startSec: readFragmentStartSec(segs[0]), endSec: readFragmentEndSec(segs[0]),
+      });
+    }
+    playFrag(player, segs[0], endRef);
 
     if (player === "B") {
       setIsPlayingB(true);
     } else {
       setIsPlayingA(true);
     }
-  }, [selectedFragment, playFrag, setActivePlayerSafe, stopSeq, reportActiveId]);
+  }, [selectedFragment, playFrag, setActivePlayerSafe, stopSeq, reportActiveId, expandTileToItems]);
 
   const handleUpload = () => {
     fileInputRef.current?.click();
