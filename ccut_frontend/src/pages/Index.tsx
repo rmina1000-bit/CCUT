@@ -528,7 +528,7 @@ const Index: React.FC = () => {
 
   // [STORY-LAYER-01 A-1] 스냅샷도 program 단위 하나. 스토리(story.fids)와 그 구성본
   // (storyFragments), 보류·휴지통·좌표가 제안축 없이 저장된다. 백엔드 진실원과 같은 키다
-  // (story_gate/service.py `read_story_fids`, ledger_r0.py `storyOrder`/`storyFragments`).
+  // (story_gate/service.py `read_story_fids`, ledger_r0.py `story.fids`/`storyFragments`).
   const buildUiSnapshot = useCallback(() => ({
     story: { fids: storyFids },
     storyFragments,
@@ -538,22 +538,22 @@ const Index: React.FC = () => {
     selectedProposalId,
     activeSource,
     deletedFragments,
-    proposalsIds: proposals ? {
-      A: (proposals as any).A?.proposal_id,
-      B: (proposals as any).B?.proposal_id,
-    } : undefined,
-  }), [storyFids, storyFragments, reservedFragments, holdPositions, committedProposalId, selectedProposalId, activeSource, deletedFragments, proposals]);
+    // [TRUTH-SINGLE-01 2번] proposalsIds 사본 폐기 — DB proposals가 진실이다.
+    //   읽는 곳 0건(전수 조사)이었고 실측에서 이미 낡아 있었다:
+    //   ui_state {A: PROP_A_E737A9…} vs DB {A: PROP_A_79716E…}.
+  }), [storyFids, storyFragments, reservedFragments, holdPositions, committedProposalId, selectedProposalId, activeSource, deletedFragments]);
 
   // [#30 merge-저장 — 원칙 "모르는 것을 지우지 않는다" (국장 승인 2026-07-17)]
   // 클라 소유 필드(아래 목록)는 스냅샷이 덮어쓰고, 그 외(서버 소유·미지 — 예: paperCutOrder)는
   // 저장 직전 서버 원본을 읽어 보존 병합한다. 경계: 클라가 의도적으로 비운 소유 필드를
   // merge가 되살리면 #1(스냅샷 부활)의 재림 — 소유 필드는 절대 병합하지 않는다.
-  // [STORY-LAYER-01 A-1] storyOrder(표시 순서)는 서버 소유(POST /ledger/{id}/order)이므로
-  // 이 목록에 넣지 않는다 — merge가 보존한다. story.fids는 조각맵·전사의 사용자 결정이라 클라 소유.
+  // [TRUTH-SINGLE-01 1번] 구판의 storyOrder(표시 순서 사본)는 폐기됐다 — 표시 순서는
+  // story.fids에서 파생한다(ledger_r0._ordered_stringout_fids). story.fids는 조각맵·전사의
+  // 사용자 결정이라 클라 소유. 서버는 저장 시 죽은 사본 키를 걷어낸다(main._strip_dead_ui_keys).
   const OWNED_UI_FIELDS = useMemo(() => new Set([
     "story", "storyFragments",
     "reservedFragments", "holdPositions", "committedProposalId", "selectedProposalId",
-    "activeSource", "deletedFragments", "proposalsIds",
+    "activeSource", "deletedFragments",
   ]), []);
   const saveUiStateMerged = useCallback(async (programId: string, snapshot: Record<string, any>) => {
     let unknown: Record<string, any> = {};

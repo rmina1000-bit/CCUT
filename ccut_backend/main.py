@@ -4894,6 +4894,32 @@ class ProjectStateRequest(BaseModel):
     reserve_state: Optional[str] = None
     ui_state: Optional[str] = None
 
+_DEAD_UI_KEYS = ("storyOrder", "proposalsIds")
+
+
+def _strip_dead_ui_keys(raw):
+    """[TRUTH-SINGLE-01] ui_state에서 폐기된 사본 키를 제거해 돌려준다.
+    파싱 실패하면 원문 그대로 — 저장을 막지 않는다(모르는 것을 지우지 않는다)."""
+    if not isinstance(raw, str):
+        return raw
+    try:
+        obj = json.loads(raw)
+    except Exception:
+        return raw
+    if not isinstance(obj, dict):
+        return raw
+    removed = [k for k in _DEAD_UI_KEYS if k in obj]
+    if not removed:
+        return raw
+    for k in removed:
+        obj.pop(k, None)
+    try:
+        print(f"[TRUTH-SINGLE] ui_state dead keys removed: {removed}")
+    except Exception:
+        pass
+    return json.dumps(obj, ensure_ascii=False)
+
+
 @app.post("/projects/{program_id}/state")
 async def save_project_state(program_id: str, req: ProjectStateRequest, db: Session = Depends(get_db)):
     """[B-4] 작업상태 영속(A=전부): active_mode/chat/reserve/ui. None인 필드는 미변경."""
@@ -4910,7 +4936,12 @@ async def save_project_state(program_id: str, req: ProjectStateRequest, db: Sess
     if req.active_mode is not None: pg.active_mode = req.active_mode
     if req.chat_state is not None: pg.chat_state = req.chat_state
     if req.reserve_state is not None: pg.reserve_state = req.reserve_state
-    if req.ui_state is not None: pg.ui_state = req.ui_state
+    if req.ui_state is not None:
+        # [TRUTH-SINGLE-01] 죽은 사본 키는 저장 시점에 걷어낸다 — 진실을 둘로 두지 않는다.
+        #   storyOrder   : 표시 순서는 story.fids에서 파생 (ledger_r0._ordered_stringout_fids)
+        #   proposalsIds : DB proposals가 진실. 읽는 곳 0건(전수)이고 실제로 낡아 있었다
+        #                  (ui_state PROP_A_E737A9… vs DB PROP_A_79716E…).
+        pg.ui_state = _strip_dead_ui_keys(req.ui_state)
     # [FIX-LIST-ORDER] 순수 UI 스냅샷(ui_state만) 저장은 '프로젝트 열람/전환'에 따른 보존일 뿐
     # 실제 작업 활동이 아니므로 recency(last_updated_at)를 갱신하지 않는다.
     # (목록이 클릭만으로 맨 위로 튀는 현상 제거 — Claude 채팅 사이드바 방식)

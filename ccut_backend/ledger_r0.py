@@ -121,24 +121,23 @@ def _recommendation_rows(con, fids):
     return by_fid
 
 
-def _ordered_stringout_fids(ui, selected_fids, all_fids):
-    """[STORY-LAYER-01 A-1] 표시 순서(스트링아웃)도 program 단위 하나 — storyOrder.
-    구판 paperCutOrder[mode](제안별 순서)는 폐기. 스토리가 하나면 순서도 하나다."""
-    story_order = ui.get("storyOrder") if isinstance(ui, dict) else None
-    paper = [str(f) for f in story_order if f] if isinstance(story_order, list) else []
-    base = paper if paper else all_fids
+def _ordered_stringout_fids(selected_fids, all_fids):
+    """[TRUTH-SINGLE-01 1번] 표시 순서의 진실은 story.fids 하나다.
+
+    구판은 ui["storyOrder"]라는 사본을 따로 두고 그걸 먼저 읽었다. 실측(Merope)에서
+    그 사본은 미선택 조각 0건 / story.fids(13)보다 2건 부족한 낡은 값이었다 —
+    story.fids가 갖지 않은 정보가 없고, 오히려 새로 추가된 조각을 스토리 순서가 아니라
+    연대순 자리로 밀어냈다. 사본을 없애고 사용본 순서를 그대로 쓴다.
+
+    순서 = story.fids(사용자 결정) + 나머지 프로그램 조각(연대순).
+    """
     seen = set()
     ordered = []
-    all_set = set(all_fids)
-    for fid in base:
-        if fid in all_set and fid not in seen:
+    for fid in selected_fids:
+        if fid and fid not in seen:
             seen.add(fid)
             ordered.append(fid)
     for fid in all_fids:
-        if fid not in seen:
-            seen.add(fid)
-            ordered.append(fid)
-    for fid in selected_fids:
         if fid not in seen:
             seen.add(fid)
             ordered.append(fid)
@@ -203,7 +202,7 @@ async def get_ledger(program_id: str):
         mode, selected_fids, _seq_src = _resolve_seq(con, program_id)
         ui = _load_ui(prow["ui_state"])
         all_fids = _all_program_fids(con, program_id)
-        fids = _ordered_stringout_fids(ui, selected_fids, all_fids)
+        fids = _ordered_stringout_fids(selected_fids, all_fids)
         selected_set = set(selected_fids)
         play_order_by_fid = {fid: i for i, fid in enumerate(selected_fids)}
         recommendation_by_fid = _recommendation_rows(con, fids)
@@ -457,7 +456,10 @@ async def get_render_edl(program_id: str):
 
 @router.post("/ledger/{program_id}/order")
 async def save_ledger_order(program_id: str, payload: dict):
-    """Papercut order: program 단위 스토리 하나에 표시 순서(storyOrder)와 선택 순서(story.fids)를 쓴다.
+    """Papercut order: 스토리 하나에 쓰는 자리도 하나 — story.fids.
+
+    [TRUTH-SINGLE-01 1번] 구판이 함께 쓰던 표시 순서 사본(storyOrder)은 폐기했다.
+    표시 순서는 story.fids에서 파생한다(_ordered_stringout_fids) — 진실은 하나.
 
     [STORY-LAYER-01 A-1] 구판은 제안별(paperCutOrder[mode]/proposalsKeyFragments[mode])로
     갈라 써서 A와 B가 다른 이야기를 갖게 만들었다. 이제 쓰는 자리는 하나뿐이다.
@@ -481,7 +483,7 @@ async def save_ledger_order(program_id: str, payload: dict):
             return {"ok": False, "error": "empty_order"}
         full_order = [fid for fid in full_order if fid in all_fids]
         selected_order = [fid for fid in selected_order if fid in all_fids]
-        ui["storyOrder"] = full_order
+        ui.pop("storyOrder", None)   # [TRUTH-SINGLE-01] 낡은 사본 소거
         story = ui.get("story") if isinstance(ui.get("story"), dict) else {}
         story["fids"] = selected_order
         ui["story"] = story
