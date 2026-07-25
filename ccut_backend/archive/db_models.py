@@ -143,6 +143,11 @@ class ProposalTable(Base):
     fallback_reason = Column(String, nullable=True)
     created_at = Column(DateTime, default=datetime.datetime.now)
     program_id = Column(String, nullable=True)  # [B-3a] 신규 프로젝트 제안. 레거시=null
+    # [PROPOSAL-AXIS-01 1-1] proposal = f(승인 스냅샷, 기법팩)
+    #   story_approval_id : 이 제안이 파생된 승인(story_approval.approval_id). 조각·순서의 출처.
+    #   technique_id      : A/B가 갈리는 유일한 축. 현재 'as_is' 하나뿐이라 A == B가 정상이다.
+    story_approval_id = Column(Integer, nullable=True)
+    technique_id = Column(String, nullable=True)
 
 class ExportInputTable(Base):
     __tablename__ = "export_input"

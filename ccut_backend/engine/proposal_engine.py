@@ -282,9 +282,17 @@ class ProposalEngine:
         return os.getenv(name, "").strip().upper() == "ON"
 
     def _composition_locked(self, project_id):
+        """[PROPOSAL-AXIS-01 3-1] 구성 단계가 끝났는가 = 승인됐는가.
+
+        판정을 is_edit_locked(=MODE_GATE AND 승인)에서 승인 여부 하나로 분리했다.
+        구판은 MODE_GATE가 OFF면 승인 후에도 False가 되어 hook_first/arrange가 편집
+        경로에서 조각을 재정렬할 수 있었다 (INV-3 위반 통로). 기법팩은 커밋 메시지대로
+        COMPOSITION technique(pre-approval only)이므로 승인 이후엔 게이트와 무관하게
+        돌지 않아야 한다.
+        """
         try:
-            from story_gate.service import is_edit_locked
-            return bool(is_edit_locked(project_id))
+            from story_gate.service import story_state, S_APPROVED
+            return story_state(project_id)["story_state"] == S_APPROVED
         except Exception:
             return False
 

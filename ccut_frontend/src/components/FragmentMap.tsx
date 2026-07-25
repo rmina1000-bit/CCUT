@@ -20,6 +20,8 @@ interface FragmentMapProps {
   onFragmentsChange: (frags: Fragment[]) => void;
   selectedFragmentId: string | null;
   activeFragmentId?: string | null;
+  /** [PLAYSTABILITY-FIX-01 1번] 조각 변경의 출처. "sequence"(시퀀스 진행)면 스크롤로 따라가지 않는다. */
+  focusOrigin?: "sequence" | "user";
   expandedFragmentId: string | null;
   onFragmentClick: (f: Fragment) => void;
   onFragmentPlay?: (f: Fragment) => void;
@@ -75,6 +77,7 @@ const FragmentMap: React.FC<FragmentMapProps> = ({
   onFragmentsChange,
   selectedFragmentId,
   activeFragmentId,
+  focusOrigin = "user",
   expandedFragmentId,
   onFragmentClick,
   onFragmentPlay,
@@ -114,13 +117,20 @@ const FragmentMap: React.FC<FragmentMapProps> = ({
   const [textEditItem, setTextEditItem] = useState<(typeof storyTextItems)[number] | null>(null);
   const [textEditNotice, setTextEditNotice] = useState<string | null>(null);
   const hiddenTextInputRef = useRef<HTMLInputElement | null>(null);
+  const rootRef = useRef<HTMLDivElement>(null);
   React.useEffect(() => {
     const activeId = activeFragmentId || selectedFragmentId;
     if (!activeId) return;
-    setActiveTextRowId(activeId);
-    const el = document.querySelector(`[data-source-fid="${activeId}"], [data-map-fid="${activeId}"]`);
+    setActiveTextRowId(activeId);          // 하이라이트는 출처와 무관하게 항상.
+    // [PLAYSTABILITY-FIX-01 1번] 스크롤 따라가기는 **사용자 클릭일 때만**.
+    //   시퀀스 재생 진행으로 이걸 호출하면 중앙 채팅이 통째로 밀린다 — 실측 S1.scrollTop 0 -> 2152.
+    if (focusOrigin !== "user") return;
+    //   조회는 자기 인스턴스 안으로 한정한다. 구판 document.querySelector는 전역이라
+    //   우측 조각맵 인스턴스가 자기 요소를 0/11로 못 집고 중앙(DOM 순서상 앞)을 집었다.
+    //   OriginalPanorama:59·66과 같은 방식(컨테이너 ref 스코프).
+    const el = rootRef.current?.querySelector(`[data-source-fid="${activeId}"], [data-map-fid="${activeId}"]`);
     if (el) el.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "nearest" });
-  }, [activeFragmentId, selectedFragmentId]);
+  }, [activeFragmentId, selectedFragmentId, focusOrigin]);
 
   const syntheticSeams = useMemo(() => detectSyntheticSeams(fragments), [fragments]);
 
@@ -415,6 +425,7 @@ const FragmentMap: React.FC<FragmentMapProps> = ({
   return (
     <TooltipProvider delayDuration={300}>
       <div
+        ref={rootRef}
         className={`flex flex-col ${title === "" && !showFaceControls ? "" : "bg-card/50 rounded-lg border border-border/20"}`} data-dropzone="fragment-map"
         onDragOver={(e) => {
                 const types = e.dataTransfer.types;

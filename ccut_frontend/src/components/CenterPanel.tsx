@@ -18,7 +18,8 @@ import { DEBUG_LOG } from "@/utils/debugFlags";
 // [STORY-GATE P3] 승인 전에는 편집 결과물 대신 '원고'를 무대에 세운다.
 import { useStoryGate } from "@/hooks/useStoryGate";
 import { fragmentTranscriptText, FRAGMENT_TEXT_FONT, FRAGMENT_TEXT_STYLE, FRAGMENT_SILENT_STYLE } from "@/lib/fragmentText";
-import { storyStageVisible } from "@/lib/storyMode";
+// [CHATLOG-STACK-01] storyStageVisible import 제거 — 중앙은 택일하지 않는다(누적).
+//   이 유틸의 소비처는 이제 Index의 rightStoryMode 하나다.
 
 import type { AppState, SourceEntry } from "@/types";
 
@@ -50,6 +51,19 @@ function readFragmentEndSec(fragment: any): number {
 
 function readFragmentDurationSec(fragment: any): number {
   return Math.max(readFragmentEndSec(fragment) - readFragmentStartSec(fragment), 0.001);
+}
+
+/**
+ * [PLAYSTABILITY-FIX-01 3번] 재생 시 end를 실제 영상 길이로 클램프 (파생 보정만).
+ *   실측: SF_B2425A_SRC_F6A1092E 의 end 18.0 > 소스 duration 17.995465 (4.5ms 초과).
+ *   경계 판정은 `currentTime >= end - LEAD`인데, 초과분이 LEAD(0.02s)보다 크면 도달 자체가
+ *   불가능해 경계가 영원히 안 걸린다(= 그 조각에서 멈춤). duration을 넘지 않게 깎는다.
+ *   ★DB의 조각 좌표는 건드리지 않는다 — 재생 순간의 파생값만 보정한다.
+ */
+function clampEndToDuration(endSec: number, duration: number | undefined | null): number {
+  const d = Number(duration);
+  if (!Number.isFinite(d) || d <= 0) return endSec;   // 아직 모르면 그대로 (metadata 전)
+  return endSec > d ? d : endSec;
 }
 
 function physicalClipToFragment(clip: PhysicalClip, sourceLabelMap: Record<string, string> = {}): Fragment {
@@ -135,7 +149,7 @@ interface CenterPanelProps {
   modeGateEnabled?: boolean;
   storyPlan?: StoryPlanPreview | null;
   onStoryPlanConfirm?: (plan: StoryPlanPreview) => void;
-  onActiveFragmentChange?: (id: string | null) => void;
+  onActiveFragmentChange?: (id: string | null, origin?: "sequence" | "user") => void;
   activeFragmentId?: string | null;
   activeStoryFragmentId?: string | null;
   storyReplacement?: React.ReactNode;
@@ -414,7 +428,9 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
   const activePlayerRef = useRef<"A" | "B" | null>(null);
 
   // [LAYOUT] A/B 편집제안 세로 아코디언 — 기본 둘 다 접힘, 클릭 시 하나만 펼침
-  const [expandedProposal, setExpandedProposal] = useState<"A" | "B" | null>(null);
+  // [CHATLOG-STACK-01 1번] 아코디언 폐지 — expandedProposal 제거.
+  //   채팅은 기록이다. A를 고르면 B가 접히던 구조(탭·아코디언)는 확정 설계에 어긋난다.
+  //   이제 A·B는 항상 펼친 채 세로로 누적되고, 선택은 '재생 위치'만 옮긴다.
   // [#19 스토리박스] 승인 전(story mode) 제안 세대를 채팅 흐름에 경량 스토리박스로 상주시킨다.
   // 기본 접힘(append-only 이력이 쌓여도 흐름이 스캔 가능하게 — E 판단). 헤더 클릭으로 펼침.
   const [openStoryBox, setOpenStoryBox] = useState<string | null>(null);
@@ -439,12 +455,10 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
       ? false
       : storyGate.approved;
 
-  // [#19-b 심판 2026-07-19 · R8 유령 1·4호 2026-07-20] 중앙 '활성 세대'의 단일 판정값.
-  //   story 카드 = 한 번도 승인 안 된 원고(story_draft) 또는 재편집 세션(reEditActive).
-  //   A/B 무대 = 승인(approved) 또는 A/B 확정으로 어긋난 review — A↔B 확정 왕복에 불변.
-  // 판정·후단 조건 모두 storyStageVisible 하나에 흡수 — 우측(rightStoryMode)과 완전 동일한
-  // 식이라 '분열 경로'가 없다. 밖에서 `||proposals` 같은 조건을 덧대지 않는다(그게 유령 4호).
-  const centerShowStory = storyStageVisible(storyGate.story, !!reEditActive);
+  // [CHATLOG-STACK-01 1번] centerShowStory 제거 — 소비처 0.
+  //   '무엇을 대신 보여줄까'(택일)를 판정하던 값이었다. 누적 구조에서는 택일이 없다:
+  //   원고는 늘 있고, 무대(A/B)는 승인 시 그 아래로 붙는다(editStageAllowed).
+  //   우측 패널의 rightStoryMode(Index)는 storyStageVisible을 계속 쓴다 — 그쪽은 옷 갈아입기다.
   useEffect(() => {
     if (storyRefreshNonceRef.current === storyRefreshNonce) return;
     storyRefreshNonceRef.current = storyRefreshNonce;
@@ -481,7 +495,10 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
     if (activeFragmentId) setActiveStoryFragmentId(activeFragmentId);
   }, [activeFragmentId]);
   useEffect(() => {
-    if (!programId || !centerShowStory || (storyGate.story?.item_count ?? 0) === 0) {
+    // [CHATLOG-STACK-01 1번] centerShowStory 조건 제거 — 전사는 단계와 무관하게 유지한다.
+    //   구판은 편집 단계(centerShowStory=false)에서 목록을 비워, 누적해도 빈 블록만 남았다.
+    //   원고가 있으면(item_count>0) 항상 싣는다. 기록은 단계가 바뀌어도 사라지지 않는다.
+    if (!programId || (storyGate.story?.item_count ?? 0) === 0) {
       setActiveStoryItems([]);
       return;
     }
@@ -515,7 +532,7 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
       })
       .catch(() => { if (!dead) setActiveStoryItems([]); });
     return () => { dead = true; };
-  }, [programId, centerShowStory, storyGate.story?.item_count, storyViewKey, storyRefreshNonce, sourceEntries, modeGateEnabled, fragments]);
+  }, [programId, storyGate.story?.item_count, storyViewKey, storyRefreshNonce, sourceEntries, modeGateEnabled, fragments]);
   // [UI-①] 업로드 스테이징 (null=비활성)
   const [stagedFiles, setStagedFiles] = useState<StagedMeta[] | null>(null);
   // [PERSON-PALETTE] 이름을 물어볼 얼굴 군집 + 방금 저장한 이름 안내
@@ -756,12 +773,55 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
 
   const lastReportedActiveIdRef = useRef<string | null>(null);
 
-  const reportActiveId = useCallback((id: string | null) => {
+  // ── [PLAYSTABILITY-FIX-01 1번] 두 신호를 출처로 가른다 ────────────────────────
+  //   (a) 시퀀스 진행 보고 = "지금 이 조각 재생 중" — 표시용. 재생 제어 금지.
+  //   (b) 사용자 선택      = "이 조각 틀어줘"     — 시퀀스 중단 + 단일 재생.
+  // 구판은 둘이 같은 경로(selectedFragment)로 흘러, 시퀀스가 다음 조각을 보고할 때마다
+  // 선택 effect가 stopSeq를 불러 **시퀀스가 자기를 죽였다** — 실측: 2번째 조각에서 정지
+  // (BOUNDARY_HIT에 seqIdx=-1·isSeq=false, PLAYFRAG 중복 2회).
+  // 상태(isSeq)로 가르면 '재생 중 사용자 클릭'까지 막히므로, **출처를 표시**해서 가른다.
+  const seqAutoReportedFidRef = useRef<string | null>(null);
+
+  /** (a) 시퀀스가 스스로 진행을 알린다 — 이 보고로 촉발된 선택 변경은 재생을 제어하지 않는다. */
+  const reportSeqProgress = useCallback((id: string | null) => {
+    seqAutoReportedFidRef.current = id;
     if (id !== lastReportedActiveIdRef.current) {
       lastReportedActiveIdRef.current = id;
-      onActiveFragmentChange?.(id);
+      onActiveFragmentChange?.(id, "sequence");   // 표시용 — 스크롤로 따라가지 않는다
     }
   }, [onActiveFragmentChange]);
+
+  /** (b) 그 밖의 보고(사용자 클릭·seek·정지) — 출처 표시를 지운다. */
+  const reportActiveId = useCallback((id: string | null) => {
+    seqAutoReportedFidRef.current = null;
+    if (id !== lastReportedActiveIdRef.current) {
+      lastReportedActiveIdRef.current = id;
+      onActiveFragmentChange?.(id, "user");
+    }
+  }, [onActiveFragmentChange]);
+
+  /** [PLAYSTABILITY-FIX-01 2번-b] onEnded는 경계감시의 **보조**다 — 이미 진행했으면 또 진행하지 않는다.
+   *  진행 경로가 둘(경계감시 :1182 / onEnded :2030·:2306)인데 4번 클램프로 seqEnd가 파일 EOF와
+   *  정확히 같아지자(A idx3 = 17.995465) 둘이 동시에 발동했다 — 실측: BOUNDARY_HIT 없이 PLAYFRAG가
+   *  4ms 간격 2건, idx4(SF_BD21A3)가 4ms만 재생되고 건너뛰어졌다.
+   *  시각(디바운스)이 아니라 **재생 위치**로 가른다: 지금 미디어가 시퀀스가 믿는 조각의 끝에
+   *  실제로 도달했을 때만 보조 진행을 허용한다. 경계감시가 방금 진행했으면 endRef는 이미
+   *  '다음 조각의 끝'이고 currentTime은 그 조각의 시작 근처이므로 여기서 걸린다.
+   */
+  const endedShouldAdvance = useCallback(
+    (v: HTMLVideoElement | null, endRef: React.MutableRefObject<number>, player: "A" | "B") => {
+      const end = endRef.current;
+      if (!v || !(end > 0)) return false;
+      const ok = v.currentTime >= end - 0.25;
+      if (!ok) {
+        import.meta.env.DEV && console.log(`[SEQ_ENDED_SKIP_${player}]`, {
+          currentTime: v.currentTime, seqEnd: end, reason: "boundary_watch_already_advanced",
+        });
+      }
+      return ok;
+    },
+    []
+  );
 
   const cleanupPendingLoadHandler = useCallback((player: "A" | "B") => {
     const ref = player === "A" ? videoRefA : videoRefB;
@@ -1029,9 +1089,11 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
       const willSwapSrc = !!fragUrl && !sameVideoSource(ref.current.currentSrc || ref.current.src, fragUrl);
       if (willSwapSrc) {
         endSecRef.current = -1;
+        // 새 소스의 duration은 아직 모른다 — pending 소비(onLoadedMetadata)에서 클램프한다.
         (isA ? pendingSeqEndARef : pendingSeqEndBRef).current = endSec;
       } else {
-        endSecRef.current = endSec;
+        // [PLAYSTABILITY-FIX-01 3번] 같은 소스: duration을 이미 아니 즉시 클램프.
+        endSecRef.current = clampEndToDuration(endSec, ref.current.duration);
       }
 
       import.meta.env.DEV && console.log("[PLAYFRAG]", {
@@ -1147,7 +1209,7 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
         elapsedRef.current += readFragmentDurationSec(frags[idxRef.current]);
         idxRef.current = nextIdx;
         (isA ? setProposalTimeA : setProposalTimeB)(elapsedRef.current);
-        reportActiveId(frags[nextIdx].fragment_id);
+        reportSeqProgress(frags[nextIdx].fragment_id);
         // [CLIP_SWITCH_GUARD — #40 A·B 동형] 조각 전환 중 잔상·seek 중간 프레임 숨김.
         // 구판은 B 전용 비대칭(:2083)이었음 — A·B는 같은 동작이어야 한다 (국장 판정).
         {
@@ -1278,7 +1340,7 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
       isSeqARef.current = true;
       setActivePlayerSafe("A");
       setIsPlayingA(true);
-      reportActiveId(frags[0].fragment_id);
+      reportSeqProgress(frags[0].fragment_id);
       playFrag("A", frags[0], seqEndARef);
     } else {
       stopSeq("A");
@@ -1289,7 +1351,7 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
       isSeqBRef.current = true;
       setActivePlayerSafe("B");
       setIsPlayingB(true);
-      reportActiveId(frags[0].fragment_id);
+      reportSeqProgress(frags[0].fragment_id);
       playFrag("B", frags[0], seqEndBRef);
     }
   }, [buildSeqFrags, playFrag, stopSeq, reportActiveId, setActivePlayerSafe, displayProposalId, committedProposalId, onPlaybackNotice]);
@@ -1376,7 +1438,7 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
       setProposalTimeB(targetGlobalTime);
     }
 
-    reportActiveId(frags[resolved.index].fragment_id);
+    reportSeqProgress(frags[resolved.index].fragment_id);
 
     // Fragment change might require src change
     const targetFrag = frags[resolved.index];
@@ -1399,6 +1461,17 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
   useEffect(() => {
     if (!selectedFragment) return;
 
+    // [PLAYSTABILITY-FIX-01 1-2] (a)와 (b)를 여기서 가른다.
+    //   이 조각 변경이 **시퀀스가 스스로 알린 진행**(reportSeqProgress)에서 온 것이면
+    //   재생 제어를 하지 않는다 — 시퀀스는 이미 이 조각을 틀고 있고, 여기서 stopSeq를
+    //   부르면 시퀀스가 자기를 죽인다(실측: 2번째 조각에서 정지).
+    //   표시(강조·스크롤)는 이미 onActiveFragmentChange로 전달됐으므로 할 일이 없다.
+    //   반대로 사용자 클릭은 표식이 없으므로 아래 기존 동작(시퀀스 중단 + 단일 재생)을 탄다 —
+    //   재생 중 클릭도 정상 작동한다(상태가 아니라 출처로 갈랐기 때문).
+    if (seqAutoReportedFidRef.current === selectedFragment.fragment_id) {
+      return;
+    }
+
     if (isSeqARef.current) stopSeq("A");
     if (isSeqBRef.current) stopSeq("B");
 
@@ -1414,7 +1487,7 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
     } else {
       setIsPlayingA(true);
     }
-  }, [selectedFragment, playFrag, setActivePlayerSafe, stopSeq]);
+  }, [selectedFragment, playFrag, setActivePlayerSafe, stopSeq, reportActiveId]);
 
   const handleUpload = () => {
     fileInputRef.current?.click();
@@ -1533,23 +1606,16 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
   }, [previewUrlA, previewUrlB, startSeq, stopOtherPlayer, setActivePlayerSafe, handleProposalPreview]);
 
   // [A/B 제안] 헤더 클릭 → 그 제안을 크게 펼치고 재생, 다른 하나는 접고 정지. (항상 하나 열림)
+  // [CHATLOG-STACK-01 1번] 접기/펴기가 아니라 '재생을 이 자리로 옮긴다'.
+  // 다른 안은 정지시키되(재생은 한 자리에서만) 접지 않는다.
   const toggleProposal = useCallback((key: "A" | "B") => {
-    setExpandedProposal(key);
     if (key !== "A") videoRefA.current?.pause();
     if (key !== "B") videoRefB.current?.pause();
     playProposal(key); // 직접 클릭(제스처)이라 브라우저가 재생 허용
   }, [playProposal]);
 
 
-  // [A/B 제안] 최신 제안(새 proposal_id)이 오면 항상 B를 먼저 크게 펼친다.
-  const lastProposalIdRef = useRef<string | null>(null);
-  useEffect(() => {
-    const pid = (proposals as any)?.B?.proposal_id ?? (proposals as any)?.A?.proposal_id ?? null;
-    if (proposals && pid && pid !== lastProposalIdRef.current) {
-      lastProposalIdRef.current = pid;
-      setExpandedProposal("B");
-    }
-  }, [proposals]);
+  // [CHATLOG-STACK-01 1번] '기본 B 펼침' effect 폐지 — 접힘이 없으니 펼칠 것도 없다.
 
   const handleExportClick = async () => {
     // [STEP 10-I.2] Export 전 유효성 검사 강화 (Physical EDL 정합성 확인)
@@ -1919,9 +1985,8 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
               <span className="absolute top-0 left-0 px-1 rounded-br text-[9px] font-black leading-tight bg-primary/70 text-primary-foreground">A</span>
             </span>
             <span className="min-w-0 flex-1 text-left text-[13px] font-bold text-foreground/85">시장형 편집 <span className="text-primary">(A)</span></span>
-            <ChevronDown size={15} className={`flex-shrink-0 text-muted-foreground/50 transition-transform ${expandedProposal === "A" ? "rotate-180" : ""}`} />
           </button>
-          <div className={expandedProposal === "A" ? "px-3 pb-3" : "hidden"}>
+          <div className="px-3 pb-3">
           <div className="flex flex-col items-center space-y-4">
             <div
               className="relative w-full aspect-[16/8] rounded-2xl bg-black overflow-hidden border border-white/8 cursor-pointer group/player"
@@ -1990,6 +2055,7 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
                       // → sequence advance를 직접 트리거
                       if (activePlayerRef.current !== "A") return;
                       if (!isSeqARef.current) return;
+                      if (!endedShouldAdvance(videoRefA.current, seqEndARef, "A")) return;
                       const nextIdx = seqIdxARef.current + 1;
                       const frags = seqFragsARef.current;
                       if (nextIdx < frags.length) {
@@ -1997,7 +2063,7 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
                         seqElapsedSecARef.current += readFragmentDurationSec(curFrag);
                         seqIdxARef.current = nextIdx;
                         setProposalTimeA(seqElapsedSecARef.current);
-                        reportActiveId(frags[nextIdx].fragment_id);
+                        reportSeqProgress(frags[nextIdx].fragment_id);
                         playFrag("A", frags[nextIdx], seqEndARef);
                       } else {
                         isSeqARef.current = false;
@@ -2063,7 +2129,9 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
                         pendingLocalTimeARef.current = null;
                         // [R2 가짜 발화 차단] 소스 교체 완료 — 이제 span end 무장 (구 소스 시간과의 비교 불가 시점)
                         if (pendingSeqEndARef.current !== null) {
-                          seqEndARef.current = pendingSeqEndARef.current;
+                          // [PLAYSTABILITY-FIX-01 3번] duration을 이제 아니 여기서 클램프.
+                          seqEndARef.current = clampEndToDuration(
+                            pendingSeqEndARef.current, e.currentTarget.duration);
                           pendingSeqEndARef.current = null;
                         }
                         const tgt = e.currentTarget;
@@ -2182,9 +2250,8 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
               <span className="absolute top-0 left-0 px-1 rounded-br text-[9px] font-black leading-tight bg-ccut-indigo/80 text-white">B</span>
             </span>
             <span className="min-w-0 flex-1 text-left text-[13px] font-bold text-foreground/85">사용자친화형 편집 <span className="text-ccut-indigo">(B)</span></span>
-            <ChevronDown size={15} className={`flex-shrink-0 text-muted-foreground/50 transition-transform ${expandedProposal === "B" ? "rotate-180" : ""}`} />
           </button>
-          <div className={expandedProposal === "B" ? "px-3 pb-3" : "hidden"}>
+          <div className="px-3 pb-3">
           <div className="flex flex-col items-center space-y-4">
             <div
               className="relative w-full aspect-[16/8] rounded-2xl bg-black overflow-hidden border border-white/8 cursor-pointer group/player"
@@ -2264,6 +2331,7 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
                       // [SEQ-ONENDED] 짧은 영상이 자연 종료되면 sequence advance 직접 트리거
                       if (activePlayerRef.current !== "B") return;
                       if (!isSeqBRef.current) return;
+                      if (!endedShouldAdvance(videoRefB.current, seqEndBRef, "B")) return;
                       const nextIdx = seqIdxBRef.current + 1;
                       const frags = seqFragsBRef.current;
                       if (nextIdx < frags.length) {
@@ -2271,7 +2339,7 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
                         seqElapsedSecBRef.current += readFragmentDurationSec(curFrag);
                         seqIdxBRef.current = nextIdx;
                         setProposalTimeB(seqElapsedSecBRef.current);
-                        reportActiveId(frags[nextIdx].fragment_id);
+                        reportSeqProgress(frags[nextIdx].fragment_id);
                         playFrag("B", frags[nextIdx], seqEndBRef);
                       } else {
                         isSeqBRef.current = false;
@@ -2336,7 +2404,9 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
                         pendingLocalTimeBRef.current = null;
                         // [R2 가짜 발화 차단] 소스 교체 완료 — 이제 span end 무장
                         if (pendingSeqEndBRef.current !== null) {
-                          seqEndBRef.current = pendingSeqEndBRef.current;
+                          // [PLAYSTABILITY-FIX-01 3번] duration을 이제 아니 여기서 클램프.
+                          seqEndBRef.current = clampEndToDuration(
+                            pendingSeqEndBRef.current, e.currentTarget.duration);
                           pendingSeqEndBRef.current = null;
                         }
                         const tgt = e.currentTarget;
@@ -2493,9 +2563,8 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
           </>
         );
 
-        // [#19-b 심판 · GATE-LOOP-01 2-1] 활성 세대 표현 = 단일 판정값 하나. A/B 왕복 불변.
-        // 무대는 '승인됨'일 때만 선다(editStageAllowed). 그 외 전부 원고 — 판정 전 구간 포함.
-        const showStory = !editStageAllowed;
+        // [#19-b 심판 · GATE-LOOP-01 2-1 · CHATLOG-STACK-01] 무대(A/B)는 '승인됨'일 때만
+        // 붙는다(editStageAllowed). 원고(전사)는 단계와 무관하게 늘 위에 남는다.
         const storyContent = (
           <div className="w-full max-w-[800px] rounded-2xl border border-white/8 bg-white/[0.02] overflow-hidden">
             {/* [TRANSCRIPT-POLISH-01] New-story banner is hidden in mode gate view. */}
@@ -2527,7 +2596,7 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
                       data-story-fid={it.fragmentId}
                       onClick={() => {
                         setActiveStoryFragmentId(it.fragmentId);
-                        onActiveFragmentChange?.(it.fragmentId);
+                        onActiveFragmentChange?.(it.fragmentId, "user");
                       }}
                       className={`w-full text-left text-[12px] leading-snug rounded px-1.5 py-0.5 transition-colors ${storyRowActive ? "text-white" : "text-muted-foreground/65 hover:text-foreground"}`}
                       style={{ fontFamily: FRAGMENT_TEXT_FONT }}
@@ -2561,7 +2630,17 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
           </div>
         );
 
-        const finalContent = showStory ? storyContent : stageContent;
+        // [CHATLOG-STACK-01 1번] swap → stack. 한 자리에서 갈아끼우지 않고 세로로 누적한다.
+        //   구판: `showStory ? storyContent : stageContent` — 편집 단계로 가면 채팅창의
+        //   전사가 통째로 사라졌다. 채팅은 기록이므로 사라지지 않고 위로 올라가야 한다.
+        //   신판: 확정된 스토리(전사)가 위에 남고, 승인되면 그 아래로 제안 A·B가 붙는다.
+        //   탭·아코디언 없음 — 세 블록이 동시에 존재한다.
+        const finalContent = (
+          <>
+            {storyContent}
+            {editStageAllowed && stageContent}
+          </>
+        );
         return stageSlot ? createPortal(finalContent, stageSlot) : finalContent; })()}
 
         {/* [FLOW] 자동 스크롤 목적지 — 흐름의 최신 지점 */}

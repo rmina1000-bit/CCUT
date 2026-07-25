@@ -439,6 +439,17 @@ try:
 except Exception as _mirror_e:
     print(f"[MIRROR] schema ensure failed (non-blocking): {_mirror_e}")
 
+# [PROPOSAL-AXIS-01 1-1] proposals.story_approval_id / technique_id 보장 (ADD COLUMN만).
+# 기동 시점이어야 한다: ORM 모델에는 컬럼이 있는데 테이블에 없으면 **읽기(SELECT)부터**
+# 깨진다 — 실측: GET /proposals/project/{id}/sources 가 500
+# (sqlite3.OperationalError: no such column: proposals.story_approval_id).
+try:
+    from story_gate.proposal_axis import ensure_columns as _axis_ensure_columns
+    _axis_added = _axis_ensure_columns()
+    print(f"[PROPOSAL-AXIS] proposals columns ensured (added={_axis_added})")
+except Exception as _axis_e:
+    print(f"[PROPOSAL-AXIS] column ensure failed (non-blocking): {_axis_e}")
+
 # [아카이브 채팅 MVP] read-only 자연어 조회 라우터 — proposal_engine/route-edit와 완전 분리
 from archive_chat_router import router as archive_chat_router, ensure_schema as _archive_chat_ensure_schema
 app.include_router(archive_chat_router)
@@ -2441,6 +2452,44 @@ async def post_generate_project_proposals(req: ProjectProposalRequest):
         except Exception as rank_err:
             print(f"[RERANKER][ERROR] Failed to rerank project proposals: {rank_err}")
 
+        # ── [PROPOSAL-AXIS-01 1-2] proposal = f(승인 스냅샷, 기법팩) ──────────────────
+        #   여기가 계약이 성립하는 유일한 지점이다. 위의 엔진(선정 HRS)·guard·ranker가 만든
+        #   조각·순서는 **채택하지 않고 덮는다** — 조각·순서의 출처는 승인 스냅샷 하나다.
+        #   저장 직전에 두는 이유: guard/ranker/preview가 시퀀스를 만질 기회를 모두 지난 뒤라야
+        #   'DB에 들어가는 값'이 승인과 같다고 말할 수 있다.
+        #   실측 위반(Merope 승인 11 vs A 9 / B 15, A∩B=2)이 이 배선의 부재에서 나왔다.
+        _axis_report = None
+        try:
+            from story_gate import proposal_axis as _axis
+            _axis.ensure_columns()
+            _appr_id, _appr_fids = _axis.live_approval_snapshot(project_id)
+            if _appr_id is not None and _appr_fids:
+                proposals, _rb = _axis.rebuild_from_approval(proposals, _appr_fids, all_fragments)
+                # [2번 검산기] 저장 직전 최후 방어선 — 어긋나면 되돌리고 raw 로그를 남긴다.
+                proposals, _violations = _axis.verify_or_restore(
+                    proposals, _appr_fids, _appr_id, project_id)
+                for _p in proposals:
+                    _p["story_approval_id"] = _appr_id
+                    _p.setdefault("technique_id", _axis.TECHNIQUE_AS_IS)
+                _axis_report = {
+                    "story_approval_id": _appr_id,
+                    "approval_item_count": len(_appr_fids),
+                    "technique_id": _axis.TECHNIQUE_AS_IS,
+                    "unresolved_fids": _rb.get("unresolved_fids") or [],
+                    "verify_violations": _violations,
+                }
+                print(f"[PROPOSAL-AXIS] approval_id={_appr_id} fids={len(_appr_fids)} "
+                      f"technique={_axis.TECHNIQUE_AS_IS} "
+                      f"unresolved={len(_rb.get('unresolved_fids') or [])} "
+                      f"violations={len(_violations)}")
+            else:
+                print(f"[PROPOSAL-AXIS][SKIP] 유효 승인 없음 — 제안 축 배선 미적용 "
+                      f"(project={project_id}). 생성 게이트가 정상이면 도달하지 않는 경로.")
+        except Exception as _axis_err:
+            # 침묵 실패 금지: 축 배선이 깨지면 이유를 남긴다. 저장은 막지 않는다
+            # (검산기 미통과 상태로 저장되지 않도록, 실패 시 축 정보는 붙지 않는다).
+            print(f"[PROPOSAL-AXIS][ERROR] 승인 스냅샷 배선 실패 (비차단): {_axis_err}")
+
         # [B-3b-3] inject·rerank 후 program_id 기준 저장 — GET 복원(filter_by program_id)과 맞물림
         _save_result = bams.save_project_proposals(project_id, proposals)
         _proposal_save_guarded = bool(isinstance(_save_result, dict) and _save_result.get("guarded"))
@@ -2509,6 +2558,8 @@ async def post_generate_project_proposals(req: ProjectProposalRequest):
             "proposals": proposals,
             "source_usage": source_usage,
             "resolved_story_template": resolved_story_template, # [STEP 10-K-B2-R1]
+            # [PROPOSAL-AXIS-01] 조각·순서의 출처와 기법, 검산기 결과를 정직하게 실어 보낸다.
+            "proposal_axis": _axis_report,
             "warnings": warnings if warnings else None
         }
 

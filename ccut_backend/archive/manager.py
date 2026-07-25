@@ -673,7 +673,10 @@ class BAMSManager:
                     duration=p["duration"],
                     proposal_reason=p.get("proposal_reason"),
                     confidence=p.get("confidence", 1.0),
-                    fallback_reason=p.get("fallback_reason")
+                    fallback_reason=p.get("fallback_reason"),
+                    # [PROPOSAL-AXIS-01 1-1] 이 제안이 어느 승인에서 나왔고 어느 기법인지.
+                    story_approval_id=p.get("story_approval_id"),
+                    technique_id=p.get("technique_id"),
                 )
                 db.add(db_p)
             db.commit()

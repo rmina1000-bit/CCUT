@@ -1669,6 +1669,7 @@ const Index: React.FC = () => {
 
   const handleEditFragmentClick = useCallback(
     (f: Fragment) => {
+      setFragmentFocusOrigin("user");   // [PLAYSTABILITY-FIX-01 1번] 클릭은 시야로 따라간다
       if (!modeGateOn && selectedFragment && getUid(selectedFragment) === getUid(f)) {
         setSelectedFragment(null);
         setHighlightedPanoramaFrag(null);
@@ -2080,7 +2081,12 @@ const Index: React.FC = () => {
     [sourceEntries, setActiveSource]
   );
 
-  const handleCenterStoryFragmentFocus = useCallback((fragmentId: string | null) => {
+  // [PLAYSTABILITY-FIX-01 1번] 조각 포커스의 출처. 시퀀스 진행이면 조각맵이 스크롤로 따라가지 않는다.
+  //   재생 진행과 사용자 클릭이 둘 다 setSelectedFragment로 흐르므로 props만으로는 가를 수 없다.
+  const [fragmentFocusOrigin, setFragmentFocusOrigin] = useState<"sequence" | "user">("user");
+
+  const handleCenterStoryFragmentFocus = useCallback((fragmentId: string | null, origin: "sequence" | "user" = "user") => {
+    setFragmentFocusOrigin(origin);
     if (!fragmentId) {
       setHighlightedPanoramaFrag(null);
       return;
@@ -2100,7 +2106,7 @@ const Index: React.FC = () => {
       return;
     }
     setHighlightedPanoramaFrag(fragmentId);
-  }, [editFragments, sourceEntries, setSelectedFragment, setActiveSource, setHighlightedPanoramaFrag]);
+  }, [editFragments, sourceEntries, setSelectedFragment, setActiveSource, setHighlightedPanoramaFrag, setFragmentFocusOrigin]);
 
   // [STORY-TRACK-B] 조각 단위 공용 미니 플레이창 — 텍스트·이미지 어디서 클릭해도 이 창 하나.
   const handleReservedClick = useCallback(
@@ -2781,6 +2787,7 @@ const Index: React.FC = () => {
                 onFragmentsChange={handleFragmentsReorder}
                 selectedFragmentId={selectedFragment ? String((selectedFragment as any).fragment_id ?? getUid(selectedFragment)) : null}
                 activeFragmentId={selectedFragment ? String((selectedFragment as any).fragment_id ?? getUid(selectedFragment)) : highlightedPanoramaFrag}
+                focusOrigin={fragmentFocusOrigin}
                 expandedFragmentId={expandedFragment}
                 onFragmentClick={handleEditFragmentClick}
                 onFragmentPlay={playImageFragmentInMini}
@@ -2952,6 +2959,7 @@ const Index: React.FC = () => {
                     onFragmentsChange={handleFragmentsReorder}
                     selectedFragmentId={selectedFragment ? String((selectedFragment as any).fragment_id ?? getUid(selectedFragment)) : null}
                     activeFragmentId={selectedFragment ? String((selectedFragment as any).fragment_id ?? getUid(selectedFragment)) : highlightedPanoramaFrag}
+                    focusOrigin={fragmentFocusOrigin}
                     expandedFragmentId={expandedFragment}
                     onFragmentClick={handleEditFragmentClick}
                     onFragmentPlay={playImageFragmentInMini}
