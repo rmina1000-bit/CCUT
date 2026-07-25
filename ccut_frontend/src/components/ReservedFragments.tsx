@@ -101,16 +101,26 @@ const ReservedFragments: React.FC<ReservedFragmentsProps> = ({
     // movedRef 는 클릭 판정 후 리셋되므로 여기선 건드리지 않음
   }, []);
 
-  const isOverTrashZone = useCallback((clientX: number, clientY: number) => {
-    if (!trashZoneRef.current) return false;
-    const rect = trashZoneRef.current.getBoundingClientRect();
-    const pad = 60;
-    return (
-      clientX >= rect.left - pad &&
-      clientX <= rect.right + pad &&
-      clientY >= rect.top - pad &&
-      clientY <= rect.bottom + pad
-    );
+  // [TRASHDROP-FIX-02 3-1] 드래그 중인 카드의 **실측** 크기. 상수 CARD_WIDTH(120)는
+  //   widthScale={0.5} 렌더 결과와 다르다 — 실측 70×100 (폭 차이 −50px). clamp가 상수를
+  //   쓰는 동안 카드는 보드 우측 50px에 영영 닿지 못했다(실측: left 586에서 멈춤,
+  //   카드 right 1221 vs 보드 right 1271). pointerdown 때 재서 여기 담고 clamp가 쓴다.
+  const cardSizeRef = useRef<{ w: number; h: number }>({ w: CARD_WIDTH, h: CARD_HEIGHT });
+
+  /** [TRASHDROP-FIX-02 3-2] 카드 rect ↔ 휴지통 아이콘 rect 교집합. 포인터 위치와 무관하다.
+   *  구판은 포인터 기준이라, 카드를 왼쪽에서 잡으면 카드가 아이콘을 덮어도(실측 겹침 396px²)
+   *  포인터는 아이콘 밖이어서 반응하지 않았다 — 조각을 휴지통에 넣을 수 없던 원인.
+   *  판정 영역은 아이콘 자신만 유지한다 (pad 부활 금지 — TRASHZONE-FIX-01). */
+  const isCardOverTrash = useCallback((pos: Position) => {
+    if (!trashZoneRef.current || !boardRef.current) return false;
+    const icon = trashZoneRef.current.querySelector("[data-hold-trash-icon]") as HTMLElement | null;
+    const ir = (icon ?? trashZoneRef.current).getBoundingClientRect();
+    const br = boardRef.current.getBoundingClientRect();
+    const { w, h } = cardSizeRef.current;
+    const cardLeft = br.left + pos.x, cardTop = br.top + pos.y;
+    const overlapX = Math.min(cardLeft + w, ir.right) - Math.max(cardLeft, ir.left);
+    const overlapY = Math.min(cardTop + h, ir.bottom) - Math.max(cardTop, ir.top);
+    return overlapX > 0 && overlapY > 0;
   }, []);
 
   const isOutsideBoard = useCallback((clientX: number, clientY: number) => {
@@ -135,8 +145,11 @@ const ReservedFragments: React.FC<ReservedFragmentsProps> = ({
       const rawX = startPosRef.current.x + dx;
       const rawY = startPosRef.current.y + dy;
 
-      const x = Math.max(0, Math.min(boardRect.width - CARD_WIDTH, rawX));
-      const y = Math.max(0, Math.min(Math.max(boardRect.height - CARD_HEIGHT, 0), rawY));
+      // [TRASHDROP-FIX-02 3-1] 상한을 **실측 카드 크기** 기준으로. 보드 밖으로 나가는 것은
+      // 여전히 막고(원본 clamp 유지), 보드 우/하 끝까지는 닿는다.
+      const { w: cardW, h: cardH } = cardSizeRef.current;
+      const x = Math.max(0, Math.min(Math.max(boardRect.width - cardW, 0), rawX));
+      const y = Math.max(0, Math.min(Math.max(boardRect.height - cardH, 0), rawY));
 
       return { x, y };
     },
@@ -154,6 +167,11 @@ const ReservedFragments: React.FC<ReservedFragmentsProps> = ({
       startClientRef.current = { x: e.clientX, y: e.clientY };
       startPosRef.current = pos;
       movedRef.current = false;
+      // [TRASHDROP-FIX-02 3-1] 이 카드의 실제 렌더 크기를 재둔다 (상수 대신 쓰는 기준).
+      {
+        const cr = (e.currentTarget as HTMLElement).getBoundingClientRect();
+        if (cr.width > 0 && cr.height > 0) cardSizeRef.current = { w: cr.width, h: cr.height };
+      }
 
       setActiveId(fid);
       setExternalReadyId(null);
@@ -196,7 +214,8 @@ const ReservedFragments: React.FC<ReservedFragmentsProps> = ({
         const nextPos = clampToBoard(e.clientX, e.clientY);
         onHoldPositionsChange?.({ ...holdPositions, [fid]: nextPos });
 
-        const over = isOverTrashZone(e.clientX, e.clientY);
+        // [TRASHDROP-FIX-02 3-2] 카드가 아이콘을 조금이라도 덮으면 hover — 포인터 위치 무관.
+        const over = isCardOverTrash(nextPos);
         trashHoverRef.current = over;
         setTrashHover(over);
 
@@ -209,7 +228,7 @@ const ReservedFragments: React.FC<ReservedFragmentsProps> = ({
         }
       }
     },
-    [activeId, clampToBoard, dragMode, holdPositions, isOutsideBoard, isOverTrashZone, onHoldPositionsChange]
+    [activeId, clampToBoard, dragMode, holdPositions, isOutsideBoard, isCardOverTrash, onHoldPositionsChange]
   );
 
   const handleCardPointerUp = useCallback(
