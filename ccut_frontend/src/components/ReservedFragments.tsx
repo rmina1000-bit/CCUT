@@ -1,9 +1,9 @@
-import React, { useState, useRef, useCallback } from "react";
+import React, { useState, useRef, useCallback, useEffect } from "react";
 import { createPortal } from "react-dom";
+import { Trash2 } from "lucide-react";
 import { Fragment } from "@/data/fragmentData";
 import FragmentTile from "./FragmentTile";
-import TrashBin from "./TrashBin";
-import { getUid } from "@/lib/fragmentIdentity";
+import { displayName, getUid } from "@/lib/fragmentIdentity";
 
 interface Position {
   x: number;
@@ -22,7 +22,8 @@ interface ReservedFragmentsProps {
   onEmptyTrash: () => void;
   holdPositions?: Record<string, { x: number; y: number }>;
   onHoldPositionsChange?: (positions: Record<string, { x: number; y: number }>) => void;
-  onDropToHold?: (fid: string, position?: { x: number; y: number }) => void;
+  onHoldPositionsCommit?: (positions: Record<string, { x: number; y: number }>) => void;
+  onDropToHold?: (fid: string, position?: { x: number; y: number }, frag?: Fragment) => void;
   compactLabels?: boolean;
 }
 
@@ -44,6 +45,7 @@ const ReservedFragments: React.FC<ReservedFragmentsProps> = ({
   onEmptyTrash,
   holdPositions = {},
   onHoldPositionsChange,
+  onHoldPositionsCommit,
   onDropToHold,
   compactLabels,
 }) => {
@@ -54,8 +56,8 @@ const ReservedFragments: React.FC<ReservedFragmentsProps> = ({
   const [activeId, setActiveId] = useState<string | null>(null);
   const [externalReadyId, setExternalReadyId] = useState<string | null>(null);
   const [trashHover, setTrashHover] = useState(false);
+  const [trashOpen, setTrashOpen] = useState(false);
   const [ghostPos, setGhostPos] = useState<Position | null>(null);
-
   const pointerIdRef = useRef<number | null>(null);
   const startClientRef = useRef<Position>({ x: 0, y: 0 });
   const startPosRef = useRef<Position>({ x: 0, y: 0 });
@@ -63,6 +65,24 @@ const ReservedFragments: React.FC<ReservedFragmentsProps> = ({
   // 클릭 vs 드래그 구분용 (이동 거리 누적)
   const movedRef = useRef(false);
 
+  // [HOLDMAP-RESTORE-01 B3] 휴지통 팝오버 — 바깥 클릭/ESC로 닫기(아이콘·팝오버 자신 클릭은 제외).
+  useEffect(() => {
+    if (!trashOpen) return;
+    const onDown = (e: MouseEvent) => {
+      const t = e.target as HTMLElement;
+      if (t.closest('[data-hold-trash-popover]') || t.closest('[data-hold-trash-icon]')) return;
+      setTrashOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setTrashOpen(false); };
+    document.addEventListener("mousedown", onDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDown);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [trashOpen]);
+
+  // [HOLDMAP-RESTORE-01] HEAD(e6d6276) 원본 그대로 — 순차배정(fallback)·boardMinHeight 없음.
   const getPosition = useCallback(
     (fragId: string): Position => {
       return holdPositions[fragId] ?? { x: 12, y: 8 };
@@ -239,7 +259,12 @@ const ReservedFragments: React.FC<ReservedFragmentsProps> = ({
         }
       }
 
-      // 클릭 판정 (이동 없으면 onFragmentClick)
+      // [HOLDMAP-RESTORE-01] 유일한 예외 — mouseup 위치 저장 1줄. 이동 중 onHoldPositionsChange가
+      // holdPositions에 최종좌표를 이미 반영하므로 그대로 commit(원본 이동엔 영향 없음).
+      if (dragMode === "internal" && movedRef.current && !trashHoverRef.current) {
+        onHoldPositionsCommit?.(holdPositions);
+      }
+
       if (!movedRef.current && dragMode !== "external") {
         const frag = fragments.find((f) => getUid(f) === fid);
         if (frag) onFragmentClick(frag);
@@ -248,7 +273,7 @@ const ReservedFragments: React.FC<ReservedFragmentsProps> = ({
       movedRef.current = false;
       cleanupAll();
     },
-    [activeId, cleanupAll, dragMode, fragments, holdPositions, isOutsideBoard, onDeleteFragment, onFragmentClick, onHoldPositionsChange, onRestoreFragment]
+    [activeId, cleanupAll, dragMode, fragments, holdPositions, isOutsideBoard, onDeleteFragment, onFragmentClick, onHoldPositionsChange, onHoldPositionsCommit, onRestoreFragment]
   );
 
   const handleCardPointerCancel = useCallback(
@@ -263,18 +288,10 @@ const ReservedFragments: React.FC<ReservedFragmentsProps> = ({
 
   const handleCardDragStart = useCallback(
     (e: React.DragEvent, f: Fragment) => {
-      const fid = getUid(f);
-
-      // external 준비된 카드만 native drag 허용
-      if (dragMode !== "external" || externalReadyId !== fid) {
-        e.preventDefault();
-        return;
-      }
-
       e.dataTransfer.setData("application/ccut-reserve-restore", JSON.stringify(f));
       e.dataTransfer.effectAllowed = "move";
     },
-    [dragMode, externalReadyId]
+    []
   );
 
   const handleCardDragEnd = useCallback(() => {
@@ -322,11 +339,7 @@ const ReservedFragments: React.FC<ReservedFragmentsProps> = ({
   return (
     <>
       <div
-        /* [#3+#13 3차 2026-07-19] min-h-full — 카드가 부모(보류맵 패널) 높이를 최소로 채운다.
-           높이 지정이 없어 내용(min-h-[220px] board)만큼만 커지던 게 큰 화면에서 카드가
-           위쪽에 뜨고 아래가 비는 '공중부양'의 실제 원인이었다(패딩 아님). min-h-full이면
-           내용이 적어도 바닥까지 내려가고(dock), 많으면 커져 부모가 스크롤한다. */
-        className="relative bg-card/50 rounded-lg overflow-hidden border border-border/20 min-h-full"
+        className="relative bg-card/50 rounded-lg overflow-hidden border border-border/20"
         onDragOver={handleDragOverHold}
         onDrop={(e) => {
           // 보류맵 자체 드래그 (reserve-restore)는 보류맵이 받지 않음
@@ -346,12 +359,18 @@ const ReservedFragments: React.FC<ReservedFragmentsProps> = ({
             try {
               const frag = JSON.parse(e.dataTransfer.getData("application/ccut-fragment-hold")) as Fragment;
               const boardRect = boardRef.current?.getBoundingClientRect();
-              if (boardRect) {
-                const x = Math.max(0, e.clientX - boardRect.left - CARD_WIDTH / 2);
-                const y = Math.max(0, e.clientY - boardRect.top - CARD_HEIGHT / 2);
-                onHoldPositionsChange?.({ ...holdPositions, [getUid(frag)]: { x, y } });
+              const position = boardRect
+                ? {
+                    x: Math.max(0, e.clientX - boardRect.left - CARD_WIDTH / 2),
+                    y: Math.max(0, e.clientY - boardRect.top - CARD_HEIGHT / 2),
+                  }
+                : undefined;
+              if (position) {
+                onHoldPositionsChange?.({ ...holdPositions, [getUid(frag)]: position });
               }
-              onDropToHold?.(getUid(frag));
+              // [DROPPOS-FIX B] 좌표 + 조각 실체를 함께 전달 — 원본맵 소스조각은 editFragments에
+              // 없어, fid만 넘기면 수신부가 조각을 못 찾아 무시됐다. frag를 넘겨 그 위치에 담는다.
+              onDropToHold?.(getUid(frag), position, frag);
             } catch (err) { }
             return;
           }
@@ -440,18 +459,93 @@ const ReservedFragments: React.FC<ReservedFragmentsProps> = ({
             );
           })}
 
-          <div ref={trashZoneRef} className="sticky bottom-2 ml-auto mr-2 z-40 w-fit">
-            <div className={`transition-transform duration-150 ${trashHover ? "scale-110" : ""}`}>
-              <TrashBin
-                deletedFragments={deletedFragments}
-                onRestoreToHold={onRestoreToHold}
-                onRestoreToEdit={onRestoreToEdit}
-                onEmptyTrash={onEmptyTrash}
-                onTrashDrop={(f) => onDeleteFragment?.(f)}
-                isMagnetic={trashHover}
-              />
+        </div>
+
+        <div ref={trashZoneRef} className="fixed bottom-4 right-6 z-50">
+          <button
+            type="button"
+            data-hold-trash-icon="true"
+            className={`relative flex h-11 w-11 items-center justify-center text-white transition-transform ${trashHover ? "scale-110" : ""}`}
+            onClick={() => setTrashOpen((prev) => !prev)}
+            onDragOver={(e) => {
+              if (e.dataTransfer.types.includes("application/ccut-reserve-restore")) {
+                e.preventDefault();
+                e.dataTransfer.dropEffect = "move";
+                trashHoverRef.current = true;
+                setTrashHover(true);
+              }
+            }}
+            onDragLeave={() => {
+              trashHoverRef.current = false;
+              setTrashHover(false);
+            }}
+            onDrop={handleTrashDrop}
+            onDropCapture={(e) => {
+              const reserveData = e.dataTransfer.getData("application/ccut-reserve-restore");
+              if (!reserveData) return;
+              e.preventDefault();
+              e.stopPropagation();
+              try {
+                const frag = JSON.parse(reserveData) as Fragment;
+                onDeleteFragment?.(frag);
+              } catch { }
+              trashHoverRef.current = false;
+              setTrashHover(false);
+            }}
+          >
+            <Trash2 size={21} strokeWidth={1.6} />
+            {deletedFragments.length > 0 && (
+              <span className="absolute -right-1.5 -top-1.5 min-w-5 rounded-full border border-white/15 bg-white/15 px-1 text-[10px] font-bold text-white">
+                {deletedFragments.length}
+              </span>
+            )}
+          </button>
+          {trashOpen && (
+            <div
+              data-hold-trash-popover="true"
+              className="absolute bottom-12 right-0 w-48 rounded-2xl border border-white/10 bg-[hsl(228_14%_10%)] p-2 shadow-2xl shadow-black/50"
+            >
+              <div className="max-h-44 overflow-y-auto">
+                {deletedFragments.length === 0 ? (
+                  <div className="px-2 py-3 text-center text-[11px] text-muted-foreground/55">empty</div>
+                ) : (
+                  deletedFragments.map((f) => (
+                    <div
+                      key={`${getUid(f)}-trash`}
+                      draggable
+                      onDragStart={(e) => {
+                        e.dataTransfer.setData("application/ccut-trash-restore", JSON.stringify(f));
+                        e.dataTransfer.effectAllowed = "move";
+                      }}
+                      className="flex items-center gap-2 rounded-xl px-1.5 py-1 hover:bg-white/5"
+                    >
+                      <div
+                        className="h-8 w-11 flex-shrink-0 rounded-md bg-secondary/70"
+                        style={{
+                          backgroundImage: f.thumbnail?.thumbnail_url ? `url(${f.thumbnail.thumbnail_url})` : "none",
+                          backgroundSize: "cover",
+                          backgroundPosition: "center",
+                        }}
+                      />
+                      <span className="min-w-0 flex-1 truncate text-[11px] font-semibold text-white/85">
+                        {/* [HOLDMAP-RESTORE-01 B2] 조각맵과 동일 표시명(display_id: "H3"/"I1"). 파일명·SF_ 금지. */}
+                        {f.display_id || displayName(f)}
+                      </span>
+                    </div>
+                  ))
+                )}
+              </div>
+              {deletedFragments.length > 0 && (
+                <button
+                  type="button"
+                  onClick={onEmptyTrash}
+                  className="mt-2 w-full rounded-lg border border-white/10 px-2 py-1 text-[10px] text-white/55 hover:bg-white/5 hover:text-white"
+                >
+                  empty
+                </button>
+              )}
             </div>
-          </div>
+          )}
         </div>
       </div>
 

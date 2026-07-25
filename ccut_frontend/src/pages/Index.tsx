@@ -18,6 +18,7 @@ import { AccountPanel } from "@/components/AccountPanel";
 import { TrashPanel } from "@/components/TrashPanel";
 import { SettingsPanel } from "@/components/SettingsPanel";
 import { SingleFragmentEditor } from "@/components/SingleFragmentEditor";
+import { AppDialog } from "@/components/AppDialog";
 import { storyStageVisible } from "@/lib/storyMode";
 import { fragmentTranscriptText } from "@/lib/fragmentText";
 // [GHOST 소각 #4·5] 구 2조각 PBE(PrecisionBoundaryEditor) 완전 소각 — 타입·주석 렌더 포함. 복원은 git 이력.
@@ -111,6 +112,11 @@ const Index: React.FC = () => {
   const storyGate = useStoryGate(activeNavItem, appState === "complete");
   const uiStateSaveRef = useRef<Promise<unknown> | null>(null);
   const [compositionNotice, setCompositionNotice] = useState<string | null>(null);
+  const [appDialog, setAppDialog] = useState<{
+    message: string;
+    cancelText?: string;
+    onConfirm?: () => void | Promise<void>;
+  } | null>(null);
   // [#22 모든 편집 진입은 스토리로 2026-07-19] '다시 편집'(SNS·아카이브)로 들어온 프로젝트는
   // 이미 승인 상태여도 편집(A/B)으로 직행하지 않고 스토리 단계로 연다. 강제 story 모드는
   // '재편집 세션'이 지속되는 동안만 — (a) 다른 프로젝트로 이동, (b) 이후 사용자가 새로 승인,
@@ -216,15 +222,19 @@ const Index: React.FC = () => {
   }, [activeNavItem, storyGate]);
 
   const handleReopenComposition = useCallback(async () => {
-    const ok = window.confirm("편집값은 보존됩니다. 빠진 조각의 값은 남고, 이음매 값은 다시 확인이 필요할 수 있습니다.");
-    if (!ok) return;
-    const result = await storyGate.reopen();
-    if (result.ok) {
-      reEditSessionStartRef.current = Date.now();
-      setReEditProgramId(activeNavItem);
-      await storyGate.reload();
-    }
-  }, [activeNavItem, storyGate]);
+    setAppDialog({
+      message: "편집값은 보존됩니다. 빠진 조각의 값은 남고, 이음매 값은 다시 확인이 필요할 수 있습니다.",
+      cancelText: "Cancel",
+      onConfirm: async () => {
+        const result = await storyGate.reopen();
+        if (result.ok) {
+          reEditSessionStartRef.current = Date.now();
+          setReEditProgramId(activeNavItem);
+          await storyGate.reload();
+        }
+      },
+    });
+  }, [activeNavItem, storyGate, setAppDialog]);
 
   // [#38] 보류맵 좌표도 제안별 구성 정보 (버킷 별칭은 displayProposalId 정의 뒤에)
   const [holdPositionsByProposal, setHoldPositionsByProposal] = useState<Record<"A" | "B", Record<string, { x: number; y: number }>>>({ A: {}, B: {} });
@@ -548,6 +558,19 @@ const Index: React.FC = () => {
     });
     return p;
   }, [saveUiStateMerged]);
+
+
+  const handleHoldPositionsCommit = useCallback((positions: Record<string, { x: number; y: number }>) => {
+    setHoldPositions(positions);
+    if (!activeNavItem || !activeNavItem.startsWith("proj_")) return;
+    saveUiStateMergedTracked(activeNavItem, {
+      ...buildUiSnapshot(),
+      holdPositions: {
+        ...holdPositionsByProposal,
+        [proposalBucket]: positions,
+      },
+    });
+  }, [activeNavItem, buildUiSnapshot, holdPositionsByProposal, proposalBucket, saveUiStateMergedTracked, setHoldPositions]);
 
   // [#8-a STORY-GATE-SYNC 2026-07-19] 제안 채택(committedProposalId) 및 그 채택된 안의
   // 조각 구성이 바뀔 때(같은 모드로 재생성된 경우 포함) ui_state를 즉시 저장한다 — 기존엔
@@ -1095,7 +1118,7 @@ const Index: React.FC = () => {
         setAppState("empty");
         
         // 사용자에게 알림 (Toast 등이 있다면 좋겠지만 여기서는 alert로 우선 처리하거나 UI에 메시지 유지)
-        alert(`[분석 실패] ${errorMsg}`);
+        setAppDialog({ message: `[분석 실패] ${errorMsg}` });
         return false;
       }
     },
@@ -1611,23 +1634,10 @@ const Index: React.FC = () => {
   // [STORY-TRACK-B] 조각 단위 공용 미니 플레이창 상태·핸들러 — handleEditFragmentClick보다
   // 먼저 선언(TDZ 방지: 아래 useCallback이 이걸 deps로 참조). A/B 듀얼 무접촉, sec canonical.
   const [miniTarget, setMiniTarget] = useState<MiniPlayTarget | null>(null);
-  const playImageFragmentInMini = useCallback((f: Fragment) => {
-    const af = f as any;
-    const sid = af.source_id ?? f.source_video;
-    const url = af.video_url
-      ?? (sourceEntries ?? []).find((e) => e.source_id === sid)?.video_url;
-    if (!url) return;
-    // sec 변환(canonical): sec 우선, frame은 ÷30 폴백 (CenterPanel readFragmentStartSec 규약).
-    const startSec = Number(af.start_sec ?? af.start_time ?? af.start ?? ((f.start_frame ?? 0) / 30));
-    const endRaw = Number(af.end_sec ?? af.end_time ?? af.end ?? ((f.end_frame ?? 0) / 30));
-    const endSec = endRaw > startSec ? endRaw : startSec + 1;
-    setMiniTarget({ videoUrl: url, spans: [[startSec, endSec]],
-                    fragmentId: f.fragment_id, label: af.display_id || undefined });
-  }, [sourceEntries]);
 
   const handleEditFragmentClick = useCallback(
     (f: Fragment) => {
-      if (selectedFragment && getUid(selectedFragment) === getUid(f)) {
+      if (!modeGateOn && selectedFragment && getUid(selectedFragment) === getUid(f)) {
         setSelectedFragment(null);
         setHighlightedPanoramaFrag(null);
         setExpandedFragment(null);
@@ -1635,13 +1645,13 @@ const Index: React.FC = () => {
       } else {
         setSelectedFragment(f);
         setActiveSource(f.source_video);
-        setHighlightedPanoramaFrag(getUid(f));
+        const highlightId = String((f as any).fragment_id ?? getUid(f));
+        setHighlightedPanoramaFrag(highlightId);
+        window.setTimeout(() => setHighlightedPanoramaFrag(highlightId), 0);
         setExpandedFragment(null);
-        // [B-2/B-3] 이미지조각 클릭 → 공용 미니 창에서 그 조각 재생(A/B 듀얼 아님) + 원본맵 강조.
-        playImageFragmentInMini(f);
       }
     },
-    [selectedFragment, playImageFragmentInMini]
+    [modeGateOn, selectedFragment]
   );
 
   // [2-2b] 조각편집 진입 (단일 조각 1개).
@@ -1666,25 +1676,30 @@ const Index: React.FC = () => {
 
   const handleRemoveSource = useCallback(async (source: any) => {
     const label = source.label || source.source_id;
-    if (!window.confirm(`영상 ${label}을(를) 이 프로젝트에서 빼시겠어요?\n(원본 파일과 조각은 보존됩니다)`)) return;
-    try {
-      if (activeNavItem && activeNavItem.startsWith("proj_")) {
-        await fetch(`${videoService.API_BASE_URL}/projects/${activeNavItem}/sources/${source.source_id}`, { method: "DELETE" });
-      }
-      setSourceEntries((prev) => {
-        const next = prev.filter((s) => s.source_id !== source.source_id);
-        if (activeSource === label && next.length > 0) {
-          setActiveSource(next[0].label);
-          setSourceFragments(next[0].fragments);
-          setEditFragments(next[0].fragments);
+    setAppDialog({
+      message: `영상 ${label}을(를) 이 프로젝트에서 빼시겠어요?\n(원본 파일과 조각은 보존됩니다)`,
+      cancelText: "Cancel",
+      onConfirm: async () => {
+        try {
+          if (activeNavItem && activeNavItem.startsWith("proj_")) {
+            await fetch(`${videoService.API_BASE_URL}/projects/${activeNavItem}/sources/${source.source_id}`, { method: "DELETE" });
+          }
+          setSourceEntries((prev) => {
+            const next = prev.filter((s) => s.source_id !== source.source_id);
+            if (activeSource === label && next.length > 0) {
+              setActiveSource(next[0].label);
+              setSourceFragments(next[0].fragments);
+              setEditFragments(next[0].fragments);
+            }
+            return next;
+          });
+          console.log(`[UI-?? source removed from project: ${source.source_id}`);
+        } catch (err) {
+          console.error("[UI-?? remove source failed:", err);
         }
-        return next;
-      });
-      console.log(`[UI-②] source removed from project: ${source.source_id}`);
-    } catch (err) {
-      console.error("[UI-②] remove source failed:", err);
-    }
-  }, [activeNavItem, activeSource]);
+      },
+    });
+  }, [activeNavItem, activeSource, setSourceEntries, setSourceFragments, setEditFragments, setActiveSource, setAppDialog]);
 
   const handleRenameSource = useCallback(async (source: SourceEntry, name: string) => {
     if (!source?.source_id) return;
@@ -1709,6 +1724,15 @@ const Index: React.FC = () => {
     label?: string;
     dialogue?: string;
     stageDirection?: string;
+    timelineItemId?: string;
+    sourceId?: string;
+    revision?: number | null;
+    anchorStartMs?: number;
+    anchorEndMs?: number;
+    trimStartMs?: number;
+    trimEndMs?: number;
+    words?: Array<{ w: string; s_ms: number; e_ms: number; p?: number | null; excluded?: boolean }>;
+    excludedRanges?: number[][];
   }>>([]);
   useEffect(() => {
     if (!modeGateOn || !activeNavItem || !activeNavItem.startsWith("proj_")) {
@@ -1720,10 +1744,15 @@ const Index: React.FC = () => {
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => {
         if (dead || !d?.ok) return;
+        const sourceOrder = new Map((sourceEntries ?? []).map((s, i) => [s.source_id, i]));
         const perSource = new Map<string, number>();
         const rows = ((d.items ?? []) as any[])
-          .filter((it) => it.selected !== false && !it.removed && !it.missing)
-          .sort((a, b) => (a.play_order ?? Number.MAX_SAFE_INTEGER) - (b.play_order ?? Number.MAX_SAFE_INTEGER))
+          .filter((it) => !it.missing)
+          .sort((a, b) => {
+            const sourceCmp = (sourceOrder.get(a.source_id) ?? Number.MAX_SAFE_INTEGER) - (sourceOrder.get(b.source_id) ?? Number.MAX_SAFE_INTEGER);
+            if (sourceCmp !== 0) return sourceCmp;
+            return Number(a.anchor_start_ms ?? a.start_ms ?? 0) - Number(b.anchor_start_ms ?? b.start_ms ?? 0);
+          })
           .map((it) => {
             const source = sourceEntries.find((s) => s.source_id === it.source_id);
             const sourceLabel = source?.label || "";
@@ -1734,6 +1763,15 @@ const Index: React.FC = () => {
               label: sourceLabel ? `${sourceLabel}${n}` : "",
               dialogue: fragmentTranscriptText(it),
               stageDirection: String(it.stage_direction ?? "").trim(),
+              timelineItemId: it.timeline_item_id,
+              sourceId: it.source_id,
+              revision: it.revision ?? null,
+              anchorStartMs: it.anchor_start_ms,
+              anchorEndMs: it.anchor_end_ms,
+              trimStartMs: it.trim_start_ms,
+              trimEndMs: it.trim_end_ms,
+              words: it.words ?? [],
+              excludedRanges: it.excluded_ranges ?? [],
             };
           });
         setModeStoryTextItems(rows);
@@ -1753,14 +1791,6 @@ const Index: React.FC = () => {
   }, []);
   const refreshEditStatesRef = useRef(refreshEditStates);
   refreshEditStatesRef.current = refreshEditStates;
-  // [EDIT-CONTRACT-B0] PBE 재진입용 — DB state 우선, cutover 전에는 적용 세션 state로 복원.
-  const sfeContractState = useMemo(() => {
-    if (!singleEditTarget) return null;
-    const fid = String((singleEditTarget as any).root_fragment_uid ?? (singleEditTarget as any).fragment_id ?? "");
-    const persisted = editContractV2 ? editStatesList.find((s) => s.parent_fragment_id === fid) : null;
-    return persisted ?? localPbeContractStates[pbeContractKey(activeNavItem, fid)] ?? null;
-  }, [activeNavItem, editContractV2, singleEditTarget, editStatesList, localPbeContractStates]);
-
   // [R2] 같은 parent에 상태 행이 여럿(NA/B 분열)일 때 표시 파생이 고를 행 = PBE 발급식 그대로.
   // ref 경유로 identity를 고정해 재수화 effect/memo의 deps를 흔들지 않는다.
   const preferredPbeItemIdRef = useRef<(fid: string) => string>(() => "");
@@ -1769,6 +1799,84 @@ const Index: React.FC = () => {
       timelineItemIdFor(editCtxRef.current.programId ?? "", String(committedProposalId ?? "NA"), fid, 0);
   }, [committedProposalId]);
   const preferredPbeItemIdFor = useCallback((fid: string) => preferredPbeItemIdRef.current(fid), []);
+  const editStateForFragment = useCallback((fragment: Fragment): EditStateRow | null => {
+    const fid = String((fragment as any).root_fragment_uid ?? (fragment as any).fragment_id ?? getUid(fragment));
+    const candidates = Array.from(editStatesRef.current.values()).filter((state) => state.parent_fragment_id === fid);
+    if (candidates.length === 0) return null;
+    const preferred = preferredPbeItemIdFor(fid);
+    return candidates.find((state) => state.timeline_item_id === preferred) ?? candidates[0];
+  }, [preferredPbeItemIdFor]);
+  const playImageFragmentInMini = useCallback(async (f: Fragment) => {
+    const af = f as any;
+    const sid = af.source_id ?? f.source_video;
+    const url = af.video_url
+      ?? (sourceEntries ?? []).find((e) => e.source_id === sid || e.label === sid)?.video_url;
+    if (!url) return;
+    const startSec = Number(af.start_sec ?? af.start_time ?? af.start ?? ((f.start_frame ?? 0) / 30));
+    const endRaw = Number(af.end_sec ?? af.end_time ?? af.end ?? ((f.end_frame ?? 0) / 30));
+    const endSec = endRaw > startSec ? endRaw : startSec + 1;
+    const state = editStateForFragment(f);
+    const spansMs = state?.spans ?? (Array.isArray(af.spans_ms) ? af.spans_ms : []);
+    const editedSpans = spansMs
+      .map(([s, e]: [number, number]) => [Number(s) / 1000, Number(e) / 1000] as [number, number])
+      .filter(([s, e]: [number, number]) => Number.isFinite(s) && Number.isFinite(e) && e > s);
+    const fallbackTarget = {
+      videoUrl: url,
+      spans: editedSpans.length > 0 ? editedSpans : [[startSec, endSec]] as [number, number][],
+      fragmentId: f.fragment_id,
+      label: af.display_id || undefined,
+    };
+    if (state && editedSpans.length > 1 && af.source_id) {
+      try {
+        const response = await fetch("/api/precision-preview", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            source_id: af.source_id,
+            spans: spansMs,
+          }),
+        });
+        const result = await response.json().catch(() => null);
+        if (response.ok && result?.ok && result?.url && Number(result.duration_ms) > 0) {
+          setMiniTarget({
+            videoUrl: result.url,
+            spans: [[0, Number(result.duration_ms) / 1000]],
+            fragmentId: f.fragment_id,
+            label: af.display_id || undefined,
+          });
+          return;
+        }
+      } catch {
+        // Fail silent: the existing source seek preview remains available.
+      }
+    }
+    setMiniTarget(fallbackTarget);
+  }, [editStateForFragment, sourceEntries]);
+  // [EDIT-CONTRACT-B0] PBE 재진입용 — DB state 우선, cutover 전에는 적용 세션 state로 복원.
+  const sfeContractState = useMemo(() => {
+    if (!singleEditTarget) return null;
+    const persisted = editContractV2 ? editStateForFragment(singleEditTarget) : null;
+    const fid = String((singleEditTarget as any).root_fragment_uid ?? (singleEditTarget as any).fragment_id ?? "");
+    return persisted ?? localPbeContractStates[pbeContractKey(activeNavItem, fid)] ?? null;
+  }, [activeNavItem, editContractV2, editStateForFragment, singleEditTarget, editStatesList, localPbeContractStates]);
+
+  const sfePrecisionContext = useMemo(() => {
+    if (!modeGateOn || !singleEditTarget || !activeNavItem) return null;
+    const fid = String(
+      (singleEditTarget as any).root_fragment_uid
+      ?? (singleEditTarget as any).fragment_id
+      ?? getUid(singleEditTarget),
+    );
+    const row = modeStoryTextItems.find((item) => item.fragmentId === fid);
+    if (!row?.sourceId || !row.words?.length || !row.dialogue) return null;
+    return {
+      programId: activeNavItem,
+      fragmentId: fid,
+      sourceId: row.sourceId,
+      text: row.dialogue,
+      words: row.words,
+    };
+  }, [activeNavItem, modeGateOn, modeStoryTextItems, singleEditTarget]);
 
   const handleSingleFragmentApply = useCallback(
     (payload: {
@@ -1938,11 +2046,12 @@ const Index: React.FC = () => {
         setSelectedFragment(f);
         const label = (sourceEntries ?? []).find((e) => e.source_id === (f as any).source_id)?.label || f.source_video;
         if (label) setActiveSource(label);
-        setHighlightedPanoramaFrag(getUid(f));
-        playImageFragmentInMini(f);
+        const highlightId = String((f as any).fragment_id ?? getUid(f));
+        setHighlightedPanoramaFrag(highlightId);
+        window.setTimeout(() => setHighlightedPanoramaFrag(highlightId), 0);
       }
     },
-    [selectedFragment, sourceEntries, playImageFragmentInMini]
+    [selectedFragment, sourceEntries]
   );
 
   // [STORY-TRACK-A A-4] 텍스트조각(우측 스토리 에디터) 클릭 → 원본맵 "나 여기있어".
@@ -1970,10 +2079,13 @@ const Index: React.FC = () => {
       setSelectedFragment(frag);
       const label = (sourceEntries ?? []).find((e) => e.source_id === (frag as any).source_id)?.label || (frag as any).source_video;
       if (label) setActiveSource(label);
-      playImageFragmentInMini(frag);
+      const highlightId = String((frag as any).fragment_id ?? getUid(frag));
+      setHighlightedPanoramaFrag(highlightId);
+      window.setTimeout(() => setHighlightedPanoramaFrag(highlightId), 0);
+      return;
     }
     setHighlightedPanoramaFrag(fragmentId);
-  }, [editFragments, sourceEntries, setSelectedFragment, setActiveSource, setHighlightedPanoramaFrag, playImageFragmentInMini]);
+  }, [editFragments, sourceEntries, setSelectedFragment, setActiveSource, setHighlightedPanoramaFrag]);
 
   // [STORY-TRACK-B] 조각 단위 공용 미니 플레이창 — 텍스트·이미지 어디서 클릭해도 이 창 하나.
   const handleReservedClick = useCallback(
@@ -1984,7 +2096,9 @@ const Index: React.FC = () => {
       } else {
         setSelectedFragment(f);
         setActiveSource(f.source_video);
-        setHighlightedPanoramaFrag(getUid(f));
+        const highlightId = String((f as any).fragment_id ?? getUid(f));
+        setHighlightedPanoramaFrag(highlightId);
+        window.setTimeout(() => setHighlightedPanoramaFrag(highlightId), 0);
       }
     },
     [selectedFragment]
@@ -2059,13 +2173,14 @@ const Index: React.FC = () => {
   );
 
   const handleDropToHold = useCallback(
-    (fragId: string, position?: { x: number; y: number }) => {
-      const frag = editFragments.find((f) => getUid(f) === fragId);
-      if (!frag) return;
+    (fragId: string, position?: { x: number; y: number }, frag?: Fragment) => {
+      // [DROPPOS-FIX B] 조각맵 조각은 editFragments에서 찾고, 원본맵 소스조각은 넘겨받은 frag로 폴백.
+      const target = editFragments.find((f) => getUid(f) === fragId) ?? frag;
+      if (!target) return;
       if (position) {
         setHoldPositions((prev) => ({ ...prev, [fragId]: position }));
       }
-      handleMoveToHold(frag);
+      handleMoveToHold(target);
     },
     [editFragments, handleMoveToHold]
   );
@@ -2171,7 +2286,8 @@ const Index: React.FC = () => {
 
   const handleAddFromSource = useCallback(
     (f: Fragment, insertAt?: number) => {
-      if (!committedProposalId || !proposals) return;
+      const target = displayProposalId as "A" | "B" | null;
+      if (editFragments.some((x) => getUid(x) === getUid(f))) return;
 
       const newFrag: Fragment = {
         ...f,
@@ -2187,10 +2303,12 @@ const Index: React.FC = () => {
         next = arr;
       }
       setEditFragments(next);
+      setReservedFragments((prev) => removeByUid(prev, f));
+
+      if (!target || !proposals) return;
 
       setProposals((pPrev) => {
         if (!pPrev) return pPrev;
-        const target = committedProposalId as "A" | "B";
         const proposal = pPrev[target];
         if (!proposal) return pPrev;
         const keys = [...proposal.key_fragments];
@@ -2206,7 +2324,7 @@ const Index: React.FC = () => {
         };
       });
     },
-    [editFragments, committedProposalId, proposals, setProposals]
+    [editFragments, displayProposalId, proposals, removeByUid, setProposals]
   );
 
   const handleDeleteFromHold = useCallback(
@@ -2592,8 +2710,10 @@ const Index: React.FC = () => {
   }, [physicalClips.length, markTiming]);
 
   const handleEmptyTrash = useCallback(() => {
+    // [HOLDMOVE-FIX B1] deps=[]는 첫 렌더(bucket A) setter를 고정 → 다른 버킷에선 비우기 무효.
+    // 현재 버킷 setter를 참조하도록 deps에 포함.
     setDeletedFragments([]);
-  }, []);
+  }, [setDeletedFragments]);
 
   const handleBoundaryDragChange = useCallback(
     (leftFrag: Fragment | null, rightFrag: Fragment | null) => {
@@ -2750,6 +2870,7 @@ const Index: React.FC = () => {
     setHighlightedPanoramaFrag(null);
     setExpandedFragment(null);
   }, []);
+  const hasProjectMedia = sourceEntries.length > 0 || sourceFragments.length > 0 || resolvedFragments.length > 0;
 
   return (
     <div
@@ -2757,6 +2878,18 @@ const Index: React.FC = () => {
       className="flex h-screen w-full overflow-hidden bg-background"
       onClick={handleBackgroundClick}
     >
+      <AppDialog
+        open={!!appDialog}
+        message={appDialog?.message ?? ""}
+        confirmText="OK"
+        cancelText={appDialog?.cancelText}
+        onCancel={() => setAppDialog(null)}
+        onConfirm={async () => {
+          const next = appDialog;
+          setAppDialog(null);
+          await next?.onConfirm?.();
+        }}
+      />
       <div className="relative flex-shrink-0" style={{ width: navCollapsed ? 48 : navWidth }}>
         <LeftNav
           activeItem={activeNavItem}
@@ -2790,7 +2923,7 @@ const Index: React.FC = () => {
         </div>
       )}
 
-      <div style={!(activeNavItem === "archive" || activeNavItem === "upload" || activeNavItem === "account" || activeNavItem === "settings" || activeNavItem === "trash") ? { width: centerWidth, flexShrink: 0 } : { flex: 1, minWidth: 0 }} className="h-full">
+      <div style={!(activeNavItem === "archive" || activeNavItem === "upload" || activeNavItem === "account" || activeNavItem === "settings" || activeNavItem === "trash") && hasProjectMedia ? { width: centerWidth, flexShrink: 0 } : { flex: 1, minWidth: 0 }} className="h-full">
         {activeNavItem === "settings" ? (
           <SettingsPanel />
         ) : activeNavItem === "archive" ? (
@@ -2845,8 +2978,42 @@ const Index: React.FC = () => {
             exportClips={physicalClips}
             storyPlan={storyPlan}
             onStoryPlanConfirm={setStoryPlan}
-            activeStoryFragmentId={selectedFragment ? getUid(selectedFragment) : highlightedPanoramaFrag}
+            activeStoryFragmentId={selectedFragment ? String((selectedFragment as any).fragment_id ?? getUid(selectedFragment)) : highlightedPanoramaFrag}
             modeGateEnabled={modeGateOn}
+            activeFragmentId={selectedFragment ? String((selectedFragment as any).fragment_id ?? getUid(selectedFragment)) : null}
+            storyReplacement={modeGateOn ? (
+              <FragmentMap
+                fragments={resolvedFragments}
+                onFragmentsChange={handleFragmentsReorder}
+                selectedFragmentId={selectedFragment ? String((selectedFragment as any).fragment_id ?? getUid(selectedFragment)) : null}
+                activeFragmentId={selectedFragment ? String((selectedFragment as any).fragment_id ?? getUid(selectedFragment)) : highlightedPanoramaFrag}
+                expandedFragmentId={expandedFragment}
+                onFragmentClick={handleEditFragmentClick}
+                onFragmentPlay={playImageFragmentInMini}
+                onEditFragment={handleSingleFragmentEdit}
+                onFragmentDoubleClick={handleEditFragmentDoubleClick}
+                onExcludeFragment={modeEditLocked ? () => {} : handleExcludeFromEdit}
+                onRestoreFragment={modeEditLocked ? () => {} : handleRestoreFromHold}
+                onSourceRestore={modeEditLocked ? () => {} : handleAddFromSource}
+                onMoveToHold={modeEditLocked ? () => {} : handleMoveToHold}
+                onTrashRestore={modeEditLocked ? () => {} : handleRestoreToEdit}
+                onBoundaryClick={handleOpenBoundaryEditor}
+                sourceVideoUrls={Object.fromEntries(
+                  (sourceEntries ?? []).flatMap(e => [[e.source_id, e.video_url], [e.label, e.video_url]]).filter(([, v]) => v)
+                )}
+                modeGateEnabled={modeGateOn}
+                compositionLocked={modeEditLocked}
+                fragmentFace="text"
+                title=""
+                textScope="all"
+                showFaceControls={false}
+                showCompositionActions={false}
+                sourceFragments={(sourceEntries ?? []).flatMap((e) => e.fragments ?? [])}
+                storyTextItems={modeStoryTextItems}
+                programId={activeNavItem}
+                onTextEditStateChanged={() => { refreshEditStatesRef.current(); void refreshLedgerEdl(); setStoryLedgerRefreshNonce((n) => n + 1); }}
+              />
+            ) : undefined}
             onActiveFragmentChange={handleCenterStoryFragmentFocus}
             onStoryEditStateChanged={() => { refreshEditStatesRef.current(); void refreshLedgerEdl(); void storyGate.reload(); setStoryLedgerRefreshNonce((n) => n + 1); }}
             storyRefreshNonce={storyLedgerRefreshNonce}
@@ -2878,7 +3045,7 @@ const Index: React.FC = () => {
         )}
       </div>
 
-      {!(activeNavItem === "archive" || activeNavItem === "upload" || activeNavItem === "account" || activeNavItem === "trash") && (
+      {!(activeNavItem === "archive" || activeNavItem === "upload" || activeNavItem === "account" || activeNavItem === "trash") && hasProjectMedia && (
         <>
           <div
             className={`flex-shrink-0 flex items-center justify-center cursor-col-resize group transition-colors ${isDragging ? "bg-primary/15" : "hover:bg-primary/8"
@@ -2908,6 +3075,7 @@ const Index: React.FC = () => {
               highlightedFragmentId={highlightedPanoramaFrag}
               selectedFragmentId={selectedFragment?.fragment_id || null}
               onFragmentClick={handlePanoramaFragmentClick}
+              onFragmentPlay={playImageFragmentInMini}
               intelligenceOn={intelligenceOn}
               onToggleIntelligence={() => setIntelligenceOn((p) => !p)}
 
@@ -2989,9 +3157,11 @@ const Index: React.FC = () => {
                   <FragmentMap
                     fragments={resolvedFragments}
                     onFragmentsChange={handleFragmentsReorder}
-                    selectedFragmentId={selectedFragment ? getUid(selectedFragment) : null}
+                    selectedFragmentId={selectedFragment ? String((selectedFragment as any).fragment_id ?? getUid(selectedFragment)) : null}
+                    activeFragmentId={selectedFragment ? String((selectedFragment as any).fragment_id ?? getUid(selectedFragment)) : highlightedPanoramaFrag}
                     expandedFragmentId={expandedFragment}
                     onFragmentClick={handleEditFragmentClick}
+                    onFragmentPlay={playImageFragmentInMini}
                     onEditFragment={handleSingleFragmentEdit}
                     onFragmentDoubleClick={handleEditFragmentDoubleClick}
                     onExcludeFragment={modeEditLocked ? () => {} : handleExcludeFromEdit}
@@ -3001,17 +3171,23 @@ const Index: React.FC = () => {
                     onTrashRestore={modeEditLocked ? () => {} : handleRestoreToEdit}
                     onBoundaryClick={handleOpenBoundaryEditor}
                     sourceVideoUrls={Object.fromEntries(
-                      (sourceEntries ?? []).map(e => [e.source_id, e.video_url]).filter(([, v]) => v)
+                      (sourceEntries ?? []).flatMap(e => [[e.source_id, e.video_url], [e.label, e.video_url]]).filter(([, v]) => v)
                     )}
                     modeGateEnabled={modeGateOn}
                     compositionLocked={modeEditLocked}
                     fragmentFace={fragmentFace}
                     onFragmentFaceChange={setFragmentFace}
+                    title={undefined}
+                    textButtonLabel="텍스트 조각"
+                    textScope="selected"
                     onApproveComposition={handleApproveComposition}
                     onReopenComposition={handleReopenComposition}
                     compositionNotice={compositionNotice}
                     modeRound={storyGate.story?.mode_round ?? 1}
+                    sourceFragments={(sourceEntries ?? []).flatMap((e) => e.fragments ?? [])}
                     storyTextItems={modeStoryTextItems}
+                    programId={activeNavItem}
+                    onTextEditStateChanged={() => { refreshEditStatesRef.current(); void refreshLedgerEdl(); setStoryLedgerRefreshNonce((n) => n + 1); }}
                   />
                 )}
               </div>
@@ -3042,6 +3218,7 @@ const Index: React.FC = () => {
                   onEmptyTrash={handleEmptyTrash}
                   holdPositions={holdPositions}
                   onHoldPositionsChange={setHoldPositions}
+                  onHoldPositionsCommit={handleHoldPositionsCommit}
                   onDropToHold={handleDropToHold}
                   compactLabels={modeGateOn}
                 />
@@ -3057,6 +3234,7 @@ const Index: React.FC = () => {
         fragment={singleEditTarget}
         projectName={projects.find(p => p.id === activeNavItem)?.name}
         contractState={sfeContractState}
+        precisionContext={sfePrecisionContext}
         onApply={handleSingleFragmentApply}
       />
       {/* [STORY-TRACK-B] 조각 단위 공용 미니 플레이창 — 텍스트·이미지 클릭 공용. 창 1개. */}

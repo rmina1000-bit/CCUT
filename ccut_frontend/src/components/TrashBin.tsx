@@ -235,7 +235,8 @@ const TrashBin: React.FC<TrashBinProps> = ({
                         className={`text-[9px] font-medium ${sourceColors[f.source_video] || "text-foreground"
                           }`}
                       >
-                        {f.fragment_id}
+                        {/* [HOLDMOVE-FIX B2] 조각맵과 동일한 표시명(display_id: "D3"/"I1"). 파일명·SF_ 노출 금지. */}
+                        {f.display_id || f.fragment_id}
                       </span>
                       <span className="text-[8px] text-muted-foreground/35">
                         {f.duration.toFixed(1)}s

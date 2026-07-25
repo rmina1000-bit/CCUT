@@ -1,7 +1,6 @@
-import React, { useRef, useEffect, useMemo } from "react";
+import React, { useRef, useEffect, useMemo, useState } from "react";
 import { Fragment, allFragments } from "@/data/fragmentData";
 import FragmentTile from "./FragmentTile";
-import { Eye, EyeOff } from "lucide-react";
 import {
   Tooltip,
   TooltipContent,
@@ -15,6 +14,7 @@ interface OriginalPanoramaProps {
   highlightedFragmentId: string | null;
   selectedFragmentId: string | null;
   onFragmentClick: (f: Fragment) => void;
+  onFragmentPlay?: (f: Fragment) => void;
   intelligenceOn: boolean;
   onToggleIntelligence: () => void;
   fragmentOverrides?: Map<string, Fragment>;
@@ -22,6 +22,8 @@ interface OriginalPanoramaProps {
   // [UI-②] 분석 후에도 영상 추가/빼기
   onAddSource?: () => void;
   onRemoveSource?: (source: any) => void;
+  onRenameSource?: (source: any, name: string) => void;
+  compactLabels?: boolean;
   onBoundaryClick?: (leftFragId: string | null, rightFragId: string | null) => void;
   sourceFragments?: Fragment[];
   sources?: { source_id: string; label?: string; title?: string; file_path?: string; video_url?: string }[];
@@ -33,6 +35,7 @@ const OriginalPanorama: React.FC<OriginalPanoramaProps> = ({
   highlightedFragmentId,
   selectedFragmentId,
   onFragmentClick,
+  onFragmentPlay,
   intelligenceOn,
   onToggleIntelligence,
   fragmentOverrides,
@@ -42,8 +45,13 @@ const OriginalPanorama: React.FC<OriginalPanoramaProps> = ({
   sources = [],
   onAddSource,
   onRemoveSource,
+  onRenameSource,
+  compactLabels,
 }) => {
   const scrollRef = useRef<HTMLDivElement>(null);
+  const [renamingSourceId, setRenamingSourceId] = useState<string | null>(null);
+  const [renameValue, setRenameValue] = useState("");
+  const [hoveredPlayId, setHoveredPlayId] = useState<string | null>(null);
 
   useEffect(() => {
     if (highlightedFragmentId && scrollRef.current) {
@@ -84,15 +92,40 @@ const OriginalPanorama: React.FC<OriginalPanoramaProps> = ({
         {/* Header */}
         <div className="flex items-center justify-between px-3 py-2">
           <div className="flex items-center gap-2.5 min-w-0 flex-1">
-            <h3 className="text-[11px] font-semibold text-foreground/80 uppercase tracking-widest whitespace-nowrap">원본맵</h3>
+            <h3 className="text-[12px] font-semibold text-foreground/80 uppercase tracking-widest whitespace-nowrap">원본맵</h3>
             <div className="flex gap-1 overflow-x-auto no-scrollbar flex-1 min-w-0 py-1">
               {sources && Array.isArray(sources) && sources.map((s) => (
                 <span key={s.source_id} className="relative group/srctab flex-shrink-0">
+                  {renamingSourceId === s.source_id ? (
+                    <input
+                      autoFocus
+                      className="w-28 rounded-md border border-primary/35 bg-background/95 px-2 py-0.5 text-[12px] text-foreground outline-none shadow-lg"
+                      value={renameValue}
+                      onChange={(e) => setRenameValue(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          onRenameSource?.(s, renameValue.trim());
+                          setRenamingSourceId(null);
+                        }
+                        if (e.key === "Escape") setRenamingSourceId(null);
+                      }}
+                      onBlur={() => {
+                        if (renameValue.trim()) onRenameSource?.(s, renameValue.trim());
+                        setRenamingSourceId(null);
+                      }}
+                    />
+                  ) : (
+                  <>
                   <button
                     onClick={() => onSourceChange(s.label || s.source_id)}
+                    onContextMenu={(e) => {
+                      e.preventDefault();
+                      setRenamingSourceId(s.source_id);
+                      setRenameValue(String((s as any).display_name || (s as any).title || ""));
+                    }}
                     /* [DISPLAY-NAME] 라벨만으론 어느 영상인지 알 수 없다 — 원본 제목 툴팁 */
-                    title={(s as any).title ? String((s as any).title).replace(/\.[A-Za-z0-9]{2,4}$/, "") : undefined}
-                    className={`px-2 py-0.5 rounded-[3px] text-[9px] font-medium transition-all
+                    title={(s as any).display_name || undefined}
+                    className={`px-2 py-0.5 rounded-[3px] text-[12px] font-medium transition-all
                       ${(s.label || s.source_id) === activeSource
                         ? "bg-primary/20 text-primary"
                         : "text-muted-foreground/60 hover:text-foreground/70 hover:bg-secondary/40"
@@ -100,13 +133,10 @@ const OriginalPanorama: React.FC<OriginalPanoramaProps> = ({
                   >
                     {(s as any).label || (s.source_id.split('_').pop() || s.source_id)}
                   </button>
-                  {/* [UI-②] 호버 시 이 영상을 프로젝트에서 빼기 */}
-                  {onRemoveSource && (
-                    <button
-                      title="이 영상 빼기"
-                      onClick={(e) => { e.stopPropagation(); onRemoveSource(s); }}
-                      className="absolute -top-1 -right-1 hidden group-hover/srctab:flex w-3 h-3 items-center justify-center rounded-full bg-red-600 text-white text-[8px] leading-none"
-                    >×</button>
+                  <span className="pointer-events-none absolute left-1/2 top-full z-50 mt-2 hidden -translate-x-1/2 whitespace-nowrap rounded-xl border border-white/10 bg-[hsl(228_14%_10%)] px-3 py-2 text-[12px] text-foreground/85 shadow-2xl shadow-black/45 group-hover/srctab:block">
+                    {(s as any).display_name || ""}
+                  </span>
+                  </>
                   )}
                 </span>
               ))}
@@ -115,22 +145,11 @@ const OriginalPanorama: React.FC<OriginalPanoramaProps> = ({
                 <button
                   title="영상 추가"
                   onClick={onAddSource}
-                  className="px-1.5 py-0.5 rounded-[3px] text-[10px] font-bold text-muted-foreground/50 hover:text-primary hover:bg-primary/10 transition-all flex-shrink-0"
-                >＋</button>
+                  className="px-1.5 py-0.5 rounded-[3px] text-[12px] font-bold text-muted-foreground/50 hover:text-primary hover:bg-primary/10 transition-all flex-shrink-0"
+                >+</button>
               )}
             </div>
           </div>
-          <button
-            onClick={onToggleIntelligence}
-            className={`flex items-center gap-1 px-1.5 py-0.5 rounded-[3px] text-[9px] font-medium transition-all
-              ${intelligenceOn
-                ? "bg-ccut-indigo/15 text-ccut-amber/80"
-                : "text-muted-foreground/40 hover:text-foreground/50"
-              }`}
-          >
-            {intelligenceOn ? <Eye size={10} /> : <EyeOff size={10} />}
-            정보
-          </button>
         </div>
 
         <div
@@ -142,11 +161,14 @@ const OriginalPanorama: React.FC<OriginalPanoramaProps> = ({
               <div
                 data-fid={f.fragment_id}
                 className={`relative transition-all duration-150 cursor-grab active:cursor-grabbing ${highlightedFragmentId === f.fragment_id
-                  ? "ring-1 ring-primary/40"
+                  ? "ring-4 ring-primary/80 bg-primary/20 rounded shadow-[0_0_18px_rgba(96,165,250,0.45)]"
                   : isBoundaryHighlighted(f.fragment_id)
-                    ? "ring-1 ring-primary/30"
+                    ? "ring-2 ring-primary/50 bg-primary/10 rounded"
                     : ""
                   }`}
+                onMouseEnter={() => setHoveredPlayId(f.fragment_id)}
+                onMouseMove={() => setHoveredPlayId(f.fragment_id)}
+                onMouseLeave={() => setHoveredPlayId((current) => current === f.fragment_id ? null : current)}
                 draggable={true}
                 onDragStart={(e) => {
                   e.dataTransfer.setData("application/ccut-fragment-hold", JSON.stringify(f));
@@ -161,6 +183,16 @@ const OriginalPanorama: React.FC<OriginalPanoramaProps> = ({
                   onClick={() => onFragmentClick(f)}
                   widthScale={0.6}
                   variant="panorama"
+                  compactLabelOnly={true}
+                  showPlayButton={true}
+                  playButtonVisible={hoveredPlayId === f.fragment_id}
+                  onPlay={(e) => {
+                    e.stopPropagation();
+                    onFragmentPlay?.({
+                      ...f,
+                      video_url: (f as any).video_url ?? sources.find((s) => s.label === activeSource)?.video_url,
+                    } as Fragment);
+                  }}
                   showIntelligence={intelligenceOn}
                   videoPath={
                     // [FIX-ACTIVE-SOURCE] activeSource는 라벨(A/B/C), source_id와 혼동 금지

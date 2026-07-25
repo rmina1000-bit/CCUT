@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { Fragment, formatDuration } from "@/data/fragmentData";
 import { displayName } from "@/lib/fragmentIdentity";
-import { Clock, Play } from "lucide-react";
+import { Play } from "lucide-react";
 import { DEBUG_LOG } from "@/utils/debugFlags";
 
 interface FragmentTileProps {
@@ -17,7 +17,12 @@ interface FragmentTileProps {
   onDoubleClick?: () => void;
   onEditFragment?: () => void;   // [2-2b] 조각편집 진입 (variant=edit에서만 버튼 노출)
 
+  compactLabelOnly?: boolean;
+  showPlayButton?: boolean;
+  playButtonVisible?: boolean;
+  onPlay?: (e: React.MouseEvent) => void;
   widthScale?: number;
+  orderBadge?: number | null;
 }
 
 const FragmentTile: React.FC<FragmentTileProps> = ({
@@ -33,7 +38,12 @@ const FragmentTile: React.FC<FragmentTileProps> = ({
   onDoubleClick,
   onEditFragment,
 
+  compactLabelOnly = false,
+  showPlayButton = false,
+  playButtonVisible = false,
+  onPlay,
   widthScale = 0.7,
+  orderBadge = null,
 }) => {
   const [hasImageError, setHasImageError] = useState(false);
   const seconds = fragment.duration / 30;
@@ -135,20 +145,21 @@ const FragmentTile: React.FC<FragmentTileProps> = ({
   };
 
   const resolvedUrl = resolveThumbnailUrl(fragment);
+  const isProgrammed = orderBadge != null;
 
   return (
     <div
       onClick={onClick}
       onDoubleClick={onDoubleClick}
-      className={`relative group cursor-pointer overflow-hidden border flex-shrink-0 fragment-tile
+      className={`relative group cursor-pointer overflow-hidden border-[0.5px] flex-shrink-0 fragment-tile rounded-lg
         transition-all duration-200 bg-[hsl(228_10%_13%)]
         ${isSelected
-          ? "border-primary shadow-[0_0_0_1px_rgba(96,165,250,0.28),0_10px_24px_rgba(0,0,0,0.28)]"
+          ? "border-primary ring-2 ring-primary/80 shadow-[0_0_0_2px_rgba(96,165,250,0.42),0_0_22px_rgba(96,165,250,0.35),0_10px_24px_rgba(0,0,0,0.28)]"
           : isHighlighted
-            ? "border-primary/40 shadow-[0_0_0_1px_rgba(96,165,250,0.12)]"
+            ? "border-primary ring-2 ring-primary/70 shadow-[0_0_0_2px_rgba(96,165,250,0.36),0_0_18px_rgba(96,165,250,0.28)]"
             : "border-border/20 hover:border-primary/20"
         }`}
-      style={{ width: cardWidth, height: "100px" }}
+      style={{ width: cardWidth, height: "100px", opacity: isProgrammed ? undefined : 0.72 }}
     >
       <div
         className="absolute inset-0 flex items-center justify-center overflow-hidden bg-[hsl(228_8%_14%)]"
@@ -161,10 +172,6 @@ const FragmentTile: React.FC<FragmentTileProps> = ({
             backgroundSize: "24px 24px",
           }}
         />
-        <div className="relative">
-          <div className="absolute inset-0 bg-white/10 blur-xl rounded-full scale-150 opacity-20" />
-          <Play size={20} className="text-white/40 fill-white/10" />
-        </div>
       </div>
 
       {hasImageError || !resolvedUrl ? (
@@ -222,37 +229,35 @@ const FragmentTile: React.FC<FragmentTileProps> = ({
         </div>
       )}
 
-      <div className="absolute inset-0 z-10 p-3 flex flex-col justify-between">
-        <div className="flex items-start justify-between gap-2">
-          <div className="min-w-0">
-            {/* [DISPLAY-NAME] 주이름 = 단일 진실원("원본제목 · m:ss–m:ss") — raw ID 비노출 */}
-            <span className="block text-[10px] font-black text-white/80 tracking-tight truncate" title={displayName(fragment)}>
-              {displayName(fragment)}
-            </span>
-          </div>
+      <div className="absolute inset-0 z-10">
+        {isProgrammed && (
+          <span className="absolute left-[6px] top-[6px] flex h-[18px] w-[18px] items-center justify-center rounded-[5px] bg-primary font-mono text-[11px] font-medium leading-none text-primary-foreground">
+            {orderBadge}
+          </span>
+        )}
+        {fragment.display_id && !fragment.display_id.startsWith("SF_") && (
+          <span className="absolute right-[7px] top-[7px] font-mono text-[11px] font-medium leading-none text-secondary-foreground/60">
+            {fragment.display_id}
+          </span>
+        )}
+        <span className="absolute bottom-[6px] left-[7px] font-mono text-[10px] font-normal leading-none text-muted-foreground">
+          {formatDuration(fragment.duration)}
+        </span>
 
-          {/* [UI-⑧] display_id("A1")는 편집 위치용 보조 배지로 축소 존치 */}
-          {fragment.display_id && !fragment.display_id.startsWith("SF_") && (
-            <span className="flex-shrink-0 px-1 py-px rounded bg-black/45 border border-white/15 text-[9px] font-black text-white/60">
-              {fragment.display_id}
-            </span>
-          )}
-        </div>
-
-        <div className="flex items-end justify-between gap-2">
-          <div className="flex items-center gap-1.5 text-white/82">
-            <Clock size={10} className="text-primary/90" />
-            <span className="text-[11px] font-bold">{formatDuration(fragment.duration)}</span>
-          </div>
-
-          <div
-            className="w-6 h-6 rounded-lg bg-primary/18 border border-primary/20
-              flex items-center justify-center opacity-0 group-hover:opacity-100
-              transition-all duration-200 translate-y-1 group-hover:translate-y-0"
+        {showPlayButton && (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onPlay?.(e);
+            }}
+            className={`absolute bottom-[6px] right-[7px] h-6 w-6 rounded-lg bg-primary/18 border border-primary/20
+              flex items-center justify-center ${playButtonVisible ? "opacity-100" : "opacity-0"} group-hover:opacity-100
+              transition-all duration-200 translate-y-1 group-hover:translate-y-0`}
           >
-            <Play size={10} className="text-primary fill-primary" />
-          </div>
-        </div>
+            <Play size={12} className="text-primary fill-primary" />
+          </button>
+        )}
       </div>
 
       <div className="absolute bottom-0 left-0 w-full h-1 bg-white/6 overflow-hidden">

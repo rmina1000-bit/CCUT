@@ -11,6 +11,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { ArrowDown, ArrowUp, Check, GripVertical, Play } from "lucide-react";
 import { videoService } from "@/services/videoService";
 import { FRAGMENT_TEXT_FONT, fragmentTextColor, FRAGMENT_EXCLUDED_STYLE } from "@/lib/fragmentText";
+import { TextCaret, excludedRangesFromEditing, wordsToChars, moveTextCaret } from "@/lib/ledgerTextEditor";
 import { recordMirrorEvent } from "@/utils/mirrorEventLog";
 
 type MsRange = [number, number];
@@ -64,27 +65,12 @@ interface EdlClip {
 interface Char { ch: string; s_ms: number | null; e_ms: number | null; }
 interface Editing { itemId: string; chars: Char[]; inactive: Set<number>; caret: number; }
 
-// [#21 잔여] 조각 텍스트 폰트 단일 원천 — 우측 전사·중앙 스토리카드 공용.
 const SANS = FRAGMENT_TEXT_FONT;
 
 const fmtClock = (ms?: number) => {
   if (!ms || ms < 0) return "0:00";
   const s = Math.round(ms / 1000);
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
-};
-
-// 대사 단어 → 글자 배열 (글자별 시간 = 단어 시간을 글자 수로 균등 분할. 근사지만 결정론)
-const wordsToChars = (words: WordTok[]): Char[] => {
-  const chars: Char[] = [];
-  words.forEach((w, wi) => {
-    const arr = Array.from(w.w);
-    const per = arr.length ? (w.e_ms - w.s_ms) / arr.length : 0;
-    arr.forEach((ch, i) => chars.push({
-      ch, s_ms: Math.round(w.s_ms + i * per), e_ms: Math.round(w.s_ms + (i + 1) * per),
-    }));
-    if (wi < words.length - 1) chars.push({ ch: " ", s_ms: null, e_ms: null });  // 단어 사이 공백(시간 없음)
-  });
-  return chars;
 };
 
 /** [STORY-GATE P3] 워크스페이스 안에 끼워 넣을 수 있게 props 수용.
@@ -577,6 +563,14 @@ const LedgerPage: React.FC<LedgerPageProps> = ({
     (it.excluded_ranges ?? []).forEach(([s, e]) => {
       chars.forEach((c, i) => { if (c.s_ms != null && c.s_ms < e && (c.e_ms ?? 0) > s) inactive.add(i); });
     });
+    // [SAVE-INTEGRITY] word.excluded(trim 밖·기존 제외 포함) 단어 전체를 union 복원
+    //   — 화면 취소선과 저장 산식(inactive)의 두 진실을 일치시킨다.
+    let _ci = 0;
+    for (const w of it.words) {
+      const _n = Array.from(w.w).length;
+      if ((w as { excluded?: boolean }).excluded) for (let _k = 0; _k < _n; _k++) inactive.add(_ci + _k);
+      _ci += _n + 1;
+    }
     const ed = { itemId: it.timeline_item_id, chars, inactive, caret };
     editingRef.current = ed;
     setEditing(ed);
@@ -600,17 +594,11 @@ const LedgerPage: React.FC<LedgerPageProps> = ({
     if (!cur || !data?.items) return;
     const it = data.items.find((x) => x.timeline_item_id === cur.itemId);
     if (!it) return;
-    // 길이 0 구간(ASR 좌표 s_ms==e_ms)은 계약 위반이라 서버가 거부한다 — 전송에서 제외
-    const ranges: number[][] = [];
-    let droppedZero = 0;
-    cur.inactive.forEach((i) => {
-      const c = cur.chars[i];
-      if (c.s_ms == null || c.e_ms == null) return;
-      if (c.e_ms > c.s_ms) ranges.push([c.s_ms, c.e_ms]);
-      else droppedZero += 1;
-    });
-    // 전부 길이 0이면 저장할 시간 구간이 없다 — 빈 배열 POST는 RESTORE(기존 편집 삭제)가 되므로 생략
-    if (ranges.length === 0 && droppedZero > 0) return;
+    // 길이 0 구간은 제외하고, 연속으로 지운 단어 사이는 ASR 무음 틈까지 한 범위로 저장한다.
+    const { ranges } = excludedRangesFromEditing(cur);
+    // [SAVE-INTEGRITY] 조용한 드롭 폐지 — 파생은 더 이상 단어를 버리지 않는다.
+    //   진짜 no-op(제외한 글자 자체가 없음)일 때만 저장 생략(빈 배열 POST=RESTORE 오작동 방지).
+    if (ranges.length === 0 && cur.inactive.size === 0) return;
     const restoreEditing = () => {
       setEditing((now) => now ?? cur);  // 사용자가 다른 문장 편집을 시작했으면 덮어쓰지 않는다
       setTimeout(() => hiddenRef.current?.focus({ preventScroll: true }), 0);
@@ -626,9 +614,7 @@ const LedgerPage: React.FC<LedgerPageProps> = ({
     }
   }, [data, postEdit, reload, onEditStateChanged, reportEditFailure]);
 
-  const moveCaret = (from: number, dir: -1 | 1, chars: Char[]) => Math.max(0, Math.min(chars.length, from + dir));
-
-  const onEditKey = useCallback((e: React.KeyboardEvent<HTMLInputElement>) => {
+    const onEditKey = useCallback((e: React.KeyboardEvent<HTMLInputElement>) => {
     const key = e.key;
     if (key === "Escape" || key === "Enter") { e.preventDefault(); commitEdit(); return; }
     if (!["ArrowLeft", "ArrowRight", "Home", "End", "Backspace", "Delete"].includes(key)) return;
@@ -636,8 +622,8 @@ const LedgerPage: React.FC<LedgerPageProps> = ({
     setEditing((cur) => {
       if (!cur) return cur;
       const { chars, caret, inactive } = cur;
-      if (key === "ArrowLeft") return { ...cur, caret: moveCaret(caret, -1, chars) };
-      if (key === "ArrowRight") return { ...cur, caret: moveCaret(caret, 1, chars) };
+      if (key === "ArrowLeft") return { ...cur, caret: moveTextCaret(caret, -1, chars) };
+      if (key === "ArrowRight") return { ...cur, caret: moveTextCaret(caret, 1, chars) };
       if (key === "Home") return { ...cur, caret: 0 };
       if (key === "End") return { ...cur, caret: chars.length };
       if (key === "Backspace") {
@@ -680,10 +666,7 @@ const LedgerPage: React.FC<LedgerPageProps> = ({
   }, []);
 
 
-  const Caret = () => (
-    <span className="inline-block w-px h-[1.05em] align-[-0.15em] mx-[0.5px]"
-      style={{ background: "hsl(220,9%,90%)", animation: "ccutBlink 1s step-end infinite" }} />
-  );
+  const Caret = TextCaret;
 
   return (
     <div className={embedded ? "" : "min-h-screen"}

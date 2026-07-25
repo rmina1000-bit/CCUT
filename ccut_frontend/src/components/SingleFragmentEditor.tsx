@@ -118,6 +118,13 @@ interface SingleFragmentEditorProps {
     trim_start_ms: number; trim_end_ms: number;
     excluded_ranges: Array<[number, number]>; removed: boolean;
   } | null;
+  precisionContext?: {
+    programId: string;
+    fragmentId: string;
+    sourceId: string;
+    text: string;
+    words: Array<{ w: string; s_ms: number; e_ms: number; p?: number | null; excluded?: boolean }>;
+  } | null;
   onApply?: (payload: {
     fragmentUid: string;
     newStartSec: number;
@@ -136,6 +143,7 @@ export const SingleFragmentEditor: React.FC<SingleFragmentEditorProps> = ({
   projectName,
   readOnly = false,
   contractState = null,
+  precisionContext = null,
   onApply,
 }) => {
   // [R3 G1 — 국장 승인 2026-07-17] 편집기의 단일 진실 = ms 구간 (anchor 절대좌표).
@@ -143,6 +151,9 @@ export const SingleFragmentEditor: React.FC<SingleFragmentEditorProps> = ({
   const [trimStartMs, setTrimStartMs] = useState(0);
   const [trimEndMs, setTrimEndMs] = useState(0);
   const [excludedMs, setExcludedMs] = useState<MsRange[]>([]);
+  const [alignedWords, setAlignedWords] = useState<Array<{ text: string; start_ms: number; end_ms: number }>>([]);
+  const [isAligning, setIsAligning] = useState(false);
+  const [alignmentError, setAlignmentError] = useState<string | null>(null);
   // [PBE-DENSITY] 파노라마 프레임 수 (기본 12). 12가 아니면 백엔드가 P_{fid}_d{n}_{i}.jpg 로 생성.
   const [frameCount, setFrameCount] = useState(12);
   const frameSuffix = frameCount === 12 ? "" : `_d${frameCount}`;
@@ -230,6 +241,9 @@ export const SingleFragmentEditor: React.FC<SingleFragmentEditorProps> = ({
     });
     setCurrentIndex(0);
     setIsPlaying(false);
+    setAlignedWords([]);
+    setIsAligning(false);
+    setAlignmentError(null);
 
     if (startSec === undefined || endSec === undefined) return;
 
@@ -527,6 +541,49 @@ export const SingleFragmentEditor: React.FC<SingleFragmentEditorProps> = ({
     onOpenChange(false);
   };
 
+  const handlePrecisionAlign = async () => {
+    if (!fragment || !precisionContext || isAligning || excludedMs.length === 0) return;
+    setIsAligning(true);
+    setAlignmentError(null);
+    try {
+      const response = await fetch("/api/precision-align", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          program_id: precisionContext.programId,
+          fragment_id: precisionContext.fragmentId,
+          source_id: precisionContext.sourceId,
+          text: precisionContext.text,
+          words: precisionContext.words,
+          anchor_start_ms: anchorStartMsVal,
+          anchor_end_ms: anchorEndMsVal,
+          excluded_ranges: excludedMs,
+        }),
+      });
+      const result = await response.json().catch(() => null);
+      if (!response.ok || !result?.ok) {
+        throw new Error(result?.message || result?.error || "Precision alignment failed.");
+      }
+      const nextRanges = (result.excluded_ranges ?? [])
+        .map((span: number[]) => [Number(span[0]), Number(span[1])] as MsRange)
+        .filter(([start, end]: MsRange) => Number.isFinite(start) && Number.isFinite(end) && end > start);
+      setExcludedMs(nextRanges);
+      setAlignedWords(
+        (result.aligned_words ?? [])
+          .map((word: any) => ({
+            text: String(word.text ?? ""),
+            start_ms: Number(word.start_ms),
+            end_ms: Number(word.end_ms),
+          }))
+          .filter((word: any) => word.text && Number.isFinite(word.start_ms) && Number.isFinite(word.end_ms)),
+      );
+    } catch (error) {
+      setAlignmentError(error instanceof Error ? error.message : "Precision alignment failed.");
+    } finally {
+      setIsAligning(false);
+    }
+  };
+
   const updateIndexFromX = (clientX: number) => {
     if (!containerRef.current) return;
     const rect = containerRef.current.getBoundingClientRect();
@@ -624,7 +681,8 @@ export const SingleFragmentEditor: React.FC<SingleFragmentEditorProps> = ({
   // [PBE-RESIZE] 우하단 핸들 드래그로 크기 조절. 가로/세로 모두 뷰포트(브라우저) 밖으로 못 나가게 clamp.
   const MIN_W = 360;
   const MIN_H = 320;
-  const handleResizeMouseDown = (e: React.MouseEvent) => {
+  type ResizeEdge = "top" | "bottom" | "left" | "right" | "top-left" | "top-right" | "bottom-left" | "bottom-right";
+  const handleResizeMouseDown = (e: React.MouseEvent, edge: ResizeEdge) => {
     if (!dialogRef.current) return;
     e.preventDefault();
     e.stopPropagation();
@@ -634,30 +692,48 @@ export const SingleFragmentEditor: React.FC<SingleFragmentEditorProps> = ({
     const startY = e.clientY;
     const initialW = rect.width;
     const initialH = rect.height;
-    const fixedLeft = rect.left;
-    const fixedTop = rect.top;
+    const initialLeft = rect.left;
+    const initialTop = rect.top;
 
-    // 리사이즈 중에는 위치를 현재 좌상단에 고정(센터 변환 해제) → 우하단으로만 확장.
     if (dialogRef.current) {
-      dialogRef.current.style.left = `${fixedLeft}px`;
-      dialogRef.current.style.top = `${fixedTop}px`;
+      dialogRef.current.style.left = `${initialLeft}px`;
+      dialogRef.current.style.top = `${initialTop}px`;
       dialogRef.current.style.transform = "none";
       dialogRef.current.style.margin = "0";
     }
 
     let latestW = initialW;
     let latestH = initialH;
+    let latestLeft = initialLeft;
+    let latestTop = initialTop;
 
     const handleMouseMove = (moveEvent: MouseEvent) => {
       const deltaX = moveEvent.clientX - startX;
       const deltaY = moveEvent.clientY - startY;
+      const affectsLeft = edge.includes("left");
+      const affectsRight = edge.includes("right");
+      const affectsTop = edge.includes("top");
+      const affectsBottom = edge.includes("bottom");
 
-      // 우/하단 가장자리가 뷰포트를 넘지 못하도록 좌상단 기준 최대치 계산
-      const maxW = Math.max(MIN_W, window.innerWidth - fixedLeft);
-      const maxH = Math.max(MIN_H, window.innerHeight - fixedTop);
+      if (affectsLeft) {
+        const maxW = Math.max(MIN_W, initialLeft + initialW);
+        latestW = Math.max(MIN_W, Math.min(maxW, initialW - deltaX));
+        latestLeft = initialLeft + (initialW - latestW);
+      } else if (affectsRight) {
+        const maxW = Math.max(MIN_W, window.innerWidth - initialLeft);
+        latestW = Math.max(MIN_W, Math.min(maxW, initialW + deltaX));
+        latestLeft = initialLeft;
+      }
 
-      latestW = Math.max(MIN_W, Math.min(maxW, initialW + deltaX));
-      latestH = Math.max(MIN_H, Math.min(maxH, initialH + deltaY));
+      if (affectsTop) {
+        const maxH = Math.max(MIN_H, initialTop + initialH);
+        latestH = Math.max(MIN_H, Math.min(maxH, initialH - deltaY));
+        latestTop = initialTop + (initialH - latestH);
+      } else if (affectsBottom) {
+        const maxH = Math.max(MIN_H, window.innerHeight - initialTop);
+        latestH = Math.max(MIN_H, Math.min(maxH, initialH + deltaY));
+        latestTop = initialTop;
+      }
 
       if (resizeRafRef.current === null) {
         resizeRafRef.current = requestAnimationFrame(() => {
@@ -665,6 +741,8 @@ export const SingleFragmentEditor: React.FC<SingleFragmentEditorProps> = ({
           if (dialogRef.current) {
             dialogRef.current.style.width = `${latestW}px`;
             dialogRef.current.style.height = `${latestH}px`;
+            dialogRef.current.style.left = `${latestLeft}px`;
+            dialogRef.current.style.top = `${latestTop}px`;
             dialogRef.current.style.maxWidth = "100vw";
             dialogRef.current.style.maxHeight = "100vh";
           }
@@ -679,8 +757,7 @@ export const SingleFragmentEditor: React.FC<SingleFragmentEditorProps> = ({
         cancelAnimationFrame(resizeRafRef.current);
         resizeRafRef.current = null;
       }
-      // 위치도 함께 고정(센터 변환 → 좌표 고정 전환 유지)
-      setPosition({ x: fixedLeft, y: fixedTop });
+      setPosition({ x: latestLeft, y: latestTop });
       setSize({ width: latestW, height: latestH });
     };
 
@@ -694,7 +771,7 @@ export const SingleFragmentEditor: React.FC<SingleFragmentEditorProps> = ({
         ref={dialogRef}
         position={position}
         size={size}
-        className="sm:max-w-[720px] w-[90vw] max-h-[100vh] bg-[hsl(228,12%,10%)] border-border/15 text-foreground"
+        className="sm:max-w-[720px] w-[90vw] max-h-[100vh] bg-[hsl(228,12%,17%)] border-2 border-border text-foreground"
       >
         <DialogHeader className="mb-1 select-none cursor-move flex-shrink-0" onMouseDown={handleTitleMouseDown}>
           <div className="flex items-center gap-2 min-w-0">
@@ -885,10 +962,13 @@ export const SingleFragmentEditor: React.FC<SingleFragmentEditorProps> = ({
                         />
                       )}
                       {/* [R3 G2] 부분 걸침 = 걸친 ms 구간만 칸 안에서 정확한 위치·폭으로 표시 (자동 확대·축소 없음) */}
+                      {exState === "full" && (
+                        <div className="absolute inset-0 bg-red-600/80 border-x-2 border-red-300 pointer-events-none z-10" />
+                      )}
                       {overlaps.map(([os, oe], k) => (
                         <div
                           key={k}
-                          className="absolute top-0 bottom-0 bg-red-600/45 border-x border-red-400/70 pointer-events-none z-10"
+                          className="absolute top-0 bottom-0 bg-red-600/80 border-x-2 border-red-300 pointer-events-none z-10"
                           style={{
                             left: `${(((os - cellS) / cellWidthMs) * 100).toFixed(2)}%`,
                             width: `${(((oe - os) / cellWidthMs) * 100).toFixed(2)}%`,
@@ -967,6 +1047,41 @@ export const SingleFragmentEditor: React.FC<SingleFragmentEditorProps> = ({
               <span>{formatSec(railDuration)}</span>
             </div>
 
+            {precisionContext && (
+              <div className="relative h-9 border-y border-border/10 overflow-hidden">
+                {(alignedWords.length > 0
+                  ? alignedWords
+                  : precisionContext.words.map((word) => ({
+                      text: word.w,
+                      start_ms: word.s_ms,
+                      end_ms: word.e_ms,
+                    }))
+                ).map((word, index) => {
+                  const start = Math.max(anchorStartMsVal, word.start_ms);
+                  const end = Math.min(anchorEndMsVal, word.end_ms);
+                  if (end <= start || anchorDurMs <= 0) return null;
+                  const excluded = excludedMs.some(([s, e]) => end > s && start < e);
+                  return (
+                    <div
+                      key={`${index}-${word.text}-${start}`}
+                      title={`${word.text} ${start}–${end}ms`}
+                      className={`absolute inset-y-1 flex items-center justify-center border-x px-0.5 text-[9px] leading-none overflow-hidden ${
+                        excluded
+                          ? "border-red-300/80 bg-red-600/70 text-white"
+                          : "border-border/20 bg-secondary/30 text-muted-foreground"
+                      }`}
+                      style={{
+                        left: `${(((start - anchorStartMsVal) / anchorDurMs) * 100).toFixed(3)}%`,
+                        width: `${Math.max(0.6, ((end - start) / anchorDurMs) * 100).toFixed(3)}%`,
+                      }}
+                    >
+                      {word.text}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
             {/* Inactive Zone Labels */}
             <div className="flex justify-between items-center text-[10px] text-muted-foreground/80 mt-1 px-1">
               <span className={trimStartMs > anchorStartMsVal ? "text-red-400 font-medium" : "opacity-30"}>앞 버림</span>
@@ -998,6 +1113,22 @@ export const SingleFragmentEditor: React.FC<SingleFragmentEditorProps> = ({
             </span>
           ) : (
             <>
+              {precisionContext && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={handlePrecisionAlign}
+                  disabled={isAligning || excludedMs.length === 0}
+                  className="text-xs h-8 text-foreground hover:bg-secondary/40"
+                >
+                  {isAligning ? "정밀 맞춤 중…" : "대사 정밀 맞춤"}
+                </Button>
+              )}
+              {alignmentError && (
+                <span role="alert" className="text-[11px] text-red-400 max-w-[220px]">
+                  {alignmentError}
+                </span>
+              )}
               <Button
                 type="button"
                 variant="outline"
@@ -1053,15 +1184,53 @@ export const SingleFragmentEditor: React.FC<SingleFragmentEditorProps> = ({
 
         {/* [PBE-RESIZE] 우하단 리사이즈 핸들 */}
         <div
-          onMouseDown={handleResizeMouseDown}
-          title="크기 조절"
-          className="absolute bottom-0 right-0 w-5 h-5 cursor-nwse-resize z-50 flex items-end justify-end p-0.5 text-muted-foreground/50 hover:text-foreground"
+          data-pbe-resize-edge="top"
+          onMouseDown={(e) => handleResizeMouseDown(e, "top")}
+          className="absolute left-3 right-3 top-0 h-2 cursor-ns-resize z-50"
           style={{ touchAction: "none" }}
-        >
-          <svg viewBox="0 0 10 10" className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth="1.2">
-            <path d="M9 3 L3 9 M9 6.5 L6.5 9" strokeLinecap="round" />
-          </svg>
-        </div>
+        />
+        <div
+          data-pbe-resize-edge="bottom"
+          onMouseDown={(e) => handleResizeMouseDown(e, "bottom")}
+          className="absolute left-3 right-3 bottom-0 h-2 cursor-ns-resize z-50"
+          style={{ touchAction: "none" }}
+        />
+        <div
+          data-pbe-resize-edge="left"
+          onMouseDown={(e) => handleResizeMouseDown(e, "left")}
+          className="absolute left-0 top-3 bottom-3 w-2 cursor-ew-resize z-50"
+          style={{ touchAction: "none" }}
+        />
+        <div
+          data-pbe-resize-edge="right"
+          onMouseDown={(e) => handleResizeMouseDown(e, "right")}
+          className="absolute right-0 top-3 bottom-3 w-2 cursor-ew-resize z-50"
+          style={{ touchAction: "none" }}
+        />
+        <div
+          data-pbe-resize-edge="top-left"
+          onMouseDown={(e) => handleResizeMouseDown(e, "top-left")}
+          className="absolute left-0 top-0 h-3 w-3 cursor-nwse-resize z-50"
+          style={{ touchAction: "none" }}
+        />
+        <div
+          data-pbe-resize-edge="top-right"
+          onMouseDown={(e) => handleResizeMouseDown(e, "top-right")}
+          className="absolute right-0 top-0 h-3 w-3 cursor-nesw-resize z-50"
+          style={{ touchAction: "none" }}
+        />
+        <div
+          data-pbe-resize-edge="bottom-left"
+          onMouseDown={(e) => handleResizeMouseDown(e, "bottom-left")}
+          className="absolute bottom-0 left-0 h-3 w-3 cursor-nesw-resize z-50"
+          style={{ touchAction: "none" }}
+        />
+        <div
+          data-pbe-resize-edge="bottom-right"
+          onMouseDown={(e) => handleResizeMouseDown(e, "bottom-right")}
+          className="absolute bottom-0 right-0 h-3 w-3 cursor-nwse-resize z-50"
+          style={{ touchAction: "none" }}
+        />
       </LocalDialogContent>
     </Dialog>
   );

@@ -1,7 +1,9 @@
-﻿import React, { useState, useCallback, useMemo } from "react";
+﻿import React, { useState, useCallback, useMemo, useRef } from "react";
 import { Fragment } from "@/data/fragmentData";
 import FragmentTile from "./FragmentTile";
 import { getUid } from "@/lib/fragmentIdentity";
+import { FRAGMENT_EXCLUDED_STYLE } from "@/lib/fragmentText";
+import { TextCaret, editingFromWords, excludedRangesFromEditing, moveTextCaret, WordTok, TextEditing } from "@/lib/ledgerTextEditor";
 import {
   SyntheticCollapsedSeam,
   detectSyntheticSeams,
@@ -17,8 +19,10 @@ interface FragmentMapProps {
   fragments: Fragment[];
   onFragmentsChange: (frags: Fragment[]) => void;
   selectedFragmentId: string | null;
+  activeFragmentId?: string | null;
   expandedFragmentId: string | null;
   onFragmentClick: (f: Fragment) => void;
+  onFragmentPlay?: (f: Fragment) => void;
   onEditFragment?: (f: Fragment) => void;   // [2-2b] 議곌컖?몄쭛 吏꾩엯
   onFragmentDoubleClick: (f: Fragment) => void;
   onExcludeFragment: (f: Fragment) => void;
@@ -40,20 +44,39 @@ interface FragmentMapProps {
   onReopenComposition?: () => void;
   compositionNotice?: string | null;
   modeRound?: number;
+  title?: string;
+  textButtonLabel?: string;
+  textScope?: "all" | "selected";
+  showFaceControls?: boolean;
+  showCompositionActions?: boolean;
+  sourceFragments?: Fragment[];
   storyTextItems?: Array<{
     fragmentId?: string | null;
     label?: string;
     dialogue?: string;
     stageDirection?: string;
+    timelineItemId?: string;
+    sourceId?: string;
+    revision?: number | null;
+    anchorStartMs?: number;
+    anchorEndMs?: number;
+    trimStartMs?: number;
+    trimEndMs?: number;
+    words?: WordTok[];
+    excludedRanges?: number[][];
   }>;
+  programId?: string | null;
+  onTextEditStateChanged?: () => void;
 }
 
 const FragmentMap: React.FC<FragmentMapProps> = ({
   fragments,
   onFragmentsChange,
   selectedFragmentId,
+  activeFragmentId,
   expandedFragmentId,
   onFragmentClick,
+  onFragmentPlay,
   onEditFragment,
   onFragmentDoubleClick,
   onExcludeFragment,
@@ -71,11 +94,32 @@ const FragmentMap: React.FC<FragmentMapProps> = ({
   onReopenComposition,
   compositionNotice,
   modeRound = 1,
+  title,
+  textButtonLabel = "전사",
+  textScope = "all",
+  showFaceControls = true,
+  showCompositionActions = true,
+  sourceFragments = [],
   storyTextItems = [],
+  programId,
+  onTextEditStateChanged,
 }) => {
   const [draggedId, setDraggedId] = useState<string | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
   const [hoveredSeamKey, setHoveredSeamKey] = useState<string | null>(null);
+  const [activeTextRowId, setActiveTextRowId] = useState<string | null>(null);
+  const [hoveredImagePlayId, setHoveredImagePlayId] = useState<string | null>(null);
+  const [textEditing, setTextEditing] = useState<TextEditing | null>(null);
+  const [textEditItem, setTextEditItem] = useState<(typeof storyTextItems)[number] | null>(null);
+  const [textEditNotice, setTextEditNotice] = useState<string | null>(null);
+  const hiddenTextInputRef = useRef<HTMLInputElement | null>(null);
+  React.useEffect(() => {
+    const activeId = activeFragmentId || selectedFragmentId;
+    if (!activeId) return;
+    setActiveTextRowId(activeId);
+    const el = document.querySelector(`[data-source-fid="${activeId}"], [data-map-fid="${activeId}"]`);
+    if (el) el.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "nearest" });
+  }, [activeFragmentId, selectedFragmentId]);
 
   const syntheticSeams = useMemo(() => detectSyntheticSeams(fragments), [fragments]);
 
@@ -114,14 +158,39 @@ const FragmentMap: React.FC<FragmentMapProps> = ({
     e.dataTransfer.dropEffect = "move";
 
     const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-    const midX = rect.left + rect.width / 2;
+    // [DROPPOS-FIX] 세로 스택(전사·텍스트조각)은 Y, 가로 배치(이미지조각)는 X 기준으로 앞/뒤 판정.
+    const isVertical = modeGateEnabled && fragmentFace === "text";
+    const before = isVertical
+      ? e.clientY < rect.top + rect.height / 2
+      : e.clientX < rect.left + rect.width / 2;
 
-    if (e.clientX < midX) {
+    if (before) {
       setDragOverIndex(realIndex);
     } else {
       setDragOverIndex(realIndex === totalCount - 1 ? totalCount : realIndex + 1);
     }
-  }, [compositionLocked]);
+  }, [compositionLocked, modeGateEnabled, fragmentFace]);
+
+  // [DROPPOS-FIX A] 원본맵 드롭이 타일이 아닌 컨테이너로 떨어질 때의 삽입 위치 —
+  // 커서 좌표를 '선택 타일'(draggable=true, realIndex 정확) 미드포인트와 비교해 산출.
+  // 어떤 타일보다도 뒤(끝)일 때만 append(fragments.length).
+  const computeDropIndex = useCallback((e: React.DragEvent): number => {
+    const host = e.currentTarget as HTMLElement;
+    const tiles = Array.from(
+      host.querySelectorAll('[data-dropzone="fragment-map-item"][draggable="true"]')
+    ) as HTMLElement[];
+    const isVertical = modeGateEnabled && fragmentFace === "text";
+    const pos = isVertical ? e.clientY : e.clientX;
+    for (const tile of tiles) {
+      const r = tile.getBoundingClientRect();
+      const mid = isVertical ? r.top + r.height / 2 : r.left + r.width / 2;
+      if (pos < mid) {
+        const idx = Number(tile.getAttribute("data-frag-index"));
+        if (Number.isFinite(idx)) return idx;
+      }
+    }
+    return fragments.length;
+  }, [modeGateEnabled, fragmentFace, fragments.length]);
 
   const handleDrop = useCallback(
     (e: React.DragEvent, targetRealIndex: number) => {
@@ -200,6 +269,25 @@ const FragmentMap: React.FC<FragmentMapProps> = ({
 
   const activeCount = visibleFragments.length;
   const excludedCount = fragments.length - activeCount;
+  const transcriptFragments = useMemo(
+    () => (modeGateEnabled && fragmentFace === "text" && textScope === "all" && sourceFragments.length > 0 ? sourceFragments : visibleFragments.map(({ fragment }) => fragment)),
+    [modeGateEnabled, fragmentFace, textScope, sourceFragments, visibleFragments]
+  );
+  const transcriptRows = useMemo(
+    () =>
+      transcriptFragments.map((fragment, sourceIndex) => {
+        const uid = getUid(fragment);
+        const selectedIndex = visibleFragments.findIndex(({ fragment: selected }) => getUid(selected) === uid);
+        return {
+          fragment,
+          sourceIndex,
+          realIndex: selectedIndex >= 0 ? visibleFragments[selectedIndex].realIndex : fragments.length,
+          selectedIndex,
+          selected: selectedIndex >= 0,
+        };
+      }),
+    [transcriptFragments, visibleFragments, fragments.length]
+  );
   const storyTextByFragmentId = useMemo(() => {
     const m = new Map<string, (typeof storyTextItems)[number]>();
     storyTextItems.forEach((it) => {
@@ -223,22 +311,120 @@ const FragmentMap: React.FC<FragmentMapProps> = ({
     return seconds === null ? "" : `${seconds.toFixed(1)}s`;
   };
   const cleanText = (v: unknown) => String(v ?? "").trim();
+  const cleanLabel = (v: unknown) => {
+    const label = cleanText(v);
+    return /^(SF_|SRC_|PROP_)/.test(label) ? "" : label;
+  };
   const textForCard = (f: Fragment, index: number) => {
     const story = storyTextByFragmentId.get(getUid(f)) ?? storyTextItems[index];
     const stage = cleanText(story?.stageDirection || f.stage_direction);
     const dialogue = cleanText(story?.dialogue || f.dialogue || f.transcript || f.original_text || f.intelligence?.description || f.description);
     return {
-      label: cleanText(story?.label),
+      label: cleanLabel(story?.label || (f as any).display_id),
       stage: stage || (!dialogue ? "(무음)" : ""),
       dialogue,
       duration: formatSeconds(f),
     };
   };
+  const toggleTranscriptFragment = (f: Fragment, selected: boolean) => {
+    const uid = getUid(f);
+    setActiveTextRowId(uid);
+    onFragmentClick(f);
+    if (compositionLocked) return;
+    if (selected) {
+      onFragmentsChange(fragments.filter((fr) => getUid(fr) !== uid));
+      onMoveToHold(f);
+    } else {
+      onFragmentsChange([...fragments, { ...f, excluded: false }]);
+      onSourceRestore?.(f, fragments.length);
+    }
+  };
+  const focusTranscriptFragment = (f: Fragment) => {
+    const uid = getUid(f);
+    setActiveTextRowId(uid);
+    onFragmentClick(f);
+  };
+
+  const startTextEdit = (f: Fragment, index: number) => {
+    const uid = getUid(f);
+    const story = storyTextByFragmentId.get(uid) ?? storyTextItems[index];
+    if (!story?.timelineItemId || !story.words || story.words.length === 0) {
+      setTextEditing(null);
+      setTextEditItem(null);
+      setTextEditNotice("\uB300\uC0AC \uB370\uC774\uD130 \uC5C6\uC74C");
+      setActiveTextRowId(uid);
+      return;
+    }
+    setTextEditNotice(null);
+    setActiveTextRowId(uid);
+    setTextEditItem(story);
+    setTextEditing(editingFromWords(story.timelineItemId, story.words, story.excludedRanges ?? [], 0));
+    setTimeout(() => hiddenTextInputRef.current?.focus({ preventScroll: true }), 0);
+  };
+
+  const commitTextEdit = async () => {
+    const cur = textEditing;
+    const item = textEditItem;
+    setTextEditing(null);
+    setTextEditItem(null);
+    if (!cur || !item || !programId) return;
+    const { ranges } = excludedRangesFromEditing(cur);
+    // [SAVE-INTEGRITY] 조용한 드롭 폐지 — 진짜 no-op일 때만 생략(빈 배열 POST=RESTORE 오작동 방지).
+    if (ranges.length === 0 && cur.inactive.size === 0) return;
+    const res = await fetch("/api/edit-state", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        program_id: programId,
+        timeline_item_id: item.timelineItemId,
+        source_id: item.sourceId,
+        anchor_start_ms: item.anchorStartMs,
+        anchor_end_ms: item.anchorEndMs,
+        trim_start_ms: item.trimStartMs ?? item.anchorStartMs,
+        trim_end_ms: item.trimEndMs ?? item.anchorEndMs,
+        revision: item.revision ?? undefined,
+        parent_fragment_id: item.fragmentId,
+        origin: "TEXT_EDITOR",
+        excluded_ranges: ranges,
+        removed: false,
+        command_type: "EXCLUDE_RANGE",
+      }),
+    });
+    const body = await res.json().catch(() => null);
+    if (body?.ok) onTextEditStateChanged?.();
+  };
+
+  const onTextEditKey = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    const key = e.key;
+    if (key === "Escape" || key === "Enter") { e.preventDefault(); void commitTextEdit(); return; }
+    if (!["ArrowLeft", "ArrowRight", "Home", "End", "Backspace", "Delete"].includes(key)) return;
+    e.preventDefault();
+    setTextEditing((cur) => {
+      if (!cur) return cur;
+      const { chars, caret, inactive } = cur;
+      if (key === "ArrowLeft") return { ...cur, caret: moveTextCaret(caret, -1, chars) };
+      if (key === "ArrowRight") return { ...cur, caret: moveTextCaret(caret, 1, chars) };
+      if (key === "Home") return { ...cur, caret: 0 };
+      if (key === "End") return { ...cur, caret: chars.length };
+      if (key === "Backspace") {
+        let p = caret - 1;
+        while (p >= 0 && chars[p].s_ms == null) p--;
+        if (p < 0) return cur;
+        const ni = new Set(inactive); ni.has(p) ? ni.delete(p) : ni.add(p);
+        return { ...cur, inactive: ni, caret: p };
+      }
+      let p = caret;
+      while (p < chars.length && chars[p].s_ms == null) p++;
+      if (p >= chars.length) return cur;
+      const ni = new Set(inactive); ni.has(p) ? ni.delete(p) : ni.add(p);
+      return { ...cur, inactive: ni, caret: p + 1 };
+    });
+  };
 
   return (
     <TooltipProvider delayDuration={300}>
       <div
-        className="flex flex-col bg-card/50 rounded-lg border border-border/20" data-dropzone="fragment-map"
+        className={`flex flex-col ${title === "" && !showFaceControls ? "" : "bg-card/50 rounded-lg border border-border/20"}`} data-dropzone="fragment-map"
         onDragOver={(e) => {
           if (compositionLocked) return;
           const types = e.dataTransfer.types;
@@ -285,7 +471,7 @@ const FragmentMap: React.FC<FragmentMapProps> = ({
             e.preventDefault();
             try {
               const frag = JSON.parse(holdData) as Fragment;
-              onSourceRestore?.(frag, fragments.length);
+              onSourceRestore?.(frag, computeDropIndex(e));
             } catch {
               // ignore malformed payload
             }
@@ -295,10 +481,11 @@ const FragmentMap: React.FC<FragmentMapProps> = ({
 
         }}
       >
+        {!(title === "" && !showFaceControls) && (
         <div className="flex items-center justify-between px-3 py-2">
           <div className="flex items-center gap-1.5">
-            <h3 className="text-[11px] font-semibold text-foreground/80 uppercase tracking-widest">
-              조각맵
+            <h3 className="text-[12px] font-semibold text-foreground/80 uppercase tracking-widest">
+              {title ?? "조각맵"}
             </h3>
             <span className="text-[9px] text-muted-foreground/40">
               {activeCount}
@@ -308,42 +495,45 @@ const FragmentMap: React.FC<FragmentMapProps> = ({
               <span className="text-[9px] text-primary/70">{modeRound}차</span>
             )}
           </div>
-          {modeGateEnabled && (
+          {modeGateEnabled && showFaceControls && (
             <div className="flex items-center gap-1">
               <button
                 type="button"
-                className={`px-2 py-1 rounded border text-[10px] ${fragmentFace === "text" ? "bg-primary/15 border-primary/40" : "border-border/30"}`}
+                className={`px-2 py-1 rounded border text-[12px] ${fragmentFace === "text" ? "bg-primary/15 border-primary/40" : "border-border/30"}`}
                 onClick={() => onFragmentFaceChange?.("text")}
               >
-                텍스트 조각
+                {textButtonLabel}
               </button>
               <button
                 type="button"
-                className={`px-2 py-1 rounded border text-[10px] ${fragmentFace === "image" ? "bg-primary/15 border-primary/40" : "border-border/30"}`}
+                className={`px-2 py-1 rounded border text-[12px] ${fragmentFace === "image" ? "bg-primary/15 border-primary/40" : "border-border/30"}`}
                 onClick={() => onFragmentFaceChange?.("image")}
               >
                 이미지 조각
               </button>
-              {compositionLocked ? (
-                <button type="button" className="px-2 py-1 rounded border border-primary/40 text-[10px]" onClick={onReopenComposition}>
-                  조각을 다시 고르기
-                </button>
-              ) : (
-                <button type="button" className="px-2 py-1 rounded bg-primary text-primary-foreground text-[10px]" onClick={onApproveComposition}>
-                  편집으로 가기
-                </button>
+              {showCompositionActions && (
+                compositionLocked ? (
+                  <button type="button" className="px-2 py-1 rounded border border-primary/40 text-[12px]" onClick={onReopenComposition}>
+                    조각을 다시 고르기
+                  </button>
+                ) : (
+                  <button type="button" className="px-2 py-1 rounded bg-primary text-primary-foreground text-[12px]" onClick={onApproveComposition}>
+                    편집으로 가기
+                  </button>
+                )
               )}
             </div>
           )}
         </div>
+        )}
         {modeGateEnabled && compositionNotice && (
-          <div className="px-3 pb-1 text-[10px] text-primary/80">
+          <div className="px-3 pb-1 text-[12px] text-primary/80">
             {compositionNotice}
           </div>
         )}
 
         <div
-          className="flex flex-wrap items-start content-start gap-0.5 px-2 py-1.5 min-h-[160px] pb-8"
+          className={`flex ${modeGateEnabled && fragmentFace === "text" ? "flex-col items-stretch gap-0 min-h-[360px]" : "flex-wrap items-start content-start gap-0.5 min-h-[160px]"} px-2 py-1.5 pb-8 overflow-y-auto`}
           onDragOver={(e) => {
             // 議곌컖 tile ?꾩뿉?쒕뒗 tile??onDragOver媛 泥섎━ ???ш린?쒕뒗 鍮?怨듦컙留?泥섎━
             const target = e.target as HTMLElement;
@@ -387,7 +577,7 @@ const FragmentMap: React.FC<FragmentMapProps> = ({
               if (isOnTile) return;
               try {
                 const frag = JSON.parse(holdData) as Fragment;
-                onSourceRestore?.(frag, fragments.length);
+                onSourceRestore?.(frag, computeDropIndex(e));
               } catch { }
               return;
             }
@@ -402,27 +592,37 @@ const FragmentMap: React.FC<FragmentMapProps> = ({
             onFragmentsChange(newFrags);
           }}
         >
-          {visibleFragments.map(({ fragment: f, realIndex }, visIdx) => {
+          {(modeGateEnabled && fragmentFace === "text" ? transcriptRows : visibleFragments.map(({ fragment, realIndex }, sourceIndex) => ({ fragment, sourceIndex, realIndex, selectedIndex: sourceIndex, selected: true }))).map(({ fragment: f, realIndex, sourceIndex, selectedIndex, selected }, visIdx) => {
             const uid = getUid(f);
             const seam = seamAfterVisible.get(uid);
             const seamKey = seam
               ? `${seam.leftVisibleFragmentId}-${seam.rightVisibleFragmentId}`
               : null;
             const nextVisible = visIdx < visibleFragments.length - 1 ? visibleFragments[visIdx + 1] : null;
+            const fid = (f as any).fragment_id ?? uid;
+            const activeId = activeFragmentId || selectedFragmentId;
+            const fragmentActive = activeId === uid || activeId === fid || activeTextRowId === uid || activeTextRowId === fid;
 
             return (
               <React.Fragment key={(f as any).stable_key || uid}>
 
 
                 <div
-                  draggable={!compositionLocked}
+                  draggable={!compositionLocked && selected}
                   onDragStart={(e) => handleDragStart(e, f)}
                   onDragOver={(e) => handleDragOver(e, realIndex, fragments.length)}
                   onDrop={(e) => handleDrop(e, realIndex)}
                   onDragEnd={handleDragEnd}
-                  className="flex items-stretch relative"
+                  onClick={modeGateEnabled && fragmentFace !== "text" ? () => onFragmentClick(f) : undefined}
+                  onMouseDown={modeGateEnabled && fragmentFace !== "text" ? (e) => {
+                    if ((e.target as HTMLElement).closest("[data-image-play]")) return;
+                    onFragmentClick(f);
+                  } : undefined}
+                  className={`flex items-stretch relative ${modeGateEnabled && fragmentFace === "text" ? "w-full" : ""}`}
                   data-dropzone="fragment-map-item"
                   data-frag-index={realIndex}
+                  data-map-fid={fid}
+                  data-fragment-active={fragmentActive ? "true" : "false"}
                   style={{
                     opacity: draggedId === uid ? 0.4 : f.selection_state === "N" ? 0.35 : 1,
                     filter: f.selection_state === "N" ? "saturate(0.3)" : "none",
@@ -434,39 +634,127 @@ const FragmentMap: React.FC<FragmentMapProps> = ({
                   {visIdx === visibleFragments.length - 1 && dragOverIndex === fragments.length && (
                     <div className="absolute right-0 top-0 bottom-0 w-0.5 bg-primary rounded-full z-50 pointer-events-none" style={{ transform: "translateX(2px)" }} />
                   )}
-                  <div className="relative group/frag flex items-stretch">
+                  <div
+                    className={`relative group group/frag flex items-stretch ${modeGateEnabled && fragmentFace === "text" ? "w-full" : ""}`}
+                    onMouseEnter={() => setHoveredImagePlayId(fid)}
+                    onMouseMove={() => setHoveredImagePlayId(fid)}
+                    onMouseLeave={() => setHoveredImagePlayId((current) => current === fid ? null : current)}
+                  >
                     {modeGateEnabled && fragmentFace === "text" ? (
                       (() => {
-                        const txt = textForCard(f, realIndex);
+                        const txt = textForCard(f, sourceIndex);
                         return (
                       <button
                         type="button"
-                        onClick={() => onFragmentClick(f)}
-                        onDoubleClick={() => onFragmentDoubleClick(f)}
-                        className={`w-[132px] min-h-[82px] text-left rounded border px-2 py-1.5 text-[11px] leading-snug bg-background/60 transition-all ${selectedFragmentId === uid ? "border-primary bg-primary/15 shadow-[0_0_0_2px_rgba(96,165,250,0.35)]" : "border-border/30"}`}
+                        onClick={(e) => {
+                          if (e.detail >= 2) { startTextEdit(f, sourceIndex); return; }
+                          textScope === "selected" ? focusTranscriptFragment(f) : toggleTranscriptFragment(f, selected);
+                        }}
+                        onDoubleClick={() => startTextEdit(f, sourceIndex)}
+                        data-transcript-row="true"
+                        data-transcript-active={fragmentActive ? "true" : "false"}
+                        data-transcript-selected={selected ? "true" : "false"}
+                        data-source-fid={fid}
+                        className={`flex w-full items-center gap-2.5 border-b-[0.5px] border-l-2 px-3 py-[6px] text-left transition-colors ${fragmentActive ? "border-l-primary bg-primary/10" : "border-l-transparent border-border/30"}`}
                       >
-                        {txt.label && <div className="text-[10px] font-black text-primary/80 mb-0.5">{txt.label}</div>}
-                        {txt.stage && <div className="italic text-muted-foreground/80 line-clamp-2">{txt.stage}</div>}
-                        {txt.dialogue && <div className="text-foreground/90 line-clamp-3 mt-0.5">{txt.dialogue}</div>}
-                        {txt.duration && <div className="text-[9px] text-muted-foreground/55 mt-1">{txt.duration}</div>}
+                        <span className="flex h-[18px] w-[18px] flex-none items-center justify-center">
+                          <span
+                            role="button"
+                            aria-label="play fragment"
+                            className={`flex h-4 w-4 items-center justify-center ${fragmentActive || selected ? "text-foreground/80" : "text-muted-foreground/60 hover:text-foreground/80"}`}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onFragmentPlay?.({
+                                ...f,
+                                video_url: (f as any).video_url ?? sourceVideoUrls?.[(f as any).source_id] ?? sourceVideoUrls?.[(f as any).source_video],
+                              } as Fragment);
+                            }}
+                          >
+                            <svg width="15" height="15" viewBox="0 0 24 24" aria-hidden="true">
+                              <path d="M9 7.5 L16.5 12 L9 16.5 Z" fill="currentColor" stroke="currentColor" strokeWidth={2.6} strokeLinejoin="round" strokeLinecap="round" />
+                            </svg>
+                          </span>
+                        </span>
+                        <span className="flex h-[18px] w-[18px] flex-none items-center justify-center">
+                          {selected && (
+                            <span className="flex h-[18px] w-[18px] items-center justify-center rounded-[5px] bg-primary font-mono text-[11px] font-medium leading-none text-primary-foreground">
+                              {selectedIndex + 1}
+                            </span>
+                          )}
+                        </span>
+                        <span className={`w-7 flex-none font-mono text-[12px] font-medium leading-none ${selected ? "text-primary" : "text-secondary-foreground/60"}`}>
+                          {txt.label}
+                        </span>
+                        <span className={`min-w-0 flex-1 whitespace-normal break-words text-[12px] leading-snug ${selected ? "text-foreground" : "text-muted-foreground/60"}`}>
+                          {txt.stage && <span className="italic text-muted-foreground">{txt.stage}</span>}
+                          {txt.stage && txt.dialogue && <span> </span>}
+                          {textEditing?.itemId === (storyTextByFragmentId.get(fid) ?? storyTextItems[sourceIndex])?.timelineItemId ? (
+                            textEditing.chars.map((c, i) => (
+                              <React.Fragment key={i}>
+                                {textEditing.caret === i && <TextCaret />}
+                                <span
+                                  onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); setTextEditing((cur) => cur ? { ...cur, caret: i } : cur); }}
+                                  style={textEditing.inactive.has(i) ? FRAGMENT_EXCLUDED_STYLE : undefined}
+                                >{c.ch === " " ? " " : c.ch}</span>
+                              </React.Fragment>
+                            ))
+                          ) : (storyTextByFragmentId.get(fid) ?? storyTextItems[sourceIndex])?.words?.length ? (
+                            (storyTextByFragmentId.get(fid) ?? storyTextItems[sourceIndex])!.words!.map((w, wi) => (
+                              <span key={wi} style={w.excluded ? FRAGMENT_EXCLUDED_STYLE : undefined}>{w.w}{" "}</span>
+                            ))
+                          ) : (
+                            txt.dialogue && <span>{txt.dialogue}</span>
+                          )}
+                        </span>
+                        {txt.duration && (
+                          <span className="flex-none font-mono text-[11px] text-muted-foreground">
+                            {txt.duration}
+                          </span>
+                        )}
                       </button>
                         );
                       })()
                     ) : (
-                      <FragmentTile
-                        fragment={f}
-                        isSelected={selectedFragmentId === uid}
-                        isHighlighted={false}
-                        isExpanded={expandedFragmentId === uid}
-                        hasActiveSelection={!!selectedFragmentId}
-                        onClick={() => onFragmentClick(f)}
-                        onDoubleClick={() => onFragmentDoubleClick(f)}
-                        onEditFragment={onEditFragment && !compositionLocked ? () => onEditFragment(f) : undefined}
-                        videoPath={sourceVideoUrls?.[(f as any).source_id] ?? null}
-                        compactLabelOnly={modeGateEnabled}
-                        widthScale={0.7}
-                        variant="edit"
-                      />
+                      <>
+                        <FragmentTile
+                          fragment={f}
+                          isSelected={selectedFragmentId === uid}
+                          isHighlighted={fragmentActive}
+                          isExpanded={expandedFragmentId === uid}
+                          hasActiveSelection={!!selectedFragmentId}
+                          onClick={() => onFragmentClick(f)}
+                          onDoubleClick={() => onFragmentDoubleClick(f)}
+                          onEditFragment={onEditFragment && !compositionLocked ? () => onEditFragment(f) : undefined}
+                          videoPath={sourceVideoUrls?.[(f as any).source_id] ?? null}
+                          compactLabelOnly={modeGateEnabled}
+                          widthScale={0.7}
+                          variant="edit"
+                          orderBadge={modeGateEnabled ? selectedIndex + 1 : null}
+                        />
+                        {modeGateEnabled && (
+                          <button
+                            type="button"
+                            data-image-play="true"
+                            className={`absolute left-1/2 bottom-1 z-30 pointer-events-auto -translate-x-1/2 rounded bg-black/60 px-1.5 py-0.5 text-[12px] text-white/90 transition-opacity hover:bg-black/80 ${hoveredImagePlayId === fid ? "opacity-100" : "opacity-0"}`}
+                            onMouseDown={(e) => {
+                              e.stopPropagation();
+                              onFragmentPlay?.({
+                                ...f,
+                                video_url: (f as any).video_url ?? sourceVideoUrls?.[(f as any).source_id] ?? sourceVideoUrls?.[(f as any).source_video],
+                              } as Fragment);
+                            }}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onFragmentPlay?.({
+                                ...f,
+                                video_url: (f as any).video_url ?? sourceVideoUrls?.[(f as any).source_id] ?? sourceVideoUrls?.[(f as any).source_video],
+                              } as Fragment);
+                            }}
+                          >
+                            ▶
+                          </button>
+                        )}
+                      </>
                     )}
                   </div>
 
@@ -488,6 +776,18 @@ const FragmentMap: React.FC<FragmentMapProps> = ({
           })}
         </div>
 
+        {textEditNotice && (
+          <div data-transcript-edit-notice="true" className="px-3 py-1 text-[11px] text-muted-foreground">{textEditNotice}</div>
+        )}
+        {textEditing && (
+          <input
+            ref={hiddenTextInputRef}
+            data-transcript-hidden-editor="true"
+            className="sr-only"
+            onKeyDown={onTextEditKey}
+            onBlur={() => { if (textEditing) void commitTextEdit(); }}
+          />
+        )}
       </div>
     </TooltipProvider>
   );

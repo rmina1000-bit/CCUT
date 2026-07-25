@@ -78,6 +78,7 @@ function physicalClipToFragment(clip: PhysicalClip, sourceLabelMap: Record<strin
 
 interface StoryLedgerItem {
   timeline_item_id: string;
+  fragment_id?: string;
   selected?: boolean;
   play_order?: number;
   removed?: boolean;
@@ -131,9 +132,13 @@ interface CenterPanelProps {
   sourceEntries?: SourceEntry[];
   fragments?: Fragment[];
   exportClips?: PhysicalClip[];
+  modeGateEnabled?: boolean;
   storyPlan?: StoryPlanPreview | null;
   onStoryPlanConfirm?: (plan: StoryPlanPreview) => void;
   onActiveFragmentChange?: (id: string | null) => void;
+  activeFragmentId?: string | null;
+  activeStoryFragmentId?: string | null;
+  storyReplacement?: React.ReactNode;
   programId?: string | null;
   programTitle?: string | null;
   onExportDone?: () => void;
@@ -380,9 +385,13 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
   sourceEntries = [],
   fragments = [],
   exportClips = [],
+  modeGateEnabled,
   storyPlan,
   onStoryPlanConfirm,
   onActiveFragmentChange,
+  activeFragmentId,
+  activeStoryFragmentId: activeStoryFragmentIdProp,
+  storyReplacement,
   programId,
   programTitle,
   onExportDone,
@@ -453,10 +462,15 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
   // 공유 — 우측에서 활성/비활성 바꾸면 storyRefreshNonce/storyViewKey로 여기도 갱신.
   const [activeStoryItems, setActiveStoryItems] = useState<Array<{
     id: string;
+    fragmentId: string;
     label: string;
     dialogue: string;
-    stageDirection: string;
+  stageDirection: string;
   }>>([]);
+  const [activeStoryFragmentId, setActiveStoryFragmentId] = useState<string | null>(null);
+  useEffect(() => {
+    if (activeFragmentId) setActiveStoryFragmentId(activeFragmentId);
+  }, [activeFragmentId]);
   useEffect(() => {
     if (!programId || !centerShowStory || (storyGate.story?.item_count ?? 0) === 0) {
       setActiveStoryItems([]);
@@ -467,20 +481,32 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
       .then((r) => (r.ok ? r.json() : null))
       .then((d: StoryLedgerResponse | null) => {
         if (dead || !d?.ok) return;
-        const rows = (d.items ?? [])
-          .filter((it) => it.selected !== false && !it.removed && !it.missing)
-          .sort((a, b) => (a.play_order ?? Number.MAX_SAFE_INTEGER) - (b.play_order ?? Number.MAX_SAFE_INTEGER))
-          .map((it) => ({
-            id: it.timeline_item_id,
-            label: it.place ? `S· ${it.place}` : (it.source_title ?? it.source_id ?? ""),
-            dialogue: fragmentTranscriptText(it),
-            stageDirection: (it.stage_direction ?? "").trim(),
-          }));
+        const ledgerItems = (d.items ?? []).filter((it) => !it.missing);
+        const ledgerByFragmentId = new Map(ledgerItems.map((it) => [it.fragment_id, it]));
+        const visibleItems = modeGateEnabled && fragments.length > 0
+          ? fragments.map((f: any) => ledgerByFragmentId.get(f.fragment_id)).filter(Boolean) as StoryLedgerItem[]
+          : ledgerItems
+            .filter((it) => it.selected !== false && !it.removed)
+            .sort((a, b) => (a.play_order ?? Number.MAX_SAFE_INTEGER) - (b.play_order ?? Number.MAX_SAFE_INTEGER));
+        const rows = visibleItems
+          .map((it) => {
+            const source = sourceEntries.find((s) => s.source_id === it.source_id);
+            const ordered = source?.fragments ?? [];
+            const idx = ordered.findIndex((f: any) => f.fragment_id === it.fragment_id);
+            const label = source?.label && idx >= 0 ? `${source.label}${idx + 1}` : "";
+            return {
+              id: it.timeline_item_id,
+              fragmentId: String((it as any).fragment_id ?? (it as any).source_fragment_id ?? it.timeline_item_id),
+              label,
+              dialogue: fragmentTranscriptText(it),
+              stageDirection: (it.stage_direction ?? "").trim(),
+            };
+          });
         setActiveStoryItems(rows);
       })
       .catch(() => { if (!dead) setActiveStoryItems([]); });
     return () => { dead = true; };
-  }, [programId, centerShowStory, storyGate.story?.item_count, storyViewKey, storyRefreshNonce]);
+  }, [programId, centerShowStory, storyGate.story?.item_count, storyViewKey, storyRefreshNonce, sourceEntries, modeGateEnabled, fragments]);
   // [UI-①] 업로드 스테이징 (null=비활성)
   const [stagedFiles, setStagedFiles] = useState<StagedMeta[] | null>(null);
   // [PERSON-PALETTE] 이름을 물어볼 얼굴 군집 + 방금 저장한 이름 안내
@@ -1728,7 +1754,7 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
                             <span className="text-[11px] font-medium animate-pulse">듣고 있어요…</span>
                           </div>
                         )}
-                        {item.msg.text}
+                        {String(item.msg.text || "").replace(/\b\d{8}_\d{6}(?:_\d+)?\b/g, "")}
                       </div>
                       {/* [관문D 2026-07-21] 큐원 판단근거(대사·장면·맥락) 얇게 표시 — 없으면 "근거 없음" */}
                       {item.msg.sender === "ai" && (item.msg as any).candidate_evidence && Object.keys((item.msg as any).candidate_evidence).length > 0 && (
@@ -1755,7 +1781,7 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
                       {(item.msg as any).kind === "search_results" && Array.isArray((item.msg as any).results) && (item.msg as any).results.length > 0 && (
                         <SearchResultCards results={(item.msg as any).results} />
                       )}
-                      <span className="text-[10px] text-muted-foreground/40 px-1">{new Date(item.msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                      <span className="text-[12px] text-muted-foreground/40 px-1">{new Date(item.msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
                     </div>
                   </div>
                 </div>
@@ -1809,7 +1835,7 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
                               </div>
                             )}
                           </div>
-                          <span className="text-[10px] text-muted-foreground/40 px-1">{when}</span>
+                          <span className="text-[12px] text-muted-foreground/40 px-1">{when}</span>
                         </div>
                       </div>
                     </div>
@@ -2463,43 +2489,55 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
         const showStory = centerShowStory;
         const storyContent = (
           <div className="w-full max-w-[800px] rounded-2xl border border-white/8 bg-white/[0.02] overflow-hidden">
-            {/* [S5] 2차 집중분석이 끝나도 원고를 자동으로 갈아치우지 않는다 — 알림만. */}
-            {storyGate.hasNewerStory && (
-              <div className="flex items-center gap-3 px-4 py-2.5 text-[12px] border-b border-white/8 bg-primary/5">
-                <span className="text-foreground/70">새 분석 결과가 있습니다.</span>
-                <button type="button"
-                  onClick={() => { storyGate.adoptLatest(); setStoryViewKey((k) => k + 1); }}
-                  className="underline underline-offset-2 text-primary hover:opacity-80">반영하기</button>
-                <span className="ml-auto text-foreground/40">지금 보고 계신 원고는 그대로 둡니다.</span>
-              </div>
-            )}
+            {/* [TRANSCRIPT-POLISH-01] New-story banner is hidden in mode gate view. */}
             {/* [STORY-TRACK-A A-5] 편집기는 우측 조각맵으로 이전. 중앙은 활성 텍스트조각만
                 읽기전용으로 표현한다(스토리 카드). 편집은 여기서 못 한다 — 우측에서. */}
             {(storyGate.story?.item_count ?? 0) > 0 ? (
-              <div className="px-5 py-4 flex flex-col gap-2 max-h-[46vh] overflow-y-auto">
+              <div className="px-5 py-4 flex flex-col gap-2 max-h-[70vh] overflow-y-auto">
                 <div className="flex items-center gap-2 mb-1">
                   <BookOpen size={13} className="text-primary/70" />
-                  <span className="text-[11px] font-bold tracking-wider uppercase text-muted-foreground/60">이야기 (고른 장면)</span>
-                  <span className="ml-auto text-[11px] text-muted-foreground/40">우측 조각맵에서 고르고 빼세요</span>
+                  <span className="text-[12px] font-bold tracking-wider uppercase text-muted-foreground/60">{storyReplacement ? "전사" : "이야기 (고른 장면)"}</span>
+                  <span className="ml-auto text-[12px] text-muted-foreground/40">우측 조각맵에서 고르고 빼세요</span>
                 </div>
-                {activeStoryItems.length > 0 ? (
-                  activeStoryItems.map((it, i) => (
+                {storyReplacement ? (
+                  storyReplacement
+                ) : activeStoryItems.length > 0 ? (
+                  activeStoryItems.map((it, i) => {
+                    const storyRowActive =
+                      activeStoryFragmentId === it.fragmentId ||
+                      activeFragmentId === it.fragmentId ||
+                      activeStoryFragmentIdProp === it.fragmentId;
+                    return (
                     // [#21 잔여] 조각 텍스트 폰트·사이즈를 우측 전사와 완전 동일하게
                     // (FRAGMENT_TEXT_FONT · 15px · leading 1.7). 화면 내 모든 조각 텍스트 동일 폰트.
-                    <div key={it.id} className="flex gap-2.5 text-[15px] leading-[1.7]" style={{ fontFamily: FRAGMENT_TEXT_FONT }}>
-                      <span className="flex-shrink-0 text-[11px] font-mono text-primary/50 mt-0.5">{i + 1}</span>
-                      <div className="min-w-0">
+                    <button
+                      key={it.id}
+                      type="button"
+                      data-story-fragment-row="true"
+                      data-story-fragment-active={storyRowActive ? "true" : "false"}
+                      data-story-fid={it.fragmentId}
+                      onClick={() => {
+                        setActiveStoryFragmentId(it.fragmentId);
+                        onActiveFragmentChange?.(it.fragmentId);
+                      }}
+                      className={`w-full text-left text-[12px] leading-snug rounded px-1.5 py-0.5 transition-colors ${storyRowActive ? "text-white" : "text-muted-foreground/65 hover:text-foreground"}`}
+                      style={{ fontFamily: FRAGMENT_TEXT_FONT }}
+                    >
+                      <span className="inline-flex items-baseline gap-1.5 whitespace-normal break-words">
+                        <span className="text-[12px] font-mono text-primary/50">{i + 1}.</span>
+                        {it.label && <span className="font-black text-primary/80">{it.label}</span>}
                         {it.stageDirection && (
-                          <p className="italic text-foreground/60">{it.stageDirection}</p>
+                          <span className="italic">{it.stageDirection}</span>
                         )}
                         {it.dialogue ? (
-                          <p style={FRAGMENT_TEXT_STYLE}>{it.dialogue}</p>
+                          <span style={FRAGMENT_TEXT_STYLE}>{it.dialogue}</span>
                         ) : !it.stageDirection ? (
-                          <p><span style={FRAGMENT_SILENT_STYLE}>(무음)</span></p>
+                          <span style={FRAGMENT_SILENT_STYLE}>(무음)</span>
                         ) : null}
-                      </div>
-                    </div>
-                  ))
+                      </span>
+                    </button>
+                  );
+                  })
                 ) : (
                   <p className="py-6 text-center text-[13px] text-foreground/40">
                     아직 고른 장면이 없어요. 우측 조각맵에서 원하는 전사를 눌러 담아주세요.
