@@ -119,10 +119,81 @@ def upsert_edit_state(payload):
             "SELECT * FROM fragment_edit_state WHERE program_id=? AND timeline_item_id=?",
             (payload["program_id"], payload["timeline_item_id"])).fetchone()
         if row is None:
+            # ── [MIGRATE-1 M3] 승계 — 같은 조각의 선행 행이 있으면 물려받는다 ──────────
+            #   실사고(2026-07-26 06:31): timeline_item_id 발급식이 신형식(_B_ 제거)으로
+            #   바뀌었는데 이 조회는 timeline_item_id 로만 찾는다. 구형식 행만 있는 조각을
+            #   다시 편집하면 여기서 '행 없음'으로 떨어져 anchor부터 새로 시작했고,
+            #   사용자가 지운 6.46초가 통째로 사라졌다(RESTORE-1에서 복원).
+            #   읽기(재생·EDL)는 parent_fragment_id 로 찾아 구형식 행을 정상 소비한다 —
+            #   갈라진 곳은 읽기가 아니라 이 쓰기 지점 하나뿐이다.
+            _pred, _pred_note = None, None
+            try:
+                _cands = con.execute(
+                    "SELECT * FROM fragment_edit_state WHERE program_id=? AND parent_fragment_id=? "
+                    "AND timeline_item_id<>?",
+                    (payload["program_id"], payload.get("parent_fragment_id"),
+                     payload["timeline_item_id"])).fetchall() if payload.get("parent_fragment_id") else []
+            except sqlite3.OperationalError:
+                _cands = []
+
+            def _has_value(r):
+                try:
+                    exc = json.loads(r["excluded_ranges_json"] or "[]")
+                except Exception:
+                    exc = []
+                return bool(exc) or bool(r["removed"]) or \
+                    r["trim_start_ms"] != r["anchor_start_ms"] or r["trim_end_ms"] != r["anchor_end_ms"]
+
+            _valued = [r for r in _cands if _has_value(r)]
+            if len(_valued) == 1:
+                _pred = _valued[0]
+                _pred_note = "single_valued_predecessor"
+            elif len(_valued) > 1:
+                # 어느 쪽이 진실인지 정할 근거가 없다 — 병합·추측 금지(INV-3). 로그만 남긴다.
+                _pred_note = "UNKNOWN_multiple_valued_predecessors"
+                print(f"[EDIT-STATE][INHERIT][UNKNOWN] 선행 행이 여러 개라 승계하지 않음 "
+                      f"program={payload['program_id']} parent={payload.get('parent_fragment_id')} "
+                      f"candidates={[r['timeline_item_id'] for r in _valued]}")
+            elif _cands:
+                _pred_note = "predecessor_without_value"
+
             esid = payload.get("edit_state_id") or f"ES_{uuid.uuid4().hex[:12].upper()}"
-            before = {"trim_start_ms": payload["anchor_start_ms"], "trim_end_ms": payload["anchor_end_ms"],
-                      "excluded_ranges": [], "removed": False}
-            revision = 1
+            if _pred is not None:
+                # 승계 = "보내지 않은 필드"의 기본값을 선행 행에서 물려받는 것.
+                #   사용자가 이번에 보낸 값은 언제나 이긴다(INV-6) — 키가 있으면 그 값을 쓴다.
+                if "trim_start_ms" not in payload:
+                    canonical["trim_start_ms"] = _pred["trim_start_ms"]
+                if "trim_end_ms" not in payload:
+                    canonical["trim_end_ms"] = _pred["trim_end_ms"]
+                if "excluded_ranges" not in payload:
+                    try:
+                        canonical["excluded_ranges"] = json.loads(_pred["excluded_ranges_json"] or "[]")
+                    except Exception:
+                        pass
+                if "removed" not in payload:
+                    canonical["removed"] = bool(_pred["removed"])
+                before = _row_to_state(_pred)
+                revision = _pred["revision"] + 1
+                # 조용한 소실 금지: 보낸 값이 선행 편집을 잃는다면 사실대로 크게 남긴다.
+                try:
+                    _pred_exc = json.loads(_pred["excluded_ranges_json"] or "[]")
+                except Exception:
+                    _pred_exc = []
+                if _pred_exc and not canonical["excluded_ranges"]:
+                    print(f"[EDIT-STATE][INHERIT][LOSS] 선행 excluded {_pred_exc} 가 이번 저장으로 사라짐 "
+                          f"— 클라이언트가 명시적으로 빈 값을 보냈다. program={payload['program_id']} "
+                          f"parent={payload.get('parent_fragment_id')} from={_pred['timeline_item_id']} "
+                          f"to={payload['timeline_item_id']} origin={payload['origin']} "
+                          f"command={payload['command_type']}")
+                print(f"[EDIT-STATE][INHERIT] {_pred['timeline_item_id']} -> {payload['timeline_item_id']} "
+                       f"rev {_pred['revision']}->{revision} trim=[{canonical['trim_start_ms']},"
+                       f"{canonical['trim_end_ms']}] excluded={canonical['excluded_ranges']} ({_pred_note})")
+            else:
+                before = {"trim_start_ms": payload["anchor_start_ms"], "trim_end_ms": payload["anchor_end_ms"],
+                          "excluded_ranges": [], "removed": False}
+                revision = 1
+            _carried = payload.get("carried_from_item_id") or (
+                _pred["timeline_item_id"] if _pred is not None else None)
             con.execute(
                 """INSERT INTO fragment_edit_state
                    (edit_state_id, schema_version, program_id, timeline_item_id, source_id,
@@ -131,11 +202,15 @@ def upsert_edit_state(payload):
                     created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                 (esid, SCHEMA_VERSION, payload["program_id"], payload["timeline_item_id"],
                  payload["source_id"], canonical["anchor_start_ms"], canonical["anchor_end_ms"],
-                 payload.get("parent_fragment_id"), payload.get("carried_from_item_id"),
+                 payload.get("parent_fragment_id"), _carried,
                  int(payload.get("occurrence", 0)),
                  canonical["trim_start_ms"], canonical["trim_end_ms"],
                  json.dumps(canonical["excluded_ranges"], separators=(",", ":")),
-                 int(canonical["removed"]), revision, payload["origin"], now, now))
+                 int(canonical["removed"]),
+                 revision,
+                 ("MIGRATION" if (_pred is not None and payload["origin"] not in ("MIGRATION",)
+                                  and "excluded_ranges" not in payload) else payload["origin"]),
+                 now, now))
         else:
             # anchor 불변 — 기존 행의 anchor를 절대 덮어쓰지 않는다 (v0.4 §6)
             client_rev = payload.get("revision")
