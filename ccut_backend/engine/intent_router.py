@@ -448,7 +448,22 @@ def route_edit_intent(source_ids=None, input_text="", recent_messages=None,
     if (_re.search(r"보여줘|보여 줘|있나\??|있냐|있어\?|있는지|찾아줘|찾아 줘|찾아봐|불러와|검색해|뭐가 있", t)
             and not _re.search(r"편집|골라줘|골라 줘|만들어|빼줘|빼 줘|줄여|늘려|남겨", t)):
         _person0 = hub.resolve_person_name(t, vocab=person_vocab)
-        if search_lookup is not None:
+        # [SHOW-GUARD 2026-07-26] 조회어만으로는 조회가 아니다 — '무엇을' 찾는지가 있어야 한다.
+        #   실사고: "넌 니 안에 어떤 기능이 있는지 알고 있나?"가 '있는지'·'있나' 두 개에 걸려
+        #   조각 12개를 토해냈다(det 즉답 48ms, 큐원 미호출). '있나?'는 한국어에서 압도적으로
+        #   그냥 의문 어미다("먹었나?", "알고 있나?"). 조회어 + (소재 명사 | 인물)을 함께 요구한다.
+        #   ★위 정규식에서 단어를 빼지 않는다 — 기존 조회 발화는 그대로 산다.
+        #   ★main.py 의문문 가드(:4828)에 show를 넣는 길은 택하지 않았다: 큐원 분류표에
+        #     show 항목이 아예 없어(chat|edit|confirm|retrigger|reset|unclear) 물음표 붙은
+        #     정상 조회("정은한 나오는 조각 있나?")까지 잡담으로 죽는다.
+        _show_subject = bool(
+            _re.search(r"조각|장면|영상|사진|클립|컷|화면|파일|소스|원본|아카이브", t)
+            or _person0)
+        if not _show_subject:
+            print(f"[SHOW-GUARD] 조회어는 있으나 소재(조각·장면·인물)가 없다 "
+                  f"-> 조회 아님, 사다리 계속: {t[:40]}")
+            found = None
+        elif search_lookup is not None:
             found = search_lookup(t, _person0)
         else:
             from engine.fragment_show import search_show

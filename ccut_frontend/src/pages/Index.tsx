@@ -2621,22 +2621,22 @@ const Index: React.FC = () => {
     handleConsultation(text);
   }, [handleConsultation]);
 
-  // [F1 하나의 강물 — SEE FAIL 1 수리] 재생 불가 안내를 지휘부 채팅에 흘린다 (toast 폐지).
-  // 연타 도배 금지: 직전 메시지가 동일 문구면 재전송하지 않는다. storyPlan 부재 시
-  // 최소 골격 생성 (#3 절개분과 동일 규약 — 침묵 화면 금지).
+  // [PLAYNOTICE-JUMP-01] 재생 불가 안내는 **채팅에 쌓지 않는다**.
+  //
+  //  구판은 이 안내를 storyPlan.messages 에 append 했다(F1 — toast 폐지, SEE FAIL 1 수리).
+  //  그런데 messages.length 가 늘면 CenterPanel 의 성장 effect(:698)가 발동하고,
+  //  그 조건이 `chatAtBottomRef.current || isChatNearBottom()` 이라 캐시가 낡은 true 면
+  //  위에서 읽는 중에도 chatEnd 로 scrollIntoView 가 걸린다 → 화면이 위로 확 튄다.
+  //  실측(조사): CenterPanel 전체에서 스크롤을 움직이는 코드는 그 scrollIntoView 2곳뿐이고,
+  //  레이아웃 계열(무대 높이 변화·transform 변경·무대 리마운트)은 전부 브라우저 앵커링이
+  //  흡수해 체감 이동 0px 이었다. 즉 "가끔 튀는" 유일한 방아쇠가 이 append 였다.
+  //  "가끔"인 이유도 여기서 나온다 — 이 안내는 재생할 조각이 없을 때만 발화한다.
+  //
+  //  안내 자체는 없애지 않는다(침묵 화면 금지). 이미 있는 고지 표면(compositionNotice,
+  //  FragmentMap.tsx:529)으로 흘린다 — 새 UI·새 상태를 만들지 않는다. 문구도 마침
+  //  "보류맵에서 조각을 되돌리시면..."이라 그 패널이 가리키는 곳과 같다.
   const handlePlaybackNotice = useCallback((text: string) => {
-    setStoryPlan((prev: any) => {
-      const msgs = prev?.messages ?? [];
-      const last = msgs[msgs.length - 1];
-      if (last?.sender === "ai" && last?.text === text) return prev;
-      const notice = {
-        id: `ai_playback_notice_${Date.now()}`,
-        sender: "ai" as const,
-        text,
-        timestamp: Date.now(),
-      };
-      return { ...(prev ?? { story_plan_id: `STP_${Date.now()}` }), messages: [...msgs, notice] };
-    });
+    setCompositionNotice(text);
   }, []);
 
   const handleRestoreProposalEntry = useCallback((id: string) => {

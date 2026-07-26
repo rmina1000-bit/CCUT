@@ -1103,7 +1103,34 @@ export const useProposalState = (
 
           // Guard A/B existence
           if (!generatedProposals.A || !generatedProposals.B) {
-            console.warn("[CONSULTATION_PROJECT_RESULT] Missing A/B proposals. Keeping existing proposals.");
+            console.warn("[CONSULTATION_PROJECT_RESULT] Missing A/B proposals. Keeping existing proposals.", proposalData);
+            // [SILENCE-1] 실패를 삼키지 않는다.
+            //   구판은 여기서 console.warn 후 그냥 return 했다. 그런데 바로 위에서 사용자에게
+            //   "약 1분 예상 — 끝나면 알려드릴게요"라고 이미 약속한 뒤였다(:1021 ai_working).
+            //   실측(국장 콘솔): proposals=[] 빈 배열이 오면 [] 는 truthy 라서 아래 :1181 의
+            //   정직한 실패 경로를 지나쳐 여기로 떨어지고, 사용자는 영원히 기다리게 된다.
+            //   ★문구는 지어내지 않는다. 백엔드가 message 를 줬으면 그것을 그대로 쓴다.
+            //   없으면 무엇이 안 됐는지 사실만 적는다(추측·위로·"다시 시도" 같은 빈말 금지).
+            const _warnLines = Array.isArray((proposalData as any)?.warnings)
+              ? (proposalData as any).warnings
+                  .map((w: any) => (typeof w === "string" ? w : (w?.message || w?.reason)))
+                  .filter(Boolean)
+              : [];
+            const _backendMsg = (proposalData as any)?.message
+              || (_warnLines.length ? _warnLines.join(" / ") : null);
+            const _got = Object.keys(generatedProposals).join("·") || "없음";
+            const _failText = _backendMsg
+              ? String(_backendMsg)
+              : `제안을 만들지 못했습니다 — 서버가 A·B 두 안을 돌려주지 않았습니다 (받은 안: ${_got}, 응답 상태: ${(proposalData as any)?.status ?? "없음"}). 이전 제안은 그대로 두었습니다.`;
+            setStoryPlan((prev: any) => prev ? {
+              ...prev,
+              messages: [...(prev.messages ?? []), {
+                id: `ai_fail_${Date.now()}`,
+                sender: "ai",
+                text: _failText,
+                timestamp: Date.now(),
+              }],
+            } : prev);
             return;
           }
 
