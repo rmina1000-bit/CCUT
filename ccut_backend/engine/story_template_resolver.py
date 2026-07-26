@@ -59,6 +59,84 @@ def has_veto(results) -> bool:
     return any(r.get("verdict") == VERDICT_VIOLATION for r in results)
 
 
+def _check_edit_state_no_shadow(ctx):
+    """[RESTORE-1 S4] RULE_EDIT_STATE_NO_SHADOW — 빈 행이 편집 행을 가리고 있는가.
+
+    실사고(2026-07-26 06:31): timeline_item_id 에서 제안식별자(_B_)를 떼는 이관이
+    한 조각에만 실행되면서, 같은 조각에 rev=1·excluded=[] 인 새 행이 생겼다.
+    선택식이 '선호 item id 우선'이라 그 빈 행이 rev=13 편집 행을 가렸고,
+    사용자가 지운 6.46초가 재생·미리보기·export 어디에도 반영되지 않았다.
+    이 규칙은 그 형상을 데이터에서 직접 찾는다 — 로그 전용(Veto 없음, 데이터 문제다).
+    """
+    import json as _json
+    import os as _os
+    import sqlite3 as _sq
+    prog = ctx.get("program_id")
+    db = _os.path.join(_os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))), "ccut_app.db")
+    try:
+        con = _sq.connect("file:" + db + "?mode=ro", uri=True)
+        con.row_factory = _sq.Row
+    except Exception as e:
+        return {"verdict": VERDICT_UNKNOWN, "measured": None, "threshold": "no shadowing row",
+                "detail": f"DB 열기 실패: {e}"}
+    try:
+        q = "SELECT rowid,* FROM fragment_edit_state"
+        args = ()
+        if prog:
+            q += " WHERE program_id=?"
+            args = (prog,)
+        rows = con.execute(q, args).fetchall()
+    except _sq.OperationalError as e:
+        con.close()
+        return {"verdict": VERDICT_UNKNOWN, "measured": None, "threshold": "no shadowing row",
+                "detail": f"테이블 없음: {e}"}
+    finally:
+        try:
+            con.close()
+        except Exception:
+            pass
+    if not rows:
+        return {"verdict": VERDICT_NA, "measured": {"rows": 0}, "threshold": "no shadowing row",
+                "detail": "편집 상태 행 없음"}
+
+    def _empty(r):
+        try:
+            return _json.loads(r["excluded_ranges_json"] or "[]") == []
+        except Exception:
+            return False
+
+    groups = {}
+    for r in rows:
+        groups.setdefault((r["program_id"], r["parent_fragment_id"]), []).append(r)
+    shadows = []
+    for (pg, fid), rs in groups.items():
+        if len(rs) < 2:
+            continue
+        # 선택식(프론트·ledger 공통): 선호 item id = ITEM_{hash6(program)}_{fid}_0
+        h = 5381
+        for ch in pg or "":
+            h = ((h << 5) + h + ord(ch)) & 0xFFFFFFFF
+        want = "ITEM_%s_%s_0" % (format(h, "x").rjust(6, "0")[-6:], fid)
+        chosen = next((r for r in rs if r["timeline_item_id"] == want), rs[0])
+        hidden = [r for r in rs if r["rowid"] != chosen["rowid"] and not _empty(r)]
+        if _empty(chosen) and hidden:
+            shadows.append({
+                "program_id": pg, "parent_fragment_id": fid,
+                "chosen": {"rowid": chosen["rowid"], "item": chosen["timeline_item_id"],
+                           "rev": chosen["revision"], "excluded": chosen["excluded_ranges_json"]},
+                "hidden": [{"rowid": r["rowid"], "item": r["timeline_item_id"], "rev": r["revision"],
+                            "excluded": r["excluded_ranges_json"]} for r in hidden],
+            })
+    return {"verdict": VERDICT_PASS if not shadows else VERDICT_VIOLATION,
+            "measured": {"groups": len(groups), "rows": len(rows), "shadowed": shadows},
+            "threshold": "선택된 행이 비어 있고 가려진 행이 편집을 보유하면 VIOLATION",
+            "detail": "가려진 편집 없음" if not shadows
+                      else "빈 행이 편집 행을 가리는 중 — 사용자 편집이 산출물에 반영되지 않는다"}
+
+
+register_rule_check("RULE_EDIT_STATE_NO_SHADOW", _check_edit_state_no_shadow)
+
+
 class StoryTemplateResolver:
     """Resolves User Intent into specific Story Templates and Editing Techniques."""
 
