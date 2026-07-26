@@ -133,6 +133,12 @@ def _revision_reply(rev):
     return f"네, {where} '{rev['theme']}' 조각을 빼겠습니다."
 
 
+# [MIRROR-FIX-1] facts 블록(:177-188)이 수첩이 있을 때만 덧붙이는 읽기 지시문.
+#   자유대화 프롬프트에서 수첩 줄을 들어낼 때 이 지시문도 함께 들어내야
+#   "없는 블록을 읽어라"가 남지 않는다. ★블록 원문은 수정 금지라 여기서 참조만 한다.
+_MIRROR_READ_CLAUSE = " [수첩 요약]은 mirror_ledger의 pass/correction 집계값으로만 읽어라.\n"
+
+
 def _mirror_summary_fact(project_id):
     project_id = str(project_id or "").strip()
     if not project_id:
@@ -186,6 +192,22 @@ def _llm_understand(input_text, recent_messages=None, source_ids=None,
         )
     facts = (f"[지금] {now.year}년 {now.month}월 {now.day}일 {weekday}요일 "
              f"{now.strftime('%H:%M')}\n" + work_line + mirror_line + fact_rule)
+    # [MIRROR-FIX-1 R4(2)] 자유대화 프롬프트에서는 수첩을 뺀다.
+    #   판정 근거(R2-4 실측): 프롬프트 어디에도 큐원이 수첩으로 무엇을 하라는 지시가 없다.
+    #     유일한 언급이 "…집계값으로만 읽어라"(읽는 법)뿐이라 대화에서 이 값으로
+    #     달라질 행동이 없다. 남으면 편집 쪽으로 끄는 앵커로만 작동한다.
+    #   ★뺐을 때 달라지는 것: 잡담 중 "내가 몇 번 되돌렸지?" 같은 질문에 큐원이
+    #     수첩으로 답하지 못하고 모른다고 한다. 분류 프롬프트에는 그대로 남으므로
+    #     편집 맥락의 판단에는 영향이 없다.
+    #   ★facts 블록(:177-188) 문구는 건드리지 않는다 — 조립된 결과에서 수첩 줄만 들어낸다.
+    facts_chat = facts
+    if mirror_line:
+        facts_chat = facts_chat.replace(mirror_line, "")
+        if _MIRROR_READ_CLAUSE in facts_chat:
+            facts_chat = facts_chat.replace(_MIRROR_READ_CLAUSE, "\n")
+        else:
+            print("[MIRROR-FIX-1][WARN] 수첩 읽기 지시문을 못 찾음 — "
+                  "facts 문구가 바뀌었는지 확인 필요(대화 프롬프트에 지시문만 남음)")
     prompt = (
         "너는 CCUT — 영상 편집 스튜디오의 다정한 동료다. 사용자와 자연스럽게 대화하고, "
         "사용자의 말이 편집 지시일 때만 편집 접수로 처리한다.\n"
@@ -273,11 +295,11 @@ def _llm_understand(input_text, recent_messages=None, source_ids=None,
         if defer_chat:
             r = _resp("answer_only", "", confidence=0.85, via="qwen",
                       matched={"kind": "free_chat"})
-            r["_stream_chat"] = {"facts": facts}
+            r["_stream_chat"] = {"facts": facts_chat}   # [MIRROR-FIX-1] 대화엔 수첩 없음
             return r
         # [대화 품질 2026-07-06] 분류(temp 0)와 대화(temp 0.7)를 분리 — 분류 초안 답 대신
         # 대화 전용 프롬프트(화제 이탈 금지·실시간 정보 아는 척 금지)로 최종 답을 만든다.
-        talk = _llm_smalltalk(input_text, recent_messages, facts=facts)
+        talk = _llm_smalltalk(input_text, recent_messages, facts=facts_chat)
         return _resp("answer_only",
                      talk or reply or "네, 듣고 있어요. 편하게 이야기해 주세요.",
                      confidence=0.85, via="qwen", matched={"kind": "free_chat"})

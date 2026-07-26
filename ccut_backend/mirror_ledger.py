@@ -20,6 +20,60 @@ ALLOWED_EVENT_KINDS = {"accept", "undo", "edit_again", "continue"}
 ALLOWED_VERDICTS = {"pass", "correction"}
 ALLOWED_BASES = {"accept", "undo", "edit_again", "continue", "elapsed_time_threshold"}
 
+# ══════════════════════════════════════════════════════════════════════════
+#  [MIRROR-FIX-1 2026-07-26] 시계는 사용자 행동이 아니다.
+#    국장 원칙(2026-07-22): "거울은 사용자 행동. 엔진이 사실만 기록. 큐원은 읽기만."
+#    실사고: proj_f6be58f81e4f 의 수첩 1행이
+#      {event_kind:continue, verdict:correction, basis:elapsed_time_threshold,
+#       elapsed_ms:5512732(=1시간 32분)}
+#    이었고 그 1행이 correction_rate=1.000 으로 매 발화 프롬프트에 주입됐다.
+#    사용자가 무엇을 고친 것이 아니라 자리를 비운 것이다.
+#
+#    원인(프론트 mirrorEventLog.ts:143-167 verdictFor):
+#      :145 undo/edit_again        -> correction   (사용자 행동)
+#      :152 elapsed >= 10분        -> correction   ★시계 — 아래 분기보다 먼저 온다
+#      :159 accept/continue        -> pass         (사용자 행동)
+#    시계 분기가 사용자 행동 분기를 **선점**해서, 10분 넘겨 누른 승인(accept)·
+#    이어가기(continue)가 전부 "교정"으로 기록됐다. 실측 4/4 건이 이 형상이다.
+#
+#    ★판정 주체가 프론트라 근본 수리는 프론트지만 이번 차수 수정 금지 파일이다.
+#      엔진 경계에서 막는다 — 사실(elapsed_ms)은 그대로 남기고 해석만 바로잡는다.
+#    ★새 verdict 값(neutral/none)은 물리적으로 불가능하다. 실제 스키마가
+#      verdict TEXT NOT NULL CHECK(verdict IN ('pass','correction')) 이라
+#      제3의 값은 테이블 재생성을 요구한다(INV-5 위반). 그래서 새 값을 만들지 않고,
+#      시계 분기를 걷어냈을 때 저 코드가 **원래 주었을 값**으로 환산한다.
+# ══════════════════════════════════════════════════════════════════════════
+CLOCK_BASES = {"elapsed_time_threshold"}
+
+
+def normalize_verdict(event_kind, verdict, verdict_basis):
+    """시계가 찍은 판정을 사용자 행동 기준으로 환산. 반환 (verdict, basis, changed).
+
+    ★시계 근거가 아니면 손대지 않는다. 판정 불가한 event_kind 도 손대지 않는다(INV-3).
+    """
+    if verdict_basis not in CLOCK_BASES:
+        return verdict, verdict_basis, False
+    if event_kind in ("undo", "edit_again"):
+        return "correction", event_kind, True      # mirrorEventLog.ts:145-150
+    if event_kind in ("accept", "continue"):
+        return "pass", event_kind, True            # mirrorEventLog.ts:159-164
+    return verdict, verdict_basis, False
+
+
+# 읽기 집계용 SQL — 저장된 행은 건드리지 않고(INV-2) 집계 순간에만 환산한다.
+_EFFECTIVE_VERDICT_SQL = (
+    "CASE WHEN verdict_basis='elapsed_time_threshold' THEN "
+    " CASE WHEN event_kind IN ('accept','continue') THEN 'pass' "
+    "      WHEN event_kind IN ('undo','edit_again') THEN 'correction' "
+    "      ELSE verdict END "
+    "ELSE verdict END"
+)
+_EFFECTIVE_BASIS_SQL = (
+    "CASE WHEN verdict_basis='elapsed_time_threshold' "
+    " AND event_kind IN ('accept','continue','undo','edit_again') "
+    "THEN event_kind ELSE verdict_basis END"
+)
+
 DDL_SQL = f"""
 CREATE TABLE IF NOT EXISTS {TABLE} (
     mirror_event_id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -117,6 +171,16 @@ def _validate(payload: MirrorEventPayload):
     if payload.elapsed_ms is not None:
         if not isinstance(payload.elapsed_ms, int) or isinstance(payload.elapsed_ms, bool) or payload.elapsed_ms < 0:
             raise MirrorLedgerError("format_violation", f"elapsed_ms must be non-negative integer: {payload.elapsed_ms!r}")
+
+    # [MIRROR-FIX-1] 쓰기 경계 — 시계가 찍은 판정은 들이지 않는다.
+    #   ★이벤트를 버리는 것이 아니다. 사실(event_kind·elapsed_ms·ts)은 전부 그대로 저장하고
+    #    해석(verdict)만 사용자 행동 기준으로 바로잡는다. 조용히 바꾸지 않는다 — raw 로 남긴다.
+    _v, _b, _changed = normalize_verdict(event_kind, verdict, verdict_basis)
+    if _changed:
+        print(f"[MIRROR-FIX-1][쓰기환산] project_id={project_id} event_kind={event_kind} "
+              f"{verdict}:{verdict_basis} -> {_v}:{_b} elapsed_ms={payload.elapsed_ms} "
+              f"(시계는 사용자 행동이 아니다)")
+        verdict, verdict_basis = _v, _b
 
     return {
         "project_id": project_id,
@@ -251,8 +315,8 @@ def summarize_project(project_id: str, recent_limit: int = 5, max_events=None,
         row = con.execute(
             f"""SELECT
                     COUNT(*) AS total_count,
-                    SUM(CASE WHEN verdict='pass' THEN 1 ELSE 0 END) AS pass_count,
-                    SUM(CASE WHEN verdict='correction' THEN 1 ELSE 0 END) AS correction_count,
+                    SUM(CASE WHEN ({_EFFECTIVE_VERDICT_SQL})='pass' THEN 1 ELSE 0 END) AS pass_count,
+                    SUM(CASE WHEN ({_EFFECTIVE_VERDICT_SQL})='correction' THEN 1 ELSE 0 END) AS correction_count,
                     SUM(CASE WHEN event_kind='accept' THEN 1 ELSE 0 END) AS accept_count,
                     SUM(CASE WHEN event_kind='undo' THEN 1 ELSE 0 END) AS undo_count,
                     SUM(CASE WHEN event_kind='edit_again' THEN 1 ELSE 0 END) AS edit_again_count,
@@ -265,7 +329,8 @@ def summarize_project(project_id: str, recent_limit: int = 5, max_events=None,
         correction_count = int((row or {})["correction_count"] or 0)
         undo_count = int((row or {})["undo_count"] or 0)
         recent_rows = con.execute(
-            f"""SELECT verdict, verdict_basis
+            f"""SELECT ({_EFFECTIVE_VERDICT_SQL}) AS verdict,
+                       ({_EFFECTIVE_BASIS_SQL}) AS verdict_basis
                 FROM ({scoped_sql})
                 ORDER BY ts DESC, mirror_event_id DESC
                 LIMIT ?""",
@@ -305,25 +370,22 @@ def format_summary_fact_line(summary):
     if total_count <= 0:
         return ""
     recent = ",".join((summary or {}).get("recent_verdicts") or []) or "none"
-    ledger_total = int((summary or {}).get("ledger_total_count") or total_count)
-    omitted_count = int((summary or {}).get("omitted_count") or 0)
-    summary_limit = int((summary or {}).get("summary_event_limit") or DEFAULT_SUMMARY_EVENT_LIMIT)
+    # [MIRROR-FIX-1 R4(2)] 큐원이 쓸 수 없는 필드를 뺀다.
+    #   기준(지시서 R3-3): "큐원이 그 값으로 실제로 다르게 행동할 수 있는 것만 남긴다."
+    #   ★R2(4) 실측: 프롬프트 어디에도 큐원에게 수첩으로 무엇을 하라는 지시가 없다.
+    #    유일한 언급이 "[수첩 요약]은 pass/correction 집계값으로만 읽어라"(읽는 법)뿐이라
+    #    엄밀히는 전 필드가 뺄 후보다. 수첩 기능 폐지는 이번 범위가 아니므로
+    #    사용자 행동 집계만 남기고 DB 내부 지표는 전부 뺀다.
+    #   뺀 것 — project_id(내부 식별자) / ledger_total·omitted·summary_limit(페이징 내부값)
+    #           / accept·undo·edit_again·continue(pass·correction 과 중복)
+    #           / pass_rate·undo_rate(total·pass·correction 에서 파생)
+    #   ★해석문으로 바꾸지 않는다 — key=value 데이터 형식 그대로 유지한다.
     return (
-        "[수첩 요약] mirror_ledger "
-        f"project_id={(summary or {}).get('project_id')} "
-        f"ledger_total={ledger_total} "
+        "[수첩 요약] "
         f"total={total_count} "
-        f"omitted={omitted_count} "
-        f"summary_limit={summary_limit} "
         f"pass={(summary or {}).get('pass_count', 0)} "
         f"correction={(summary or {}).get('correction_count', 0)} "
-        f"accept={(summary or {}).get('accept_count', 0)} "
-        f"undo={(summary or {}).get('undo_count', 0)} "
-        f"edit_again={(summary or {}).get('edit_again_count', 0)} "
-        f"continue={(summary or {}).get('continue_count', 0)} "
-        f"pass_rate={(summary or {}).get('pass_rate', 0.0):.3f} "
         f"correction_rate={(summary or {}).get('correction_rate', 0.0):.3f} "
-        f"undo_rate={(summary or {}).get('undo_rate', 0.0):.3f} "
         f"recent_verdicts={recent}"
     )
 
