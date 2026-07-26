@@ -364,6 +364,62 @@ def extract_motion_curve(video_path: str, duration_sec: float,
     return sorted(out, key=lambda x: x["t"])
 
 
+def motion_scores_for_spans(video_path: str, duration_sec: float, spans: list,
+                            fps_sample: float = 2.0, curve: list = None) -> list:
+    """[SIGNAL-WAKE-1] 구간별 모션 점수 = extract_motion_curve 샘플의 구간 평균.
+
+    생산함수(extract_motion_curve)·저장컬럼(evidence_board.motion_score)·
+    소비처(proposal_engine:211)는 이미 있었고 배선만 끊겨 있었다(256/256 전부 0).
+    새 모델·새 테이블 없이 기존 곡선을 구간으로 접기만 한다.
+
+    spans: [(start_sec, end_sec), ...]
+    반환: [float | None, ...] — 구간에 샘플이 없으면 None ("모른다"를 0으로 위장하지 않는다)
+    """
+    c = curve if curve is not None else extract_motion_curve(video_path, duration_sec, fps_sample)
+    out = []
+    for s, e in spans:
+        vals = [p["score"] for p in c if s <= p["t"] < e]
+        out.append(round(sum(vals) / len(vals), 6) if vals else None)
+    return out
+
+
+def beat_times(video_path: str, duration_sec: float = None) -> list:
+    """[SIGNAL-WAKE-1] 오디오 비트 시각(초). 기존 설치 자산(librosa)만 사용 — 새 모델 없음.
+
+    실패·무음·librosa 부재면 빈 리스트를 그대로 반환한다(없는 걸 있다고 하지 않는다).
+    """
+    import subprocess, tempfile, os
+    tmp = None
+    try:
+        import librosa
+    except Exception as e:
+        print(f"[BEAT] librosa 없음 — 건너뜀: {e}")
+        return []
+    try:
+        fd, tmp = tempfile.mkstemp(suffix=".wav")
+        os.close(fd)
+        cmd = ["ffmpeg", "-y", "-loglevel", "error", "-i", video_path,
+               "-vn", "-ac", "1", "-ar", "22050", tmp]
+        subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                       timeout=max(120, int((duration_sec or 60) * 2)))
+        if not os.path.exists(tmp) or os.path.getsize(tmp) == 0:
+            return []
+        y, sr = librosa.load(tmp, sr=22050, mono=True)
+        if y is None or len(y) == 0:
+            return []
+        _tempo, frames = librosa.beat.beat_track(y=y, sr=sr, units="frames")
+        return [round(float(t), 3) for t in librosa.frames_to_time(frames, sr=sr)]
+    except Exception as e:
+        print(f"[BEAT] 추출 실패 (무시): {e}")
+        return []
+    finally:
+        if tmp and os.path.exists(tmp):
+            try:
+                os.remove(tmp)
+            except Exception:
+                pass
+
+
 def find_motion_inflections(curve: list, min_gap_sec: float = 3.0,
                             smooth_window: int = 4,
                             k_smooth: float = 1.0,

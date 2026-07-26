@@ -1030,6 +1030,39 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
     [previewUrlB, getVideoUrlForProposal, videoUrl, proposals, isProposalEmpty]
   );
 
+  // ── [PUNCH-1 R1] 펀치인 = 화면 변환. 재생 경로에도 같은 진실을 건다 ──────────────
+  //   확정된 안은 previewUrl이 null이라(위 1015행) 렌더된 mp4를 쓰지 않는다.
+  //   그래서 백엔드 ffmpeg 줌이 화면에 도달하지 못했다(국장 "차이를 모르겠다").
+  //   좌표를 새로 만들지 않고 백엔드 punch_spec(진실 하나)을 그대로 받아 CSS로 건다.
+  const [punchSpecs, setPunchSpecs] = useState<Record<string, { at: number; zoom: number; basis: string }>>({});
+  const [punchRampSec, setPunchRampSec] = useState(0.12);
+  const [punchScaleA, setPunchScaleA] = useState(1);
+  useEffect(() => {
+    if (!programId) return;
+    let dead = false;
+    (async () => {
+      try {
+        const r = await fetch(`${videoService.API_BASE_URL}/punch/${programId}`).then((x) => x.json());
+        if (dead || !r?.ok) return;
+        setPunchSpecs(r.specs || {});
+        if (typeof r.ramp_sec === "number") setPunchRampSec(r.ramp_sec);
+        console.log("[PUNCH] specs 수신", { count: r.count, approval_id: r.approval_id, mode_technique: r.mode_technique });
+      } catch (e) {
+        console.log("[PUNCH] specs 수신 실패 (비차단)", e);
+      }
+    })();
+    return () => { dead = true; };
+  }, [programId]);
+  /** A(punch_in)만 확대한다. B(as_is)는 항상 1배 — 여기가 A/B가 갈리는 유일한 지점. */
+  const applyPunchA = useCallback((curTimeSec: number) => {
+    const frag: any = seqFragsARef.current?.[seqIdxARef.current];
+    const spec = frag ? punchSpecs[String(frag.fragment_id ?? "")] : undefined;
+    const next = spec && curTimeSec >= spec.at ? spec.zoom : 1;
+    setPunchScaleA((prev) => (prev === next ? prev : next));
+  }, [punchSpecs]);
+  // 재생이 끝나면 원래 배율로 — 확대된 채 멈춰 있으면 다음 재생의 첫 조각이 오염된다.
+  useEffect(() => { if (!isPlayingA) setPunchScaleA(1); }, [isPlayingA]);
+
   /**
    * [SEQFRAGS-INV-01 2번] 타일 1개 -> 재생 항목 N개 전개. **해석과 시퀀스 구성의 분리 중 '전개' 축**.
    *   조각은 자동 분할되지 않는다(헌장 §6) — 타일은 계속 1개다. 다만 내부 제외(중간삭제)가 있으면
@@ -2216,7 +2249,13 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
                 <>
                   <video
                     ref={videoRefA}
-                    style={{ opacity: isSrcLoadingA ? 0 : 1, transition: 'opacity 0.05s' }}
+                    style={{
+                      opacity: isSrcLoadingA ? 0 : 1,
+                      // [PUNCH-1 R1] A = punch_in. 배율·시각은 백엔드 punch_spec 그대로.
+                      transform: `scale(${punchScaleA})`,
+                      transformOrigin: 'center center',
+                      transition: `opacity 0.05s, transform ${punchRampSec}s linear`,
+                    }}
                     src={playerSrcA ?? playerVideoUrlA ?? undefined}
                     poster={getProposalPoster("A")}
                     className="w-full h-full object-contain bg-black"
@@ -2284,6 +2323,8 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
                         const global = seqElapsedSecARef.current + Math.max(0, v.currentTime - fragStart);
                         setProposalTimeA(global);
                       }
+                      // [PUNCH-1 R1] v.currentTime은 소스 절대초 — punch_spec.at과 같은 좌표계다.
+                      applyPunchA(v.currentTime);
 
                       // [R2] 경계 판정 본체는 rAF 루프(startBoundaryWatch)가 담당 (≈16ms 정밀).
                       // 여기는 백그라운드 탭(브라우저가 rAF 정지) 전용 백스톱 — 동일 처리부 공유,

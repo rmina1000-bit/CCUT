@@ -12,6 +12,23 @@
       "best_for": ["all"]
     },
     {
+      "technique_id": "punch_in",
+      "display_name": "펀치인 (강조 확대)",
+      "category": "framing",
+      "origin_model": ["broadcast"],
+      "description": "조각 안 강조 지점(첫 말 또는 첫 비트)에서 화면을 확대해 시선을 모은다. 조각 경계·순서·대사는 건드리지 않는다.",
+      "required_signals": ["word_timestamps", "audio_beat", "motion_vector"],
+      "engine_effect": { "zoom_min": 1.10, "zoom_max": 1.15, "ramp_sec": 0.25 },
+      "hard_bounds": {
+        "zoom_max_allowed": 2.50,
+        "zoom_min_allowed": 1.02,
+        "ramp_min_sec": 0.08,
+        "_origin": "PROVISIONAL · 국장 판정 대기. 기법이 요청하는 값(engine_effect)과 분리된 상한이라야 규칙이 반증 가능해진다. 근거: PUNCH-1 검증용 최대 2.20이 국장 화면 PASS를 받았으므로 그 값은 허용되어야 하고 그 위 여유 0.30. 업계 표준 출처 없음 — 줌 배율 상한을 규정한 방송 규격을 우리 자산에서 찾지 못했다."
+      },
+      "failure_check": "punch_without_evidence",
+      "best_for": ["people_focus", "highlights"]
+    },
+    {
       "technique_id": "sentence_boundary_cut",
       "display_name": "문장 단위 컷팅",
       "category": "cutting",

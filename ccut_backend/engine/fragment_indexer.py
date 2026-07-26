@@ -145,9 +145,49 @@ def load_semantic_fragment_rows(con, source_filter=None):
             "role": stru.get("role"),
             "hook_score": float(hook_score or 0.0),
             "transcript": transcript,
-            "motion_score": 0.0, "keyframe": None,
+            # [PUNCH-1 P1] 상수 0.0 제거 — "모른다"를 0으로 위장하지 않는다(INV-4).
+            #   아래 _inject_motion_scores가 SF 조각 경계로 실측해 채우고, 실패하면 NULL로 남는다.
+            #   구판은 여기 0.0이 박혀 670/670이 0이었고 재인덱싱이 그 0을 계속 되밀었다.
+            "motion_score": None, "keyframe": None,
         }
+    _inject_motion_scores(con, rows)
     return rows
+
+
+def _inject_motion_scores(con, rows):
+    """[PUNCH-1 P1] SF 조각 경계로 motion을 실측해 주입 (소스당 곡선 1회 추출).
+
+    VF(evidence_board) 경유는 청크 1개 값이 여러 조각에 복사돼 분별력이 없었다
+    (SIGNAL-WAKE-2 X1: 같은 VF 안 두 조각이 SAME). 여기서는 조각 경계로 직접 접는다.
+    곡선 추출 실패·구간 샘플 0이면 None을 그대로 둔다 — 0 위장 금지(INV-4).
+    """
+    from collections import defaultdict
+    try:
+        from engine.signal_processor import extract_motion_curve, motion_scores_for_spans
+    except Exception as e:
+        print(f"[INDEXER][MOTION] signal_processor 로드 실패 — motion NULL 유지: {e}")
+        return
+    by_src = defaultdict(list)
+    for fid, r in rows.items():
+        by_src[r["source_id"]].append(fid)
+    for sid, fids in by_src.items():
+        path = source_video_path(con, sid)
+        if not path:
+            print(f"[INDEXER][MOTION] {sid}: 원본 없음 — motion NULL 유지 ({len(fids)}조각)")
+            continue
+        fids.sort(key=lambda f: rows[f]["start"])
+        spans = [(rows[f]["start"], rows[f]["end"]) for f in fids]
+        dur = max((e for _, e in spans), default=0.0)
+        try:
+            curve = extract_motion_curve(path, dur)
+            vals = motion_scores_for_spans(path, dur, spans, curve=curve)
+        except Exception as e:
+            print(f"[INDEXER][MOTION] {sid}: 추출 실패 — motion NULL 유지: {e}")
+            continue
+        n_null = sum(1 for v in vals if v is None)
+        for f, v in zip(fids, vals):
+            rows[f]["motion_score"] = v
+        print(f"[INDEXER][MOTION] {sid}: {len(fids)}조각 채움 (NULL {n_null}, curve {len(curve)} samples)")
 
 
 def ensure_places_schema(con):

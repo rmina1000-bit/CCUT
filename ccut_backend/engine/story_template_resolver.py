@@ -5,6 +5,60 @@ from typing import Dict, Any, Optional, List
 
 logger = logging.getLogger(__name__)
 
+# ══════════════════════════════════════════════════════════════════════════
+#  [RULE-1] 하드룰 집행기 — 적재만 하고 집행하지 않던 구조를 끊는다.
+#    실측(RULE-1 R1): production_hard_rules.json 12개는 로드되어 id 목록만 통과했고
+#    ccut_enforcement_point 를 역참조하는 코드가 없어 집행 0/12였다.
+#    여기서 rule_id ↔ 검사 함수를 잇고, 위반이면 그 기법을 적용하지 않는다(Veto).
+# ══════════════════════════════════════════════════════════════════════════
+VERDICT_PASS = "PASS"
+VERDICT_VIOLATION = "VIOLATION"
+VERDICT_NA = "NOT_APPLICABLE"
+VERDICT_UNKNOWN = "UNKNOWN"
+
+_RULE_CHECKS = {}
+
+
+def register_rule_check(rule_id: str, fn):
+    """rule_id 별 검사 함수 등록. fn(context) -> {verdict, measured, threshold, detail}"""
+    _RULE_CHECKS[rule_id] = fn
+    return fn
+
+
+def registered_rule_ids():
+    return sorted(_RULE_CHECKS)
+
+
+def check_rules(context: Dict[str, Any], rule_ids=None):
+    """규칙 검사. 신호가 없어 검사 못 한 것은 PASS가 아니라 UNKNOWN이다.
+
+    조용한 통과 금지 — 판정·실측값·임계값을 전부 raw 로그로 남긴다.
+    """
+    out = []
+    for rid in (rule_ids or sorted(_RULE_CHECKS)):
+        fn = _RULE_CHECKS.get(rid)
+        if fn is None:
+            r = {"verdict": VERDICT_UNKNOWN, "measured": None, "threshold": None,
+                 "detail": "검사 함수 미등록 — 적재만 됨"}
+        else:
+            try:
+                r = fn(context) or {}
+            except Exception as e:
+                r = {"verdict": VERDICT_UNKNOWN, "measured": None, "threshold": None,
+                     "detail": f"검사 실패: {e}"}
+        r.setdefault("verdict", VERDICT_UNKNOWN)
+        r["rule_id"] = rid
+        out.append(r)
+        print(f"[RULE][{rid}] {r['verdict']} measured={r.get('measured')} "
+              f"threshold={r.get('threshold')} {r.get('detail') or ''}")
+    return out
+
+
+def has_veto(results) -> bool:
+    """required 규칙 위반이 하나라도 있으면 기법을 적용하지 않는다."""
+    return any(r.get("verdict") == VERDICT_VIOLATION for r in results)
+
+
 class StoryTemplateResolver:
     """Resolves User Intent into specific Story Templates and Editing Techniques."""
 

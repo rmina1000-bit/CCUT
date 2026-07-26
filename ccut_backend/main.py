@@ -1172,26 +1172,51 @@ def _background_signal_analysis(source_id: str, video_path: str, fragments: list
     """
     from engine.signal_processor import SignalProcessor
     print(f"[SIGNAL BG] Analysis STARTED for source_id={source_id}")
-    
+
     sp = SignalProcessor(video_path)
-    for frag in fragments:
+
+    # [SIGNAL-WAKE-1] 소스당 1회만 계산해 조각으로 접는다 (조각마다 재추출 금지).
+    #   motion_score: 생산함수·저장컬럼·소비처가 이미 있는데 배선만 끊겨 256/256 전부 0이었다.
+    #   audio_beat  : 저장은 기존 metadata_json JSON 컬럼 (스키마 변경 0).
+    _src_end = max((f.get("start_time", 0.0) + f.get("duration", 0.0)) for f in fragments) if fragments else 0.0
+    try:
+        from engine.signal_processor import extract_motion_curve, motion_scores_for_spans, beat_times
+        _curve = extract_motion_curve(video_path, _src_end)
+        _spans = [(f["start_time"], f["start_time"] + f["duration"]) for f in fragments]
+        _motions = motion_scores_for_spans(video_path, _src_end, _spans, curve=_curve)
+        _beats = beat_times(video_path, _src_end)
+        print(f"[SIGNAL BG] motion curve={len(_curve)} samples, beats={len(_beats)}")
+    except Exception as _sw:
+        print(f"[SIGNAL BG] motion/beat 추출 실패 (비차단): {_sw}")
+        _motions = [None] * len(fragments)
+        _beats = []
+
+    for _i, frag in enumerate(fragments):
         fid = frag["fragment_id"]
         start = frag["start_time"]
         dur = frag["duration"]
-        
+
         try:
             # 1. 오디오 에너지(RMS) 추출
             energy = sp.get_rms_energy(start, dur)
-            
+
             # 2. Evidence Board 필드 병합 (Field-level merge)
-            bams.update_evidence(fid, {
+            _payload = {
                 "source_id": source_id,
                 "worker_name": "audio",
                 "start": start,
                 "end": start + dur,
                 "audio_energy": energy,
                 "confidence": 0.8
-            })
+            }
+            # [SIGNAL-WAKE-1] 값이 있을 때만 싣는다 — None을 0으로 위장하지 않는다.
+            _m = _motions[_i] if _i < len(_motions) else None
+            if _m is not None:
+                _payload["motion_score"] = _m
+            _bin = [t for t in _beats if start <= t < start + dur]
+            if _bin:
+                _payload["metadata_json"] = {"audio_beat": _bin}
+            bams.update_evidence(fid, _payload)
             bams.flush_evidence(fid)
             
         except Exception as e:
@@ -1677,6 +1702,40 @@ async def make_proposal_preview(proposal_id: str, db: Session = Depends(get_db))
     }
 
 
+@app.get("/punch/{program_id}")
+async def get_punch_specs(program_id: str):
+    """[PUNCH-1 R1] 승인 스냅샷 조각들의 펀치인 지점·배율 — **계산 결과, 저장하지 않는다**.
+
+    화면 재생(조각맵 파생)은 렌더된 preview mp4를 쓰지 않는다(확정 후 previewUrl=null,
+    CenterPanel.tsx:1015). 그래서 ffmpeg 줌 필터가 국장 화면에 도달하지 못했다.
+    같은 punch_spec을 프론트에 그대로 넘겨 화면 변환으로 걸면 재생·렌더·export가
+    같은 시각·같은 배율을 쓴다 — 기법 진실은 여전히 하나(proposal_axis.punch_spec).
+    """
+    try:
+        from story_gate import proposal_axis as _axis
+        _appr_id, _appr_fids = _axis.live_approval_snapshot(program_id)
+        if _appr_id is None or not _appr_fids:
+            return {"ok": True, "program_id": program_id, "approval_id": None, "specs": {}}
+        _axis.reset_punch_caches()      # config가 바뀌었을 수 있다 — 매 요청 최신값을 읽는다
+        _cfg = _axis.punch_config()
+        specs, rules = {}, {}
+        for _f in _appr_fids:
+            sp = _axis.punch_spec(_f)
+            if sp:
+                specs[_f] = {"at": sp["at"], "zoom": sp["zoom"], "basis": sp["basis"]}
+        return {
+            "ok": True, "program_id": program_id, "approval_id": _appr_id,
+            # [RULE-1 R4] 규칙 값의 출처는 config JSON 하나. 프론트도 그 값을 그대로 쓴다.
+            "config": _cfg,
+            "ramp_sec": (_cfg or {}).get("ramp_sec"),
+            "mode_technique": _axis.MODE_TECHNIQUE,
+            "count": len(specs), "specs": specs,
+        }
+    except Exception as e:
+        print(f"[PUNCH][ERROR] {e}")
+        return {"ok": False, "program_id": program_id, "error": str(e), "specs": {}}
+
+
 @app.get("/evidence/{source_id}")
 async def get_evidence_board(source_id: str):
     """[STEP 2] 소스별 Evidence Board 데이터 조회"""
@@ -1933,7 +1992,10 @@ def inject_proposal_previews(proposals: list) -> list:
             if not source_path or not os.path.exists(source_path):
                 print(f"[PROPOSAL_PREVIEW_INJECT] source_path missing for {sid}")
                 continue
-            clips.append({"source_path": source_path, "start": start, "end": end})
+            # [PUNCH-1 P4] fragment_id 동봉 — 기법은 조각 단위로 결정된다.
+            #   구판은 여기서 조각 정체성이 사라져 미리보기가 기법을 알 수 없었다.
+            clips.append({"source_path": source_path, "start": start, "end": end,
+                          "fragment_id": frag.get("fragment_id")})
         return variant, proposal_id, clips
 
     def _apply_result(p, variant, proposal_id, result):
@@ -2470,16 +2532,17 @@ async def post_generate_project_proposals(req: ProjectProposalRequest):
                     proposals, _appr_fids, _appr_id, project_id)
                 for _p in proposals:
                     _p["story_approval_id"] = _appr_id
-                    _p.setdefault("technique_id", _axis.TECHNIQUE_AS_IS)
+                    # [PUNCH-1 P4] A/B가 갈리는 유일한 축. 조각·순서는 위 rebuild가 이미 동일하게 맞췄다.
+                    _p["technique_id"] = _axis.technique_for_mode(_p.get("mode"))
                 _axis_report = {
                     "story_approval_id": _appr_id,
                     "approval_item_count": len(_appr_fids),
-                    "technique_id": _axis.TECHNIQUE_AS_IS,
+                    "technique_id": {_p.get("mode"): _p.get("technique_id") for _p in proposals},
                     "unresolved_fids": _rb.get("unresolved_fids") or [],
                     "verify_violations": _violations,
                 }
                 print(f"[PROPOSAL-AXIS] approval_id={_appr_id} fids={len(_appr_fids)} "
-                      f"technique={_axis.TECHNIQUE_AS_IS} "
+                      f"technique={ {_p.get('mode'): _p.get('technique_id') for _p in proposals} } "
                       f"unresolved={len(_rb.get('unresolved_fids') or [])} "
                       f"violations={len(_violations)}")
             else:

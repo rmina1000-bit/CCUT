@@ -43,9 +43,18 @@ def _concat_filter_with_audio_splice_fade(durations: list[float]) -> str:
 
 
 def _preview_filename(proposal_id: str, variant: str) -> str:
-    """PREV_{proposal_id}_{variant}.mp4 — 특수문자 제거"""
+    """PREV_{proposal_id}_{variant}_{technique}.mp4 — 특수문자 제거
+
+    [PUNCH-1 P4] 기법을 파일명에 넣는다. 넣지 않으면 기법이 바뀌어도 CACHE HIT가 나서
+    화면에는 옛 기법의 미리보기가 계속 뜬다(조용한 거짓말).
+    """
     safe_id = proposal_id.replace("/", "_").replace("\\", "_").replace(":", "_")
-    return f"PREV_{safe_id}_{variant}.mp4"
+    try:
+        from story_gate.proposal_axis import technique_for_mode
+        tech = technique_for_mode(variant)
+    except Exception:
+        tech = "as_is"
+    return f"PREV_{safe_id}_{variant}_{tech}.mp4"
 
 
 def ensure_proposal_preview(
@@ -103,7 +112,8 @@ def ensure_proposal_preview(
         if end <= start:
             print(f"[PREVIEW_RENDER] WARN: end({end}) <= start({start}) → skip")
             continue
-        valid_clips.append({"source_path": src, "start": start, "end": end})
+        valid_clips.append({"source_path": src, "start": start, "end": end,
+                            "fragment_id": c.get("fragment_id")})
 
     if not valid_clips:
         return _fail(proposal_id, variant, preview_url, "NO_VALID_CLIPS")
@@ -116,12 +126,24 @@ def ensure_proposal_preview(
         # STEP A: 각 clip 개별 re-encode
         def _encode_clip(idx, clip):
             temp_out = os.path.join(tmpdir, f"clip_{idx:04d}.mp4")
+            # [PUNCH-1 P4] 기법 필터. 렌더 경로(render_engine)와 **같은 함수**를 부른다 —
+            #   기법 구현이 두 벌로 갈리면 미리보기와 내보내기가 달라진다(INV-3).
+            _vf = "scale=1280:720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=30"
+            try:
+                from story_gate.proposal_axis import punch_filter, technique_for_mode
+                _pf = punch_filter(technique_for_mode(variant), clip.get("fragment_id"),
+                                   float(clip["start"]), float(clip["end"]), 1280, 720)
+                if _pf:
+                    _vf += "," + _pf
+                    print(f"[PREVIEW_RENDER][PUNCH] clip {idx} {clip.get('fragment_id')} -> {_pf[:70]}...")
+            except Exception as _pe:
+                print(f"[PREVIEW_RENDER][PUNCH] 필터 생략 (비차단): {_pe}")
             cmd = [
                 "ffmpeg", "-y", "-loglevel", "error",
                 "-ss", str(clip["start"]),
                 "-to", str(clip["end"]),
                 "-i",  clip["source_path"],
-                "-vf", "scale=1280:720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=30",
+                "-vf", _vf,
                 "-c:v", "libx264", "-preset", "veryfast", "-crf", "28",
                 "-c:a", "aac", "-b:a", "96k",
                 "-movflags", "+faststart",

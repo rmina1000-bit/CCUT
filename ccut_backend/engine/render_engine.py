@@ -49,6 +49,7 @@ class RenderEngine:
                 "export_id": row.export_id,
                 "source_id": row.source_id,
                 "proposal_id": row.proposal_id,
+                "mode": row.mode,          # [PUNCH-1 P4] 기법 결정에 필요 (A=punch_in / B=as_is)
                 "clips": row.clips,
                 "total_duration": row.total_duration,
                 "status": row.status
@@ -79,10 +80,15 @@ class RenderEngine:
         output_path = self.export_dir / output_filename
 
         # 5. FFmpeg 실행
+        # [PUNCH-1 P4] mode → technique 는 순수 상수 사상. 미리보기도 같은 함수를 쓴다.
+        from story_gate.proposal_axis import technique_for_mode
+        _tech = technique_for_mode(export_input.get("mode"))
+        print(f"[RENDER][PUNCH] mode={export_input.get('mode')} technique={_tech}")
         result = self._render_with_ffmpeg(
             clips=clips,
             source_paths=source_map["paths"],
-            output_path=str(output_path)
+            output_path=str(output_path),
+            technique=_tech
         )
 
         # 6. Render Result 저장
@@ -170,7 +176,7 @@ class RenderEngine:
             
         return {"ok": True, "paths": paths}
 
-    def _render_with_ffmpeg(self, clips: List[Dict[str, Any]], source_paths: Dict[str, str], output_path: str) -> Dict[str, Any]:
+    def _render_with_ffmpeg(self, clips: List[Dict[str, Any]], source_paths: Dict[str, str], output_path: str, technique: str = None) -> Dict[str, Any]:
         """[STREAM-FIX] concat inpoint/outpoint는 timestamp를 손상시켜 실제 fps가
         1~2fps로 떨어진다(프레임당 1초 재생). 각 클립을 -ss/-to로 정밀 추출하면서
         30fps CFR · 1920x1080 · 48kHz로 정규화한 뒤 concat copy로 합친다.
@@ -193,12 +199,24 @@ class RenderEngine:
                     continue
                 clip_duration = max(0.0, float(clip["end"]) - float(clip["start"]))
                 tmp = clip_dir / f"clip_{i:04d}.mp4"
+                # [PUNCH-1 P4] 미리보기(proposal_preview_engine)와 **같은 함수**를 부른다.
+                #   해상도만 다르고(1920x1080 vs 1280x720) 줌 배율·시점은 동일하다.
+                _vf = ("scale=1920:1080:force_original_aspect_ratio=decrease,"
+                       "pad=1920:1080:(ow-iw)/2:(oh-ih)/2,setsar=1")
+                try:
+                    from story_gate.proposal_axis import punch_filter
+                    _pf = punch_filter(technique, clip.get("fragment_id"),
+                                       float(clip["start"]), float(clip["end"]), 1920, 1080)
+                    if _pf:
+                        _vf += "," + _pf
+                        print(f"[RENDER][PUNCH] clip {i} {clip.get('fragment_id')} -> {_pf[:70]}...")
+                except Exception as _pe:
+                    print(f"[RENDER][PUNCH] 필터 생략 (비차단): {_pe}")
                 cut_cmd = [
                     "ffmpeg", "-y", "-loglevel", "error",
                     "-ss", str(clip["start"]), "-to", str(clip["end"]),
                     "-i", src_path,
-                    "-vf", "scale=1920:1080:force_original_aspect_ratio=decrease,"
-                           "pad=1920:1080:(ow-iw)/2:(oh-ih)/2,setsar=1",
+                    "-vf", _vf,
                     "-r", "30", "-fps_mode", "cfr",
                     # [STREAM-FIX] 1초마다 강제 keyframe — keyframe이 드물면 브라우저가
                     # 조각 경계 이후 디코드를 못 해 멈춘다(seek 불가).
