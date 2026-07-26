@@ -422,29 +422,36 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
   const videoRefA = useRef<HTMLVideoElement>(null);
   const videoRefB = useRef<HTMLVideoElement>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
-  // [CHATSCROLL-FIX-01] 표준 채팅 규칙 — 사용자가 하단 근처에 있을 때만 따라간다.
-  //   구판은 새 내용이 늘어나면 무조건 chatEnd로 흘러내렸다(:673 block:"end").
-  //   실측: 중간(S1=1200, 남은거리 2272)에서 새 메시지 1건 -> +2193px 하단 점프.
-  //   위로 올려 읽는 중에는 끌어내리지 않고 '새 내용' 버튼만 띄운다.
+  // ── [CHATSCROLL-LOCK-02] 채팅 스크롤은 기본이 '고정'이다 ──────────────────────
+  //
+  //  구판(CHATSCROLL-FIX-01)은 "따라갈지 말지"를 매번 판정했다. 판정에 쓰던
+  //  chatAtBottomRef 는 onScroll 이 갱신하는 캐시인데 `캐시 || 실측` 로 놓여 있어,
+  //  캐시가 낡은 true 면 실측을 덮어썼다(:729).
+  //  실측(SCROLL-2 D2, 브라우저 계측):
+  //    · chatScrollRef 노드 == onScroll 노드 == 실제 스크롤 노드 (동일노드 확인)
+  //    · 그런데 scroll 이벤트가 **0건 발화**한다
+  //      (element 리스너 0 / onscroll 프로퍼티 0 / document 캡처 0, scrollTop 은 실제 이동)
+  //    · smooth 스크롤도 동작하지 않는다 (scrollIntoView smooth 0px, scrollTo smooth 0px)
+  //  → 이벤트를 못 받으므로 "하단에 있는가"를 신뢰성 있게 추적할 방법이 없다.
+  //
+  //  그래서 판정을 정교화하지 않고 **없앤다**. 자동 추종을 제거한다.
+  //  새 내용이 오면 화면은 그대로 두고 '새 내용 ↓' 만 띄운다.
+  //  사용자가 그 버튼을 누르는 것 = 유일한 명시적 해제 행위. 그때만 하단으로 간다.
+  //  움직이지 않는 것이 잘못 움직이는 것보다 낫다.
   const chatScrollRef = useRef<HTMLDivElement>(null);
-  const CHAT_BOTTOM_SLACK = 120; // 하단 근접 판정(px)
-  const chatAtBottomRef = useRef(true);
+  const CHAT_BOTTOM_SLACK = 120; // 하단 근접 판정(px) — 구판 값 그대로 재사용
   const [chatHasNew, setChatHasNew] = useState(false);
-  const isChatNearBottom = useCallback(() => {
-    const el = chatScrollRef.current;
-    if (!el) return true;                                   // 아직 없음 = 따라가도 무해
-    if (el.scrollHeight <= el.clientHeight + 4) return true; // 스크롤 자체가 없음 = 항상 하단
-    return el.scrollHeight - el.scrollTop - el.clientHeight <= CHAT_BOTTOM_SLACK;
-  }, []);
+  /** 사용자가 스스로 하단에 닿으면 알림을 끈다. 이벤트가 안 와도 무해 — 버튼이 남을 뿐이다. */
   const handleChatScroll = useCallback(() => {
-    const near = isChatNearBottom();
-    chatAtBottomRef.current = near;
-    if (near) setChatHasNew(false);
-  }, [isChatNearBottom]);
+    const el = chatScrollRef.current;
+    if (!el) return;
+    if (el.scrollHeight - el.scrollTop - el.clientHeight <= CHAT_BOTTOM_SLACK) setChatHasNew(false);
+  }, []);
+  /** 유일한 자동 스크롤 지점 — 사용자가 버튼을 눌렀을 때만. smooth 는 쓰지 않는다(도착 안 함). */
   const scrollChatToBottom = useCallback(() => {
-    chatAtBottomRef.current = true;
+    const el = chatScrollRef.current;
     setChatHasNew(false);
-    chatEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+    if (el) el.scrollTop = el.scrollHeight - el.clientHeight;
   }, []);
   const consultationTextareaRef = useRef<HTMLTextAreaElement | null>(null);
 
@@ -684,10 +691,9 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
     dispatchCommand(text);
   }, [consultationInput, dispatchCommand, resetConsultationTextarea]);
 
-  // [F 스크롤 앵커] 새 메시지/새 제안 세대가 실제로 '늘어날' 때만 하단으로 흐른다.
-  // 과거 제안 소환(activeProposalEntryId 변경)은 스크롤을 끌어내리지 않는다 — 무대가
-  // 중간 슬롯으로 이동하는데 하단으로 튕기던 '흘러내림'을 절단. 소환 고지 메시지는
-  // length 증가로 자연히 하단 정렬(그건 최신 사건이므로 정상).
+  // [CHATSCROLL-LOCK-02] 새 내용이 늘어나도 **화면은 움직이지 않는다.** 알리기만 한다.
+  //   구판은 여기서 판정해 하단으로 흘려보냈다. 그 판정이 회귀의 근원이었다(캐시 OR 실측).
+  //   자동 스크롤은 사용자가 '새 내용 ↓' 를 누를 때 단 한 곳(scrollChatToBottom)에서만 일어난다.
   const _prevChatLenRef = useRef({ msgs: 0, gens: 0 });
   useEffect(() => {
     const msgs = storyPlan?.messages?.length ?? 0;
@@ -695,17 +701,15 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
     const grew = msgs > _prevChatLenRef.current.msgs || gens > _prevChatLenRef.current.gens;
     _prevChatLenRef.current = { msgs, gens };
     if (!grew) return;
-    // [CHATSCROLL-FIX-01] 하단 근처일 때만 따라간다 — 위에서 읽는 중이면 알림만.
-    if (chatAtBottomRef.current || isChatNearBottom()) {
-      chatAtBottomRef.current = true;
-      chatEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
-    } else {
-      import.meta.env.DEV && console.log("[CHATSCROLL][HOLD]", {
-        msgs, gens, reason: "user_scrolled_up",
+    // 스크롤이 있을 때만 알린다 — 갈 곳이 없으면 버튼이 무의미하다(판정이 아니라 DOM 사실).
+    const el = chatScrollRef.current;
+    if (el && el.scrollHeight > el.clientHeight + 4) {
+      import.meta.env.DEV && console.log("[CHATSCROLL][LOCK]", {
+        msgs, gens, top: Math.round(el.scrollTop), sh: el.scrollHeight, ch: el.clientHeight,
       });
       setChatHasNew(true);
     }
-  }, [storyPlan?.messages?.length, proposalHistory.length, isChatNearBottom]);
+  }, [storyPlan?.messages?.length, proposalHistory.length]);
 
   const setActivePlayerSafe = useCallback((player: "A" | "B" | null) => {
     activePlayerRef.current = player;
