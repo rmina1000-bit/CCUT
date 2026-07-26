@@ -1963,18 +1963,43 @@ def inject_preview_clips(fragments: list, background: bool = True) -> list:
     return fragments
 
 
-def inject_proposal_previews(proposals: list) -> list:
+def inject_proposal_previews(proposals: list, edl_clips: list = None) -> list:
     """
     [PROPOSAL_PREVIEW_INJECT] proposals 배열의 각 제안에 preview_url을 주입.
     proposal.sequence -> clips -> ensure_proposal_preview -> preview_url.
     preview_url이 없으면 None (fallback 금지).
+
+    [BOUNDARY-1 B3] edl_clips 가 오면 그것이 경계의 유일한 진실이다.
+      구판은 proposal.sequence 의 anchor 좌표를 읽어, 사용자가 자른 trim 과 지운 말
+      (excluded_ranges)이 미리보기에 전혀 반영되지 않았다(실측: 4/13 조각에서 갈림).
+      EDL 은 재생·export 가 쓰는 바로 그 compile_spans 결과다 — 셋이 같은 값을 본다.
     """
     if not proposals:
         return proposals
 
     from engine.proposal_preview_engine import ensure_proposal_preview
 
+    def _build_clips_from_edl(p):
+        variant     = (p.get("mode") or "A").upper()
+        proposal_id = p.get("proposal_id") or p.get("id") or "UNKNOWN"
+        clips = []
+        for c in edl_clips:
+            sid = c.get("source_id") or ""
+            source_data = bams.get_source(sid) if sid else None
+            source_path = source_data.file_path if source_data else None
+            if not source_path or not os.path.exists(source_path):
+                print(f"[PROPOSAL_PREVIEW_INJECT] source_path missing for {sid}")
+                continue
+            s, e = float(c.get("start_sec") or 0.0), float(c.get("end_sec") or 0.0)
+            if e <= s:
+                continue
+            clips.append({"source_path": source_path, "start": s, "end": e,
+                          "fragment_id": c.get("fragment_id")})
+        return variant, proposal_id, clips
+
     def _build_clips(p):
+        if edl_clips:
+            return _build_clips_from_edl(p)
         variant     = (p.get("mode") or "A").upper()
         proposal_id = p.get("proposal_id") or p.get("id") or "UNKNOWN"
         sequence    = p.get("sequence", [])
@@ -2502,7 +2527,21 @@ async def post_generate_project_proposals(req: ProjectProposalRequest):
             print(f"[STORY-GATE] {project_id} 미승인 -> render_preview 강제 False (I-1)")
         _pv_t0 = time.time()
         if _pv_render:
-            proposals = await _loop.run_in_executor(None, inject_proposal_previews, proposals)
+            # [BOUNDARY-1 B3] 미리보기 경계도 EDL 하나에서 받는다 — 재생·export 와 같은 값.
+            _edl_clips = None
+            try:
+                from ledger_r0 import get_render_edl as _get_edl
+                _edl = await _get_edl(project_id)
+                if _edl.get("ok") and _edl.get("clips"):
+                    _edl_clips = _edl["clips"]
+                    print(f"[BOUNDARY] 미리보기 경계 출처=EDL clips={len(_edl_clips)} "
+                          f"(구판: proposal.sequence anchor 좌표)")
+                else:
+                    print("[BOUNDARY] EDL 비어 있음 — 미리보기는 sequence 좌표로 폴백 (정직 표기)")
+            except Exception as _be:
+                print(f"[BOUNDARY] EDL 취득 실패 — sequence 좌표로 폴백 (비차단): {_be}")
+            proposals = await _loop.run_in_executor(
+                None, lambda: inject_proposal_previews(proposals, edl_clips=_edl_clips))
             print(f"[TIMING] preview_render={time.time() - _pv_t0:.1f}s")
         else:
             print("[STORY-GATE] render_preview=False -> preview 렌더 생략 (sequence만 반환)")

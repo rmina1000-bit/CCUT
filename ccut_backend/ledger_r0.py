@@ -408,14 +408,36 @@ async def get_render_edl(program_id: str):
         return d
     con = _connect()
     try:
+        # [BOUNDARY-1 B3] 경계 진실 단일화 — 매칭키를 **재생 경로와 같은 규칙**으로 맞춘다.
+        #   구판은 timeline_item_id 로만 찾았다. 그런데 edit_state 행 대부분은 구판 제안별 id
+        #   분열의 잔재라 'ITEM_{hash}_B_{fid}_0' 형태이고, ledger item id 는 'ITEM_{hash}_{fid}_0'
+        #   라서 서로 만나지 않는다. 실측(BOUNDARY-1 B1b): 10행 중 매칭 1행.
+        #   나머지 9행은 anchor 폴백으로 떨어져 사용자 trim·excluded_ranges 가 통째로 사라진 채
+        #   export 됐다. 프론트 재생(editStateForFragment / fragmentTiles.stateForRoot)은
+        #   parent_fragment_id 로 찾아 전부 만난다 — 그 규칙 하나로 모은다.
+        #   제3의 경로를 만들지 않는다. 선택식까지 프론트와 글자 그대로 같다.
         state = {}
+        by_parent = {}
         try:
             for r in con.execute(
-                "SELECT timeline_item_id, trim_start_ms, trim_end_ms, excluded_ranges_json, removed "
-                "FROM fragment_edit_state WHERE program_id=?", (program_id,)):
+                "SELECT timeline_item_id, parent_fragment_id, trim_start_ms, trim_end_ms, "
+                "excluded_ranges_json, removed FROM fragment_edit_state WHERE program_id=?",
+                (program_id,)):
                 state[r["timeline_item_id"]] = r
+                by_parent.setdefault(r["parent_fragment_id"], []).append(r)
         except sqlite3.OperationalError:
             pass
+
+        def _state_for(item):
+            """재생 경로와 동일한 선택식: parent_fragment_id 후보 → 선호 item id → 첫 행."""
+            cands = by_parent.get(item.get("fragment_id")) or []
+            if not cands:
+                return state.get(item["timeline_item_id"])
+            want = item["timeline_item_id"]
+            for c in cands:
+                if c["timeline_item_id"] == want:
+                    return c
+            return cands[0]
 
         clips = []
         order = 0
@@ -426,7 +448,7 @@ async def get_render_edl(program_id: str):
             if it.get("selected") is False:
                 continue
             a0, a1 = it["anchor_start_ms"], it["anchor_end_ms"]
-            st = state.get(it["timeline_item_id"])
+            st = _state_for(it)
             if st:
                 canon = {
                     "trim_start_ms": st["trim_start_ms"], "trim_end_ms": st["trim_end_ms"],

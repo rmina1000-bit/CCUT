@@ -144,13 +144,186 @@ def _check_punch_zoom_bound(ctx):
             "detail": "상하한 내" if ok else "상하한 초과 — 기법 적용 차단(Veto)"}
 
 
+# ── [BOUNDARY-1 B4] 경계 규칙 3종 ───────────────────────────────────────────
+def _hash6(s):
+    """프론트 timelineItemIdFor 의 djb2 — 선호 item id 계산에 쓴다(같은 식이라야 같은 행을 고른다)."""
+    h = 5381
+    for ch in s:
+        h = ((h << 5) + h + ord(ch)) & 0xFFFFFFFF
+    return format(h, "x").rjust(6, "0")[-6:]
+
+
+def boundary_spans(program_id, fragment_id):
+    """재생·export 경계를 각자의 실제 코드 경로에서 뽑는다. 새 경로를 만들지 않는다.
+
+    playback : edit_contract.service.list_edit_states (compile_spans) + 프론트 선택식
+    export   : ledger_r0.get_render_edl (compile_spans)
+    preview  : [BOUNDARY-1 B3] 이후 EDL 에 묶여 있으므로 export 와 같은 값이다.
+               (구판은 proposal.sequence anchor 좌표였고 그게 갈림의 원인이었다)
+    """
+    import asyncio
+    out = {"playback": None, "export": None, "preview": None}
+    try:
+        from edit_contract.service import list_edit_states
+        states = list_edit_states(program_id)
+        cands = [s for s in states if s.get("parent_fragment_id") == fragment_id]
+        if cands:
+            want = "ITEM_%s_%s_0" % (_hash6(program_id), fragment_id)
+            st = next((c for c in cands if c["timeline_item_id"] == want), cands[0])
+            out["playback"] = [[round(a / 1000.0, 3), round(b / 1000.0, 3)] for a, b in st["spans"]]
+        else:
+            con = _connect()
+            try:
+                r = con.execute('SELECT start,"end" FROM semantic_fragments WHERE fragment_id=?',
+                                (fragment_id,)).fetchone()
+            finally:
+                con.close()
+            if r:
+                out["playback"] = [[round(float(r["start"]), 3), round(float(r["end"]), 3)]]
+    except Exception as e:
+        print(f"[BOUNDARY][WARN] playback spans 취득 실패: {e}")
+    try:
+        from ledger_r0 import get_render_edl
+        edl = asyncio.new_event_loop().run_until_complete(get_render_edl(program_id))
+        got = [[c["start_sec"], c["end_sec"]] for c in (edl.get("clips") or [])
+               if c["fragment_id"] == fragment_id]
+        out["export"] = got or None
+    except Exception as e:
+        print(f"[BOUNDARY][WARN] export spans 취득 실패: {e}")
+    out["preview"] = out["export"]      # B3 이후 같은 출처 — 다르면 그건 배선이 풀린 것
+    return out
+
+
+def _fragment_words(fragment_id):
+    """조각 구간에 속한 단어 [(start, end)]. 없으면 None (모른다 — 빈 리스트와 구별한다)."""
+    con = _connect()
+    try:
+        r = con.execute('SELECT source_id, start, "end" FROM semantic_fragments WHERE fragment_id=?',
+                        (fragment_id,)).fetchone()
+        if r is None:
+            return None
+        s, e = float(r["start"] or 0), float(r["end"] or 0)
+        sub = con.execute("SELECT segments FROM subtitles WHERE source_id=?", (r["source_id"],)).fetchone()
+        if not sub or not sub["segments"]:
+            return None
+        segs = json.loads(sub["segments"])
+        if isinstance(segs, str):
+            segs = json.loads(segs)
+        ws = [(float(w["start"]), float(w["end"])) for sg in segs for w in (sg.get("words") or [])
+              if w.get("start") is not None and w.get("end") is not None
+              and float(w["end"]) > s and float(w["start"]) < e]
+        return ws or None
+    except Exception:
+        return None
+    finally:
+        con.close()
+
+
+def _check_boundary_path_uniform(ctx):
+    """RULE_BOUNDARY_PATH_UNIFORM — 재생·미리보기·export 가 같은 경계를 읽는가."""
+    from engine.story_template_resolver import (VERDICT_PASS, VERDICT_VIOLATION,
+                                                VERDICT_UNKNOWN, VERDICT_NA)
+    fid, prog = ctx.get("fragment_id"), ctx.get("program_id")
+    if not fid or not prog:
+        return {"verdict": VERDICT_UNKNOWN, "measured": None, "threshold": "3 paths equal",
+                "detail": "program_id/fragment_id 없음"}
+    sp = boundary_spans(prog, fid)
+    if sp["playback"] is None or sp["export"] is None:
+        return {"verdict": VERDICT_UNKNOWN, "measured": sp, "threshold": "3 paths equal",
+                "detail": "경로 중 하나를 측정하지 못함"}
+    same = (sp["playback"] == sp["export"] == sp["preview"])
+    return {"verdict": VERDICT_PASS if same else VERDICT_VIOLATION, "measured": sp,
+            "threshold": "playback == preview == export",
+            "detail": "세 경로 동일" if same else "경계 불일치 — 산출물이 재생과 달라진다"}
+
+
+def _check_no_mid_word_cut(ctx):
+    """RULE_NO_MID_WORD_CUT — span 경계가 단어 **내부**를 자르는가.
+
+    [INV-6] 사용자가 명시적으로 자른 자리를 되돌리지 않는다. 이 규칙은 경고만 한다.
+    """
+    from engine.story_template_resolver import VERDICT_PASS, VERDICT_VIOLATION, VERDICT_UNKNOWN
+    fid, prog = ctx.get("fragment_id"), ctx.get("program_id")
+    words = _fragment_words(fid) if fid else None
+    if words is None:
+        return {"verdict": VERDICT_UNKNOWN, "measured": None, "threshold": "no cut inside a word",
+                "detail": "word 타임스탬프 없음 — 검사 불가(모른다)"}
+    sp = boundary_spans(prog, fid) if prog else None
+    spans = (sp or {}).get("export")
+    if not spans:
+        return {"verdict": VERDICT_UNKNOWN, "measured": None, "threshold": "no cut inside a word",
+                "detail": "spans 측정 실패"}
+    hits = []
+    for a, b in spans:
+        for ws, we in words:
+            if ws < a < we:
+                hits.append({"edge": "start", "t": a, "word": [round(ws, 3), round(we, 3)]})
+            if ws < b < we:
+                hits.append({"edge": "end", "t": b, "word": [round(ws, 3), round(we, 3)]})
+    return {"verdict": VERDICT_PASS if not hits else VERDICT_VIOLATION,
+            "measured": {"spans": spans, "mid_word_cuts": hits[:4], "n": len(hits)},
+            "threshold": "no cut inside a word",
+            "detail": "단어 내부 절단 없음" if not hits
+                      else "단어 내부 절단 — 경고만(사용자 결정 우선, INV-6)"}
+
+
+def _check_word_boundary_snap(ctx):
+    """RULE_WORD_BOUNDARY_SNAP — span 경계가 가장 가까운 단어 경계에서 얼마나 떨어졌나.
+
+    허용오차 출처: config/editing_techniques.json 의 word_boundary_snap.engine_effect
+    .snap_threshold_ms (실재 자산 200ms). 문서 BROADCAST_EDITING_ACTIVATION_PLAN 에는
+    스냅 허용오차 값이 없다 — 없는 것을 있다고 적지 않는다.
+    """
+    from engine.story_template_resolver import VERDICT_PASS, VERDICT_VIOLATION, VERDICT_UNKNOWN
+    tol_ms = None
+    try:
+        with open(_TECH_CONFIG_PATH, encoding="utf-8") as f:
+            for t in json.load(f).get("techniques", []):
+                if t.get("technique_id") == "word_boundary_snap":
+                    tol_ms = (t.get("engine_effect") or {}).get("snap_threshold_ms")
+    except Exception:
+        pass
+    if tol_ms is None:
+        return {"verdict": VERDICT_UNKNOWN, "measured": None, "threshold": None,
+                "detail": "snap_threshold_ms 없음 — 허용오차를 모른다"}
+    fid, prog = ctx.get("fragment_id"), ctx.get("program_id")
+    words = _fragment_words(fid) if fid else None
+    if words is None:
+        return {"verdict": VERDICT_UNKNOWN, "measured": None, "threshold": {"snap_threshold_ms": tol_ms},
+                "detail": "word 타임스탬프 없음 — 검사 불가(모른다)"}
+    sp = boundary_spans(prog, fid) if prog else None
+    spans = (sp or {}).get("export")
+    if not spans:
+        return {"verdict": VERDICT_UNKNOWN, "measured": None, "threshold": {"snap_threshold_ms": tol_ms},
+                "detail": "spans 측정 실패"}
+    edges = [t for a, b in spans for t in (a, b)]
+    marks = sorted({v for w in words for v in w})
+    devs = [round(min(abs(t - m) for m in marks) * 1000.0, 1) for t in edges] if marks else []
+    worst = max(devs) if devs else None
+    ok = worst is not None and worst <= float(tol_ms)
+    return {"verdict": VERDICT_PASS if ok else VERDICT_VIOLATION,
+            "measured": {"deviations_ms": devs, "worst_ms": worst},
+            "threshold": {"snap_threshold_ms": tol_ms},
+            "detail": "허용오차 내" if ok else "허용오차 초과 — 경고만(사용자 결정 우선, INV-6)"}
+
+
 def _register_rules():
     try:
         from engine.story_template_resolver import register_rule_check
         register_rule_check("RULE_TECHNIQUE_PATH_UNIFORM", _check_technique_path_uniform)
         register_rule_check("RULE_PUNCH_ZOOM_BOUND", _check_punch_zoom_bound)
+        # [BOUNDARY-1 B4] 경계 3종 — 전부 로그 전용. Veto required 승격은 국장 판정 후.
+        register_rule_check("RULE_BOUNDARY_PATH_UNIFORM", _check_boundary_path_uniform)
+        register_rule_check("RULE_NO_MID_WORD_CUT", _check_no_mid_word_cut)
+        register_rule_check("RULE_WORD_BOUNDARY_SNAP", _check_word_boundary_snap)
     except Exception as e:
         print(f"[RULE][REGISTER] 등록 실패: {e}")
+
+
+# [BOUNDARY-1 B4 · INV-6] 경계 3종은 Veto 대상이 아니다.
+#   사용자가 자른 자리를 규칙이 되돌리면 안 된다 — 규칙은 경고만 하고 사용자가 이긴다.
+#   punch_filter 의 Veto 판정은 아래 목록에 있는 규칙만 본다.
+VETO_RULE_IDS = ("RULE_PUNCH_ZOOM_BOUND", "RULE_TECHNIQUE_PATH_UNIFORM")
 
 
 def technique_for_mode(mode):
@@ -253,10 +426,23 @@ def _punch_filter_raw(fragment_id, clip_start, clip_end, out_w, out_h, fps=30):
 
 
 def punch_rule_results(fragment_id, clip_start, clip_end):
-    """[RULE-1 R3] 이 조각에 대한 하드룰 판정 목록. raw 로그는 check_rules가 남긴다."""
+    """[RULE-1 R3] 기법 적용 판정에 쓰는 규칙만 돌린다(Veto 대상). raw 로그는 check_rules가 남긴다.
+
+    경계 3종은 여기서 돌리지 않는다 — 로그 전용이고, 렌더 루프마다 EDL을 다시 뽑으면
+    비싸다. 경계 검사는 boundary_rule_results()로 따로 부른다.
+    """
     from engine.story_template_resolver import check_rules
     return check_rules({"fragment_id": fragment_id, "clip_start": clip_start,
-                        "clip_end": clip_end, "technique": TECHNIQUE_PUNCH_IN})
+                        "clip_end": clip_end, "technique": TECHNIQUE_PUNCH_IN},
+                       rule_ids=list(VETO_RULE_IDS))
+
+
+def boundary_rule_results(program_id, fragment_id):
+    """[BOUNDARY-1 B4] 경계 규칙 3종 판정. 로그 전용 — 어떤 것도 산출물을 막지 않는다."""
+    from engine.story_template_resolver import check_rules
+    return check_rules({"program_id": program_id, "fragment_id": fragment_id},
+                       rule_ids=["RULE_BOUNDARY_PATH_UNIFORM", "RULE_NO_MID_WORD_CUT",
+                                 "RULE_WORD_BOUNDARY_SNAP"])
 
 
 def punch_filter(technique, fragment_id, clip_start, clip_end, out_w, out_h, fps=30):
