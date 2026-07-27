@@ -4731,18 +4731,26 @@ async def route_edit_intent_stream_api(req: EditIntentRouteRequest):
         yield _sse({"type": "meta", "action": "answer_only"})
         first_ms = None
         final_text = None
+        partial_text = ""
         for kind, payload in stream_smalltalk(req.input_text, req.recent_messages,
                                               facts=sc.get("facts") or ""):
             if kind == "token":
                 if first_ms is None:
                     first_ms = int((_time.time() - t0) * 1000)
                     print(f"[F2-TTFT] path=stream first_token_ms={first_ms}")
+                partial_text += payload
                 yield _sse({"type": "token", "text": payload})
             elif kind == "done":
                 final_text = payload
+        stream_text = final_text or partial_text.strip()
         if not final_text:
-            final_text = "네, 듣고 있어요. 편하게 이야기해 주세요."
+            final_text = stream_text or "네, 듣고 있어요. 편하게 이야기해 주세요."
         r["reply"] = final_text
+        if stream_text:
+            r["stream_text"] = stream_text
+            r["stream_complete"] = True
+        else:
+            r["stream_complete"] = False
         print(f"[F2-TTFT] path=stream total_ms={int((_time.time() - t0) * 1000)} "
               f"reply_len={len(final_text)}")
         yield _sse({"type": "final", "result": r})

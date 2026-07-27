@@ -772,8 +772,12 @@ export const useProposalState = (
       // 명령이 의도를 덮어쓰지 않는다 — 16:06 사건("스토리 다시 편집하게 해줘"가 의도를 대체) 절단.
       const isRetrigger = route.action === "retrigger";
       const isIntentClear = route.action === "intent_clear";
+      const generatedReply =
+        typeof route.stream_text === "string" && route.stream_text.trim()
+          ? route.stream_text
+          : null;
       consultationDecision = {
-        text: route.reply || "네, 확인했습니다.",
+        text: generatedReply || route.reply || "네, 확인했습니다.",
         // revise_current는 현 단계에선 재제안 경로로 수렴 (백엔드 REVISION 게이트가 하류 처리)
         // ask_include_archive는 승인 대화 — 제안 실행 없이 되묻기만 표시 (P1)
         shouldRunProposal: route.action === "run_proposal" || route.action === "revise_current"

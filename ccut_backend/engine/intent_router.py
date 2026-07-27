@@ -47,6 +47,9 @@ _CHAT_SIGNAL_RE = _re_mod.compile(
 # 짧은 승인어는 게이트 제외 — 제안 확정("좋아", "이대로") 흐름 보호
 _AFFIRM_SHORT_RE = _re_mod.compile(
     r"^(응+|어+|네|예|그래|좋아요?|좋지|좋네|오케이|ok|콜)[.!~\s]*$", _re_mod.IGNORECASE)
+_CONTEXT_COMMAND_RE = _re_mod.compile(
+    r"다시\s*해\s*줘|아까\s*그거|방금\s*말한\s*거|그거\s*말고|취소|되돌려|undo",
+    _re_mod.IGNORECASE)
 
 # 받침 유무에 따라 형태가 갈리는 조사 (받침없음형, 받침있음형)
 _PARTICLE_PAIRS = [("가", "이"), ("는", "은"), ("를", "을"), ("와", "과"),
@@ -629,6 +632,12 @@ def route_edit_intent(source_ids=None, input_text="", recent_messages=None,
     #    "생일잔치만 편집해줄래?"(질문꼴 편집요청)는 결정론 모드에서 편집 우선(L0 골든).
     if _CHAT_SIGNAL_RE.search(t) and not _AFFIRM_SHORT_RE.match(t) \
             and (allow_llm or not _EDIT_MARK_RE.search(t)):
+        if allow_llm and defer_chat and not _EDIT_MARK_RE.search(t) \
+                and not _CONTEXT_COMMAND_RE.search(t):
+            r = _resp("answer_only", "", confidence=0.85, via="qwen",
+                      matched={"kind": "free_chat"})
+            r["_stream_chat"] = {"facts": ""}
+            return r
         if allow_llm:
             und = _llm_understand(t, recent_messages, source_ids, person_vocab,
                                   defer_chat=defer_chat, project_id=project_id)
