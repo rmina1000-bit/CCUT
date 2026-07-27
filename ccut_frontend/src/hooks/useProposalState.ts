@@ -10,6 +10,8 @@ import { storyGateEnabled } from "@/hooks/useStoryGate";  // [STORY-GATE P3/S3] 
 import { DEBUG_LOG } from "@/utils/debugFlags";
 import { recordMirrorEvent } from "@/utils/mirrorEventLog";
 
+const ROUTING_PENDING_TEXT = "말씀을 확인하고 있습니다...";
+
 // == 대화 판정 경로 (2026-07-27 감사 확정) ==
 // 제품 경로: routeEditIntentStream -> POST /intent/route-edit/stream
 // fallback: /intent/route-edit (batch)
@@ -597,7 +599,7 @@ export const useProposalState = (
     const aiMsg = {
       id: aiMsgId,
       sender: "ai" as const,
-      text: "편집 방향을 해석하고 있습니다...",
+      text: ROUTING_PENDING_TEXT,
       timestamp: Date.now() + 1,
       isInterpreting: true
     };

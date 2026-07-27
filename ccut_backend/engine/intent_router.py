@@ -50,6 +50,16 @@ _AFFIRM_SHORT_RE = _re_mod.compile(
 _CONTEXT_COMMAND_RE = _re_mod.compile(
     r"다시\s*해\s*줘|아까\s*그거|방금\s*말한\s*거|그거\s*말고|취소|되돌려|undo",
     _re_mod.IGNORECASE)
+_OPEN_EDIT_RE = _re_mod.compile(
+    r"편집|나오게|남게|남겨|골라|만들|위주|중심|모아|추려|빼|줄여|늘려|장면만|컷만|부분만")
+_OPEN_EDIT_META_RE = _re_mod.compile(
+    r"잘\s*모르|모르겠|생소|궁금|어떻게|뭐지|무엇|뭔지|왜|배웠|얘기는\s*나중|나중에\s*하고|"
+    r"좋은\s*건지|좋은건지|어울리는\s*건지|어울리는건지|사용해야\s*하는\s*건지|"
+    r"사용하는지|[?？]")
+_OPEN_EDIT_REQUEST_RE = _re_mod.compile(
+    r"해\s*줘|해줘|해\s*줄래|해줄래|해\s*주세요|해주세요|해\s*봐|해봐|"
+    r"만들어\s*줘|만들어줘|골라\s*줘|골라줘|모아\s*줘|모아줘|추려\s*줘|추려줘|"
+    r"남겨\s*줘|남겨줘|빼\s*줘|빼줘|줄여\s*줘|줄여줘")
 
 # 받침 유무에 따라 형태가 갈리는 조사 (받침없음형, 받침있음형)
 _PARTICLE_PAIRS = [("가", "이"), ("는", "은"), ("를", "을"), ("와", "과"),
@@ -881,12 +891,19 @@ def route_edit_intent(source_ids=None, input_text="", recent_messages=None,
     #    hub 판사(조각 서술 기반 LLM 판단)에 넘긴다 (국장 지적 2026-07-05:
     #    "생일잔치 장면만 나오게 해줘"가 되묻기로 거절된 사건 — 정해지지 않은 요구에
     #    해석·인식으로 반응). 조건 미달이면 하류의 정직한 빈 제안이 설명한다.
-    if _re.search(r"편집|나오게|남게|남겨|골라|만들|위주|중심|모아|추려|빼|줄여|늘려|장면만|컷만|부분만", t):
+    if _OPEN_EDIT_RE.search(t):
         _core = _re.sub(
             r"(의)?\s*(장면|부분|컷|것|영상|조각)?\s*(만|들만|을|를|이|가|으로|로)?\s*"
             r"(나오게|남게|보이게)?\s*(위주로|중심으로)?\s*(다시)?\s*(편집|모아|골라|추려|만들어|남겨)?\s*"
-            r"(해\s*줘|해줘|해\s*봐|해봐|줘|주세요|부탁해?)?[.!?~\s]*$", "", t).strip()
+            r"(해\s*줘|해줘|해\s*줄래|해줄래|해\s*주세요|해주세요|해\s*봐|해봐|줘|주세요|부탁해?)?[.!?~\s]*$", "", t).strip()
         if len(_core) >= 2:
+            if _OPEN_EDIT_META_RE.search(t) and not _OPEN_EDIT_REQUEST_RE.search(t):
+                return _resp("ask_clarification",
+                             "지금 말씀은 편집 지시라기보다 고민이나 질문으로 들려요. "
+                             "이 내용을 기준으로 편집안을 다시 만들고 싶으시면 "
+                             "'이 기준으로 편집해줘'처럼 말씀해 주세요.",
+                             normalized=t, confidence=0.82, via="deterministic",
+                             matched={"kind": "open_theme_confirm", "core": _core})
             return _resp("run_proposal",
                          f"네, \"{_core}\" 기준으로 골라볼게요. 맞는 조각이 없으면 솔직히 말씀드릴게요.",
                          normalized=t, confidence=0.75, via="deterministic",
