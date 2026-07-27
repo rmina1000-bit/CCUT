@@ -4696,12 +4696,7 @@ async def route_edit_intent_stream_api(req: EditIntentRouteRequest):
     import json as _json
     import time as _time
     from fastapi.responses import StreamingResponse
-    from engine.intent_router import (
-        route_edit_intent,
-        stream_smalltalk,
-        smalltalk_retry_max,
-        validate_smalltalk_reply,
-    )
+    from engine.intent_router import route_edit_intent, stream_smalltalk
 
     def _sse(obj):
         return "data: " + _json.dumps(obj, ensure_ascii=False) + "\n\n"
@@ -4737,7 +4732,6 @@ async def route_edit_intent_stream_api(req: EditIntentRouteRequest):
         first_ms = None
         final_text = None
         partial_text = ""
-        aborted = False
         for kind, payload in stream_smalltalk(req.input_text, req.recent_messages,
                                               facts=sc.get("facts") or ""):
             if kind == "token":
@@ -4745,27 +4739,12 @@ async def route_edit_intent_stream_api(req: EditIntentRouteRequest):
                     first_ms = int((_time.time() - t0) * 1000)
                     print(f"[F2-TTFT] path=stream first_token_ms={first_ms}")
                 partial_text += payload
+                yield _sse({"type": "token", "text": payload})
             elif kind == "done":
                 final_text = payload
-            elif kind == "abort":
-                aborted = True
-        stream_text = validate_smalltalk_reply(final_text or partial_text)
-        if not stream_text and smalltalk_retry_max() > 0:
-            retry_text = ""
-            retry_aborted = False
-            for kind, payload in stream_smalltalk(req.input_text, req.recent_messages,
-                                                  facts=sc.get("facts") or ""):
-                if kind == "token":
-                    retry_text += payload
-                elif kind == "done":
-                    retry_text = payload
-                elif kind == "abort":
-                    retry_aborted = True
-            if not retry_aborted:
-                stream_text = validate_smalltalk_reply(retry_text)
-        if stream_text:
-            yield _sse({"type": "token", "text": stream_text})
-        final_text = stream_text or "네, 듣고 있어요. 편하게 이야기해 주세요."
+        stream_text = final_text or partial_text.strip()
+        if not final_text:
+            final_text = stream_text or "네, 듣고 있어요. 편하게 이야기해 주세요."
         r["reply"] = final_text
         if stream_text:
             r["stream_text"] = stream_text
@@ -4773,7 +4752,7 @@ async def route_edit_intent_stream_api(req: EditIntentRouteRequest):
         else:
             r["stream_complete"] = False
         print(f"[F2-TTFT] path=stream total_ms={int((_time.time() - t0) * 1000)} "
-              f"reply_len={len(final_text)} aborted={aborted} valid={bool(stream_text)}")
+              f"reply_len={len(final_text)}")
         yield _sse({"type": "final", "result": r})
 
     return StreamingResponse(gen(), media_type="text/event-stream")
