@@ -3,6 +3,13 @@
  */
 
 import { fetcher, API_BASE_URL } from "./api";
+import {
+    beginSpeedTrace,
+    finishSpeedTrace,
+    markFetchIssued,
+    markFirstByte,
+    markFirstDom,
+} from "@/utils/speedTrace";
 
 // [FIX-RUNTIME-1b] /system/diagnostics 응답(라이브 JSON 기준)
 export interface SystemDiagnostics {
@@ -183,10 +190,13 @@ export const videoService = {
         payload: any,
         onToken?: (accum: string) => void,
     ) => {
+        const trace = beginSpeedTrace();
+        const body = JSON.stringify(payload);
+        const traceHeaders = markFetchIssued(trace);
         const response = await fetch(`${API_BASE_URL}/intent/route-edit/stream`, {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(payload)
+            headers: { "Content-Type": "application/json", ...traceHeaders },
+            body
         });
         if (!response.ok || !response.body) throw new Error(`stream ${response.status}`);
         const reader = response.body.getReader();
@@ -197,6 +207,7 @@ export const videoService = {
         for (;;) {
             const { done, value } = await reader.read();
             if (done) break;
+            markFirstByte(trace);
             buf += decoder.decode(value, { stream: true });
             let idx;
             while ((idx = buf.indexOf("\n\n")) >= 0) {
@@ -208,6 +219,7 @@ export const videoService = {
                     if (ev.type === "token" && typeof ev.text === "string") {
                         accum += ev.text;
                         onToken?.(accum);
+                        markFirstDom(trace);
                     } else if (ev.type === "final") {
                         final = ev.result;
                     }
@@ -215,6 +227,23 @@ export const videoService = {
             }
         }
         if (!final) throw new Error("stream ended without final");
+        finishSpeedTrace(trace, API_BASE_URL, {
+            endpoint: "/intent/route-edit/stream",
+            method: "POST",
+            body_bytes: new TextEncoder().encode(body).length,
+            recent_msgs: Array.isArray(payload?.recent_messages) ? payload.recent_messages.length : 0,
+            recent_chars: Array.isArray(payload?.recent_messages)
+                ? payload.recent_messages.reduce((n: number, m: any) => n + String(m?.text || "").length, 0)
+                : 0,
+            source_ids: Array.isArray(payload?.source_ids) ? payload.source_ids.length : 0,
+            fragment_labels: payload?.fragment_labels ? Object.keys(payload.fragment_labels).length : 0,
+            stream: true,
+        }, {
+            action: final?.action,
+            via: final?.via,
+            matched: final?.matched,
+            reply_len: String(final?.reply || "").length,
+        });
         return final;
     },
 

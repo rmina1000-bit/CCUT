@@ -22,6 +22,10 @@ import json
 import hashlib
 import sqlite3
 import urllib.request
+try:
+    import speed_trace as _speed_trace
+except Exception:
+    _speed_trace = None
 
 BACKEND_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 DB_PATH = os.path.join(BACKEND_DIR, "ccut_app.db")
@@ -151,13 +155,40 @@ def _ollama_json(prompt: str, timeout: int = 60, temperature: float = 0) -> dict
         OLLAMA_URL + "/api/generate", data=body,
         headers={"Content-Type": "application/json"},
     )
+    trace_id = _speed_trace.get_current() if _speed_trace else None
+    call_idx = None
+    if trace_id and _speed_trace and _speed_trace.enabled():
+        call = {
+            "kind": "json",
+            "model": HUB_MODEL,
+            "prompt_chars": len(prompt),
+            "body_bytes": len(body),
+            "num_ctx": OLLAMA_NUM_CTX,
+            "keep_alive": OLLAMA_KEEP_ALIVE,
+            "temperature": temperature,
+            "timeout": timeout,
+            "t_queue_enter": _speed_trace.now_ms(),
+        }
+        call_idx = _speed_trace.append_ollama_call(trace_id, call)
     if _SERIALIZE:
         with _OLLAMA_LOCK:
+            if trace_id and _speed_trace and _speed_trace.enabled():
+                _speed_trace.mark(trace_id, "t3_5", None)
+                _speed_trace.update_ollama_call(trace_id, call_idx, t_queue_exit=_speed_trace.now_ms())
+                _speed_trace.mark(trace_id, "t4", None)
+                _speed_trace.update_ollama_call(trace_id, call_idx, t_request=_speed_trace.now_ms())
             with urllib.request.urlopen(req, timeout=timeout) as resp:
                 data = json.loads(resp.read().decode("utf-8"))
     else:
+        if trace_id and _speed_trace and _speed_trace.enabled():
+            _speed_trace.mark(trace_id, "t3_5", None)
+            _speed_trace.update_ollama_call(trace_id, call_idx, t_queue_exit=_speed_trace.now_ms())
+            _speed_trace.mark(trace_id, "t4", None)
+            _speed_trace.update_ollama_call(trace_id, call_idx, t_request=_speed_trace.now_ms())
         with urllib.request.urlopen(req, timeout=timeout) as resp:
             data = json.loads(resp.read().decode("utf-8"))
+    if trace_id and _speed_trace and _speed_trace.enabled():
+        _speed_trace.update_ollama_call(trace_id, call_idx, t_done=_speed_trace.now_ms())
     return json.loads(data.get("response", "{}") or "{}")
 
 
@@ -184,9 +215,34 @@ def _ollama_stream(prompt: str, timeout: int = 60, temperature: float = 0.7,
         OLLAMA_URL + "/api/generate", data=body,
         headers={"Content-Type": "application/json"},
     )
+    trace_id = _speed_trace.get_current() if _speed_trace else None
+    call_idx = None
+    if trace_id and _speed_trace and _speed_trace.enabled():
+        call_idx = _speed_trace.append_ollama_call(trace_id, {
+            "kind": "stream",
+            "model": HUB_MODEL,
+            "prompt_chars": len(prompt),
+            "body_bytes": len(body),
+            "num_ctx": OLLAMA_NUM_CTX,
+            "keep_alive": OLLAMA_KEEP_ALIVE,
+            "temperature": temperature,
+            "num_predict": num_predict,
+            "top_p": top_p,
+            "top_k": top_k,
+            "timeout": timeout,
+            "t_queue_enter": _speed_trace.now_ms(),
+        })
     if _SERIALIZE:
         _OLLAMA_LOCK.acquire()
+    if trace_id and _speed_trace and _speed_trace.enabled():
+        if "t3_5" not in getattr(_speed_trace, "_RECORDS", {}).get(trace_id, {}):
+            _speed_trace.mark(trace_id, "t3_5", None)
+        _speed_trace.update_ollama_call(trace_id, call_idx, t_queue_exit=_speed_trace.now_ms())
     try:
+        if trace_id and _speed_trace and _speed_trace.enabled():
+            if "t4" not in getattr(_speed_trace, "_RECORDS", {}).get(trace_id, {}):
+                _speed_trace.mark(trace_id, "t4", None)
+            _speed_trace.update_ollama_call(trace_id, call_idx, t_request=_speed_trace.now_ms())
         with urllib.request.urlopen(req, timeout=timeout) as resp:
             for line in resp:
                 line = line.strip()
@@ -198,10 +254,17 @@ def _ollama_stream(prompt: str, timeout: int = 60, temperature: float = 0.7,
                     continue
                 chunk = data.get("response") or ""
                 if chunk:
+                    if trace_id and _speed_trace and _speed_trace.enabled():
+                        if "t5" not in getattr(_speed_trace, "_RECORDS", {}).get(trace_id, {}):
+                            _speed_trace.mark(trace_id, "t5", None)
+                        _speed_trace.update_ollama_call(
+                            trace_id, call_idx, t_first_token=_speed_trace.now_ms())
                     yield chunk
                 if data.get("done"):
                     break
     finally:
+        if trace_id and _speed_trace and _speed_trace.enabled():
+            _speed_trace.update_ollama_call(trace_id, call_idx, t_done=_speed_trace.now_ms())
         if _SERIALIZE:
             _OLLAMA_LOCK.release()
 

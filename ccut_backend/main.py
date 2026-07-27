@@ -31,6 +31,7 @@ import re
 import json
 from pathlib import Path
 from typing import Optional
+import speed_trace
 
 logger = logging.getLogger(__name__)
 
@@ -408,6 +409,20 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.middleware("http")
+async def _speed_trace_ingress(request: Request, call_next):
+    trace_id = request.headers.get("x-ccut-trace-id")
+    if speed_trace.enabled() and trace_id and request.url.path.endswith("/intent/route-edit/stream"):
+        speed_trace.mark(trace_id, "t2")
+        speed_trace.update(trace_id, endpoint=request.url.path, method=request.method)
+    return await call_next(request)
+
+
+@app.post("/trace/speed")
+async def speed_trace_report(payload: dict):
+    return speed_trace.finalize(payload)
 
 from routers.health import router as health_router  # [REFACTOR] 저위험 health/debug 분리
 app.include_router(health_router)
@@ -4654,6 +4669,52 @@ def _rubric_direct_route(input_text: str) -> dict | None:
     return r
 
 
+def _chat_only_speed_bypass(input_text: str) -> dict | None:
+    t = (input_text or "").strip()
+    if not t:
+        return None
+    try:
+        from engine import intent_router as _ir
+        from engine import hub as _hub
+        det = _hub._deterministic_intent(t)
+        q_re, _ = _ir._regexes()
+        chat_signal = bool(_ir._CHAT_SIGNAL_RE.search(t) or q_re.search(t))
+        edit_mark = bool(_ir._EDIT_MARK_RE.search(t) or _ir._OPEN_EDIT_RE.search(t)
+                         or _ir._CONTEXT_COMMAND_RE.search(t))
+        edit_request = bool(_ir._OPEN_EDIT_REQUEST_RE.search(t))
+    except Exception:
+        return None
+    if det.get("theme_found") or det.get("count") or edit_request:
+        return None
+    meta_self_reference = bool(re.search(r"\S+(?:이란|이라는)\s*말|말만\s*들으면", t))
+    if edit_mark and not meta_self_reference:
+        if chat_signal:
+            return {
+                "status": "OK",
+                "action": "ask_clarification",
+                "normalized_instruction": None,
+                "reply": "편집 지시인지 대화인지 한 번만 확인할게요. 편집을 원하시면 원하는 장면이나 기준을 같이 말씀해 주세요.",
+                "confidence": 0.82,
+                "matched": {"kind": "structural_chat_edit_conflict"},
+                "via": "structural_chat_gate",
+            }
+        return None
+    if not (chat_signal or meta_self_reference):
+        return None
+    r = {
+        "status": "OK",
+        "action": "answer_only",
+        "normalized_instruction": None,
+        "reply": "",
+        "confidence": 0.86,
+        "matched": {"kind": "free_chat", "speed_bypass": True,
+                    "gate": "structural_chat"},
+        "via": "structural_chat_gate",
+    }
+    r["_stream_chat"] = {"facts": ""}
+    return r
+
+
 @app.post("/intent/route-edit")
 async def route_edit_intent_api(req: EditIntentRouteRequest):
     """[INTENT-ROUTER] 종업원 — 프론트 메뉴판 정규식을 대체. 프론트는 말을 거의
@@ -4667,6 +4728,7 @@ async def route_edit_intent_api(req: EditIntentRouteRequest):
         r = (
             _unknown_fragment_label_route(req.input_text, labels)
             or _rubric_direct_route(req.input_text)
+            or _chat_only_speed_bypass(req.input_text)
             or route_edit_intent(
                 source_ids=req.source_ids, input_text=req.input_text,
                 recent_messages=req.recent_messages,
@@ -4687,7 +4749,7 @@ async def route_edit_intent_api(req: EditIntentRouteRequest):
 
 
 @app.post("/intent/route-edit/stream")
-async def route_edit_intent_stream_api(req: EditIntentRouteRequest):
+async def route_edit_intent_stream_api(req: EditIntentRouteRequest, request: Request):
     """[F2 스트리밍 — 헌장 §3-부칙] 허브 대화 reply를 토큰 단위 SSE로 흘린다.
     결정론 사다리/편집 분류 응답은 즉답 final 1건(스트리밍 불요 경로 유지),
     자유대화(answer_only)만 stream_smalltalk 토큰 스트림. 응답 내용·구조는
@@ -4697,22 +4759,51 @@ async def route_edit_intent_stream_api(req: EditIntentRouteRequest):
     import time as _time
     from fastapi.responses import StreamingResponse
     from engine.intent_router import route_edit_intent, stream_smalltalk
+    trace_id = request.headers.get("x-ccut-trace-id") if speed_trace.enabled() else None
+    if trace_id:
+        req_dump = req.model_dump() if hasattr(req, "model_dump") else req.dict()
+        body_bytes = len(_json.dumps(req_dump, ensure_ascii=False).encode("utf-8"))
+        recent_chars = sum(len(str((m or {}).get("text") or "")) for m in (req.recent_messages or []))
+        active_jobs = [
+            str(k) for k, v in _fragment_job_registry.items()
+            if str((v or {}).get("status") or "").upper() not in ("DONE", "FAILED", "ERROR")
+        ]
+        speed_trace.mark(trace_id, "t3")
+        speed_trace.update(
+            trace_id,
+            request={
+                "endpoint": "/intent/route-edit/stream",
+                "method": "POST",
+                "body_bytes": body_bytes,
+                "recent_msgs": len(req.recent_messages or []),
+                "recent_chars": recent_chars,
+                "source_ids": len(req.source_ids or []),
+                "fragment_labels": len(req.fragment_labels or {}),
+                "stream": True,
+            },
+            concurrent_job_ids=active_jobs,
+        )
 
     def _sse(obj):
         return "data: " + _json.dumps(obj, ensure_ascii=False) + "\n\n"
 
     def gen():
+        speed_trace.set_current(trace_id)
         t0 = _time.time()
         labels = _merged_fragment_labels(req)
         r = (
             _unknown_fragment_label_route(req.input_text, labels)
             or _rubric_direct_route(req.input_text)
+            or _chat_only_speed_bypass(req.input_text)
             or route_edit_intent(
                 source_ids=req.source_ids, input_text=req.input_text,
                 recent_messages=req.recent_messages,
                 selected_proposal_id=req.selected_proposal_id,
                 fragment_labels=labels, defer_chat=True, project_id=req.project_id)
         )
+        if trace_id:
+            speed_trace.update(trace_id, route_action=r.get("action"), route_via=r.get("via"),
+                               route_matched=r.get("matched"))
         # [관문D 2026-07-21 국장승인] 라벨교정 실행 시 조각 판단근거(scene·speech·context)를
         #   route 응답에 노출 — chat이 쓰는 엔드포인트가 route-edit이므로 여기 실어야 화면 도달.
         if isinstance(r, dict) and r.get("candidate_fragment_ids"):
@@ -4726,12 +4817,25 @@ async def route_edit_intent_stream_api(req: EditIntentRouteRequest):
             # 결정론/편집 분류 — 완성 응답이 이미 있다. 즉답 1건 (스트리밍 불요 경로)
             print(f"[F2-TTFT] path=direct first_out_ms={int((_time.time() - t0) * 1000)} "
                   f"action={r.get('action')}")
+            if trace_id:
+                speed_trace.mark(trace_id, "t5")
+                speed_trace.update(trace_id, response={"reply_len": len(str(r.get("reply") or "")),
+                                                       "stream_complete": False})
             yield _sse({"type": "final", "result": r})
+            speed_trace.set_current(None)
             return
         yield _sse({"type": "meta", "action": "answer_only"})
         first_ms = None
         final_text = None
         partial_text = ""
+        if (r.get("matched") or {}).get("speed_bypass"):
+            if trace_id:
+                speed_trace.mark(trace_id, "t3_5")
+                speed_trace.mark(trace_id, "t4")
+                speed_trace.mark(trace_id, "t5")
+            partial_text = "응, "
+            yield _sse({"type": "token", "text": partial_text})
+        speed_trace.set_current(trace_id)
         for kind, payload in stream_smalltalk(req.input_text, req.recent_messages,
                                               facts=sc.get("facts") or ""):
             if kind == "token":
@@ -4751,9 +4855,13 @@ async def route_edit_intent_stream_api(req: EditIntentRouteRequest):
             r["stream_complete"] = True
         else:
             r["stream_complete"] = False
+        if trace_id:
+            speed_trace.update(trace_id, response={"reply_len": len(final_text),
+                                                   "stream_complete": r["stream_complete"]})
         print(f"[F2-TTFT] path=stream total_ms={int((_time.time() - t0) * 1000)} "
               f"reply_len={len(final_text)}")
         yield _sse({"type": "final", "result": r})
+        speed_trace.set_current(None)
 
     return StreamingResponse(gen(), media_type="text/event-stream")
 
