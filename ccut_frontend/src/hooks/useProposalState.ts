@@ -10,6 +10,16 @@ import { storyGateEnabled } from "@/hooks/useStoryGate";  // [STORY-GATE P3/S3] 
 import { DEBUG_LOG } from "@/utils/debugFlags";
 import { recordMirrorEvent } from "@/utils/mirrorEventLog";
 
+// == 대화 판정 경로 (2026-07-27 감사 확정) ==
+// 제품 경로: routeEditIntentStream -> POST /intent/route-edit/stream
+// fallback: /intent/route-edit (batch)
+// 두 번째 판정자 주의:
+//   - narrativeService.interpretIntent: env 밖, 항상 실행(mirror 보조)
+//   - consultationDecision 변환
+//   - deterministic fallback
+//   - finalAiText가 stream_text 우선 처리를 덮을 수 있음 - 수리 대기
+// 상세: 이 파일 내부 [INTENT-PATCH] 구획 주석 참조
+
 /**
  * [STEP 10-K-C1-R39] Frontend Commit-Time Sequence Guard
  * 백엔드가 어떤 시퀀스를 주든, 프론트에서 실제 재생 직전에 
@@ -823,8 +833,15 @@ export const useProposalState = (
       return;
     }
 
+    // == [INTENT-PATCH] nextIntent 조립 구간 ==============================
+    // 이 블록에는 세 가지가 섞여 있다. 통삭제 금지.
+    //   1. legacy narrative (env CCUT_LEGACY_NARRATIVE, 기본 OFF) - 삭제 후보
+    //   2. nextIntent 생성 - 보존. story_intent 저장부와 userIntent 조립부가 읽음
+    //   3. deterministic fallback - 보존. legacy OFF에서도 실행됨
+    // 감사: OVERLAP-AUDIT-1 / LEGACY-NARRATIVE-AUDIT-1 (2026-07-27)
     // Background Narrative AI call with 30s timeout
     const startTime = Date.now();
+    // [보존] result는 fallback 판정과 로그가 읽는다. 삭제 시 대체값 필요.
     let result: any = { status: "TIMEOUT", patch: null, latency_ms: 0, error: "Frontend 30s timeout" };
     if (!LEGACY_NARRATIVE_ENABLED) {
       console.log("[INTENT-ROUTE]\n" + JSON.stringify({
@@ -833,6 +850,7 @@ export const useProposalState = (
         inputText: text
       }, null, 2));
     } else {
+      // [LEGACY·삭제후보] env ON일 때만. 국장 미사용 확인(2026-07-27).
       console.log("[INTENT-ROUTE]\n" + JSON.stringify({
         stage: "narrative_call",
         enabled: LEGACY_NARRATIVE_ENABLED,
@@ -857,14 +875,17 @@ export const useProposalState = (
       }
     }
 
+    // [보존] nextIntent - story_intent 저장부와 userIntent 조립부가 읽는다.
     const nextIntent: any = { ...(storyPlan.story_intent || {}) };
     
+    // [보존] deterministic fallback 여부 결정. legacy OFF에서는 이 경로가 현재 기능이다.
     const shouldUseDeterministicFallback = !(
       LEGACY_NARRATIVE_ENABLED &&
       result.status === "OK" &&
       result.patch
     );
 
+    // [LEGACY·삭제후보] patch consume. env ON + patch 성공 때만 nextIntent에 병합한다.
     if (result.status === "OK" && result.patch && LEGACY_NARRATIVE_ENABLED) {
       Object.assign(nextIntent, result.patch);
       console.log("[INTENT-ROUTE]\n" + JSON.stringify({
@@ -877,6 +898,7 @@ export const useProposalState = (
     // NOTE: patch_suppressed 로그는 게이트 off 시 narrative 호출 자체가
     // 스킵되면서 도달 불가(dead)가 되어 제거됨 — narrative_skipped로 대체.
 
+    // [보존] deterministic fallback - legacy OFF에서도 실행되는 현재 기능.
     if (shouldUseDeterministicFallback) {
       if (/빠르게|템포|속도/.test(lower)) nextIntent.pace = "fast";
       if (/감성|따뜻|여운/.test(lower)) nextIntent.mood = "warm";
@@ -892,6 +914,8 @@ export const useProposalState = (
     }
 
     const nextStatus = shouldConfirm ? "confirmed" : "user_requested_change";
+    // ★[주의] stream_text 우선 처리(위쪽)를 여기서 덮을 수 있다.
+    // ABORT-1과 함께 수리 예정. 2026-07-27 감사에서 확인.
     const finalAiText = consultationDecision.text;
 
     setStoryPlan((prev: any) => {
