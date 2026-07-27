@@ -121,6 +121,26 @@ def _resp(action, reply, normalized=None, confidence=0.9, matched=None, via="det
     }
 
 
+def _history_prefix_pattern():
+    return os.getenv(
+        "CCUT_RECENT_MESSAGE_PREFIX_RE",
+        r"^\s*(?:(?:CCUT|AI|Assistant|User|사용자|어시스턴트)\s*[:：]\s*)+",
+    )
+
+
+def _clean_recent_text(text):
+    """Strip speaker prefixes from stored chat history before prompt injection."""
+    raw = str(text or "")
+    try:
+        return _re_mod.sub(_history_prefix_pattern(), "", raw).strip()
+    except _re_mod.error:
+        return _re_mod.sub(
+            r"^\s*(?:(?:CCUT|AI|Assistant|User|사용자|어시스턴트)\s*[:：]\s*)+",
+            "",
+            raw,
+        ).strip()
+
+
 def _last_user_edit_instruction(recent_messages):
     """Return the last user edit instruction exactly as typed, if one is present."""
     for m in reversed(recent_messages or []):
@@ -187,7 +207,7 @@ def _llm_understand(input_text, recent_messages=None, source_ids=None,
     ctx = ""
     for m in (recent_messages or [])[-8:]:
         who = "사용자" if (m.get("sender") == "user") else "CCUT"
-        txt = str(m.get("text") or "")[:160]
+        txt = _clean_recent_text(m.get("text"))[:160]
         if txt:
             ctx += f"{who}: {txt}\n"
     n_src = len(source_ids or [])
@@ -349,7 +369,7 @@ def _smalltalk_prompt(input_text, recent_messages=None, facts="", plain=False):
     ctx = ""
     for m in (recent_messages or [])[-6:]:
         who = "사용자" if (m.get("sender") == "user") else "CCUT"
-        txt = str(m.get("text") or "")[:120]
+        txt = _clean_recent_text(m.get("text"))[:120]
         if txt:
             ctx += f"{who}: {txt}\n"
     tail = ("답변 문장만 출력한다 — JSON·따옴표·머리말 금지.\n" if plain
