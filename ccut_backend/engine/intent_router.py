@@ -121,6 +121,27 @@ def _resp(action, reply, normalized=None, confidence=0.9, matched=None, via="det
     }
 
 
+def _last_user_edit_instruction(recent_messages):
+    """Return the last user edit instruction exactly as typed, if one is present."""
+    for m in reversed(recent_messages or []):
+        if m.get("sender") != "user":
+            continue
+        txt = str(m.get("text") or "").strip()
+        if not txt:
+            continue
+        if _EDIT_MARK_RE.search(txt) or _re_mod.search(
+                r"위주|중심|나오는|나온|장면|영상|조각|클립|컷|모아|골라|추려|만들|남겨|빼|줄여|늘려",
+                txt):
+            return txt
+    return None
+
+
+def _bare_redo_clarification(prev_instruction=None):
+    if prev_instruction:
+        return f"방금 말씀하신 '{prev_instruction}' 기준으로 다시 할까요? 맞으면 '응'이라고 답해 주세요."
+    return "무엇을 다시 할까요? 다시 적용할 기준을 한 번만 말씀해 주세요."
+
+
 _ORDINAL_KO = {0: "첫 번째", 1: "두 번째", 2: "세 번째", 3: "네 번째",
                4: "다섯 번째", -1: "마지막"}
 
@@ -435,6 +456,23 @@ def route_edit_intent(source_ids=None, input_text="", recent_messages=None,
                 return rr
             return r0  # 그새 프로젝트에 생겼으면 그 결과 그대로
 
+        _redo_ask_idx = None
+        for idx in range(len(recent_messages) - 1, -1, -1):
+            txt = str(recent_messages[idx].get("text") or "").strip()
+            if recent_messages[idx].get("sender") != "user" and "기준으로 다시 할까요" in txt:
+                _redo_ask_idx = idx
+                break
+        _redo_prev_edit = _last_user_edit_instruction(
+            recent_messages[:_redo_ask_idx] if _redo_ask_idx is not None else None)
+        if _redo_prev_edit:
+            return route_edit_intent(source_ids=source_ids, input_text=_redo_prev_edit,
+                                     recent_messages=None, allow_llm=allow_llm,
+                                     person_vocab=person_vocab,
+                                     archive_lookup=archive_lookup,
+                                     search_lookup=search_lookup,
+                                     fragment_labels=fragment_labels,
+                                     project_id=project_id)
+
     # ── 0.65 의도 해제 [INTENT-CLEAR — #49 (a) 4단, 국장 승인 2026-07-17] —
     #    "전부 다시 봐줘"류 = 활성 의도 스택 초기화 + 무필터 복귀 (F4·§1-10: 승계가 감옥이 되면 안 된다).
     #    "처음부터 다시"는 재실행/해제가 애매 — 여기서 잡지 않고 clarification으로 (V 판정).
@@ -460,12 +498,21 @@ def route_edit_intent(source_ids=None, input_text="", recent_messages=None,
     #    긴 형태 우선(만들어→만들) — 정규식 대안은 순서 매칭.
     if len(t) <= 24 and _re.match(
             r"^(그럼\s*)?(스토리|편집|제안|영상)?\s*(을|를)?\s*(다시|재|새로|한\s*번\s*더)\s*"
-            r"(편집|제안|골라서|골라|만들어|만들|뽑아|뽑)?\s*(하게|하도록)?\s*"
+            r"(편집|제안|생성|골라서|골라|만들어|만들|뽑아|뽑)?\s*(하게|하도록)?\s*"
             r"(해\s*줘|해줘|해\s*봐|해봐|부탁해?|줘|주세요|하자|할래|볼래|보자)?[.!~?\s]*$", t):
-        return _resp("retrigger",
-                     "직전 기준으로 다시 골라볼게요.",
+        _prev_edit = _last_user_edit_instruction(recent_messages)
+        return _resp("ask_clarification",
+                     _bare_redo_clarification(_prev_edit),
                      confidence=0.9, via="deterministic",
-                     matched={"kind": "retrigger"})
+                     matched={"kind": "bare_redo_clarification"})
+    if len(t) <= 24 and _re.match(
+            r"^(아까\s*그거|방금\s*말한\s*거|그거)\s*(다시|한\s*번\s*더)?\s*"
+            r"(해\s*줘|해줘|해\s*봐|해봐|줘|주세요)?[.!~?\s]*$", t):
+        _prev_edit = _last_user_edit_instruction(recent_messages)
+        return _resp("ask_clarification",
+                     _bare_redo_clarification(_prev_edit),
+                     confidence=0.9, via="deterministic",
+                     matched={"kind": "bare_redo_clarification"})
 
     # ── 0.5 조회/열람 [SHOW] — "보여줘/있나/찾아줘"는 편집이 아니라 보여주기다.
     #    편집 동사가 함께 있으면(예: "찾아서 편집해줘") 편집 사다리가 우선.
