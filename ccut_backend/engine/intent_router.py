@@ -344,6 +344,37 @@ def _sanitize_talk(reply):
     return reply
 
 
+_SMALLTALK_FALLBACK_REPLY = "네, 듣고 있어요. 편하게 이야기해 주세요."
+
+
+def smalltalk_retry_max():
+    try:
+        return max(0, min(1, int(os.getenv("CCUT_SMALLTALK_RETRY_MAX", "1"))))
+    except Exception:
+        return 1
+
+
+def validate_smalltalk_reply(reply):
+    """스트림 최종문 채택 게이트. 위생 통과 + 화면에 남겨도 되는 완결문만 허용."""
+    text = _sanitize_talk(str(reply or "").strip())
+    if not text:
+        return None
+    if _re_mod.fullmatch(r"[\W_./\\-]+", text):
+        return None
+    ascii_probe = text.replace("CCUT", "")
+    if _re_mod.search(r"/[A-Za-z0-9_-]{2,}", ascii_probe):
+        return None
+    if _re_mod.search(r"[A-Z]{3,}", ascii_probe):
+        return None
+    if _re_mod.search(r"[A-Za-z]{2,}\s+[A-Za-z]{2,}", ascii_probe):
+        return None
+    if any(ch in text for ch in "📌💡💬"):
+        return None
+    if not _re_mod.search(r"(요|다|죠|까|네|어|아|세요|습니다|니다|[.!?])\s*$", text):
+        return None
+    return text
+
+
 def _smalltalk_prompt(input_text, recent_messages=None, facts="", plain=False):
     """[F2] 자유대화 프롬프트 조립 — 일괄(JSON)과 스트림(plain 텍스트)이 규칙을 공유."""
     ctx = ""
