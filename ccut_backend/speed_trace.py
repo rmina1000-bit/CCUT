@@ -114,6 +114,10 @@ def _summarize_ollama_calls(rec: dict[str, Any]) -> None:
             call["num_predict"] = "unset"
         stop = call.get("stop")
         call["stop_configured"] = bool(stop)
+        if call.get("prompt_tokens") is None and call.get("prompt_eval_count") is None:
+            call["prompt_token_status"] = "missing"
+        else:
+            call["prompt_token_status"] = "ok"
 
 
 def finalize(frontend: dict[str, Any]) -> dict[str, Any]:
@@ -128,7 +132,13 @@ def finalize(frontend: dict[str, Any]) -> dict[str, Any]:
                 rec[key] = frontend.get(key)
         rec["longtasks"] = frontend.get("longtasks") or []
         rec["request"] = frontend.get("request") or rec.get("request")
-        rec["response"] = frontend.get("response") or rec.get("response")
+        server_response = rec.get("response") if isinstance(rec.get("response"), dict) else {}
+        frontend_response = frontend.get("response") if isinstance(frontend.get("response"), dict) else {}
+        rec["response"] = {**server_response, **frontend_response}
+        rec["screen_text"] = frontend.get("screen_text")
+        rec["db_assistant_text"] = frontend.get("db_assistant_text")
+        rec["db_assistant_source"] = frontend.get("db_assistant_source")
+        rec["client_abort"] = bool(frontend.get("client_abort"))
         if "t5" not in rec:
             for call in rec.get("ollama_calls") or []:
                 if call.get("t_first_token"):
