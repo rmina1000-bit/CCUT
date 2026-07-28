@@ -1,6 +1,7 @@
 import json
 import os
 import sqlite3
+import subprocess
 import time
 from datetime import datetime
 from pathlib import Path
@@ -12,12 +13,72 @@ CONFIG_DIR = BACKEND_DIR / "config"
 DB_PATH = BACKEND_DIR / "ccut_app.db"
 AUDIT_CONFIG = CONFIG_DIR / "lab_audit.json"
 CANDIDATES_CONFIG = CONFIG_DIR / "lab_candidates.json"
+SENSOR_CONTRACT_CONFIG = CONFIG_DIR / "sensor_contract.json"
 _CACHE = None
 
 
 def _load_json(path):
     with open(path, "r", encoding="utf-8") as handle:
         return json.load(handle)
+
+
+def _load_head_candidate_ledger():
+    relative_path = CANDIDATES_CONFIG.relative_to(REPO_DIR).as_posix()
+    completed = subprocess.run(
+        ["git", "show", f"HEAD:{relative_path}"],
+        cwd=REPO_DIR,
+        check=True,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+    )
+    return json.loads(completed.stdout)
+
+
+def _validate_candidate_history_append_only(candidate_ledger, baseline=None):
+    baseline = baseline or _load_head_candidate_ledger()
+    current_by_id = {
+        item["candidate_id"]: item for item in candidate_ledger["candidates"]
+    }
+    for previous in baseline["candidates"]:
+        candidate_id = previous["candidate_id"]
+        current = current_by_id.get(candidate_id)
+        if current is None:
+            raise ValueError(
+                f"candidate measurement history rejected: {candidate_id} was deleted"
+            )
+        previous_history = previous.get("측정이력", [])
+        current_history = current.get("측정이력", [])
+        if len(current_history) < len(previous_history):
+            raise ValueError(
+                f"candidate measurement history rejected: {candidate_id} entries were deleted"
+            )
+        for index, previous_entry in enumerate(previous_history):
+            if current_history[index] != previous_entry:
+                raise ValueError(
+                    "candidate measurement history rejected: "
+                    f"{candidate_id} entry {index} was modified or reordered"
+                )
+    return {
+        "status": "APPEND_ONLY",
+        "baseline": "git_HEAD",
+        "checked_candidates": len(baseline["candidates"]),
+    }
+
+
+def _load_sensor_contract():
+    contract = _load_json(SENSOR_CONTRACT_CONFIG)
+    required = {
+        "sensor", "version", "fragment_id", "span",
+        "values", "confidence", "unknown_reason",
+    }
+    declared = set(contract.get("record", {}).get("required", []))
+    missing = sorted(required - declared)
+    if missing:
+        raise ValueError(
+            f"sensor contract missing required fields: {', '.join(missing)}"
+        )
+    return contract
 
 
 def _source_files(extensions):
@@ -141,6 +202,8 @@ def run_audit():
     started = time.perf_counter()
     config = _load_json(AUDIT_CONFIG)
     candidate_ledger = _load_json(CANDIDATES_CONFIG)
+    candidate_guard = _validate_candidate_history_append_only(candidate_ledger)
+    sensor_contract = _load_sensor_contract()
     extensions = set(config.get("source_extensions") or [".py", ".ts", ".tsx"])
 
     con = sqlite3.connect(f"file:{DB_PATH.as_posix()}?mode=ro", uri=True)
@@ -361,6 +424,14 @@ def run_audit():
         },
         "edges": edges,
         "candidates": candidate_ledger["candidates"],
+        "candidate_ledger_guard": candidate_guard,
+        "sensor_contract": {
+            "exists": True,
+            "path": SENSOR_CONTRACT_CONFIG.relative_to(REPO_DIR).as_posix(),
+            "schema_version": sensor_contract["schema_version"],
+            "required_fields": sensor_contract["record"]["required"],
+            "sensor_count": len(sensor_contract["sensors"]),
+        },
         "emotion_evidence": {
             "legacy_node": {
                 "id": "emotion_score",

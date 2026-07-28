@@ -1,0 +1,111 @@
+{
+  "schema_version": 1,
+  "contract_name": "CCUT Sensor Evidence Contract",
+  "storage": {
+    "new_table": false,
+    "canonical_target": {
+      "table": "semantic_fragments",
+      "column": "structural_json",
+      "json_key": "sensor_evidence"
+    },
+    "index_join": {
+      "table": "fragment_index",
+      "key": "fragment_id",
+      "payload_column": null,
+      "mode": "join_by_fragment_id",
+      "reason": "fragment_index에는 센서 계약 전체를 담는 JSON 컬럼이 없다."
+    },
+    "verified_existing_columns": [
+      {
+        "table": "semantic_fragments",
+        "column": "structural_json",
+        "json_key": "sensor_evidence"
+      },
+      {
+        "table": "fragment_index",
+        "column": "fragment_id",
+        "json_key": null
+      }
+    ]
+  },
+  "record": {
+    "required": [
+      "sensor",
+      "version",
+      "fragment_id",
+      "span",
+      "values",
+      "confidence",
+      "unknown_reason"
+    ],
+    "span": {
+      "start_ms": "integer",
+      "end_ms": "integer"
+    },
+    "confidence": "number_0_to_1_or_UNKNOWN",
+    "unknown_reason": "required_when_confidence_or_any_value_is_UNKNOWN",
+    "failure_policy": "측정 실패는 0이 아니라 UNKNOWN으로 기록한다.",
+    "forbidden_fields": [
+      "emotion_score",
+      "aggregate_score",
+      "delete_fragment",
+      "reorder_fragment"
+    ]
+  },
+  "sensors": [
+    {
+      "sensor": "camera_motion",
+      "version": "lab3_probe",
+      "values_keys": [
+        "pan",
+        "tilt",
+        "zoom",
+        "nonrigid_motion",
+        "camera_motion_onset"
+      ]
+    },
+    {
+      "sensor": "yunet",
+      "version": "lab3_probe",
+      "values_keys": [
+        "face_size",
+        "shot_size_proxy",
+        "shot_size_proxy_basis",
+        "faces"
+      ]
+    },
+    {
+      "sensor": "prosody_delta",
+      "version": "lab2_probe",
+      "values_keys": [
+        "rms_delta",
+        "f0_delta"
+      ]
+    },
+    {
+      "sensor": "silero_vad",
+      "version": "6.2.1_onnx",
+      "values_keys": [
+        "speech_presence",
+        "speech_ratio",
+        "speech_spans"
+      ]
+    },
+    {
+      "sensor": "yamnet",
+      "version": "UNKNOWN",
+      "values_keys": [
+        "acoustic_event"
+      ],
+      "unknown_reason": "MODULE_MISSING"
+    },
+    {
+      "sensor": "dnsmos",
+      "version": "UNKNOWN",
+      "values_keys": [
+        "quality_evidence"
+      ],
+      "unknown_reason": "MODEL_MISSING"
+    }
+  ]
+}

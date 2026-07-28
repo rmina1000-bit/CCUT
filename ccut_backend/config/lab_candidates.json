@@ -190,6 +190,16 @@
           "83소스환산초": 25.887,
           "UNKNOWN비율": "0%",
           "raw파일경로": "D:\\CCUT_EXTERNAL_DATA\\lab3\\silero_b3_results.json"
+        },
+        {
+          "회차": "LAB-4-ONNX",
+          "날짜": "2026-07-29",
+          "조건": "본선 Python onnxruntime 1.24.1 직접 구동, torch·silero_vad import 없음, threshold 0.5, 골든셋 5조각",
+          "정확도지표": "torch 경로 파도0·박수0·전차0·조용0·아이말0.7546 vs onnx 파도0·박수0·전차0·조용0·아이말0.7486",
+          "조각당ms": 27.01,
+          "83소스환산초": 18.096,
+          "UNKNOWN비율": "0%",
+          "raw파일경로": "D:\\CCUT_EXTERNAL_DATA\\lab4\\silero_onnxruntime_results.json"
         }
       ],
       "분류": ["미배선", "배선후보"],

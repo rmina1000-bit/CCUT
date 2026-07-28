@@ -83,6 +83,18 @@ interface LabAudit {
   };
   edges: AuditEdge[];
   candidates: LabCandidate[];
+  candidate_ledger_guard?: {
+    status: "APPEND_ONLY";
+    baseline: "git_HEAD";
+    checked_candidates: number;
+  };
+  sensor_contract?: {
+    exists: boolean;
+    path: string;
+    schema_version: number;
+    required_fields: string[];
+    sensor_count: number;
+  };
   emotion_evidence: {
     legacy_node: { id: "emotion_score"; status: "재설계" };
     items: Array<{ id: string; status: "VALUE" | "UNKNOWN" }>;
@@ -345,6 +357,16 @@ export const AdminEditLabPanel: React.FC = () => {
               ? `재료 ${audit.materials.length - missingMaterials} 값 있음 / ${missingMaterials} 값 없음 · 하드룰 ${audit.rules.declared} 선언 / ${audit.rules.registered} 등록 · 기법 ${audit.techniques.declared} 선언 / ${audit.techniques.wired} 배선`
               : "측정 결과 없음"}
           </p>
+          {audit?.sensor_contract && audit.candidate_ledger_guard && (
+            <div className="mt-2 flex flex-wrap gap-2 text-[9px] font-mono">
+              <span className="border border-emerald-500/30 bg-emerald-500/10 px-1.5 py-0.5 text-emerald-200/80">
+                Sensor Contract v{audit.sensor_contract.schema_version} · {audit.sensor_contract.sensor_count} sensors
+              </span>
+              <span className="border border-sky-500/30 bg-sky-500/10 px-1.5 py-0.5 text-sky-200/80">
+                측정이력 {audit.candidate_ledger_guard.status} · {audit.candidate_ledger_guard.baseline}
+              </span>
+            </div>
+          )}
         </div>
         <div className="flex items-center gap-3">
           {audit && (
