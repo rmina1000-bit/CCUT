@@ -440,30 +440,36 @@ def run_audit():
     }
     for item in techniques:
         technique_id = item["technique_id"]
-        required_materials = [
-            signal for signal in item.get("required_signals", [])
-            if signal in material_by_id
-        ]
-        unknown_signals = [
-            signal for signal in item.get("required_signals", [])
-            if signal not in material_by_id
-        ]
-        required_rules = referenced_technique_rules.get(
-            technique_id, "UNDECLARED"
-        )
+        relationship = item.get("relationship_source") or {}
+        relationship_source = relationship.get("type", "UNDECLARED")
+        if technique_id == "punch_in":
+            relationship_source = "DERIVED"
+        required_materials = item.get("requires_materials")
+        if required_materials is None and technique_id == "punch_in":
+            required_materials = [
+                signal for signal in item.get("required_signals", [])
+                if signal in material_by_id
+            ]
+        required_materials = required_materials or []
+        required_rules = item.get("requires_rules")
+        if required_rules is None:
+            required_rules = referenced_technique_rules.get(
+                technique_id, "UNDECLARED"
+            )
         blockers = []
         if not required_materials:
             blockers.append({
                 "kind": "관계 미선언",
-                "detail": "감사 재료와 연결된 required_signals가 없음",
-            })
-        if unknown_signals:
-            blockers.append({
-                "kind": "관계 미선언",
-                "detail": f"감사 재료에 없는 신호: {', '.join(unknown_signals)}",
+                "detail": "requires_materials 미선언",
             })
         for material_id in required_materials:
-            material = material_by_id[material_id]
+            material = material_by_id.get(material_id)
+            if material is None:
+                blockers.append({
+                    "kind": "관계 미선언",
+                    "detail": f"감사 재료에 없음: {material_id}",
+                })
+                continue
             if material["non_null"] == 0:
                 blockers.append({
                     "kind": "재료 없음",
@@ -498,6 +504,8 @@ def run_audit():
             ),
             "requires_materials": required_materials or "UNDECLARED",
             "requires_rules": required_rules,
+            "relationship_source": relationship_source,
+            "relationship_source_detail": relationship,
             "blockers": blockers,
             "wireable_now": not blockers,
             "failure_check": item.get("failure_check"),
@@ -511,6 +519,8 @@ def run_audit():
         ),
         "requires_materials": "UNDECLARED",
         "requires_rules": "UNDECLARED",
+        "relationship_source": "UNDECLARED",
+        "relationship_source_detail": {},
         "blockers": [],
         "wireable_now": True,
         "failure_check": None,

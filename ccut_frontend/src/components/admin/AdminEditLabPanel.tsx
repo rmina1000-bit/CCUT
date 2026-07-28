@@ -37,6 +37,11 @@ interface TechniqueAudit {
   declared_in: string | null;
   requires_materials: string[] | "UNDECLARED";
   requires_rules: string[] | "UNDECLARED";
+  relationship_source: "DERIVED" | "DIRECTOR" | "UNDECLARED";
+  relationship_source_detail: {
+    derived_from?: string[];
+    approved_at?: string;
+  };
   failure_check: string | null;
   blockers: Array<{ kind: string; detail: string }>;
   wireable_now: boolean;
@@ -454,6 +459,10 @@ export const AdminEditLabPanel: React.FC = () => {
                 <p className="text-sm font-semibold">{selectedTechnique.id}</p>
                 <p>{selectedTechnique.wired ? "실제 배선" : "미배선"} · 요구 재료 {Array.isArray(selectedTechnique.requires_materials) ? selectedTechnique.requires_materials.join(", ") : "관계 미선언"}</p>
                 <p>요구 룰 {Array.isArray(selectedTechnique.requires_rules) ? selectedTechnique.requires_rules.join(", ") : "관계 미선언"}</p>
+                <p>관계 출처 {selectedTechnique.relationship_source}</p>
+                {selectedTechnique.relationship_source_detail.derived_from && (
+                  <p className="text-muted-foreground/60 break-all">유도 근거: {selectedTechnique.relationship_source_detail.derived_from.join(" / ")}</p>
+                )}
                 <p className="text-muted-foreground/60 break-all">근거: {selectedTechnique.declared_in || "없음"}</p>
                 <p>차단: {selectedTechnique.blockers.map(item => `${item.kind}(${item.detail})`).join(" / ") || "없음"}</p>
               </div>
@@ -486,12 +495,13 @@ export const AdminEditLabPanel: React.FC = () => {
             <div className="overflow-x-auto border border-border/15">
               <table className="w-full text-[11px]">
                 <thead className="bg-secondary/20 text-muted-foreground/60">
-                  <tr><th className="px-3 py-2 text-left">기법</th><th className="px-3 py-2 text-left">상태</th><th className="px-3 py-2 text-left">막힌 사유</th></tr>
+                  <tr><th className="px-3 py-2 text-left">기법</th><th className="px-3 py-2 text-left">관계 출처</th><th className="px-3 py-2 text-left">상태</th><th className="px-3 py-2 text-left">막힌 사유</th></tr>
                 </thead>
                 <tbody className="divide-y divide-border/10">
                   {audit.techniques.items.map(item => (
                     <tr key={item.id}>
                       <td className="px-3 py-2 font-mono">{item.id}</td>
+                      <td className="px-3 py-2 font-mono">{item.relationship_source}</td>
                       <td className="px-3 py-2">{item.wired ? "배선됨" : item.wireable_now ? "배선 가능" : "차단"}</td>
                       <td className="px-3 py-2 text-muted-foreground/65">{item.blockers.map(blocker => `${blocker.kind}: ${blocker.detail}`).join(" / ") || "없음"}</td>
                     </tr>

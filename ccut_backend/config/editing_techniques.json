@@ -7,6 +7,16 @@
       "origin_model": ["video-use", "descript"],
       "description": "컷 지점을 가장 가까운 단어의 시작/끝 지점으로 자동 보정",
       "required_signals": ["word_timestamps"],
+      "requires_materials": ["word_timestamps"],
+      "requires_rules": ["RULE_WORD_BOUNDARY_SNAP"],
+      "relationship_source": {
+        "type": "DERIVED",
+        "derived_from": [
+          "required_signals:word_timestamps",
+          "engine_effect:snap_threshold_ms",
+          "ccut_backend/story_gate/proposal_axis.py:_check_word_boundary_snap"
+        ]
+      },
       "engine_effect": { "snap_threshold_ms": 200 },
       "failure_check": "mid_word_cut_detected",
       "best_for": ["all"]
