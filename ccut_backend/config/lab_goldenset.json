@@ -1,0 +1,74 @@
+{
+  "schema_version": 1,
+  "address_contract": {
+    "canonical": "{source_id}:{start_ms}:{end_ms}",
+    "span_hash": "SHA256(UTF-8 canonical)",
+    "fragment_id_authority": "reference_only_may_change"
+  },
+  "goldens": [
+    {
+      "golden_key": {
+        "source_id": "SRC_28216390",
+        "start_ms": 55500,
+        "end_ms": 61420,
+        "span_hash": "8696322CA310B77B1B7D88DE601C683AE39925359942453F338E4E74BE941F8E"
+      },
+      "label": "파도",
+      "fragment_id": "SF_08F5DB_SRC_28216390",
+      "history": []
+    },
+    {
+      "golden_key": {
+        "source_id": "SRC_011447A8",
+        "start_ms": 36000,
+        "end_ms": 36760,
+        "span_hash": "267BCC6A8B3AD720321E3E20A782C51AFE09C0ECB8C96F447B2E68FF32EAA78D"
+      },
+      "label": "박수",
+      "fragment_id": "SF_85E45E_SRC_011447A8",
+      "history": []
+    },
+    {
+      "golden_key": {
+        "source_id": "SRC_18733F62",
+        "start_ms": 13000,
+        "end_ms": 20000,
+        "span_hash": "11F7501250E06ACD21CC0E231D967ADEBC82B00E80A16017687AFD3906EDB4F1"
+      },
+      "label": "전차",
+      "fragment_id": "SF_4FDADC_SRC_18733F62",
+      "history": [
+        {
+          "date": "2026-07-29",
+          "event": "fragment_id_reissued",
+          "previous_fragment_id": "SF_4465F7_SRC_18733F62",
+          "current_fragment_id": "SF_4FDADC_SRC_18733F62",
+          "boundary_change": false,
+          "evidence": "same source and 13000-20000ms span"
+        }
+      ]
+    },
+    {
+      "golden_key": {
+        "source_id": "SRC_F6A1092E",
+        "start_ms": 0,
+        "end_ms": 15240,
+        "span_hash": "DFE8EC164DEA2CABCCA622CC51622FABF570F51B2492B338B450AC1031BFE8E4"
+      },
+      "label": "아이말",
+      "fragment_id": "SF_2BD443_SRC_F6A1092E",
+      "history": []
+    },
+    {
+      "golden_key": {
+        "source_id": "SRC_D959D94B",
+        "start_ms": 0,
+        "end_ms": 4000,
+        "span_hash": "2D8F9B6DB5512010161EB405100DB020DBCDD702A2B1E07F1E8A52F9788B763B"
+      },
+      "label": "조용",
+      "fragment_id": "SF_FB1BE4_SRC_D959D94B",
+      "history": []
+    }
+  ]
+}

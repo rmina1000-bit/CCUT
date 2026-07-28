@@ -1,4 +1,5 @@
 import json
+import hashlib
 import os
 import sqlite3
 import subprocess
@@ -14,6 +15,7 @@ DB_PATH = BACKEND_DIR / "ccut_app.db"
 AUDIT_CONFIG = CONFIG_DIR / "lab_audit.json"
 CANDIDATES_CONFIG = CONFIG_DIR / "lab_candidates.json"
 SENSOR_CONTRACT_CONFIG = CONFIG_DIR / "sensor_contract.json"
+GOLDENSET_CONFIG = CONFIG_DIR / "lab_goldenset.json"
 _CACHE = None
 
 
@@ -79,6 +81,89 @@ def _load_sensor_contract():
             f"sensor contract missing required fields: {', '.join(missing)}"
         )
     return contract
+
+
+def resolve_golden_key(con, golden_key):
+    canonical = (
+        f"{golden_key['source_id']}:{golden_key['start_ms']}:"
+        f"{golden_key['end_ms']}"
+    )
+    span_hash = hashlib.sha256(canonical.encode("utf-8")).hexdigest().upper()
+    if span_hash != golden_key["span_hash"]:
+        return {
+            "status": "UNKNOWN",
+            "fragment_id": None,
+            "unknown_reason": "SPAN_HASH_MISMATCH",
+        }
+
+    rows = con.execute(
+        'SELECT fragment_id, start, "end" FROM semantic_fragments '
+        "WHERE source_id=? AND ROUND(\"end\" * 1000) > ? "
+        "AND ROUND(start * 1000) < ? ORDER BY start",
+        (
+            golden_key["source_id"],
+            golden_key["start_ms"],
+            golden_key["end_ms"],
+        ),
+    ).fetchall()
+    candidates = []
+    for fragment_id, start, end in rows:
+        start_ms = round(float(start) * 1000)
+        end_ms = round(float(end) * 1000)
+        overlap_ms = max(
+            0,
+            min(end_ms, golden_key["end_ms"])
+            - max(start_ms, golden_key["start_ms"]),
+        )
+        candidates.append({
+            "fragment_id": fragment_id,
+            "start_ms": start_ms,
+            "end_ms": end_ms,
+            "overlap_ms": overlap_ms,
+        })
+
+    exact = [
+        item for item in candidates
+        if item["start_ms"] == golden_key["start_ms"]
+        and item["end_ms"] == golden_key["end_ms"]
+    ]
+    if len(exact) == 1:
+        return {
+            "status": "RESOLVED",
+            "fragment_id": exact[0]["fragment_id"],
+            "strategy": "EXACT_SPAN",
+            "current_span": {
+                "start_ms": exact[0]["start_ms"],
+                "end_ms": exact[0]["end_ms"],
+            },
+        }
+    if not candidates:
+        return {
+            "status": "UNKNOWN",
+            "fragment_id": None,
+            "unknown_reason": "NO_OVERLAP",
+        }
+
+    best_overlap = max(item["overlap_ms"] for item in candidates)
+    best = [
+        item for item in candidates if item["overlap_ms"] == best_overlap
+    ]
+    if len(best) != 1:
+        return {
+            "status": "UNKNOWN",
+            "fragment_id": None,
+            "unknown_reason": "AMBIGUOUS_OVERLAP",
+            "candidates": candidates,
+        }
+    return {
+        "status": "RESOLVED",
+        "fragment_id": best[0]["fragment_id"],
+        "strategy": "UNIQUE_MAX_OVERLAP",
+        "current_span": {
+            "start_ms": best[0]["start_ms"],
+            "end_ms": best[0]["end_ms"],
+        },
+    }
 
 
 def _source_files(extensions):
@@ -218,6 +303,8 @@ def run_audit():
     con = sqlite3.connect(f"file:{DB_PATH.as_posix()}?mode=ro", uri=True)
     con.execute("PRAGMA query_only=ON")
     materials = []
+    golden_set = _load_json(GOLDENSET_CONFIG)
+    golden_resolutions = []
     try:
         for item in config["materials"]:
             total, non_null, distinct = _material_count(con, item)
@@ -237,6 +324,13 @@ def run_audit():
                 "producer_count": len({hit.rsplit(":", 1)[0] for hit in producers}),
                 "consumers": consumers,
                 "producers": producers,
+            })
+        for item in golden_set["goldens"]:
+            golden_resolutions.append({
+                "label": item["label"],
+                "golden_key": item["golden_key"],
+                "reference_fragment_id": item["fragment_id"],
+                "resolution": resolve_golden_key(con, item["golden_key"]),
             })
     finally:
         con.close()
@@ -444,6 +538,13 @@ def run_audit():
             "schema_version": sensor_contract["schema_version"],
             "required_fields": sensor_contract["record"]["required"],
             "sensor_count": len(sensor_contract["sensors"]),
+        },
+        "golden_set": {
+            "exists": True,
+            "path": GOLDENSET_CONFIG.relative_to(REPO_DIR).as_posix(),
+            "address_authority": "source_id+start_ms+end_ms+span_hash",
+            "fragment_id_authority": "reference_only_may_change",
+            "items": golden_resolutions,
         },
         "emotion_evidence": {
             "legacy_node": {
