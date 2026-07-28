@@ -12,14 +12,21 @@ interface MaterialAudit {
   producer_count: number;
   consumers: string[];
   producers: string[];
+  storage_unit: "semantic_fragment" | "evidence_chunk" | "source_timeline";
+  fragment_consumer_contract: boolean;
+  projection: string;
+  projection_evidence: string | null;
 }
 
-type EdgeStatus = "LIVE" | "LOCKED" | "BROKEN" | "UNDECLARED";
+type EdgeStatus = "LIVE" | "REGISTERED" | "LOCKED" | "BROKEN" | "UNDECLARED";
+type RuleState = "DECLARED" | "REGISTERED" | "ENFORCED";
 
 interface RuleAudit {
   id: string;
   declared_in: string | null;
   registered: boolean;
+  enforced: boolean;
+  state: RuleState;
   checks_materials: string[] | "UNDECLARED";
   evidence: string | null;
 }
@@ -31,6 +38,8 @@ interface TechniqueAudit {
   requires_materials: string[] | "UNDECLARED";
   requires_rules: string[] | "UNDECLARED";
   failure_check: string | null;
+  blockers: Array<{ kind: string; detail: string }>;
+  wireable_now: boolean;
 }
 
 interface AuditEdge {
@@ -71,6 +80,8 @@ interface LabAudit {
   rules: {
     declared: number;
     registered: number;
+    enforced: number;
+    identity_overlap: number;
     unregistered: number;
     registered_ids: string[];
     items: RuleAudit[];
@@ -80,6 +91,8 @@ interface LabAudit {
     wired: number;
     wired_ids: string[];
     items: TechniqueAudit[];
+    wireable_unwired: number;
+    blocker_counts: Record<string, number>;
   };
   edges: AuditEdge[];
   candidates: LabCandidate[];
@@ -104,6 +117,7 @@ interface LabAudit {
 
 const STATUS_STYLE: Record<EdgeStatus, { stroke: string; dash?: string; label: string }> = {
   LIVE: { stroke: "#34d399", label: "LIVE" },
+  REGISTERED: { stroke: "#f59e0b", dash: "4 3", label: "등록·경고" },
   LOCKED: { stroke: "#64748b", label: "LOCKED" },
   BROKEN: { stroke: "#f97316", dash: "7 6", label: "BROKEN" },
   UNDECLARED: { stroke: "#64748b", dash: "2 7", label: "관계 미선언" },
@@ -124,6 +138,7 @@ const MaterialTable: React.FC<{ materials: MaterialAudit[] }> = ({ materials }) 
           <th className="px-3 py-2 text-right font-semibold">구분값</th>
           <th className="px-3 py-2 text-right font-semibold">읽는 곳</th>
           <th className="px-3 py-2 text-right font-semibold">만드는 곳</th>
+          <th className="px-3 py-2 text-left font-semibold">저장 단위</th>
         </tr>
       </thead>
       <tbody className="divide-y divide-border/10">
@@ -134,6 +149,7 @@ const MaterialTable: React.FC<{ materials: MaterialAudit[] }> = ({ materials }) 
             <td className="px-3 py-2 text-right font-mono">{item.distinct || "—"}</td>
             <td className="px-3 py-2 text-right font-mono">{item.consumer_count}</td>
             <td className="px-3 py-2 text-right font-mono">{item.producer_count}</td>
+            <td className="px-3 py-2 font-mono">{item.storage_unit}</td>
           </tr>
         ))}
       </tbody>
@@ -180,7 +196,7 @@ const CapabilityMap: React.FC<{
       <rect
         x={x} y={y} width={nodeWidth} height={nodeHeight}
         rx={4}
-        fill={status === "LIVE" ? "#102820" : status === "BROKEN" ? "#291a12" : "#171a20"}
+        fill={status === "LIVE" ? "#102820" : status === "REGISTERED" ? "#2a2110" : status === "BROKEN" ? "#291a12" : "#171a20"}
         stroke={STATUS_STYLE[status].stroke}
         strokeWidth={status === "LIVE" ? 1.5 : 1}
         strokeDasharray={STATUS_STYLE[status].dash}
@@ -243,7 +259,7 @@ const CapabilityMap: React.FC<{
               key={item.id}
               x={colX[0]} y={rowY(index)}
               title={item.label}
-              subtitle={`${item.non_null}/${item.total} · 구분 ${item.distinct || 0}`}
+              subtitle={`${item.non_null}/${item.total} · ${item.storage_unit === "semantic_fragment" ? "조각 단위" : item.storage_unit === "evidence_chunk" ? "청크 단위" : "소스 시간축"}`}
               status={locked ? "LOCKED" : "LIVE"}
               locked={locked}
               onClick={() => onSelect({ kind: "material", id: item.id })}
@@ -271,8 +287,8 @@ const CapabilityMap: React.FC<{
             key={item.id}
             x={colX[2]} y={rowY(index)}
             title={shortId(item.id)}
-            subtitle={item.registered ? "검사기 등록" : "미등록 · 관계 미선언"}
-            status={item.registered ? "LIVE" : "BROKEN"}
+            subtitle={item.state === "ENFORCED" ? "집행" : item.state === "REGISTERED" ? "등록 · 경고전용" : "선언만"}
+            status={item.state === "ENFORCED" ? "LIVE" : item.state === "REGISTERED" ? "REGISTERED" : "UNDECLARED"}
             onClick={() => onSelect({ kind: "rule", id: item.id })}
           />
         ))}
@@ -354,7 +370,7 @@ export const AdminEditLabPanel: React.FC = () => {
           <h1 className="text-lg font-bold text-foreground/90">편집연구실</h1>
           <p className="text-[11px] text-muted-foreground/50 mt-0.5">
             {audit
-              ? `재료 ${audit.materials.length - missingMaterials} 값 있음 / ${missingMaterials} 값 없음 · 하드룰 ${audit.rules.declared} 선언 / ${audit.rules.registered} 등록 · 기법 ${audit.techniques.declared} 선언 / ${audit.techniques.wired} 배선`
+              ? `재료 ${audit.materials.length - missingMaterials} 값 있음 / ${missingMaterials} 값 없음 · 하드룰 ${audit.rules.declared} 선언 / ${audit.rules.registered} 등록 / ${audit.rules.enforced} 집행 · 기법 ${audit.techniques.declared} 선언 / ${audit.techniques.wired} 배선`
               : "측정 결과 없음"}
           </p>
           {audit?.sensor_contract && audit.candidate_ledger_guard && (
@@ -417,6 +433,8 @@ export const AdminEditLabPanel: React.FC = () => {
               <div className="space-y-1 text-[11px]">
                 <p className="text-sm font-semibold">{selectedMaterial.label} {selectedMaterial.non_null}/{selectedMaterial.total}</p>
                 <p>구분값 {selectedMaterial.distinct} · producers {selectedMaterial.producer_count} · consumers {selectedMaterial.consumer_count}</p>
+                <p>저장 단위 {selectedMaterial.storage_unit} · 조각 소비 계약 {selectedMaterial.fragment_consumer_contract ? selectedMaterial.projection : "없음"}</p>
+                <p className="text-muted-foreground/60 break-all">투영 근거: {selectedMaterial.projection_evidence || "없음"}</p>
                 <p className="text-muted-foreground/60 break-all">producers: {selectedMaterial.producers.join(" / ") || "없음"}</p>
                 <p className="text-muted-foreground/60 break-all">consumers: {selectedMaterial.consumers.join(" / ") || "없음"}</p>
                 <p>{selectedMaterial.non_null === 0
@@ -427,7 +445,7 @@ export const AdminEditLabPanel: React.FC = () => {
             {selectedRule && (
               <div className="space-y-1 text-[11px]">
                 <p className="text-sm font-semibold">{selectedRule.id}</p>
-                <p>{selectedRule.registered ? "검사기 등록" : "검사기 미등록"} · 검사 재료 {Array.isArray(selectedRule.checks_materials) ? selectedRule.checks_materials.join(", ") : "관계 미선언"}</p>
+                <p>{selectedRule.state === "ENFORCED" ? "실제 집행" : selectedRule.state === "REGISTERED" ? "등록됨 · 경고전용" : "선언만"} · 검사 재료 {Array.isArray(selectedRule.checks_materials) ? selectedRule.checks_materials.join(", ") : "관계 미선언"}</p>
                 <p className="text-muted-foreground/60 break-all">근거: {selectedRule.evidence || selectedRule.declared_in || "없음"}</p>
               </div>
             )}
@@ -437,6 +455,7 @@ export const AdminEditLabPanel: React.FC = () => {
                 <p>{selectedTechnique.wired ? "실제 배선" : "미배선"} · 요구 재료 {Array.isArray(selectedTechnique.requires_materials) ? selectedTechnique.requires_materials.join(", ") : "관계 미선언"}</p>
                 <p>요구 룰 {Array.isArray(selectedTechnique.requires_rules) ? selectedTechnique.requires_rules.join(", ") : "관계 미선언"}</p>
                 <p className="text-muted-foreground/60 break-all">근거: {selectedTechnique.declared_in || "없음"}</p>
+                <p>차단: {selectedTechnique.blockers.map(item => `${item.kind}(${item.detail})`).join(" / ") || "없음"}</p>
               </div>
             )}
             {selection && !selectedMaterial && !selectedRule && !selectedTechnique && (
@@ -455,6 +474,31 @@ export const AdminEditLabPanel: React.FC = () => {
                 ))}
               </div>
             )}
+          </section>
+
+          <section className="space-y-3 border-t border-border/15 pt-4">
+            <div>
+              <h2 className="text-xs font-black tracking-widest uppercase text-muted-foreground/55">기법 배선 관문</h2>
+              <p className="mt-1 text-[10px] text-muted-foreground/45">
+                현재 미배선 중 즉시 가능 {audit.techniques.wireable_unwired} · {Object.entries(audit.techniques.blocker_counts).map(([key, value]) => `${key} ${value}`).join(" / ")}
+              </p>
+            </div>
+            <div className="overflow-x-auto border border-border/15">
+              <table className="w-full text-[11px]">
+                <thead className="bg-secondary/20 text-muted-foreground/60">
+                  <tr><th className="px-3 py-2 text-left">기법</th><th className="px-3 py-2 text-left">상태</th><th className="px-3 py-2 text-left">막힌 사유</th></tr>
+                </thead>
+                <tbody className="divide-y divide-border/10">
+                  {audit.techniques.items.map(item => (
+                    <tr key={item.id}>
+                      <td className="px-3 py-2 font-mono">{item.id}</td>
+                      <td className="px-3 py-2">{item.wired ? "배선됨" : item.wireable_now ? "배선 가능" : "차단"}</td>
+                      <td className="px-3 py-2 text-muted-foreground/65">{item.blockers.map(blocker => `${blocker.kind}: ${blocker.detail}`).join(" / ") || "없음"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </section>
 
           <section className="space-y-3 border-t border-border/15 pt-4">
@@ -561,7 +605,7 @@ export const AdminEditLabPanel: React.FC = () => {
             <div className="mt-3 space-y-5">
               <MaterialTable materials={audit.materials} />
               <p className="text-[11px] text-muted-foreground/60">
-                하드룰 선언 {audit.rules.declared} · 검사기 등록 {audit.rules.registered} · 미등록 {audit.rules.unregistered}
+                하드룰 선언 {audit.rules.declared} · 런타임 등록 {audit.rules.registered} · 실제 집행 {audit.rules.enforced} · ID 교집합 {audit.rules.identity_overlap}
               </p>
               <p className="text-[11px] text-muted-foreground/60">
                 편집기법 선언 {audit.techniques.declared} · 실제 배선 {audit.techniques.wired}

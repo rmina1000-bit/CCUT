@@ -270,6 +270,19 @@ def _edge_status(material, target_live):
     return "LIVE" if target_live else "BROKEN"
 
 
+ENFORCED_RULES = {
+    "RULE_PUNCH_ZOOM_BOUND": "ccut_backend/story_gate/proposal_axis.py:428-469",
+    "RULE_TECHNIQUE_PATH_UNIFORM": "ccut_backend/story_gate/proposal_axis.py:428-469",
+}
+
+REGISTERED_RULE_EVIDENCE = {
+    "RULE_BOUNDARY_PATH_UNIFORM": "ccut_backend/story_gate/proposal_axis.py:315-326",
+    "RULE_NO_MID_WORD_CUT": "ccut_backend/story_gate/proposal_axis.py:315-326",
+    "RULE_WORD_BOUNDARY_SNAP": "ccut_backend/story_gate/proposal_axis.py:315-326",
+    "RULE_EDIT_STATE_NO_SHADOW": "ccut_backend/engine/story_template_resolver.py:62-70",
+}
+
+
 def build_lab_context(audit):
     missing = [
         item["label"] for item in audit["materials"]
@@ -281,7 +294,7 @@ def build_lab_context(audit):
         "값없는_재료": missing,
         "하드룰": (
             f"선언 {audit['rules']['declared']} / 등록 {audit['rules']['registered']} / "
-            f"미등록 {audit['rules']['unregistered']}"
+            f"집행 {audit['rules']['enforced']} / ID 교집합 {audit['rules']['identity_overlap']}"
         ),
         "기법": (
             f"선언 {audit['techniques']['declared']} / "
@@ -324,6 +337,10 @@ def run_audit():
                 "producer_count": len({hit.rsplit(":", 1)[0] for hit in producers}),
                 "consumers": consumers,
                 "producers": producers,
+                "storage_unit": item["storage_unit"],
+                "fragment_consumer_contract": item["fragment_consumer_contract"],
+                "projection": item["projection"],
+                "projection_evidence": item["projection_evidence"],
             })
         for item in golden_set["goldens"]:
             golden_resolutions.append({
@@ -339,7 +356,7 @@ def run_audit():
         item["rule_id"] for item in _load_json(CONFIG_DIR / "production_hard_rules.json")["rules"]
     }
     registered_rules = sorted(_registered_rules())
-    registered_count = min(len(declared_rules), len(registered_rules))
+    rule_identity_overlap = sorted(declared_rules.intersection(registered_rules))
 
     techniques = _load_json(CONFIG_DIR / "editing_techniques.json")["techniques"]
     declared_techniques = {item["technique_id"] for item in techniques}
@@ -362,6 +379,8 @@ def run_audit():
                 f'"rule_id": "{rule_id}"',
             ),
             "registered": rule_id in registered_rules,
+            "enforced": False,
+            "state": "DECLARED",
             "checks_materials": "UNDECLARED",
             "evidence": "ccut_backend/config/production_hard_rules.json:rules",
         })
@@ -402,8 +421,14 @@ def run_audit():
             "id": rule_id,
             "declared_in": evidence,
             "registered": True,
+            "enforced": rule_id in ENFORCED_RULES,
+            "state": "ENFORCED" if rule_id in ENFORCED_RULES else "REGISTERED",
             "checks_materials": registered_material_checks.get(rule_id, "UNDECLARED"),
-            "evidence": registered_material_evidence.get(rule_id, evidence),
+            "evidence": (
+                ENFORCED_RULES.get(rule_id)
+                or REGISTERED_RULE_EVIDENCE.get(rule_id)
+                or registered_material_evidence.get(rule_id, evidence)
+            ),
         })
 
     technique_items = []
@@ -419,6 +444,51 @@ def run_audit():
             signal for signal in item.get("required_signals", [])
             if signal in material_by_id
         ]
+        unknown_signals = [
+            signal for signal in item.get("required_signals", [])
+            if signal not in material_by_id
+        ]
+        required_rules = referenced_technique_rules.get(
+            technique_id, "UNDECLARED"
+        )
+        blockers = []
+        if not required_materials:
+            blockers.append({
+                "kind": "관계 미선언",
+                "detail": "감사 재료와 연결된 required_signals가 없음",
+            })
+        if unknown_signals:
+            blockers.append({
+                "kind": "관계 미선언",
+                "detail": f"감사 재료에 없는 신호: {', '.join(unknown_signals)}",
+            })
+        for material_id in required_materials:
+            material = material_by_id[material_id]
+            if material["non_null"] == 0:
+                blockers.append({
+                    "kind": "재료 없음",
+                    "detail": material_id,
+                })
+            elif (
+                material["storage_unit"] != "semantic_fragment"
+                and not material["fragment_consumer_contract"]
+            ):
+                blockers.append({
+                    "kind": "재료 단위 불일치",
+                    "detail": material_id,
+                })
+        if required_rules == "UNDECLARED":
+            blockers.append({
+                "kind": "관계 미선언",
+                "detail": "requires_rules 미선언",
+            })
+        else:
+            for rule_id in required_rules:
+                if rule_id not in ENFORCED_RULES:
+                    blockers.append({
+                        "kind": "룰 미집행",
+                        "detail": rule_id,
+                    })
         technique_items.append({
             "id": technique_id,
             "wired": technique_id in wired_set,
@@ -427,9 +497,9 @@ def run_audit():
                 f'"technique_id": "{technique_id}"',
             ),
             "requires_materials": required_materials or "UNDECLARED",
-            "requires_rules": referenced_technique_rules.get(
-                technique_id, "UNDECLARED"
-            ),
+            "requires_rules": required_rules,
+            "blockers": blockers,
+            "wireable_now": not blockers,
             "failure_check": item.get("failure_check"),
         })
     technique_items.append({
@@ -441,6 +511,8 @@ def run_audit():
         ),
         "requires_materials": "UNDECLARED",
         "requires_rules": "UNDECLARED",
+        "blockers": [],
+        "wireable_now": True,
         "failure_check": None,
     })
 
@@ -471,7 +543,15 @@ def run_audit():
                 "from": material_id,
                 "to": rule["id"],
                 "kind": "material→rule",
-                "status": _edge_status(material, rule["registered"]),
+                "status": (
+                    "LOCKED"
+                    if material["non_null"] == 0
+                    else "LIVE"
+                    if rule["enforced"]
+                    else "REGISTERED"
+                    if rule["registered"]
+                    else "BROKEN"
+                ),
                 "evidence": rule["evidence"],
             })
 
@@ -508,6 +588,12 @@ def run_audit():
         })
 
     audited_at = datetime.now().astimezone().isoformat(timespec="seconds")
+    blocker_counts = {}
+    for technique in technique_items:
+        if technique["wired"]:
+            continue
+        for kind in {blocker["kind"] for blocker in technique["blockers"]}:
+            blocker_counts[kind] = blocker_counts.get(kind, 0) + 1
     material_status = {
         item["id"]: ("VALUE" if item["non_null"] > 0 else "UNKNOWN")
         for item in materials
@@ -518,8 +604,11 @@ def run_audit():
         "materials": materials,
         "rules": {
             "declared": len(declared_rules),
-            "registered": registered_count,
-            "unregistered": max(0, len(declared_rules) - registered_count),
+            "registered": len(registered_rules),
+            "enforced": len(set(ENFORCED_RULES).intersection(registered_rules)),
+            "unregistered": len(declared_rules - set(registered_rules)),
+            "identity_overlap": len(rule_identity_overlap),
+            "identity_overlap_ids": rule_identity_overlap,
             "registered_ids": registered_rules,
             "items": rule_items,
         },
@@ -527,6 +616,11 @@ def run_audit():
             "declared": len(declared_techniques),
             "wired": len(wired),
             "wired_ids": wired,
+            "wireable_unwired": sum(
+                1 for item in technique_items
+                if not item["wired"] and item["wireable_now"]
+            ),
+            "blocker_counts": blocker_counts,
             "items": technique_items,
         },
         "edges": edges,
