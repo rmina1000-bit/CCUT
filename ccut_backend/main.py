@@ -3991,6 +3991,54 @@ async def admin_ai_status():
     return _adm.ai_status()
 
 
+@app.get("/admin/api-keys")
+async def admin_api_keys():
+    from admin import service as _adm
+    return _adm.api_key_status()
+
+
+@app.get("/admin/api-keys/public-key")
+async def admin_api_key_public_key():
+    from admin import service as _adm
+    return _adm.api_key_public_key()
+
+
+@app.post("/admin/api-keys/{provider_id}/test")
+async def admin_api_key_test(provider_id: str, payload: dict = None):
+    from admin import service as _adm
+    return _adm.api_key_test(provider_id, (payload or {}).get("ciphertext"))
+
+
+@app.post("/admin/api-keys/{provider_id}/save")
+async def admin_api_key_save(provider_id: str, payload: dict = None):
+    from admin import service as _adm
+    ciphertext = (payload or {}).get("ciphertext")
+    if not ciphertext:
+        raise HTTPException(status_code=400, detail="ciphertext is required")
+    try:
+        return _adm.api_key_save(provider_id, ciphertext)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+
+@app.post("/admin/api-keys/{provider_id}/connect")
+async def admin_api_key_connect(provider_id: str, payload: dict = None):
+    from admin import service as _adm
+    ciphertext = (payload or {}).get("ciphertext")
+    if not ciphertext:
+        raise HTTPException(status_code=400, detail="ciphertext is required")
+    try:
+        return _adm.api_key_connect(provider_id, ciphertext)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+
+@app.delete("/admin/api-keys/{provider_id}")
+async def admin_api_key_disconnect(provider_id: str):
+    from admin import service as _adm
+    return _adm.api_key_disconnect(provider_id)
+
+
 @app.get("/admin/ai/runs")
 async def admin_ai_runs(limit: int = 50):
     from admin import service as _adm

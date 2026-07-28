@@ -1,16 +1,31 @@
 import React, { useEffect, useState } from "react";
-import { Sparkles, Send } from "lucide-react";
+import { ExternalLink, KeyRound, PlugZap, Send, Sparkles, Unplug } from "lucide-react";
 import { fetcher } from "@/services/api";
 
-// [War Room v1] AI 운영실 — 로컬 hub 실측 상태 + 역할별 질의 + 실행 로그.
-// v0 insights 질의 기능이 여기로 흡수됨. 외부 API AI는 disabled 슬롯만.
+// [War Room v1] AI 운영실 — 관리자 API 상태 + 역할별 질의 + 실행 로그.
+// API 키는 write-only로 입력하며 서버 응답에는 마스킹 값만 표시한다.
 
 interface AIStatus {
-  local: { model: string; url: string; reachable: boolean; error?: string };
-  external: { status: string; note: string };
+  provider: string | null;
+  model: string | null;
+  configured: boolean;
+  status: string;
   runs_total: number;
   runs_failed: number;
   roles: string[];
+}
+
+interface ApiProvider {
+  id: string;
+  display_name: string;
+  configured: boolean;
+  masked_key: string;
+  model: string | null;
+  issue_url: string | null;
+  docs_url: string | null;
+  connection: "unset" | "connected" | "error";
+  last_checked_at: string | null;
+  error: string | null;
 }
 
 interface AIRun {
@@ -34,6 +49,30 @@ interface QueryResult {
   detail?: string;
 }
 
+const encryptSecret = async (value: string): Promise<string> => {
+  const publicKey = await fetcher("/admin/api-keys/public-key") as {
+    public_key_pem: string;
+  };
+  const encoded = publicKey.public_key_pem
+    .replace("-----BEGIN PUBLIC KEY-----", "")
+    .replace("-----END PUBLIC KEY-----", "")
+    .replace(/\s/g, "");
+  const binary = Uint8Array.from(atob(encoded), char => char.charCodeAt(0));
+  const key = await crypto.subtle.importKey(
+    "spki",
+    binary,
+    { name: "RSA-OAEP", hash: "SHA-256" },
+    false,
+    ["encrypt"],
+  );
+  const ciphertext = await crypto.subtle.encrypt(
+    { name: "RSA-OAEP" },
+    key,
+    new TextEncoder().encode(value),
+  );
+  return btoa(String.fromCharCode(...new Uint8Array(ciphertext)));
+};
+
 export const AdminAIOpsPanel: React.FC = () => {
   const [status, setStatus] = useState<AIStatus | null>(null);
   const [runs, setRuns] = useState<AIRun[]>([]);
@@ -42,10 +81,16 @@ export const AdminAIOpsPanel: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [results, setResults] = useState<QueryResult[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [providers, setProviders] = useState<ApiProvider[]>([]);
+  const [keyInputs, setKeyInputs] = useState<Record<string, string>>({});
+  const [keyBusy, setKeyBusy] = useState<string | null>(null);
+  const [keyMessage, setKeyMessage] = useState<Record<string, string>>({});
+  const [keyEditing, setKeyEditing] = useState<Record<string, boolean>>({});
 
   const load = () => {
     fetcher("/admin/ai/status").then(setStatus).catch(e => setError(String(e)));
     fetcher("/admin/ai/runs?limit=30").then(r => setRuns(r.runs ?? [])).catch(e => setError(String(e)));
+    fetcher("/admin/api-keys").then(r => setProviders(r.providers ?? [])).catch(e => setError(String(e)));
   };
   useEffect(load, []);
 
@@ -67,6 +112,48 @@ export const AdminAIOpsPanel: React.FC = () => {
     }
   };
 
+  const connectKey = async (provider: ApiProvider) => {
+    const value = (keyInputs[provider.id] ?? "").trim();
+    if (!value) {
+      setKeyMessage(prev => ({ ...prev, [provider.id]: "붙여넣은 키가 없습니다." }));
+      return;
+    }
+    setKeyBusy(`${provider.id}:connect`);
+    try {
+      const ciphertext = await encryptSecret(value);
+      const result = await fetcher(`/admin/api-keys/${provider.id}/connect`, {
+        method: "POST",
+        body: JSON.stringify({ ciphertext }),
+      }) as { error?: string; model?: string };
+      if (result.error) throw new Error(result.error);
+      setKeyInputs(prev => ({ ...prev, [provider.id]: "" }));
+      setKeyEditing(prev => ({ ...prev, [provider.id]: false }));
+      setKeyMessage(prev => ({
+        ...prev,
+        [provider.id]: `연결 및 저장 완료 · ${result.model ?? provider.model ?? ""}`,
+      }));
+      load();
+    } catch (e) {
+      setKeyMessage(prev => ({ ...prev, [provider.id]: String(e) }));
+    } finally {
+      setKeyBusy(null);
+    }
+  };
+
+  const disconnectKey = async (provider: ApiProvider) => {
+    setKeyBusy(`${provider.id}:disconnect`);
+    try {
+      await fetcher(`/admin/api-keys/${provider.id}`, { method: "DELETE" });
+      setKeyInputs(prev => ({ ...prev, [provider.id]: "" }));
+      setKeyMessage(prev => ({ ...prev, [provider.id]: "연결 해제됨" }));
+      load();
+    } catch (e) {
+      setKeyMessage(prev => ({ ...prev, [provider.id]: String(e) }));
+    } finally {
+      setKeyBusy(null);
+    }
+  };
+
   return (
     <div className="space-y-5">
       <div>
@@ -78,28 +165,123 @@ export const AdminAIOpsPanel: React.FC = () => {
 
       {error && <p className="text-[11px] text-red-400">{error}</p>}
 
-      {/* 상태 카드 */}
-      <div className="grid grid-cols-2 gap-3">
-        <div className={`rounded-lg border p-4 ${status?.local.reachable ? "border-emerald-500/25 bg-emerald-500/5" : "border-red-500/25 bg-red-500/5"}`}>
-          <p className="text-[10px] font-semibold text-muted-foreground/50 uppercase">로컬 운영 AI</p>
+      <section className="space-y-3">
+        <div className="flex items-center gap-2">
+          <KeyRound size={14} className="text-primary" />
+          <h2 className="text-xs font-black tracking-widest uppercase text-muted-foreground/60">API 키</h2>
+        </div>
+        <div className="border-y border-border/15 divide-y divide-border/10">
+          {providers.map(provider => {
+            const isEditing = !provider.configured || keyEditing[provider.id];
+            const badge = provider.connection === "error"
+              ? { text: "오류", classes: "text-red-300 bg-red-500/10" }
+              : provider.configured
+                ? { text: "연결됨", classes: "text-emerald-300 bg-emerald-500/10" }
+                : { text: "미설정", classes: "text-muted-foreground bg-secondary/30" };
+            return (
+              <div key={provider.id} className="py-4 space-y-2">
+                <div className="flex items-center gap-3">
+                  <div className="w-32 flex-shrink-0">
+                    <p className="text-sm font-bold text-foreground/90">{provider.display_name}</p>
+                    <span className={`inline-flex mt-1 px-1.5 py-0.5 text-[9px] font-bold ${badge.classes}`}>
+                      {badge.text}
+                    </span>
+                  </div>
+                  {isEditing && (
+                    <input
+                      type="password"
+                      autoComplete="new-password"
+                      value={keyInputs[provider.id] ?? ""}
+                      onChange={event => setKeyInputs(prev => ({
+                        ...prev,
+                        [provider.id]: event.target.value,
+                      }))}
+                      placeholder="발급받은 API 키 붙여넣기"
+                      aria-label={`${provider.display_name} API 키`}
+                      className="min-w-0 flex-1 h-9 bg-secondary/25 border border-border/15 px-3 text-xs font-mono outline-none focus:border-primary/40"
+                    />
+                  )}
+                  {provider.issue_url ? (
+                    <a
+                      href={provider.issue_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="h-9 px-3 inline-flex items-center gap-1.5 border border-border/15 text-[11px] text-foreground/70 hover:bg-secondary/30"
+                    >
+                      <ExternalLink size={12} />
+                      발급 페이지 열기
+                    </a>
+                  ) : (
+                    <span className="text-[10px] text-muted-foreground/50">발급 페이지 미확인</span>
+                  )}
+                  {isEditing && (
+                    <button
+                      onClick={() => connectKey(provider)}
+                      disabled={keyBusy != null}
+                      className="h-9 px-4 inline-flex items-center gap-1.5 bg-primary/15 text-[11px] font-semibold text-primary hover:bg-primary/25 disabled:opacity-50"
+                    >
+                      <PlugZap size={12} />
+                      연결하고 저장
+                    </button>
+                  )}
+                  {provider.configured && !isEditing && (
+                    <button
+                      onClick={() => setKeyEditing(prev => ({ ...prev, [provider.id]: true }))}
+                      disabled={keyBusy != null}
+                      className="h-9 px-3 inline-flex items-center border border-border/15 text-[11px] text-foreground/70 hover:bg-secondary/30 disabled:opacity-50"
+                    >
+                      키 변경
+                    </button>
+                  )}
+                  <button
+                    onClick={() => disconnectKey(provider)}
+                    disabled={keyBusy != null || !provider.configured}
+                    title="연결 해제"
+                    className="h-9 w-9 inline-flex items-center justify-center border border-border/15 text-muted-foreground/60 hover:text-red-300 disabled:opacity-30"
+                  >
+                    <Unplug size={13} />
+                  </button>
+                </div>
+                <div className="pl-32 flex items-center gap-3 text-[10px] text-muted-foreground/50">
+                  <span>
+                    {provider.connection === "error"
+                      ? "키는 저장됐지만 관리자 AI를 사용할 수 없습니다."
+                      : provider.configured
+                      ? "연결되어 있습니다. 다시 설정할 필요가 없습니다."
+                      : "발급 페이지에서 키를 복사해 붙여넣고 한 번만 누르십시오."}
+                  </span>
+                  {provider.configured && <span className="font-mono">{provider.masked_key}</span>}
+                  {provider.model && <span>{provider.model}</span>}
+                  {provider.last_checked_at && (
+                    <span>마지막 확인 {new Date(provider.last_checked_at).toLocaleString()}</span>
+                  )}
+                  {(provider.error || keyMessage[provider.id]) && (
+                    <span className={provider.error ? "text-red-400" : "text-foreground/60"}>
+                      {provider.error || keyMessage[provider.id]}
+                    </span>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </section>
+
+      <div className="border border-border/15 p-4">
+          <p className="text-[10px] font-semibold text-muted-foreground/50 uppercase">관리자 AI</p>
           {status ? (
             <>
-              <p className={`text-sm font-bold mt-1 ${status.local.reachable ? "text-emerald-400" : "text-red-400"}`}>
-                {status.local.reachable ? "연결됨" : "연결 실패"}
+              <p className={`text-sm font-bold mt-1 ${status.configured ? "text-emerald-400" : "text-muted-foreground/60"}`}>
+                {status.status}
               </p>
-              <p className="text-[10px] text-muted-foreground/50 mt-0.5 font-mono">{status.local.model}</p>
-              {status.local.error && <p className="text-[10px] text-red-400/80 mt-1">{status.local.error}</p>}
+              <p className="text-[10px] text-muted-foreground/50 mt-0.5 font-mono">
+                {status.provider ?? "—"} · {status.model ?? "—"}
+              </p>
               <p className="text-[10px] text-muted-foreground/40 mt-1">
                 실행 {status.runs_total}회 · 실패 {status.runs_failed}회
               </p>
             </>
           ) : <p className="text-[11px] text-muted-foreground/50 animate-pulse mt-1">확인 중...</p>}
-        </div>
-        <div className="rounded-lg border border-border/15 bg-card/20 p-4 opacity-60">
-          <p className="text-[10px] font-semibold text-muted-foreground/50 uppercase">외부 API AI</p>
-          <p className="text-sm font-bold text-muted-foreground/60 mt-1">disabled</p>
-          <p className="text-[10px] text-muted-foreground/40 mt-0.5">{status?.external.note}</p>
-        </div>
       </div>
 
       {/* 역할별 질의 */}

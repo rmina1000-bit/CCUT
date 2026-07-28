@@ -1,0 +1,12 @@
+{
+  "providers": [
+    {
+      "id": "anthropic",
+      "display_name": "Anthropic",
+      "env_key": "ANTHROPIC_API_KEY",
+      "model_env": "CCUT_ADMIN_LLM_MODEL",
+      "issue_url": "https://platform.claude.com/settings/keys",
+      "docs_url": "https://platform.claude.com/docs/en/api/overview"
+    }
+  ]
+}
