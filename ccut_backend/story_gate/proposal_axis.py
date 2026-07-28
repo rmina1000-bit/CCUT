@@ -29,7 +29,25 @@ TECHNIQUE_AS_IS = "as_is"
 # [PUNCH-1 P4] 첫 갈림 기법. 조각 경계를 건드리지 않는 **화면 변환**이므로 INV-3을 통과한다
 #   (경계를 움직이는 기법은 재생/export가 9/13에서 갈리는 구조 결함에 걸린다 — C-AUDIT-1 L2).
 TECHNIQUE_PUNCH_IN = "punch_in"
-MODE_TECHNIQUE = {"A": TECHNIQUE_PUNCH_IN, "B": TECHNIQUE_AS_IS}
+TECHNIQUE_WORD_BOUNDARY_SNAP = "word_boundary_snap"
+
+
+def _flag_on(name):
+    return os.getenv(name, "").strip().upper() in ("1", "ON", "TRUE", "YES")
+
+
+def _word_snap_enabled():
+    return _flag_on("CCUT_TECHNIQUE_WORD_SNAP")
+
+
+def technique_for_mode(mode):
+    """mode → technique. 순수 상수 사상 — DB를 타지 않으므로 미리보기·export가 같은 답을 얻는다."""
+    m = str(mode or "").upper()
+    if m == "A":
+        return TECHNIQUE_PUNCH_IN
+    if m == "B" and _word_snap_enabled():
+        return TECHNIQUE_WORD_BOUNDARY_SNAP
+    return TECHNIQUE_AS_IS
 
 # [RULE-1 R4] 규칙 값은 코드 상수·주석이 아니라 config JSON 하나에 둔다.
 #   구판(PUNCH-1 R1)은 검증용 1.60~2.20을 코드 상수로 박고 품질용 값을 주석에 보존했다.
@@ -46,15 +64,23 @@ _PUNCH_CACHE = {}
 _CFG_CACHE = None
 
 
+def _technique_node(technique_id):
+    try:
+        with open(_TECH_CONFIG_PATH, encoding="utf-8") as f:
+            techs = json.load(f).get("techniques", [])
+        return next((t for t in techs if t.get("technique_id") == technique_id), None)
+    except Exception as e:
+        print(f"[TECHNIQUE][CONFIG] 로드 실패 technique={technique_id}: {e}")
+        return None
+
+
 def punch_config(reload=False):
     """punch_in 규칙 값 — config JSON이 유일한 출처. 없으면 지어내지 않고 None을 돌려준다."""
     global _CFG_CACHE
     if _CFG_CACHE is not None and not reload:
         return _CFG_CACHE
     try:
-        with open(_TECH_CONFIG_PATH, encoding="utf-8") as f:
-            techs = json.load(f).get("techniques", [])
-        node = next((t for t in techs if t.get("technique_id") == TECHNIQUE_PUNCH_IN), None)
+        node = _technique_node(TECHNIQUE_PUNCH_IN)
         eff = (node or {}).get("engine_effect") or {}
         if not eff or "zoom_min" not in eff or "zoom_max" not in eff or "ramp_sec" not in eff:
             print(f"[PUNCH][CONFIG] punch_in.engine_effect 없음/불완전 — 기법 적용 불가")
@@ -219,6 +245,143 @@ def _fragment_words(fragment_id):
         con.close()
 
 
+def _has_edit_overlay(program_id, fragment_id):
+    """사용자 오버레이가 있으면 semantic 경계 보정 대상이 아니다(INV-6)."""
+    con = _connect()
+    try:
+        try:
+            row = con.execute(
+                "SELECT 1 FROM fragment_edit_state WHERE program_id=? "
+                "AND parent_fragment_id=? LIMIT 1",
+                (program_id, fragment_id),
+            ).fetchone()
+        except sqlite3.OperationalError:
+            return False
+        return row is not None
+    finally:
+        con.close()
+
+
+def _word_snap_threshold_ms():
+    node = _technique_node(TECHNIQUE_WORD_BOUNDARY_SNAP)
+    value = ((node or {}).get("engine_effect") or {}).get("snap_threshold_ms")
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _nearest_word_mark(edge_sec, words):
+    marks = sorted({float(v) for w in (words or []) for v in w})
+    if not marks:
+        return None, None
+    mark = min(marks, key=lambda item: abs(float(edge_sec) - item))
+    return mark, abs(float(edge_sec) - mark) * 1000.0
+
+
+def _snap_sequence_item(program_id, item, tol_ms):
+    """proposal sequence item 하나를 단어 경계로 미세 보정한다.
+
+    큰 이동은 하지 않는다. 200ms 밖이면 VIOLATION으로 남기고 값을 보존한다.
+    """
+    from engine.story_template_resolver import (
+        VERDICT_PASS, VERDICT_VIOLATION, VERDICT_UNKNOWN, VERDICT_NA,
+    )
+    fid = item.get("fragment_id")
+    if not fid:
+        return dict(item), {"verdict": VERDICT_UNKNOWN, "detail": "fragment_id 없음"}
+    if _has_edit_overlay(program_id, fid):
+        return dict(item), {
+            "verdict": VERDICT_NA,
+            "fragment_id": fid,
+            "detail": "fragment_edit_state 오버레이 존재 — 사용자 경계 보호",
+        }
+    words = _fragment_words(fid)
+    if words is None:
+        return dict(item), {
+            "verdict": VERDICT_UNKNOWN,
+            "fragment_id": fid,
+            "detail": "word 타임스탬프 없음",
+        }
+    out = dict(item)
+    changes = []
+    violations = []
+    for key in ("start", "end"):
+        if out.get(key) is None:
+            continue
+        mark, dev_ms = _nearest_word_mark(float(out[key]), words)
+        if mark is None or dev_ms is None:
+            return dict(item), {
+                "verdict": VERDICT_UNKNOWN,
+                "fragment_id": fid,
+                "detail": "단어 경계 없음",
+            }
+        if dev_ms > tol_ms:
+            violations.append({"edge": key, "deviation_ms": round(dev_ms, 1)})
+            continue
+        before = float(out[key])
+        out[key] = round(mark, 3)
+        if abs(before - float(out[key])) > 0.0005:
+            changes.append({
+                "edge": key,
+                "from": round(before, 3),
+                "to": out[key],
+                "deviation_ms": round(dev_ms, 1),
+            })
+    if float(out.get("end") or 0) <= float(out.get("start") or 0):
+        return dict(item), {
+            "verdict": VERDICT_UNKNOWN,
+            "fragment_id": fid,
+            "detail": "스냅 후 end <= start — 보정 보류",
+        }
+    if violations:
+        return dict(item), {
+            "verdict": VERDICT_VIOLATION,
+            "fragment_id": fid,
+            "measured": {"violations": violations},
+            "detail": "허용오차 밖 — 큰 경계 이동 보류",
+        }
+    duration = round(float(out["end"]) - float(out["start"]), 3)
+    out["duration"] = duration
+    out["duration_sec"] = duration
+    return out, {
+        "verdict": VERDICT_PASS,
+        "fragment_id": fid,
+        "measured": {"changes": changes, "changed": bool(changes)},
+        "detail": "단어 경계 스냅 적용" if changes else "이미 허용오차 내",
+    }
+
+
+def apply_word_boundary_snap(proposals, program_id):
+    """B안 제안에 word_boundary_snap을 적용한다. 조각 집합·순서는 바꾸지 않는다."""
+    if not _word_snap_enabled():
+        return proposals, {"enabled": False, "applied": 0, "results": []}
+    tol_ms = _word_snap_threshold_ms()
+    if tol_ms is None:
+        return proposals, {
+            "enabled": True,
+            "applied": 0,
+            "results": [{"verdict": "UNKNOWN", "detail": "snap_threshold_ms 없음"}],
+        }
+    report = {"enabled": True, "threshold_ms": tol_ms, "applied": 0, "results": []}
+    for proposal in (proposals or []):
+        if proposal.get("technique_id") != TECHNIQUE_WORD_BOUNDARY_SNAP:
+            continue
+        snapped = []
+        for item in (proposal.get("sequence") or []):
+            new_item, result = _snap_sequence_item(program_id, item, tol_ms)
+            snapped.append(new_item)
+            result["mode"] = proposal.get("mode")
+            report["results"].append(result)
+        proposal["sequence"] = snapped
+        proposal["duration"] = round(sum(
+            float(s.get("duration_sec") or s.get("duration") or 0) for s in snapped
+        ), 2)
+        proposal.setdefault("proposal_reason", {})["applied_technique"] = TECHNIQUE_WORD_BOUNDARY_SNAP
+        report["applied"] += 1
+    return proposals, report
+
+
 def _check_boundary_path_uniform(ctx):
     """RULE_BOUNDARY_PATH_UNIFORM — 재생·미리보기·export 가 같은 경계를 읽는가."""
     from engine.story_template_resolver import (VERDICT_PASS, VERDICT_VIOLATION,
@@ -277,16 +440,19 @@ def _check_word_boundary_snap(ctx):
     from engine.story_template_resolver import VERDICT_PASS, VERDICT_VIOLATION, VERDICT_UNKNOWN
     tol_ms = None
     try:
-        with open(_TECH_CONFIG_PATH, encoding="utf-8") as f:
-            for t in json.load(f).get("techniques", []):
-                if t.get("technique_id") == "word_boundary_snap":
-                    tol_ms = (t.get("engine_effect") or {}).get("snap_threshold_ms")
+        node = _technique_node(TECHNIQUE_WORD_BOUNDARY_SNAP)
+        tol_ms = ((node or {}).get("engine_effect") or {}).get("snap_threshold_ms")
     except Exception:
         pass
     if tol_ms is None:
         return {"verdict": VERDICT_UNKNOWN, "measured": None, "threshold": None,
                 "detail": "snap_threshold_ms 없음 — 허용오차를 모른다"}
     fid, prog = ctx.get("fragment_id"), ctx.get("program_id")
+    if prog and fid and _has_edit_overlay(prog, fid):
+        from engine.story_template_resolver import VERDICT_NA
+        return {"verdict": VERDICT_NA, "measured": {"fragment_id": fid},
+                "threshold": {"snap_threshold_ms": tol_ms},
+                "detail": "fragment_edit_state 오버레이 존재 — 사용자 경계 보호(INV-6)"}
     words = _fragment_words(fid) if fid else None
     if words is None:
         return {"verdict": VERDICT_UNKNOWN, "measured": None, "threshold": {"snap_threshold_ms": tol_ms},
@@ -312,7 +478,7 @@ def _register_rules():
         from engine.story_template_resolver import register_rule_check
         register_rule_check("RULE_TECHNIQUE_PATH_UNIFORM", _check_technique_path_uniform)
         register_rule_check("RULE_PUNCH_ZOOM_BOUND", _check_punch_zoom_bound)
-        # [BOUNDARY-1 B4] 경계 3종 — 전부 로그 전용. Veto required 승격은 국장 판정 후.
+        # [BOUNDARY-1 B4] 경계 3종. WORD_BOUNDARY_SNAP은 AI semantic 경계 한정으로 집행 가능.
         register_rule_check("RULE_BOUNDARY_PATH_UNIFORM", _check_boundary_path_uniform)
         register_rule_check("RULE_NO_MID_WORD_CUT", _check_no_mid_word_cut)
         register_rule_check("RULE_WORD_BOUNDARY_SNAP", _check_word_boundary_snap)
@@ -320,15 +486,10 @@ def _register_rules():
         print(f"[RULE][REGISTER] 등록 실패: {e}")
 
 
-# [BOUNDARY-1 B4 · INV-6] 경계 3종은 Veto 대상이 아니다.
-#   사용자가 자른 자리를 규칙이 되돌리면 안 된다 — 규칙은 경고만 하고 사용자가 이긴다.
-#   punch_filter 의 Veto 판정은 아래 목록에 있는 규칙만 본다.
-VETO_RULE_IDS = ("RULE_PUNCH_ZOOM_BOUND", "RULE_TECHNIQUE_PATH_UNIFORM")
-
-
-def technique_for_mode(mode):
-    """mode → technique. 순수 상수 사상 — DB를 타지 않으므로 미리보기·export가 같은 답을 얻는다."""
-    return MODE_TECHNIQUE.get(str(mode or "").upper(), TECHNIQUE_AS_IS)
+# [BOUNDARY-1 B4 · INV-6] 사용자 오버레이는 집행 대상이 아니다.
+#   WORD_BOUNDARY_SNAP은 semantic_fragments AI 경계에만 적용된다.
+VETO_RULE_IDS = ("RULE_PUNCH_ZOOM_BOUND", "RULE_TECHNIQUE_PATH_UNIFORM",
+                 "RULE_WORD_BOUNDARY_SNAP")
 
 
 def punch_spec(fragment_id):
