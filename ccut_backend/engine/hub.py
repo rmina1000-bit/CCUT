@@ -142,7 +142,7 @@ def _apply_context_to_bundles(bundles, context):
 
 def _ollama_json(prompt: str, timeout: int = 60, temperature: float = 0) -> dict:
     # temperature 기본 0 — 판사(judge) 결정성 불변. 대화 계열만 명시적으로 올린다.
-    body = json.dumps({
+    payload = {
         "model": HUB_MODEL,
         "prompt": prompt,
         "stream": False,
@@ -150,7 +150,8 @@ def _ollama_json(prompt: str, timeout: int = 60, temperature: float = 0) -> dict
         "keep_alive": OLLAMA_KEEP_ALIVE,
         "options": {"temperature": temperature, "num_predict": 1024,
                     "num_ctx": OLLAMA_NUM_CTX},
-    }).encode("utf-8")
+    }
+    body = json.dumps(payload).encode("utf-8")
     req = urllib.request.Request(
         OLLAMA_URL + "/api/generate", data=body,
         headers={"Content-Type": "application/json"},
@@ -170,6 +171,7 @@ def _ollama_json(prompt: str, timeout: int = 60, temperature: float = 0) -> dict
             "num_predict": 1024,
             "stop": None,
             "timeout": timeout,
+            "payload": payload,
             "t_queue_enter": _speed_trace.now_ms(),
         }
         call_idx = _speed_trace.append_ollama_call(trace_id, call)
@@ -195,6 +197,8 @@ def _ollama_json(prompt: str, timeout: int = 60, temperature: float = 0) -> dict
             trace_id,
             call_idx,
             t_done=_speed_trace.now_ms(),
+            done=bool(data.get("done")),
+            done_reason=data.get("done_reason"),
             prompt_eval_count=data.get("prompt_eval_count"),
             eval_count=data.get("eval_count"),
             prompt_eval_duration_ns=data.get("prompt_eval_duration"),
@@ -202,6 +206,9 @@ def _ollama_json(prompt: str, timeout: int = 60, temperature: float = 0) -> dict
             load_duration_ns=data.get("load_duration"),
             total_duration_ns=data.get("total_duration"),
             completion_chars=len(str(data.get("response") or "")),
+            response_raw=data,
+            last_normal_chunk=str(data.get("response") or ""),
+            connection_closed_by="ollama" if data.get("done") else "backend",
         )
     return json.loads(data.get("response", "{}") or "{}")
 
@@ -218,13 +225,14 @@ def _ollama_stream(prompt: str, timeout: int = 60, temperature: float = 0.7,
         opts["top_p"] = top_p
     if top_k is not None:
         opts["top_k"] = top_k
-    body = json.dumps({
+    payload = {
         "model": HUB_MODEL,
         "prompt": prompt,
         "stream": True,
         "keep_alive": OLLAMA_KEEP_ALIVE,
         "options": opts,
-    }).encode("utf-8")
+    }
+    body = json.dumps(payload).encode("utf-8")
     req = urllib.request.Request(
         OLLAMA_URL + "/api/generate", data=body,
         headers={"Content-Type": "application/json"},
@@ -246,6 +254,8 @@ def _ollama_stream(prompt: str, timeout: int = 60, temperature: float = 0.7,
             "top_k": top_k,
             "stop": opts.get("stop"),
             "timeout": timeout,
+            "payload": payload,
+            "chunks": [],
             "t_queue_enter": _speed_trace.now_ms(),
         })
     if _SERIALIZE:
@@ -261,22 +271,37 @@ def _ollama_stream(prompt: str, timeout: int = 60, temperature: float = 0.7,
             _speed_trace.update_ollama_call(trace_id, call_idx, t_request=_speed_trace.now_ms())
         completion_chars = 0
         done_metrics = {}
+        stream_closed_by = "backend"
+        last_normal_chunk = ""
         with urllib.request.urlopen(req, timeout=timeout) as resp:
             for line in resp:
                 line = line.strip()
                 if not line:
                     continue
+                raw_line = line.decode("utf-8", errors="replace")
                 try:
-                    data = json.loads(line.decode("utf-8"))
+                    data = json.loads(raw_line)
                 except Exception:
-                    continue
-                chunk = data.get("response") or ""
-                if chunk:
-                    completion_chars += len(chunk)
                     if trace_id and _speed_trace and _speed_trace.enabled():
                         rec = getattr(_speed_trace, "_RECORDS", {}).get(trace_id, {})
                         calls = rec.get("ollama_calls") or []
                         call = calls[call_idx] if call_idx is not None and call_idx < len(calls) else {}
+                        chunks = list(call.get("chunks") or [])
+                        chunks.append({"t": _speed_trace.now_ms(), "raw": raw_line, "parse_error": True})
+                        _speed_trace.update_ollama_call(trace_id, call_idx, chunks=chunks)
+                    continue
+                chunk = data.get("response") or ""
+                if chunk:
+                    completion_chars += len(chunk)
+                    last_normal_chunk = chunk
+                    if trace_id and _speed_trace and _speed_trace.enabled():
+                        rec = getattr(_speed_trace, "_RECORDS", {}).get(trace_id, {})
+                        calls = rec.get("ollama_calls") or []
+                        call = calls[call_idx] if call_idx is not None and call_idx < len(calls) else {}
+                        chunks = list(call.get("chunks") or [])
+                        chunks.append({"t": _speed_trace.now_ms(), "text": chunk, "raw": raw_line})
+                        _speed_trace.update_ollama_call(trace_id, call_idx, chunks=chunks,
+                                                        last_normal_chunk=chunk)
                         if "t5" not in rec:
                             _speed_trace.mark(trace_id, "t5", None)
                         if not call.get("t_first_token"):
@@ -285,13 +310,22 @@ def _ollama_stream(prompt: str, timeout: int = 60, temperature: float = 0.7,
                     yield chunk
                 if data.get("done"):
                     done_metrics = data
+                    stream_closed_by = "ollama"
                     break
+    except GeneratorExit:
+        stream_closed_by = "frontend"
+        raise
+    except Exception:
+        stream_closed_by = "backend"
+        raise
     finally:
         if trace_id and _speed_trace and _speed_trace.enabled():
             _speed_trace.update_ollama_call(
                 trace_id,
                 call_idx,
                 t_done=_speed_trace.now_ms(),
+                done=bool(done_metrics.get("done")),
+                done_reason=done_metrics.get("done_reason"),
                 prompt_eval_count=done_metrics.get("prompt_eval_count"),
                 eval_count=done_metrics.get("eval_count"),
                 prompt_eval_duration_ns=done_metrics.get("prompt_eval_duration"),
@@ -299,6 +333,136 @@ def _ollama_stream(prompt: str, timeout: int = 60, temperature: float = 0.7,
                 load_duration_ns=done_metrics.get("load_duration"),
                 total_duration_ns=done_metrics.get("total_duration"),
                 completion_chars=completion_chars,
+                response_raw=done_metrics or None,
+                last_normal_chunk=last_normal_chunk,
+                connection_closed_by=stream_closed_by,
+            )
+        if _SERIALIZE:
+            _OLLAMA_LOCK.release()
+
+
+def _ollama_chat_stream(messages: list[dict], timeout: int = 60, temperature: float = 0.7,
+                        num_predict: int = 512, top_p: float = None, top_k: int = None):
+    opts = {"temperature": temperature, "num_predict": num_predict,
+            "num_ctx": OLLAMA_NUM_CTX}
+    if top_p is not None:
+        opts["top_p"] = top_p
+    if top_k is not None:
+        opts["top_k"] = top_k
+    payload = {
+        "model": HUB_MODEL,
+        "messages": messages,
+        "stream": True,
+        "keep_alive": OLLAMA_KEEP_ALIVE,
+        "options": opts,
+    }
+    body = json.dumps(payload).encode("utf-8")
+    req = urllib.request.Request(
+        OLLAMA_URL + "/api/chat", data=body,
+        headers={"Content-Type": "application/json"},
+    )
+    trace_id = None
+    call_idx = None
+    if _speed_trace:
+        trace_id = _speed_trace.get_current()
+    if trace_id and _speed_trace and _speed_trace.enabled():
+        prompt_chars = sum(len(str((m or {}).get("content") or "")) for m in messages or [])
+        call_idx = _speed_trace.append_ollama_call(trace_id, {
+            "kind": "chat_stream",
+            "purpose": "generation",
+            "model": HUB_MODEL,
+            "prompt_chars": prompt_chars,
+            "message_count": len(messages or []),
+            "message_roles": [str((m or {}).get("role") or "") for m in messages or []],
+            "temperature": temperature,
+            "num_ctx": OLLAMA_NUM_CTX,
+            "keep_alive": OLLAMA_KEEP_ALIVE,
+            "num_predict": num_predict,
+            "top_p": top_p,
+            "top_k": top_k,
+            "stop": opts.get("stop"),
+            "timeout": timeout,
+            "payload": payload,
+            "chunks": [],
+            "t_queue_enter": _speed_trace.now_ms(),
+        })
+    if _SERIALIZE:
+        if trace_id and _speed_trace and _speed_trace.enabled():
+            _speed_trace.mark(trace_id, "t3_5", None)
+            _speed_trace.update_ollama_call(trace_id, call_idx, t_queue_exit=_speed_trace.now_ms())
+        _OLLAMA_LOCK.acquire()
+    try:
+        if trace_id and _speed_trace and _speed_trace.enabled():
+            _speed_trace.mark(trace_id, "t4", None)
+            _speed_trace.update_ollama_call(trace_id, call_idx, t_request=_speed_trace.now_ms())
+        completion_chars = 0
+        done_metrics = {}
+        stream_closed_by = "backend"
+        last_normal_chunk = ""
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            for line in resp:
+                line = line.strip()
+                if not line:
+                    continue
+                raw_line = line.decode("utf-8", errors="replace")
+                try:
+                    data = json.loads(raw_line)
+                except Exception:
+                    if trace_id and _speed_trace and _speed_trace.enabled():
+                        rec = getattr(_speed_trace, "_RECORDS", {}).get(trace_id, {})
+                        calls = rec.get("ollama_calls") or []
+                        call = calls[call_idx] if call_idx is not None and call_idx < len(calls) else {}
+                        chunks = list(call.get("chunks") or [])
+                        chunks.append({"t": _speed_trace.now_ms(), "raw": raw_line, "parse_error": True})
+                        _speed_trace.update_ollama_call(trace_id, call_idx, chunks=chunks)
+                    continue
+                message = data.get("message") if isinstance(data.get("message"), dict) else {}
+                chunk = message.get("content") or data.get("response") or ""
+                if chunk:
+                    completion_chars += len(chunk)
+                    last_normal_chunk = chunk
+                    if trace_id and _speed_trace and _speed_trace.enabled():
+                        rec = getattr(_speed_trace, "_RECORDS", {}).get(trace_id, {})
+                        calls = rec.get("ollama_calls") or []
+                        call = calls[call_idx] if call_idx is not None and call_idx < len(calls) else {}
+                        chunks = list(call.get("chunks") or [])
+                        chunks.append({"t": _speed_trace.now_ms(), "text": chunk, "raw": raw_line})
+                        _speed_trace.update_ollama_call(trace_id, call_idx, chunks=chunks,
+                                                        last_normal_chunk=chunk)
+                        if "t5" not in rec:
+                            _speed_trace.mark(trace_id, "t5", None)
+                        if not call.get("t_first_token"):
+                            _speed_trace.update_ollama_call(trace_id, call_idx,
+                                                            t_first_token=_speed_trace.now_ms())
+                    yield chunk
+                if data.get("done"):
+                    done_metrics = data
+                    stream_closed_by = "ollama"
+                    break
+    except GeneratorExit:
+        stream_closed_by = "frontend"
+        raise
+    except Exception:
+        stream_closed_by = "backend"
+        raise
+    finally:
+        if trace_id and _speed_trace and _speed_trace.enabled():
+            _speed_trace.update_ollama_call(
+                trace_id,
+                call_idx,
+                t_done=_speed_trace.now_ms(),
+                done=bool(done_metrics.get("done")),
+                done_reason=done_metrics.get("done_reason"),
+                prompt_eval_count=done_metrics.get("prompt_eval_count"),
+                eval_count=done_metrics.get("eval_count"),
+                prompt_eval_duration_ns=done_metrics.get("prompt_eval_duration"),
+                eval_duration_ns=done_metrics.get("eval_duration"),
+                load_duration_ns=done_metrics.get("load_duration"),
+                total_duration_ns=done_metrics.get("total_duration"),
+                completion_chars=completion_chars,
+                response_raw=done_metrics or None,
+                last_normal_chunk=last_normal_chunk,
+                connection_closed_by=stream_closed_by,
             )
         if _SERIALIZE:
             _OLLAMA_LOCK.release()

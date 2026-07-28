@@ -402,6 +402,48 @@ def _smalltalk_prompt(input_text, recent_messages=None, facts="", plain=False):
         + f"사용자: {input_text}\n")
 
 
+def _chat_role_enabled():
+    return os.getenv("CCUT_CHAT_ROLE", "0") in ("1", "true", "True", "on", "ON")
+
+
+def _estimate_chat_tokens(text):
+    return max(1, (len(str(text or "")) + 1) // 2)
+
+
+def _smalltalk_chat_messages(input_text, recent_messages=None, facts=""):
+    budget = int(os.getenv("CCUT_CHAT_ROLE_HISTORY_TOKENS", "2048"))
+    system = (
+        "너는 CCUT — 영상 편집을 돕는 다정한 동료다. 사용자의 말에 따뜻한 존댓말 "
+        "한국어 1~3문장으로 '실제로' 대답한다.\n"
+        + facts +
+        "대화 규칙 (어기면 실격):\n"
+        "1. 사용자의 마지막 말에 직접 반응한다. 화제를 네 맘대로 바꾸지 않는다 — "
+        "카페·취미 추천 같은 뻔한 스몰토크를 먼저 꺼내지 마라.\n"
+        "2. 날씨·뉴스·유행 같은 실시간 정보는 너는 모른다 — 아는 척 금지. "
+        "사용자가 알려주면 그 말을 믿고 따라가라.\n"
+        "3. 고민·감정을 말하면 가볍게 공감하고, 구체적으로 하나만 되물어라.\n"
+        "4. '저는 편집기라서'류 거절 금지. 매번 편집 얘기로 돌리지도 마라.\n"
+        "5. 반드시 한국어만(중국어·영어 문장 금지). 모델명·제조사(Qwen 등) 언급 금지 — "
+        "너의 이름은 오직 CCUT이다. 모르는 건 솔직히 모른다고 한다.\n"
+        "답변 문장만 출력한다 — JSON·따옴표·머리말 금지.\n")
+    messages = [{"role": "system", "content": system}]
+    history = []
+    used = 0
+    for m in reversed(recent_messages or []):
+        txt = _clean_recent_text(m.get("text"))[:120]
+        if not txt:
+            continue
+        cost = _estimate_chat_tokens(txt)
+        if history and used + cost > budget:
+            break
+        used += cost
+        role = "user" if (m.get("sender") == "user") else "assistant"
+        history.append({"role": role, "content": txt})
+    messages.extend(reversed(history))
+    messages.append({"role": "user", "content": input_text})
+    return messages
+
+
 def _llm_smalltalk(input_text, recent_messages=None, facts=""):
     """[SMALLTALK/자유대화] 질문/잡담에 사람다운 답 — '나는 편집기라서'류 거절 금지
     (국장: 거절은 사용자를 바보 취급하는 것). 실패 시 None → 호출부가 따뜻한 고정 문구.
@@ -422,10 +464,16 @@ def stream_smalltalk(input_text, recent_messages=None, facts=""):
     산출: ('token', 조각) 반복 → ('done', 전체문장) / 위생 위반·실패 시 ('abort', None).
     위생 규칙은 _sanitize_talk와 동일 기준을 누적문에 적용 — 위반 즉시 중단해
     호출부가 CCUT 고정 문구로 강등한다 (조용한 유출 금지)."""
-    prompt = _smalltalk_prompt(input_text, recent_messages, facts=facts, plain=True)
     acc = ""
     try:
-        for chunk in hub._ollama_stream(prompt, timeout=30, temperature=0.7):
+        if _chat_role_enabled():
+            chunks = hub._ollama_chat_stream(
+                _smalltalk_chat_messages(input_text, recent_messages, facts=facts),
+                timeout=30, temperature=0.7)
+        else:
+            prompt = _smalltalk_prompt(input_text, recent_messages, facts=facts, plain=True)
+            chunks = hub._ollama_stream(prompt, timeout=30, temperature=0.7)
+        for chunk in chunks:
             acc += chunk
             if _re_mod.search(r"[一-鿿]", acc) or \
                _re_mod.search(r"qwen|큐원|퀜|通义|阿里|알리바바", acc, _re_mod.IGNORECASE):
