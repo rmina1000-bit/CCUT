@@ -2187,6 +2187,8 @@ async def post_narrative_intent(req: NarrativeIntentRequest):
     [STEP 10-I.5.28-H] Narrative LLM (qwen3:4b) 연동
     사용자의 자연어를 StoryIntentPatch JSON으로 해석합니다.
     """
+    if not os.getenv("MIRROR_ENABLED"):
+        return {"status": "SKIPPED", "patch": None, "latency_ms": 0, "mirror": None, "error": None}
     from ai.boundary.narrative_provider_adapter import NarrativeProviderAdapter
     try:
         adapter = NarrativeProviderAdapter()
