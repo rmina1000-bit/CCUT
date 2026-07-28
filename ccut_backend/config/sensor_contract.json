@@ -86,7 +86,6 @@
       "sensor": "silero_vad",
       "version": "6.2.1_onnx",
       "values_keys": [
-        "speech_presence",
         "speech_ratio",
         "speech_spans"
       ]

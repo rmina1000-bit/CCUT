@@ -181,7 +181,17 @@ class SemanticFragmentGenerator:
 
         # 9. DB 저장
         self.bams.save_semantic_fragments(source_id, final_fragments)
-        
+        try:
+            from engine.silero_sensor import run_source as run_silero_sensor
+            sensor_result = run_silero_sensor(source_id)
+            print(f"[SILERO_SENSOR] {sensor_result}", flush=True)
+        except Exception as sensor_error:
+            print(
+                f"[SILERO_SENSOR] source={source_id} non-blocking error: "
+                f"{sensor_error}",
+                flush=True,
+            )
+
         # [SEMANTIC DIAGNOSTIC] Final summary
         print(f"[SEMANTIC DIAGNOSTIC] Final semantic duration list (first 20): {[round(f['structural']['duration'], 1) for f in final_fragments[:20]]}")
         print(f"{'='*60}\n")

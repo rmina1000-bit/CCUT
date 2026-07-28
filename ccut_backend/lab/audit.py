@@ -126,12 +126,21 @@ def _material_count(con, material):
     total = con.execute(f'SELECT COUNT(*) FROM "{table}"').fetchone()[0]
     json_path = material.get("json_path")
     if json_path:
-        query = (
-            f'SELECT COUNT(*), COUNT(DISTINCT json_extract("{column}", ?)) '
-            f'FROM "{table}" WHERE json_valid("{column}") '
-            f'AND json_extract("{column}", ?) IS NOT NULL'
-        )
-        non_null, distinct = con.execute(query, (json_path, json_path)).fetchone()
+        if material.get("numeric_only"):
+            query = (
+                f'SELECT COUNT(*), COUNT(DISTINCT json_extract("{column}", ?)) '
+                f'FROM "{table}" WHERE json_valid("{column}") '
+                f'AND json_type("{column}", ?) IN (\'integer\', \'real\')'
+            )
+        else:
+            query = (
+                f'SELECT COUNT(*), COUNT(DISTINCT json_extract("{column}", ?)) '
+                f'FROM "{table}" WHERE json_valid("{column}") '
+                f'AND json_extract("{column}", ?) IS NOT NULL'
+            )
+        non_null, distinct = con.execute(
+            query, (json_path, json_path)
+        ).fetchone()
     else:
         query = (
             f'SELECT COUNT("{column}"), COUNT(DISTINCT "{column}") '
@@ -405,6 +414,10 @@ def run_audit():
         })
 
     audited_at = datetime.now().astimezone().isoformat(timespec="seconds")
+    material_status = {
+        item["id"]: ("VALUE" if item["non_null"] > 0 else "UNKNOWN")
+        for item in materials
+    }
     result = {
         "audited_at": audited_at,
         "duration_ms": int((time.perf_counter() - started) * 1000),
@@ -441,7 +454,10 @@ def run_audit():
                 {"id": "facial_expression_delta", "status": "UNKNOWN"},
                 {"id": "prosody_delta", "status": "VALUE"},
                 {"id": "laughter_event", "status": "UNKNOWN"},
-                {"id": "speech_presence", "status": "UNKNOWN"},
+                {
+                    "id": "speech_presence",
+                    "status": material_status.get("speech_presence", "UNKNOWN"),
+                },
                 {"id": "acoustic_event", "status": "UNKNOWN"},
             ],
             "aggregation": "금지",

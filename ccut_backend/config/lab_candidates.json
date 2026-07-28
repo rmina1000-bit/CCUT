@@ -202,7 +202,7 @@
           "raw파일경로": "D:\\CCUT_EXTERNAL_DATA\\lab4\\silero_onnxruntime_results.json"
         }
       ],
-      "분류": ["미배선", "배선후보"],
+      "분류": ["배선완료"],
       "연결후보": "speech_presence evidence",
       "재시도허용": {
         "value": true,

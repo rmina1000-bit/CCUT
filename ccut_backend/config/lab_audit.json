@@ -43,6 +43,18 @@
       "consumer_paths": ["ccut_backend/story_gate/proposal_axis.py", "ccut_backend/engine/semantic_engine.py"]
     },
     {
+      "id": "speech_presence",
+      "label": "음성 존재",
+      "table": "semantic_fragments",
+      "column": "structural_json",
+      "json_path": "$.sensor_evidence.silero_vad.values.speech_ratio",
+      "numeric_only": true,
+      "producer_terms": ["SENSOR_ID = \"silero_vad\"", "\"speech_ratio\""],
+      "producer_paths": ["ccut_backend/engine/silero_sensor.py"],
+      "consumer_terms": ["speech_presence"],
+      "consumer_paths": []
+    },
+    {
       "id": "face_size",
       "label": "얼굴 크기",
       "table": "fragment_index",
