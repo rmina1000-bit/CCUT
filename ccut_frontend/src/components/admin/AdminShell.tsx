@@ -8,11 +8,12 @@ export const AdminShell: React.FC<{
   active: AdminTab;
   screenLabel: string;
   onNavigate: (tab: AdminTab) => void;
+  aiContext?: "lab";
   children: React.ReactNode;
-}> = ({ active, screenLabel, onNavigate, children }) => (
+}> = ({ active, screenLabel, onNavigate, aiContext, children }) => (
   <div className="flex h-screen bg-[hsl(228_10%_7%)] text-foreground">
     <AdminLeftNav active={active} onNavigate={onNavigate} />
     <main className="flex-1 overflow-y-auto p-6 min-w-0">{children}</main>
-    <AdminAIPanel screen={screenLabel} />
+    <AdminAIPanel screen={screenLabel} contextSource={aiContext} />
   </div>
 );

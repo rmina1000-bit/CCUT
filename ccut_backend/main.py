@@ -4004,7 +4004,13 @@ async def admin_ai_query(payload: dict = None):
     query = (p.get("query") or "").strip()
     if not query:
         raise HTTPException(status_code=400, detail="query is required")
-    return _adm.ai_query((p.get("role") or "ops_brief").strip(), query)
+    context = p.get("context") if isinstance(p.get("context"), dict) else None
+    return _adm.ai_query(
+        (p.get("role") or "ops_brief").strip(),
+        query,
+        context=context,
+        record=not (context and context.get("screen") == "편집연구실"),
+    )
 
 
 @app.get("/admin/analytics/activity")

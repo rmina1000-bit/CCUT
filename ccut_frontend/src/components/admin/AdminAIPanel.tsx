@@ -4,8 +4,7 @@ import { fetcher } from "@/services/api";
 
 // [War Room v1] 공통 AI 보조 패널 — 전 관리자 화면 우측에 부착.
 // read/query only: 이 패널에서 write 액션 실행 금지 (지시서 §STEP1).
-// 권장 행동은 /admin/situation 실황(경보·작전큐)에서 도출 — mock 아님.
-// 질의는 로컬 hub 실질의. 실패 시 정직 표시.
+// 일반 탭 권장 행동은 /admin/situation, EDIT LAB은 동일 감사 응답에서 도출한다.
 
 interface QueryResult {
   query?: string;
@@ -19,19 +18,40 @@ interface SituationLite {
   action_queue?: { kind: string; title: string; priority: string }[];
 }
 
-export const AdminAIPanel: React.FC<{ screen: string }> = ({ screen }) => {
+interface LabAudit {
+  materials?: { id: string; label: string; non_null: number; total: number }[];
+  rules?: { declared: number; registered: number; unregistered: number };
+  techniques?: { declared: number; wired: number };
+  edges?: { status: string }[];
+}
+
+export const AdminAIPanel: React.FC<{
+  screen: string;
+  contextSource?: "lab";
+}> = ({ screen, contextSource }) => {
   const [open, setOpen] = useState(true);
   const [situation, setSituation] = useState<SituationLite | null>(null);
   const [situationError, setSituationError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(false);
   const [history, setHistory] = useState<QueryResult[]>([]);
+  const [labAudit, setLabAudit] = useState<LabAudit | null>(null);
 
   useEffect(() => {
     fetcher("/admin/situation")
       .then(setSituation)
       .catch(e => setSituationError(String(e)));
   }, []);
+
+  useEffect(() => {
+    if (contextSource !== "lab") {
+      setLabAudit(null);
+      return;
+    }
+    fetcher("/lab/audit")
+      .then(setLabAudit)
+      .catch(() => setLabAudit(null));
+  }, [contextSource]);
 
   const ask = async () => {
     const q = query.trim();
@@ -40,7 +60,11 @@ export const AdminAIPanel: React.FC<{ screen: string }> = ({ screen }) => {
     try {
       const r = await fetcher("/admin/ai/query", {
         method: "POST",
-        body: JSON.stringify({ role: "ops_brief", query: `[화면: ${screen}] ${q}` }),
+        body: JSON.stringify({
+          role: "ops_brief",
+          query: `[화면: ${screen}] ${q}`,
+          ...(labAudit ? { context: { screen: "편집연구실", audit: labAudit } } : {}),
+        }),
       }) as QueryResult;
       setHistory(prev => [r, ...prev].slice(0, 10));
       setQuery("");
@@ -51,10 +75,24 @@ export const AdminAIPanel: React.FC<{ screen: string }> = ({ screen }) => {
     }
   };
 
-  const recommended = [
-    ...(situation?.alerts ?? []).map(a => `[${a.severity}] ${a.recommended_action}`),
-    ...(situation?.action_queue ?? []).map(w => `[${w.priority}] ${w.title}`),
-  ].slice(0, 3);
+  const lockedMaterials = labAudit?.materials?.filter(item => item.non_null === 0) ?? [];
+  const labRecommended = labAudit ? [
+    lockedMaterials.length > 0
+      ? `[LOCKED ${lockedMaterials.length}] ${lockedMaterials.map(item => item.label).join(", ")} 생산 경로 확인`
+      : null,
+    (labAudit.rules?.unregistered ?? 0) > 0
+      ? `[BROKEN ${labAudit.rules?.unregistered}] 하드룰 선언·registry ID 연결 확인`
+      : null,
+    (labAudit.techniques?.declared ?? 0) > (labAudit.techniques?.wired ?? 0)
+      ? `[미배선 ${(labAudit.techniques?.declared ?? 0) - (labAudit.techniques?.wired ?? 0)}] 기법 배선 후보 검토`
+      : null,
+  ].filter((item): item is string => Boolean(item)) : [];
+  const recommended = contextSource === "lab"
+    ? labRecommended
+    : [
+      ...(situation?.alerts ?? []).map(a => `[${a.severity}] ${a.recommended_action}`),
+      ...(situation?.action_queue ?? []).map(w => `[${w.priority}] ${w.title}`),
+    ].slice(0, 3);
 
   if (!open) {
     return (
@@ -88,7 +126,7 @@ export const AdminAIPanel: React.FC<{ screen: string }> = ({ screen }) => {
 
       <div className="px-4 py-3 border-b border-border/10">
         <p className="text-[10px] font-semibold text-muted-foreground/50 uppercase mb-1.5">권장 다음 행동</p>
-        {situationError ? (
+        {contextSource !== "lab" && situationError ? (
           <p className="text-[11px] text-muted-foreground/40">상황실 데이터 연결 실패 — {situationError}</p>
         ) : recommended.length === 0 ? (
           <p className="text-[11px] text-muted-foreground/40">현재 경보·대기 작업 없음</p>

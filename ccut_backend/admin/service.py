@@ -3,16 +3,22 @@
 원칙 (설계서 SPEC/CONTRACT 기준):
 - 전 KPI는 실 DB 집계. 하드코딩 금지.
 - 관리자 행동은 admin_audit_log에 append-only 기록.
-- insights 질의는 로컬 hub(qwen2.5, engine.hub._ollama_json)로만 —
-  mock 반환 금지, hub 미응답 시 정직하게 에러 반환.
+- 관리자 AI 질의는 승인된 외부 provider로만 전송하며, 미설정 시 정직하게 실패한다.
 - billing 계열은 daily_service_metrics 실집계 — 데이터 없으면 "준비 중".
 """
 import os
 import sqlite3
 import datetime
+import json
+import base64
+from pathlib import Path
 
 BACKEND_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DB_PATH = os.path.join(BACKEND_DIR, "ccut_app.db")
+ENV_PATH = Path(BACKEND_DIR) / ".env"
+API_PROVIDER_CONFIG = Path(BACKEND_DIR) / "config" / "admin_api_providers.json"
+_API_KEY_CHECKS = {}
+_API_KEY_PRIVATE_KEY = None
 
 OPERATOR_ID = "CCUT_PRO"  # auth.manager.user_manager 실계정과 동일 키
 
@@ -21,6 +27,271 @@ def _connect():
     con = sqlite3.connect(DB_PATH, timeout=30)
     con.execute("PRAGMA busy_timeout=30000")
     return con
+
+
+def _api_providers():
+    with API_PROVIDER_CONFIG.open("r", encoding="utf-8") as handle:
+        return json.load(handle).get("providers", [])
+
+
+def _api_provider(provider_id: str):
+    return next(
+        (item for item in _api_providers() if item.get("id") == provider_id),
+        None,
+    )
+
+
+def _mask_secret(value: str) -> str:
+    value = str(value or "")
+    if not value:
+        return ""
+    prefix = value[:7] if len(value) > 11 else value[:3]
+    return f"{prefix}…{value[-4:]}"
+
+
+def _rsa_private_key():
+    global _API_KEY_PRIVATE_KEY
+    if _API_KEY_PRIVATE_KEY is None:
+        from cryptography.hazmat.primitives.asymmetric import rsa
+        _API_KEY_PRIVATE_KEY = rsa.generate_private_key(
+            public_exponent=65537,
+            key_size=2048,
+        )
+    return _API_KEY_PRIVATE_KEY
+
+
+def api_key_public_key() -> dict:
+    from cryptography.hazmat.primitives import serialization
+    public_key = _rsa_private_key().public_key().public_bytes(
+        encoding=serialization.Encoding.PEM,
+        format=serialization.PublicFormat.SubjectPublicKeyInfo,
+    )
+    return {
+        "algorithm": "RSA-OAEP-256",
+        "public_key_pem": public_key.decode("ascii"),
+    }
+
+
+def _decrypt_api_key(ciphertext: str) -> str:
+    from cryptography.hazmat.primitives import hashes
+    from cryptography.hazmat.primitives.asymmetric import padding
+    try:
+        encrypted = base64.b64decode(ciphertext, validate=True)
+        value = _rsa_private_key().decrypt(
+            encrypted,
+            padding.OAEP(
+                mgf=padding.MGF1(algorithm=hashes.SHA256()),
+                algorithm=hashes.SHA256(),
+                label=None,
+            ),
+        ).decode("utf-8").strip()
+    except Exception as exc:
+        raise ValueError("키 암호문을 해독할 수 없습니다") from exc
+    if not value or len(value) > 512 or "\n" in value or "\r" in value:
+        raise ValueError("키 형식이 올바르지 않습니다")
+    return value
+
+
+def _write_env_value(name: str, value: str):
+    raw = ENV_PATH.read_bytes() if ENV_PATH.exists() else b""
+    text = raw.decode("utf-8")
+    newline = "\r\n" if "\r\n" in text else "\n"
+    lines = text.splitlines()
+    replacement = f"{name}={value}"
+    replaced = False
+    output = []
+    for line in lines:
+        if line.startswith(f"{name}="):
+            if not replaced:
+                output.append(replacement)
+                replaced = True
+            continue
+        output.append(line)
+    if not replaced:
+        output.append(replacement)
+    rendered = newline.join(output) + newline
+    temp_path = ENV_PATH.with_suffix(".env.tmp")
+    temp_path.write_bytes(rendered.encode("utf-8"))
+    os.replace(temp_path, ENV_PATH)
+    os.environ[name] = value
+
+
+def api_key_status() -> dict:
+    providers = []
+    for item in _api_providers():
+        provider_id = item["id"]
+        value = os.getenv(item["env_key"], "").strip()
+        check = _API_KEY_CHECKS.get(provider_id, {})
+        providers.append({
+            "id": provider_id,
+            "display_name": item["display_name"],
+            "configured": bool(value),
+            "masked_key": _mask_secret(value),
+            "model": os.getenv(item.get("model_env", ""), "").strip() or None,
+            "issue_url": item.get("issue_url"),
+            "docs_url": item.get("docs_url"),
+            "connection": check.get("connection") or (
+                "connected" if value else "unset"
+            ),
+            "last_checked_at": check.get("last_checked_at"),
+            "error": check.get("error"),
+        })
+    return {"providers": providers}
+
+
+def _api_key_error_message(exc: Exception) -> str:
+    import httpx
+    if isinstance(exc, httpx.HTTPStatusError):
+        status = exc.response.status_code
+        if status == 401:
+            return "401 인증 실패"
+        if status == 429:
+            return "429 사용 한도 또는 요청 한도 초과"
+        if status == 404:
+            return "404 모델 또는 API 경로를 찾을 수 없음"
+        return f"API 오류 {status}"
+    if isinstance(exc, (httpx.ConnectError, httpx.TimeoutException)):
+        return "네트워크 연결 실패"
+    return "연결 테스트 실패"
+
+
+def _anthropic_error_message(exc: Exception) -> str:
+    import httpx
+    if isinstance(exc, httpx.HTTPStatusError):
+        try:
+            message = exc.response.json().get("error", {}).get("message")
+        except (ValueError, AttributeError):
+            message = None
+        message = str(message or "")
+        if "credit balance is too low" in message.lower():
+            return "API 크레딧 잔액 부족"
+        return message or _api_key_error_message(exc)
+    return _api_key_error_message(exc)
+
+
+def _test_anthropic_key(api_key: str) -> str:
+    import httpx
+    model = os.getenv("CCUT_ADMIN_LLM_MODEL", "").strip()
+    if not model:
+        raise ValueError("관리자 AI 모델 미설정")
+    response = httpx.post(
+        "https://api.anthropic.com/v1/messages",
+        headers={
+            "x-api-key": api_key,
+            "anthropic-version": "2023-06-01",
+            "content-type": "application/json",
+        },
+        json={
+            "model": model,
+            "max_tokens": 1,
+            "messages": [{"role": "user", "content": "Reply OK."}],
+        },
+        timeout=15,
+    )
+    response.raise_for_status()
+    return model
+
+
+def api_key_test(provider_id: str, ciphertext: str = None) -> dict:
+    provider = _api_provider(provider_id)
+    if not provider:
+        return {"error": "지원하지 않는 공급자"}
+    api_key = (
+        _decrypt_api_key(ciphertext)
+        if ciphertext
+        else os.getenv(provider["env_key"], "").strip()
+    )
+    if not api_key:
+        return {"error": "미설정", "connection": "unset"}
+    checked_at = datetime.datetime.now().astimezone().isoformat(timespec="seconds")
+    try:
+        if provider_id != "anthropic":
+            raise ValueError("지원하지 않는 공급자")
+        model = _test_anthropic_key(api_key)
+        _API_KEY_CHECKS[provider_id] = {
+            "connection": "connected",
+            "last_checked_at": checked_at,
+            "error": None,
+        }
+        return {
+            "status": "connected",
+            "model": model,
+            "last_checked_at": checked_at,
+        }
+    except Exception as exc:
+        error = _api_key_error_message(exc)
+        _API_KEY_CHECKS[provider_id] = {
+            "connection": "error",
+            "last_checked_at": checked_at,
+            "error": error,
+        }
+        return {
+            "error": error,
+            "connection": "error",
+            "last_checked_at": checked_at,
+        }
+
+
+def api_key_save(provider_id: str, ciphertext: str) -> dict:
+    provider = _api_provider(provider_id)
+    if not provider:
+        return {"error": "지원하지 않는 공급자"}
+    value = _decrypt_api_key(ciphertext)
+    _write_env_value(provider["env_key"], value)
+    _API_KEY_CHECKS.pop(provider_id, None)
+    return {
+        "status": "saved",
+        "provider": provider_id,
+        "masked_key": _mask_secret(value),
+    }
+
+
+def api_key_connect(provider_id: str, ciphertext: str) -> dict:
+    """Validate first, then persist. A failed key never reaches .env."""
+    provider = _api_provider(provider_id)
+    if not provider:
+        return {"error": "지원하지 않는 공급자"}
+    value = _decrypt_api_key(ciphertext)
+    checked_at = datetime.datetime.now().astimezone().isoformat(timespec="seconds")
+    try:
+        if provider_id != "anthropic":
+            raise ValueError("지원하지 않는 공급자")
+        model = _test_anthropic_key(value)
+    except Exception as exc:
+        error = _api_key_error_message(exc)
+        _API_KEY_CHECKS[provider_id] = {
+            "connection": "error",
+            "last_checked_at": checked_at,
+            "error": error,
+        }
+        return {
+            "error": error,
+            "connection": "error",
+            "last_checked_at": checked_at,
+        }
+
+    _write_env_value(provider["env_key"], value)
+    _API_KEY_CHECKS[provider_id] = {
+        "connection": "connected",
+        "last_checked_at": checked_at,
+        "error": None,
+    }
+    return {
+        "status": "connected",
+        "provider": provider_id,
+        "model": model,
+        "last_checked_at": checked_at,
+        "masked_key": _mask_secret(value),
+    }
+
+
+def api_key_disconnect(provider_id: str) -> dict:
+    provider = _api_provider(provider_id)
+    if not provider:
+        return {"error": "지원하지 않는 공급자"}
+    _write_env_value(provider["env_key"], "")
+    _API_KEY_CHECKS.pop(provider_id, None)
+    return {"status": "disconnected", "provider": provider_id}
 
 
 def ensure_schema():
@@ -902,8 +1173,7 @@ def design_config_status(config_id: int, status: str) -> dict:
 
 
 # ═══════════════════════════════════════════════════════════════════
-#   [War Room v1] AI 운영실 — 역할별 로컬 질의 + 실행 로그
-#   외부 API AI: v1에서 호출 경로 자체 없음 (슬롯만, 별도 승인 트랙)
+#   [War Room v1] AI 운영실 — 역할별 Anthropic 질의 + 실행 로그
 # ═══════════════════════════════════════════════════════════════════
 
 _AI_ROLES = ("ops_brief", "support_classify", "security_triage",
@@ -919,17 +1189,14 @@ _ROLE_PROMPTS = {
 
 
 def ai_status() -> dict:
-    """로컬 hub 실측 ping — 하드코딩 상태 금지."""
-    import urllib.request
-    from engine.hub import OLLAMA_URL, HUB_MODEL
-    local = {"model": HUB_MODEL, "url": OLLAMA_URL}
-    try:
-        with urllib.request.urlopen(OLLAMA_URL + "/api/tags", timeout=3) as r:
-            r.read()
-        local["reachable"] = True
-    except Exception as e:
-        local["reachable"] = False
-        local["error"] = str(e)
+    """관리자 AI 설정 상태. 키 값은 응답하거나 로그로 남기지 않는다."""
+    provider = os.getenv("CCUT_ADMIN_LLM_PROVIDER", "").strip()
+    model = os.getenv("CCUT_ADMIN_LLM_MODEL", "").strip()
+    configured = provider == "anthropic" and bool(model) and bool(
+        os.getenv("ANTHROPIC_API_KEY", "").strip()
+    )
+    provider_check = _API_KEY_CHECKS.get(provider, {})
+    connection = provider_check.get("connection")
     con = _connect()
     try:
         total, failed = con.execute(
@@ -939,9 +1206,14 @@ def ai_status() -> dict:
         total, failed = 0, 0
     con.close()
     return {
-        "local": local,
-        "external": {"status": "disabled",
-                     "note": "외부 API AI는 별도 승인 트랙 — v1에 호출 경로 없음"},
+        "provider": provider or None,
+        "model": model or None,
+        "configured": configured,
+        "status": (
+            provider_check.get("error")
+            if connection == "error"
+            else ("ready" if configured else "관리자 AI 미설정")
+        ),
         "runs_total": total or 0,
         "runs_failed": failed or 0,
         "roles": list(_AI_ROLES),
@@ -964,40 +1236,205 @@ def ai_runs(limit: int = 50) -> dict:
     return {"runs": [dict(zip(cols, r)) for r in rows]}
 
 
-def ai_query(role: str, query: str) -> dict:
-    """역할별 로컬 질의 — 전 실행 admin_ai_runs 기록. 한 번에 모델 1개, 역할 1개."""
+def _lab_transfer_context(context: dict) -> dict:
+    audit = context.get("audit") if isinstance(context.get("audit"), dict) else {}
+    materials = [
+        {
+            key: item.get(key)
+            for key in (
+                "id", "label", "non_null", "total", "distinct",
+                "producers", "consumers",
+            )
+        }
+        for item in audit.get("materials", [])
+        if isinstance(item, dict)
+    ]
+    rule_block = audit.get("rules") if isinstance(audit.get("rules"), dict) else {}
+    rule_items = [
+        item for item in rule_block.get("items", [])
+        if isinstance(item, dict)
+    ]
+    config_rule_ids = [
+        item.get("id") for item in rule_items
+        if str(item.get("declared_in") or "").startswith(
+            "ccut_backend/config/production_hard_rules.json:"
+        )
+    ]
+    registry_rule_ids = list(rule_block.get("registered_ids") or [])
+    technique_block = (
+        audit.get("techniques")
+        if isinstance(audit.get("techniques"), dict)
+        else {}
+    )
+    technique_items = [
+        {
+            key: item.get(key)
+            for key in (
+                "id", "wired", "requires_materials", "requires_rules",
+            )
+        }
+        for item in technique_block.get("items", [])
+        if isinstance(item, dict)
+        and str(item.get("declared_in") or "").startswith(
+            "ccut_backend/config/editing_techniques.json:"
+        )
+    ]
+    edges = [
+        {
+            key: edge.get(key)
+            for key in ("from", "to", "kind", "status", "evidence")
+        }
+        for edge in audit.get("edges", [])
+        if isinstance(edge, dict)
+    ]
+    status_counts = {
+        status: sum(1 for edge in edges if edge.get("status") == status)
+        for status in ("LIVE", "LOCKED", "BROKEN", "UNDECLARED")
+    }
+    return {
+        "screen": "편집연구실",
+        "materials": materials,
+        "rules": {
+            "config_declared_ids": config_rule_ids,
+            "registry_registered_ids": registry_rule_ids,
+            "intersection_ids": sorted(set(config_rule_ids) & set(registry_rule_ids)),
+        },
+        "techniques": technique_items,
+        "wired_technique_ids": list(technique_block.get("wired_ids") or []),
+        "edges": edges,
+        "status_summary": {
+            **status_counts,
+            "unwired_techniques": max(
+                0,
+                int(technique_block.get("declared") or 0)
+                - int(technique_block.get("wired") or 0),
+            ),
+        },
+        "omitted": {
+            "materials": max(0, len(audit.get("materials", [])) - len(materials)),
+            "rules": max(0, len(rule_items) - len(config_rule_ids) - len(registry_rule_ids)),
+            "techniques": max(
+                0,
+                len(technique_block.get("items", [])) - len(technique_items) - 1,
+            ),
+            "edges": max(0, len(audit.get("edges", [])) - len(edges)),
+        },
+    }
+
+
+def _build_admin_prompt(role: str, query: str, context: dict = None) -> tuple[str, dict]:
+    is_lab = bool(context and context.get("screen") == "편집연구실")
+    if is_lab:
+        transmitted = _lab_transfer_context(context)
+        context_rules = (
+            "아래 EDIT LAB 감사 데이터만 근거로 답하라.\n"
+            "모든 수치와 ID는 감사 데이터에 있는 값만 사용하라.\n"
+            "데이터에 없는 내용은 반드시 '감사 데이터에 없음'이라고 답하라.\n"
+            "추측, 일반지식, 화면 이름 되받기를 금지한다.\n"
+            "답변은 결론 한 줄, 근거 수치, 다음 후보 행동이 있으면 그 순서로 3문장 이내로 작성하라.\n"
+        )
+    else:
+        con = _connect()
+        transmitted = _service_counts(con)
+        con.close()
+        context_rules = "지표에 없는 수치는 지어내지 말고 '지표에 없음'이라고 말하라.\n"
+    payload_text = (
+        json.dumps(transmitted, ensure_ascii=False, separators=(",", ":"))
+        if is_lab
+        else "\n".join(f"- {key}: {value}" for key, value in transmitted.items())
+    )
+    output_contract = (
+        'JSON만 출력. 형식: {"answer": "한국어 답변"}'
+        if is_lab
+        else 'JSON만 출력. 형식: {"answer": "한국어 답변 (3문장 이내)"}'
+    )
+    prompt = (
+        f"{_ROLE_PROMPTS[role]}\n"
+        f"{context_rules}"
+        f"[운영 지표]\n{payload_text}\n\n"
+        f"[운영자 입력]\n{query}\n\n"
+        f"{output_contract}"
+    )
+    return prompt, transmitted
+
+
+def _anthropic_admin_query(prompt: str) -> tuple[str, str]:
+    provider = os.getenv("CCUT_ADMIN_LLM_PROVIDER", "").strip()
+    model = os.getenv("CCUT_ADMIN_LLM_MODEL", "").strip()
+    api_key = os.getenv("ANTHROPIC_API_KEY", "").strip()
+    if provider != "anthropic" or not model or not api_key:
+        raise RuntimeError("관리자 AI 미설정")
+
+    import httpx
+    request_payload = {
+        "model": model,
+        "max_tokens": 700,
+        "messages": [{"role": "user", "content": prompt}],
+    }
+    response = httpx.post(
+        "https://api.anthropic.com/v1/messages",
+        headers={
+            "x-api-key": api_key,
+            "anthropic-version": "2023-06-01",
+            "content-type": "application/json",
+        },
+        json=request_payload,
+        timeout=60,
+    )
+    response.raise_for_status()
+    body = response.json()
+    text = "".join(
+        block.get("text", "")
+        for block in body.get("content", [])
+        if isinstance(block, dict) and block.get("type") == "text"
+    ).strip()
+    if not text:
+        raise ValueError("empty Anthropic response")
+    try:
+        answer = json.loads(text).get("answer")
+    except json.JSONDecodeError:
+        answer = None
+    if not answer:
+        raise ValueError("Anthropic response is not answer JSON")
+    return answer, model
+
+
+def ai_query(role: str, query: str, context: dict = None, record: bool = True) -> dict:
+    """역할별 관리자 API 질의. EDIT LAB은 실행·감사 로그를 남기지 않는다."""
     import time as _time
     if role not in _AI_ROLES:
         return {"error": f"role must be one of {_AI_ROLES}"}
 
-    con = _connect()
-    ctx = _service_counts(con)
-    con.close()
-    ctx_lines = "\n".join(f"- {k}: {v}" for k, v in ctx.items())
-    prompt = (
-        f"{_ROLE_PROMPTS[role]}\n"
-        "지표에 없는 수치는 지어내지 말고 '지표에 없음'이라고 말하라.\n"
-        f"[운영 지표]\n{ctx_lines}\n\n"
-        f"[운영자 입력]\n{query}\n\n"
-        'JSON만 출력. 형식: {"answer": "한국어 답변 (3문장 이내)"}'
-    )
+    prompt, transmitted = _build_admin_prompt(role, query, context)
     t0 = _time.time()
     try:
-        from engine.hub import _ollama_json, HUB_MODEL
-        res = _ollama_json(prompt, timeout=60)
-        answer = (res or {}).get("answer")
-        if not answer:
-            raise ValueError("empty answer")
+        answer, model = _anthropic_admin_query(prompt)
     except Exception as e:
-        _log_ai_run(role, "local_hub", "failed", input_summary=query, error=e,
-                    duration_ms=int((_time.time() - t0) * 1000))
-        return {"error": "hub 응답 없음", "role": role, "detail": str(e)}
+        error = (
+            "관리자 AI 미설정"
+            if str(e) == "관리자 AI 미설정"
+            else _anthropic_error_message(e)
+        )
+        if os.getenv("CCUT_ADMIN_LLM_PROVIDER", "").strip() == "anthropic":
+            _API_KEY_CHECKS["anthropic"] = {
+                "connection": "error",
+                "last_checked_at": datetime.datetime.now().astimezone().isoformat(
+                    timespec="seconds"
+                ),
+                "error": error,
+            }
+        if record:
+            _log_ai_run(role, "admin_anthropic", "failed", input_summary=query, error=e,
+                        duration_ms=int((_time.time() - t0) * 1000))
+        return {"error": error, "role": role}
     duration = int((_time.time() - t0) * 1000)
-    _log_ai_run(role, "local_hub", "ok", input_summary=query,
-                output_summary=answer, duration_ms=duration)
-    audit_append("ai_query", target_type="ai_run", note=f"[{role}] {query}")
+    if record:
+        _log_ai_run(role, model, "ok", input_summary=query,
+                    output_summary=answer, duration_ms=duration)
+        audit_append("ai_query", target_type="ai_run", note=f"[{role}] {query}")
     return {"role": role, "query": query, "result": answer,
-            "duration_ms": duration, "sources_referenced": len(ctx)}
+            "duration_ms": duration,
+            "sources_referenced": len(transmitted)}
 
 
 # ═══════════════════════════════════════════════════════════════════

@@ -48,7 +48,12 @@ const AdminIndex: React.FC = () => {
     navigate(tab === "situation" ? "/admin" : `/admin/${tab}`);
 
   return (
-    <AdminShell active={active} screenLabel={LABELS[active]} onNavigate={onNavigate}>
+    <AdminShell
+      active={active}
+      screenLabel={LABELS[active]}
+      onNavigate={onNavigate}
+      aiContext={active === "edit-lab" ? "lab" : undefined}
+    >
       {active === "situation" && <AdminSituationPanel />}
       {active === "users" && <AdminUsersPanel />}
       {active === "support" && <AdminSupportPanel />}
