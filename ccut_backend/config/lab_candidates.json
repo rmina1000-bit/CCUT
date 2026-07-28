@@ -1,0 +1,241 @@
+{
+  "schema_version": 1,
+  "candidates": [
+    {
+      "candidate_id": "camera_motion",
+      "표시명": "카메라 운동",
+      "evidence_kind": "motion",
+      "환경상태": "INSTALLED",
+      "측정이력": [
+        {
+          "회차": "LAB-2-invalid",
+          "날짜": "2026-07-29",
+          "조건": "5fps, 원본 해상도, 특징점 250; 배열 shape 브로드캐스트 오류",
+          "정확도지표": "INVALID_shape_broadcast",
+          "조각당ms": "UNKNOWN",
+          "83소스환산초": "UNKNOWN",
+          "UNKNOWN비율": "100%",
+          "raw파일경로": "D:\\CCUT_EXTERNAL_DATA\\lab2_phase_a\\lab2_phase_a_results.json"
+        },
+        {
+          "회차": "LAB-2-corrected",
+          "날짜": "2026-07-29",
+          "조건": "5fps, 원본 해상도, 특징점 250, 비현실 affine 제외",
+          "정확도지표": "부호 국장 미판정",
+          "조각당ms": 1441,
+          "83소스환산초": 1554,
+          "UNKNOWN비율": "부호 100%",
+          "raw파일경로": "D:\\CCUT_EXTERNAL_DATA\\lab2_phase_a\\lab2_phase_a_results.json"
+        },
+        {
+          "회차": "LAB-3-1",
+          "날짜": "2026-07-29",
+          "조건": "2fps, width 640, 특징점 100",
+          "정확도지표": "LAB-2 부호 대비 18/25 일치(72.00%), 14축 UNKNOWN",
+          "조각당ms": 550.885,
+          "83소스환산초": 593.976,
+          "UNKNOWN비율": "35.90%",
+          "raw파일경로": "D:\\CCUT_EXTERNAL_DATA\\lab3\\motion_low_cost_rounds.json"
+        },
+        {
+          "회차": "LAB-3-2",
+          "날짜": "2026-07-29",
+          "조건": "1fps, width 480, 특징점 80",
+          "정확도지표": "LAB-2 부호 대비 14/17 일치(82.35%), 22축 UNKNOWN",
+          "조각당ms": 272.137,
+          "83소스환산초": 293.424,
+          "UNKNOWN비율": "56.41%",
+          "raw파일경로": "D:\\CCUT_EXTERNAL_DATA\\lab3\\motion_low_cost_rounds.json"
+        },
+        {
+          "회차": "LAB-3-3",
+          "날짜": "2026-07-29",
+          "조건": "0.5fps, width 320, 특징점 50",
+          "정확도지표": "LAB-2 부호 대비 5/12 일치(41.67%), 27축 UNKNOWN",
+          "조각당ms": 140.384,
+          "83소스환산초": 151.366,
+          "UNKNOWN비율": "69.23%",
+          "raw파일경로": "D:\\CCUT_EXTERNAL_DATA\\lab3\\motion_low_cost_rounds.json"
+        }
+      ],
+      "분류": ["부호 미검증"],
+      "연결후보": "camera_motion 계열 신규 재료",
+      "재시도허용": {
+        "value": false,
+        "사유": "저비용화 3차수 상한 도달. 최선 조건은 LAB-3-2이며 부호는 국장 미판정."
+      },
+      "국장판정": {
+        "상태": "미판정",
+        "날짜": null
+      }
+    },
+    {
+      "candidate_id": "yunet",
+      "표시명": "YuNet 얼굴 검출",
+      "evidence_kind": "visual",
+      "환경상태": "INSTALLED",
+      "측정이력": [
+        {
+          "회차": "LAB-2",
+          "날짜": "2026-07-29",
+          "조건": "원본 입력, score 0.7, 조각당 5프레임",
+          "정확도지표": "성능 13조각 중 무검출 3; 대형 얼굴 5/5 실패; 박수 비얼굴 오검출 최소 1",
+          "조각당ms": 551,
+          "83소스환산초": 595,
+          "UNKNOWN비율": "23.08%",
+          "raw파일경로": "D:\\CCUT_EXTERNAL_DATA\\lab2_phase_a\\lab2_phase_a_results.json"
+        },
+        {
+          "회차": "LAB-3-1",
+          "날짜": "2026-07-29",
+          "조건": "입력 0.75배, score 0.5",
+          "정확도지표": "대형 얼굴 5/5 검출, 9박스(중복 포함); 박수 22박스, 반복 비얼굴 후보 5/5",
+          "조각당ms": 119.388,
+          "83소스환산초": "UNKNOWN",
+          "UNKNOWN비율": "0%",
+          "raw파일경로": "D:\\CCUT_EXTERNAL_DATA\\lab3\\yunet_correction_rounds.json"
+        },
+        {
+          "회차": "LAB-3-2",
+          "날짜": "2026-07-29",
+          "조건": "입력 0.5배, score 0.5",
+          "정확도지표": "대형 얼굴 5/5 검출, 5박스; 박수 23박스, 반복 비얼굴 후보 5/5",
+          "조각당ms": 89.568,
+          "83소스환산초": "UNKNOWN",
+          "UNKNOWN비율": "0%",
+          "raw파일경로": "D:\\CCUT_EXTERNAL_DATA\\lab3\\yunet_correction_rounds.json"
+        },
+        {
+          "회차": "LAB-3-3",
+          "날짜": "2026-07-29",
+          "조건": "입력 0.5배, padding 25%, score 0.6",
+          "정확도지표": "대형 얼굴 5/5 검출, 5박스; 박수 18박스, 반복 비얼굴 후보 5/5",
+          "조각당ms": 119.970,
+          "83소스환산초": "UNKNOWN",
+          "UNKNOWN비율": "0%",
+          "raw파일경로": "D:\\CCUT_EXTERNAL_DATA\\lab3\\yunet_correction_rounds.json"
+        }
+      ],
+      "분류": ["신뢰부족"],
+      "연결후보": "face_size; shot_size_proxy는 승격 금지",
+      "재시도허용": {
+        "value": false,
+        "사유": "보정 3차수 상한 도달. 대형 얼굴은 회복했으나 박수 비얼굴 오검출이 유지됨."
+      },
+      "국장판정": {
+        "상태": "미판정",
+        "날짜": null
+      }
+    },
+    {
+      "candidate_id": "prosody_delta",
+      "표시명": "운율 변화량",
+      "evidence_kind": "prosody",
+      "환경상태": "INSTALLED",
+      "측정이력": [
+        {
+          "회차": "LAB-2",
+          "날짜": "2026-07-29",
+          "조건": "librosa RMS/F0 전후반 변화량, 절대 감정값 아님",
+          "정확도지표": "confidence 전부 UNKNOWN",
+          "조각당ms": 71.8,
+          "83소스환산초": 615,
+          "UNKNOWN비율": "100%",
+          "raw파일경로": "D:\\CCUT_EXTERNAL_DATA\\lab2_phase_a\\lab2_phase_a_results.json"
+        }
+      ],
+      "분류": ["재설계"],
+      "연결후보": "prosody_delta evidence",
+      "재시도허용": {
+        "value": false,
+        "사유": "절대 감정값으로 재시도하지 않음. 독립 evidence로만 보존."
+      },
+      "국장판정": {
+        "상태": "미판정",
+        "날짜": null
+      }
+    },
+    {
+      "candidate_id": "silero_vad",
+      "표시명": "Silero 음성 존재",
+      "evidence_kind": "speech",
+      "환경상태": "INSTALLED",
+      "측정이력": [
+        {
+          "회차": "LAB-3-install-failure",
+          "날짜": "2026-07-29",
+          "조건": "silero-vad 6.2.1, 격리 venv; 전역 torchaudio 2.11.0 상속",
+          "정확도지표": "IMPORT 실패: torch 2.9.1 / torchaudio 2.11.0 불일치",
+          "조각당ms": "UNKNOWN",
+          "83소스환산초": "UNKNOWN",
+          "UNKNOWN비율": "100%",
+          "raw파일경로": "D:\\CCUT_EXTERNAL_DATA\\lab3\\silero_venv"
+        },
+        {
+          "회차": "LAB-3-read-failure",
+          "날짜": "2026-07-29",
+          "조건": "격리 torchaudio 2.9.1 보정 후 silero read_audio",
+          "정확도지표": "실패: torchcodec 미설치",
+          "조각당ms": "UNKNOWN",
+          "83소스환산초": "UNKNOWN",
+          "UNKNOWN비율": "100%",
+          "raw파일경로": "D:\\CCUT_EXTERNAL_DATA\\lab3\\silero_b3_results.json"
+        },
+        {
+          "회차": "LAB-3-B3",
+          "날짜": "2026-07-29",
+          "조건": "silero-vad 6.2.1 bundled ONNX, threshold 0.5, scipy PCM16 입력",
+          "정확도지표": "speech_ratio 파도 0, 박수 0, 전차 0, 아이말 0.7546, 조용 0",
+          "조각당ms": 38.637,
+          "83소스환산초": 25.887,
+          "UNKNOWN비율": "0%",
+          "raw파일경로": "D:\\CCUT_EXTERNAL_DATA\\lab3\\silero_b3_results.json"
+        }
+      ],
+      "분류": ["미배선", "배선후보"],
+      "연결후보": "speech_presence evidence",
+      "재시도허용": {
+        "value": true,
+        "사유": "격리 B3 측정 완료. 본선 채택 판단은 다음 회차."
+      },
+      "국장판정": {
+        "상태": "미판정",
+        "날짜": null
+      }
+    },
+    {
+      "candidate_id": "yamnet",
+      "표시명": "YAMNet 음향 사건",
+      "evidence_kind": "acoustic",
+      "환경상태": "MODULE_MISSING",
+      "측정이력": [],
+      "분류": ["미배선"],
+      "연결후보": "acoustic_event evidence",
+      "재시도허용": {
+        "value": true,
+        "사유": "미프로브. 다음 회차 범위."
+      },
+      "국장판정": {
+        "상태": "미판정",
+        "날짜": null
+      }
+    },
+    {
+      "candidate_id": "dnsmos",
+      "표시명": "DNSMOS 음질",
+      "evidence_kind": "quality",
+      "환경상태": "MODEL_MISSING",
+      "측정이력": [],
+      "분류": ["미배선"],
+      "연결후보": "없음",
+      "재시도허용": {
+        "value": true,
+        "사유": "onnxruntime 1.24.1은 설치됐으나 DNSMOS 모델 파일이 없어 미프로브."
+      },
+      "국장판정": {
+        "상태": "미판정",
+        "날짜": null
+      }
+    }
+  ]
+}

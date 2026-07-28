@@ -41,6 +41,29 @@ interface AuditEdge {
   evidence: string | null;
 }
 
+interface CandidateMeasurement {
+  회차: string;
+  날짜: string;
+  조건: string;
+  정확도지표: string;
+  조각당ms: number | "UNKNOWN";
+  "83소스환산초": number | "UNKNOWN";
+  UNKNOWN비율: string;
+  raw파일경로: string;
+}
+
+interface LabCandidate {
+  candidate_id: string;
+  표시명: string;
+  evidence_kind: "visual" | "motion" | "speech" | "prosody" | "acoustic" | "quality";
+  환경상태: "INSTALLED" | "MODULE_MISSING" | "MODEL_MISSING";
+  측정이력: CandidateMeasurement[];
+  분류: string[];
+  연결후보: string;
+  재시도허용: { value: boolean; 사유: string };
+  국장판정: { 상태: "미판정" | "채택" | "보류" | "폐기"; 날짜: string | null };
+}
+
 interface LabAudit {
   audited_at: string;
   duration_ms: number;
@@ -59,6 +82,12 @@ interface LabAudit {
     items: TechniqueAudit[];
   };
   edges: AuditEdge[];
+  candidates: LabCandidate[];
+  emotion_evidence: {
+    legacy_node: { id: "emotion_score"; status: "재설계" };
+    items: Array<{ id: string; status: "VALUE" | "UNKNOWN" }>;
+    aggregation: "금지";
+  };
 }
 
 const STATUS_STYLE: Record<EdgeStatus, { stroke: string; dash?: string; label: string }> = {
@@ -270,6 +299,7 @@ export const AdminEditLabPanel: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selection, setSelection] = useState<{ kind: string; id: string } | null>(null);
+  const [selectedCandidateId, setSelectedCandidateId] = useState<string | null>(null);
 
   const load = async (rerun = false) => {
     setLoading(true);
@@ -301,6 +331,9 @@ export const AdminEditLabPanel: React.FC = () => {
   const selectedEdges = audit?.edges.filter(
     edge => edge.from === selection?.id || edge.to === selection?.id,
   ) ?? [];
+  const selectedCandidate = audit?.candidates.find(
+    candidate => candidate.candidate_id === selectedCandidateId,
+  );
 
   return (
     <div className="space-y-5">
@@ -400,6 +433,102 @@ export const AdminEditLabPanel: React.FC = () => {
                 ))}
               </div>
             )}
+          </section>
+
+          <section className="space-y-3 border-t border-border/15 pt-4">
+            <div>
+              <h2 className="text-xs font-black tracking-widest uppercase text-muted-foreground/55">센서 후보 장부</h2>
+              <p className="mt-1 text-[10px] text-muted-foreground/45">측정 사실과 분류·국장 판정을 분리해 보존합니다.</p>
+            </div>
+            <div className="overflow-x-auto border border-border/15">
+              <table className="w-full text-[11px]">
+                <thead className="bg-secondary/20 text-muted-foreground/60">
+                  <tr>
+                    <th className="px-3 py-2 text-left">후보</th>
+                    <th className="px-3 py-2 text-left">종류</th>
+                    <th className="px-3 py-2 text-left">환경상태</th>
+                    <th className="px-3 py-2 text-left">분류</th>
+                    <th className="px-3 py-2 text-left">최근 측정</th>
+                    <th className="px-3 py-2 text-left">국장판정</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border/10">
+                  {audit.candidates.map(candidate => {
+                    const latest = candidate.측정이력.at(-1);
+                    return (
+                      <tr
+                        key={candidate.candidate_id}
+                        onClick={() => setSelectedCandidateId(candidate.candidate_id)}
+                        className="cursor-pointer hover:bg-secondary/15"
+                      >
+                        <td className="px-3 py-2 font-semibold text-foreground/85">{candidate.표시명}</td>
+                        <td className="px-3 py-2 font-mono text-muted-foreground/60">{candidate.evidence_kind}</td>
+                        <td className="px-3 py-2">
+                          <span className="border border-border/20 px-1.5 py-0.5 font-mono text-[9px]">{candidate.환경상태}</span>
+                        </td>
+                        <td className="px-3 py-2">
+                          <div className="flex flex-wrap gap-1">
+                            {candidate.분류.map(tag => (
+                              <span key={tag} className="border border-amber-500/30 bg-amber-500/10 px-1.5 py-0.5 text-[9px] text-amber-200/80">{tag}</span>
+                            ))}
+                          </div>
+                        </td>
+                        <td className="px-3 py-2 font-mono text-muted-foreground/65">
+                          {latest ? `${latest.회차} · ${latest.조각당ms}ms` : "측정 없음"}
+                        </td>
+                        <td className="px-3 py-2">{candidate.국장판정.상태}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            {selectedCandidate && (
+              <div className="border border-border/15 bg-secondary/10 p-4 space-y-3">
+                <div>
+                  <p className="text-sm font-semibold">{selectedCandidate.표시명}</p>
+                  <p className="text-[10px] text-muted-foreground/60">연결 후보: {selectedCandidate.연결후보}</p>
+                  {!selectedCandidate.재시도허용.value && (
+                    <p className="mt-1 text-[10px] text-amber-300/75">재시도 잠금: {selectedCandidate.재시도허용.사유}</p>
+                  )}
+                </div>
+                <div className="space-y-2">
+                  {selectedCandidate.측정이력.length === 0 && (
+                    <p className="text-[10px] text-muted-foreground/45">측정이력 없음</p>
+                  )}
+                  {selectedCandidate.측정이력.map(item => (
+                    <div key={`${selectedCandidate.candidate_id}-${item.회차}`} className="border-t border-border/10 pt-2 text-[10px]">
+                      <p className="font-mono text-foreground/75">{item.회차} · {item.날짜}</p>
+                      <p>조건: {item.조건}</p>
+                      <p>정확도: {item.정확도지표}</p>
+                      <p>조각당 {item.조각당ms}ms · 83소스 {item["83소스환산초"]}초 · UNKNOWN {item.UNKNOWN비율}</p>
+                      <p className="break-all text-muted-foreground/55">raw: {item.raw파일경로}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </section>
+
+          <section className="space-y-3 border-t border-border/15 pt-4">
+            <div className="flex items-center gap-2">
+              <h2 className="text-xs font-black tracking-widest uppercase text-muted-foreground/55">독립 Evidence</h2>
+              <span className="border border-amber-500/30 bg-amber-500/10 px-1.5 py-0.5 text-[9px] text-amber-200/80">
+                emotion_score · 재설계
+              </span>
+            </div>
+            <p className="text-[10px] text-muted-foreground/50">독립 증거를 합산하지 않습니다.</p>
+            <div className="grid grid-cols-2 gap-px border border-border/15 bg-border/10 sm:grid-cols-5">
+              {audit.emotion_evidence.items.map(item => (
+                <div key={item.id} className="bg-background/70 p-3">
+                  <p className="break-all font-mono text-[10px] text-foreground/75">{item.id}</p>
+                  <p className={`mt-1 text-[10px] font-semibold ${item.status === "VALUE" ? "text-emerald-400" : "text-muted-foreground/40"}`}>
+                    {item.status}
+                  </p>
+                </div>
+              ))}
+            </div>
           </section>
 
           <details className="border-t border-border/15 pt-4 group">

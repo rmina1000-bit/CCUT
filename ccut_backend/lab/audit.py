@@ -11,6 +11,7 @@ REPO_DIR = BACKEND_DIR.parent
 CONFIG_DIR = BACKEND_DIR / "config"
 DB_PATH = BACKEND_DIR / "ccut_app.db"
 AUDIT_CONFIG = CONFIG_DIR / "lab_audit.json"
+CANDIDATES_CONFIG = CONFIG_DIR / "lab_candidates.json"
 _CACHE = None
 
 
@@ -139,6 +140,7 @@ def run_audit():
     global _CACHE
     started = time.perf_counter()
     config = _load_json(AUDIT_CONFIG)
+    candidate_ledger = _load_json(CANDIDATES_CONFIG)
     extensions = set(config.get("source_extensions") or [".py", ".ts", ".tsx"])
 
     con = sqlite3.connect(f"file:{DB_PATH.as_posix()}?mode=ro", uri=True)
@@ -358,6 +360,21 @@ def run_audit():
             "items": technique_items,
         },
         "edges": edges,
+        "candidates": candidate_ledger["candidates"],
+        "emotion_evidence": {
+            "legacy_node": {
+                "id": "emotion_score",
+                "status": "재설계",
+            },
+            "items": [
+                {"id": "facial_expression_delta", "status": "UNKNOWN"},
+                {"id": "prosody_delta", "status": "VALUE"},
+                {"id": "laughter_event", "status": "UNKNOWN"},
+                {"id": "speech_presence", "status": "UNKNOWN"},
+                {"id": "acoustic_event", "status": "UNKNOWN"},
+            ],
+            "aggregation": "금지",
+        },
     }
     result["ai_context"] = build_lab_context(result)
     _CACHE = result
