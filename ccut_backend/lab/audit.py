@@ -273,6 +273,7 @@ def _edge_status(material, target_live):
 ENFORCED_RULES = {
     "RULE_PUNCH_ZOOM_BOUND": "ccut_backend/story_gate/proposal_axis.py:428-469",
     "RULE_TECHNIQUE_PATH_UNIFORM": "ccut_backend/story_gate/proposal_axis.py:428-469",
+    "RULE_WORD_BOUNDARY_SNAP": "ccut_backend/story_gate/proposal_axis.py:433-492",
 }
 
 REGISTERED_RULE_EVIDENCE = {
@@ -437,6 +438,9 @@ def run_audit():
             "RULE_PUNCH_ZOOM_BOUND",
             "RULE_TECHNIQUE_PATH_UNIFORM",
         ],
+        "word_boundary_snap": [
+            "RULE_WORD_BOUNDARY_SNAP",
+        ],
     }
     for item in techniques:
         technique_id = item["technique_id"]
@@ -580,6 +584,15 @@ def run_audit():
             _line_evidence(
                 "ccut_backend/story_gate/proposal_axis.py",
                 'VETO_RULE_IDS = ("RULE_PUNCH_ZOOM_BOUND"',
+            ),
+        ),
+        (
+            "RULE_WORD_BOUNDARY_SNAP",
+            "word_boundary_snap",
+            _line_evidence(
+                "ccut_backend/story_gate/proposal_axis.py",
+                '"RULE_WORD_BOUNDARY_SNAP"',
+                2,
             ),
         ),
     ]

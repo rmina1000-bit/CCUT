@@ -121,6 +121,10 @@
     }
   ],
   "wired_techniques": {
+    "word_boundary_snap": [
+      "ccut_backend/story_gate/proposal_axis.py",
+      "ccut_backend/main.py"
+    ],
     "punch_in": [
       "ccut_backend/story_gate/proposal_axis.py",
       "ccut_frontend/src/components/CenterPanel.tsx"
