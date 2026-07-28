@@ -78,6 +78,44 @@ def update_ollama_call(trace_id: str | None, idx: int | None, **fields: Any) -> 
             calls[idx].update(fields)
 
 
+def _ms_between(end: Any, start: Any) -> int | None:
+    if isinstance(end, (int, float)) and isinstance(start, (int, float)):
+        return int(end - start)
+    return None
+
+
+def _tok_per_sec(call: dict[str, Any], gen_ms: int | None) -> float | None:
+    tokens = call.get("completion_tokens")
+    if not isinstance(tokens, (int, float)) or tokens <= 0:
+        return None
+    duration_ns = call.get("eval_duration_ns")
+    if isinstance(duration_ns, (int, float)) and duration_ns > 0:
+        return round(float(tokens) / (float(duration_ns) / 1_000_000_000), 2)
+    if isinstance(gen_ms, int) and gen_ms > 0:
+        return round(float(tokens) / (float(gen_ms) / 1000), 2)
+    return None
+
+
+def _summarize_ollama_calls(rec: dict[str, Any]) -> None:
+    calls = rec.get("ollama_calls") or []
+    rec["model_call_count"] = len(calls)
+    for call in calls:
+        if "prompt_tokens" not in call and call.get("prompt_eval_count") is not None:
+            call["prompt_tokens"] = call.get("prompt_eval_count")
+        if "completion_tokens" not in call and call.get("eval_count") is not None:
+            call["completion_tokens"] = call.get("eval_count")
+        request_ms = call.get("t_request")
+        first_ms = call.get("t_first_token") or call.get("t_done")
+        done_ms = call.get("t_done")
+        call["ttft_ms"] = _ms_between(first_ms, request_ms)
+        call["gen_ms"] = _ms_between(done_ms, first_ms)
+        call["tok_per_sec"] = _tok_per_sec(call, call.get("gen_ms"))
+        if call.get("num_predict") is None:
+            call["num_predict"] = "unset"
+        stop = call.get("stop")
+        call["stop_configured"] = bool(stop)
+
+
 def finalize(frontend: dict[str, Any]) -> dict[str, Any]:
     trace_id = str(frontend.get("trace_id") or "")
     if not _TRACE_ON or not trace_id:
@@ -99,6 +137,7 @@ def finalize(frontend: dict[str, Any]) -> dict[str, Any]:
                 if call.get("t_done"):
                     rec["t5"] = call.get("t_done")
                     break
+        _summarize_ollama_calls(rec)
         rec["finalized_at"] = now_ms()
         _TRACE_PATH.parent.mkdir(parents=True, exist_ok=True)
         with _TRACE_PATH.open("a", encoding="utf-8") as f:

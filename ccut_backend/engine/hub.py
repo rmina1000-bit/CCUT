@@ -160,12 +160,15 @@ def _ollama_json(prompt: str, timeout: int = 60, temperature: float = 0) -> dict
     if trace_id and _speed_trace and _speed_trace.enabled():
         call = {
             "kind": "json",
+            "purpose": "routing",
             "model": HUB_MODEL,
             "prompt_chars": len(prompt),
             "body_bytes": len(body),
             "num_ctx": OLLAMA_NUM_CTX,
             "keep_alive": OLLAMA_KEEP_ALIVE,
             "temperature": temperature,
+            "num_predict": 1024,
+            "stop": None,
             "timeout": timeout,
             "t_queue_enter": _speed_trace.now_ms(),
         }
@@ -188,7 +191,18 @@ def _ollama_json(prompt: str, timeout: int = 60, temperature: float = 0) -> dict
         with urllib.request.urlopen(req, timeout=timeout) as resp:
             data = json.loads(resp.read().decode("utf-8"))
     if trace_id and _speed_trace and _speed_trace.enabled():
-        _speed_trace.update_ollama_call(trace_id, call_idx, t_done=_speed_trace.now_ms())
+        _speed_trace.update_ollama_call(
+            trace_id,
+            call_idx,
+            t_done=_speed_trace.now_ms(),
+            prompt_eval_count=data.get("prompt_eval_count"),
+            eval_count=data.get("eval_count"),
+            prompt_eval_duration_ns=data.get("prompt_eval_duration"),
+            eval_duration_ns=data.get("eval_duration"),
+            load_duration_ns=data.get("load_duration"),
+            total_duration_ns=data.get("total_duration"),
+            completion_chars=len(str(data.get("response") or "")),
+        )
     return json.loads(data.get("response", "{}") or "{}")
 
 
@@ -220,6 +234,7 @@ def _ollama_stream(prompt: str, timeout: int = 60, temperature: float = 0.7,
     if trace_id and _speed_trace and _speed_trace.enabled():
         call_idx = _speed_trace.append_ollama_call(trace_id, {
             "kind": "stream",
+            "purpose": "generation",
             "model": HUB_MODEL,
             "prompt_chars": len(prompt),
             "body_bytes": len(body),
@@ -229,6 +244,7 @@ def _ollama_stream(prompt: str, timeout: int = 60, temperature: float = 0.7,
             "num_predict": num_predict,
             "top_p": top_p,
             "top_k": top_k,
+            "stop": opts.get("stop"),
             "timeout": timeout,
             "t_queue_enter": _speed_trace.now_ms(),
         })
@@ -243,6 +259,8 @@ def _ollama_stream(prompt: str, timeout: int = 60, temperature: float = 0.7,
             if "t4" not in getattr(_speed_trace, "_RECORDS", {}).get(trace_id, {}):
                 _speed_trace.mark(trace_id, "t4", None)
             _speed_trace.update_ollama_call(trace_id, call_idx, t_request=_speed_trace.now_ms())
+        completion_chars = 0
+        done_metrics = {}
         with urllib.request.urlopen(req, timeout=timeout) as resp:
             for line in resp:
                 line = line.strip()
@@ -254,17 +272,34 @@ def _ollama_stream(prompt: str, timeout: int = 60, temperature: float = 0.7,
                     continue
                 chunk = data.get("response") or ""
                 if chunk:
+                    completion_chars += len(chunk)
                     if trace_id and _speed_trace and _speed_trace.enabled():
-                        if "t5" not in getattr(_speed_trace, "_RECORDS", {}).get(trace_id, {}):
+                        rec = getattr(_speed_trace, "_RECORDS", {}).get(trace_id, {})
+                        calls = rec.get("ollama_calls") or []
+                        call = calls[call_idx] if call_idx is not None and call_idx < len(calls) else {}
+                        if "t5" not in rec:
                             _speed_trace.mark(trace_id, "t5", None)
-                        _speed_trace.update_ollama_call(
-                            trace_id, call_idx, t_first_token=_speed_trace.now_ms())
+                        if not call.get("t_first_token"):
+                            _speed_trace.update_ollama_call(
+                                trace_id, call_idx, t_first_token=_speed_trace.now_ms())
                     yield chunk
                 if data.get("done"):
+                    done_metrics = data
                     break
     finally:
         if trace_id and _speed_trace and _speed_trace.enabled():
-            _speed_trace.update_ollama_call(trace_id, call_idx, t_done=_speed_trace.now_ms())
+            _speed_trace.update_ollama_call(
+                trace_id,
+                call_idx,
+                t_done=_speed_trace.now_ms(),
+                prompt_eval_count=done_metrics.get("prompt_eval_count"),
+                eval_count=done_metrics.get("eval_count"),
+                prompt_eval_duration_ns=done_metrics.get("prompt_eval_duration"),
+                eval_duration_ns=done_metrics.get("eval_duration"),
+                load_duration_ns=done_metrics.get("load_duration"),
+                total_duration_ns=done_metrics.get("total_duration"),
+                completion_chars=completion_chars,
+            )
         if _SERIALIZE:
             _OLLAMA_LOCK.release()
 
