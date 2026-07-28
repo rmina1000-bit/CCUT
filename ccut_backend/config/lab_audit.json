@@ -1,0 +1,90 @@
+{
+  "materials": [
+    {
+      "id": "motion_vector",
+      "label": "움직임 양",
+      "table": "fragment_index",
+      "column": "motion_score",
+      "producer_terms": ["motion_scores_for_spans", "_inject_motion_scores"],
+      "producer_paths": ["ccut_backend/engine/fragment_indexer.py", "ccut_backend/main.py"],
+      "consumer_terms": ["motion_score"],
+      "consumer_paths": ["ccut_backend/story_gate/proposal_axis.py", "ccut_backend/engine/proposal_engine.py", "ccut_backend/ledger_r0.py"]
+    },
+    {
+      "id": "audio_beat",
+      "label": "소리 비트",
+      "table": "evidence_board",
+      "column": "metadata_json",
+      "json_path": "$.audio_beat",
+      "producer_terms": ["beat_times", "\"audio_beat\""],
+      "producer_paths": ["ccut_backend/engine/signal_processor.py", "ccut_backend/main.py"],
+      "consumer_terms": ["audio_beat"],
+      "consumer_paths": ["ccut_backend/story_gate/proposal_axis.py"]
+    },
+    {
+      "id": "audio_energy",
+      "label": "소리 크기",
+      "table": "evidence_board",
+      "column": "audio_energy",
+      "producer_terms": ["\"audio_energy\": energy"],
+      "producer_paths": ["ccut_backend/main.py"],
+      "consumer_terms": ["audio_energy"],
+      "consumer_paths": ["ccut_backend/engine/proposal_engine.py"]
+    },
+    {
+      "id": "word_timestamps",
+      "label": "말 시각",
+      "table": "subtitles",
+      "column": "segments",
+      "json_path": "$",
+      "producer_terms": ["word_timestamps"],
+      "producer_paths": ["ccut_backend/engine/ai_engine.py"],
+      "consumer_terms": ["word_timestamps", "fragment_words"],
+      "consumer_paths": ["ccut_backend/story_gate/proposal_axis.py", "ccut_backend/engine/semantic_engine.py"]
+    },
+    {
+      "id": "face_size",
+      "label": "얼굴 크기",
+      "table": "fragment_index",
+      "column": "main_subjects",
+      "json_path": "$.face_size",
+      "producer_terms": ["face_size"],
+      "producer_paths": [],
+      "consumer_terms": ["face_size"],
+      "consumer_paths": []
+    },
+    {
+      "id": "shot_size",
+      "label": "샷 크기",
+      "table": "fragment_index",
+      "column": "main_subjects",
+      "json_path": "$.shot_size",
+      "producer_terms": ["shot_size"],
+      "producer_paths": [],
+      "consumer_terms": ["shot_size"],
+      "consumer_paths": []
+    },
+    {
+      "id": "emotion_score",
+      "label": "감정 점수",
+      "table": "semantic_fragments",
+      "column": "semantic_json",
+      "json_path": "$.emotion_score",
+      "producer_terms": ["emotion_score"],
+      "producer_paths": [],
+      "consumer_terms": ["emotion_score"],
+      "consumer_paths": []
+    }
+  ],
+  "wired_techniques": {
+    "punch_in": [
+      "ccut_backend/story_gate/proposal_axis.py",
+      "ccut_frontend/src/components/CenterPanel.tsx"
+    ],
+    "as_is": [
+      "ccut_backend/story_gate/proposal_axis.py",
+      "ccut_backend/engine/proposal_preview_engine.py"
+    ]
+  },
+  "source_extensions": [".py", ".ts", ".tsx"]
+}

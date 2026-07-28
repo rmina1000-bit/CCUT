@@ -3825,6 +3825,18 @@ async def admin_situation():
     return _adm.situation()
 
 
+@app.get("/lab/audit")
+async def lab_audit():
+    from lab.audit import get_audit
+    return get_audit()
+
+
+@app.post("/lab/audit/run")
+async def lab_audit_run():
+    from lab.audit import run_audit
+    return run_audit()
+
+
 @app.get("/admin/users")
 async def admin_users():
     from admin import service as _adm
