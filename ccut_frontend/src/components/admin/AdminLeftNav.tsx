@@ -1,13 +1,13 @@
 import React from "react";
 import {
   Radar, Users, LifeBuoy, Wallet, BarChart3, Paintbrush,
-  Sparkles, ShieldAlert, Scale, ScrollText, ArrowLeft,
+  Sparkles, ShieldAlert, Scale, ScrollText, FlaskConical, ArrowLeft,
 } from "lucide-react";
 
 // [War Room v1] 최상위 메뉴 10개 — IA 확정본(CCUT_ADMIN_WAR_ROOM_IA_FINAL.md)이 단일 진실원.
 export type AdminTab =
   | "situation" | "users" | "support" | "revenue" | "analytics"
-  | "design" | "ai" | "security" | "legal" | "audit";
+  | "design" | "ai" | "security" | "legal" | "audit" | "edit-lab";
 
 const MENU: { key: AdminTab; label: string; icon: React.ReactNode }[] = [
   { key: "situation", label: "상황실", icon: <Radar size={14} /> },
@@ -20,6 +20,7 @@ const MENU: { key: AdminTab; label: string; icon: React.ReactNode }[] = [
   { key: "security", label: "보안 관제", icon: <ShieldAlert size={14} /> },
   { key: "legal", label: "법무/수사공조", icon: <Scale size={14} /> },
   { key: "audit", label: "감사/작업기록", icon: <ScrollText size={14} /> },
+  { key: "edit-lab", label: "편집연구실", icon: <FlaskConical size={14} /> },
 ];
 
 export const AdminLeftNav: React.FC<{

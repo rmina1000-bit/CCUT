@@ -12,12 +12,14 @@ import { AdminUsersPanel } from "@/components/admin/AdminUsersPanel";
 import { AdminRevenuePanel } from "@/components/admin/AdminRevenuePanel";
 import { AdminAIOpsPanel } from "@/components/admin/AdminAIOpsPanel";
 import { AdminAuditPanel } from "@/components/admin/AdminAuditPanel";
+import { AdminEditLabPanel } from "@/components/admin/AdminEditLabPanel";
 
 // [War Room v1] /admin/* 진입점 — URL 경로가 탭의 단일 진실원.
 // /admin → 상황실. 나머지는 /admin/{tab}.
 const TABS: AdminTab[] = [
   "situation", "users", "support", "revenue", "analytics",
   "design", "ai", "security", "legal", "audit",
+  "edit-lab",
 ];
 
 const LABELS: Record<AdminTab, string> = {
@@ -31,6 +33,7 @@ const LABELS: Record<AdminTab, string> = {
   security: "보안 관제",
   legal: "법무/수사공조",
   audit: "감사/작업기록",
+  "edit-lab": "편집연구실",
 };
 
 
@@ -56,6 +59,7 @@ const AdminIndex: React.FC = () => {
       {active === "security" && <AdminSecurityPanel />}
       {active === "legal" && <AdminLegalPanel />}
       {active === "audit" && <AdminAuditPanel />}
+      {active === "edit-lab" && <AdminEditLabPanel />}
     </AdminShell>
   );
 };
