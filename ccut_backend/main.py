@@ -4792,78 +4792,110 @@ async def route_edit_intent_stream_api(req: EditIntentRouteRequest, request: Req
     def gen():
         speed_trace.set_current(trace_id)
         t0 = _time.time()
+        backend_sse_events = []
+        client_aborted = False
+
+        def _trace_sse(kind, payload):
+            if not trace_id:
+                return
+            backend_sse_events.append({"t": speed_trace.now_ms(), "kind": kind, "payload": payload})
+            speed_trace.update(trace_id, backend_sse_events=backend_sse_events[-200:],
+                               last_backend_sse=backend_sse_events[-1])
+
+        def _emit(obj):
+            raw = _sse(obj)
+            _trace_sse(str(obj.get("type") or "unknown"), obj)
+            return raw
+
         labels = _merged_fragment_labels(req)
-        r = (
-            _unknown_fragment_label_route(req.input_text, labels)
-            or _rubric_direct_route(req.input_text)
-            or _chat_only_speed_bypass(req.input_text)
-            or route_edit_intent(
-                source_ids=req.source_ids, input_text=req.input_text,
-                recent_messages=req.recent_messages,
-                selected_proposal_id=req.selected_proposal_id,
-                fragment_labels=labels, defer_chat=True, project_id=req.project_id)
-        )
-        if trace_id:
-            speed_trace.update(trace_id, route_action=r.get("action"), route_via=r.get("via"),
-                               route_matched=r.get("matched"))
-        # [관문D 2026-07-21 국장승인] 라벨교정 실행 시 조각 판단근거(scene·speech·context)를
-        #   route 응답에 노출 — chat이 쓰는 엔드포인트가 route-edit이므로 여기 실어야 화면 도달.
-        if isinstance(r, dict) and r.get("candidate_fragment_ids"):
-            try:
-                from engine.converse import _candidate_evidence
-                r["candidate_evidence"] = _candidate_evidence(r["candidate_fragment_ids"])
-            except Exception as _e:
-                print(f"[ROUTE-EDIT][WARN] candidate_evidence 실패 ({_e})")
-        sc = r.pop("_stream_chat", None)
-        if not sc:
-            # 결정론/편집 분류 — 완성 응답이 이미 있다. 즉답 1건 (스트리밍 불요 경로)
-            print(f"[F2-TTFT] path=direct first_out_ms={int((_time.time() - t0) * 1000)} "
-                  f"action={r.get('action')}")
+        try:
+            r = (
+                _unknown_fragment_label_route(req.input_text, labels)
+                or _rubric_direct_route(req.input_text)
+                or _chat_only_speed_bypass(req.input_text)
+                or route_edit_intent(
+                    source_ids=req.source_ids, input_text=req.input_text,
+                    recent_messages=req.recent_messages,
+                    selected_proposal_id=req.selected_proposal_id,
+                    fragment_labels=labels, defer_chat=True, project_id=req.project_id)
+            )
             if trace_id:
-                speed_trace.mark(trace_id, "t5")
-                speed_trace.update(trace_id, response={"reply_len": len(str(r.get("reply") or "")),
-                                                       "stream_complete": False})
-            yield _sse({"type": "final", "result": r})
+                speed_trace.update(trace_id, route_action=r.get("action"), route_via=r.get("via"),
+                                   route_matched=r.get("matched"))
+            # [관문D 2026-07-21 국장승인] 라벨교정 실행 시 조각 판단근거(scene·speech·context)를
+            #   route 응답에 노출 — chat이 쓰는 엔드포인트가 route-edit이므로 여기 실어야 화면 도달.
+            if isinstance(r, dict) and r.get("candidate_fragment_ids"):
+                try:
+                    from engine.converse import _candidate_evidence
+                    r["candidate_evidence"] = _candidate_evidence(r["candidate_fragment_ids"])
+                except Exception as _e:
+                    print(f"[ROUTE-EDIT][WARN] candidate_evidence 실패 ({_e})")
+            sc = r.pop("_stream_chat", None)
+            if not sc:
+                # 결정론/편집 분류 — 완성 응답이 이미 있다. 즉답 1건 (스트리밍 불요 경로)
+                print(f"[F2-TTFT] path=direct first_out_ms={int((_time.time() - t0) * 1000)} "
+                      f"action={r.get('action')}")
+                if trace_id:
+                    speed_trace.mark(trace_id, "t5")
+                    speed_trace.update(trace_id, response={"reply_len": len(str(r.get("reply") or "")),
+                                                           "stream_complete": False,
+                                                           "backend_assistant_text": str(r.get("reply") or "")})
+                yield _emit({"type": "final", "result": r})
+                return
+            yield _emit({"type": "meta", "action": "answer_only"})
+            first_ms = None
+            final_text = None
+            partial_text = ""
+            stream_aborted = False
+            if (r.get("matched") or {}).get("speed_bypass"):
+                if trace_id:
+                    speed_trace.mark(trace_id, "t3_5")
+                    speed_trace.mark(trace_id, "t4")
+                    speed_trace.mark(trace_id, "t5")
+                partial_text = "응, "
+                yield _emit({"type": "token", "text": partial_text})
+            speed_trace.set_current(trace_id)
+            for kind, payload in stream_smalltalk(req.input_text, req.recent_messages,
+                                                  facts=sc.get("facts") or ""):
+                if kind == "token":
+                    if first_ms is None:
+                        first_ms = int((_time.time() - t0) * 1000)
+                        print(f"[F2-TTFT] path=stream first_token_ms={first_ms}")
+                    partial_text += payload
+                    yield _emit({"type": "token", "text": payload})
+                elif kind == "done":
+                    final_text = payload
+                elif kind == "abort":
+                    stream_aborted = True
+                    partial_text = ""
+                    break
+            stream_text = "" if stream_aborted else (final_text or partial_text.strip())
+            if not final_text:
+                final_text = stream_text or "네, 듣고 있어요. 편하게 이야기해 주세요."
+            r["reply"] = final_text
+            if stream_text:
+                r["stream_text"] = stream_text
+                r["stream_complete"] = True
+            else:
+                r["stream_complete"] = False
+            if trace_id:
+                speed_trace.update(trace_id, response={"reply_len": len(final_text),
+                                                       "stream_complete": r["stream_complete"],
+                                                       "backend_assistant_text": final_text},
+                                   stream_aborted=stream_aborted)
+            print(f"[F2-TTFT] path=stream total_ms={int((_time.time() - t0) * 1000)} "
+                  f"reply_len={len(final_text)}")
+            yield _emit({"type": "final", "result": r})
+        except GeneratorExit:
+            client_aborted = True
+            if trace_id:
+                speed_trace.update(trace_id, client_abort=True, connection_closed_by="frontend")
+            raise
+        finally:
+            if trace_id:
+                speed_trace.update(trace_id, client_abort=client_aborted,
+                                   connection_closed_by="frontend" if client_aborted else "backend")
             speed_trace.set_current(None)
-            return
-        yield _sse({"type": "meta", "action": "answer_only"})
-        first_ms = None
-        final_text = None
-        partial_text = ""
-        if (r.get("matched") or {}).get("speed_bypass"):
-            if trace_id:
-                speed_trace.mark(trace_id, "t3_5")
-                speed_trace.mark(trace_id, "t4")
-                speed_trace.mark(trace_id, "t5")
-            partial_text = "응, "
-            yield _sse({"type": "token", "text": partial_text})
-        speed_trace.set_current(trace_id)
-        for kind, payload in stream_smalltalk(req.input_text, req.recent_messages,
-                                              facts=sc.get("facts") or ""):
-            if kind == "token":
-                if first_ms is None:
-                    first_ms = int((_time.time() - t0) * 1000)
-                    print(f"[F2-TTFT] path=stream first_token_ms={first_ms}")
-                partial_text += payload
-                yield _sse({"type": "token", "text": payload})
-            elif kind == "done":
-                final_text = payload
-        stream_text = final_text or partial_text.strip()
-        if not final_text:
-            final_text = stream_text or "네, 듣고 있어요. 편하게 이야기해 주세요."
-        r["reply"] = final_text
-        if stream_text:
-            r["stream_text"] = stream_text
-            r["stream_complete"] = True
-        else:
-            r["stream_complete"] = False
-        if trace_id:
-            speed_trace.update(trace_id, response={"reply_len": len(final_text),
-                                                   "stream_complete": r["stream_complete"]})
-        print(f"[F2-TTFT] path=stream total_ms={int((_time.time() - t0) * 1000)} "
-              f"reply_len={len(final_text)}")
-        yield _sse({"type": "final", "result": r})
-        speed_trace.set_current(None)
 
     return StreamingResponse(gen(), media_type="text/event-stream")
 
