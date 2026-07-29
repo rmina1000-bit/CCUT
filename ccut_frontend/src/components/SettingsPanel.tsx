@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useCallback } from "react";
 import { RefreshCw, CheckCircle2, XCircle, AlertTriangle, Cpu } from "lucide-react";
 import { videoService, SystemDiagnostics } from "@/services/videoService";
+import { AppDialog } from "@/components/AppDialog";
 
 // [FIX-RUNTIME-1b] GPU ASR 런타임 환경진단 화면 (베타 최소 표시).
 // 백엔드 /system/diagnostics 를 소비·표시만 한다(read 전용).
@@ -39,6 +40,7 @@ export const SettingsPanel: React.FC = () => {
   const [gates, setGates] = useState<Record<string, string> | null>(null);
   const [cleaning, setCleaning] = useState<string | null>(null);
   const [cleanNote, setCleanNote] = useState<string | null>(null);
+  const [cleanupConfirm, setCleanupConfirm] = useState<{ target: string; label: string } | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -61,7 +63,6 @@ export const SettingsPanel: React.FC = () => {
   }, []);
 
   const cleanup = async (target: string, label: string) => {
-    if (!window.confirm(`${label}을(를) 비울까요?\n(전부 자동으로 다시 만들어지는 캐시입니다)`)) return;
     setCleaning(target);
     try {
       const r = await fetch("/api/settings/cleanup", {
@@ -107,6 +108,18 @@ export const SettingsPanel: React.FC = () => {
 
   return (
     <div className="h-full w-full overflow-y-auto bg-[hsl(228,14%,8%)] text-foreground">
+      <AppDialog
+        open={!!cleanupConfirm}
+        message={cleanupConfirm ? `${cleanupConfirm.label}을(를) 비울까요?\n(전부 자동으로 다시 만들어지는 캐시입니다)` : ""}
+        confirmText="OK"
+        cancelText="Cancel"
+        onCancel={() => setCleanupConfirm(null)}
+        onConfirm={() => {
+          const next = cleanupConfirm;
+          setCleanupConfirm(null);
+          if (next) cleanup(next.target, next.label);
+        }}
+      />
       <div className="max-w-[720px] mx-auto px-8 py-8">
         <div className="flex items-center justify-between mb-1">
           <h1 className="text-[18px] font-bold flex items-center gap-2">
@@ -167,14 +180,14 @@ export const SettingsPanel: React.FC = () => {
             </div>
             <div className="flex items-center gap-2 mt-3">
               <button
-                onClick={() => cleanup("previews", "제안 미리보기 캐시")}
+                onClick={() => setCleanupConfirm({ target: "previews", label: "제안 미리보기 캐시" })}
                 disabled={cleaning !== null}
                 className="text-[12px] px-3 py-1.5 rounded-lg border border-border/30 text-foreground/70 hover:text-foreground hover:bg-secondary/40 transition-colors disabled:opacity-50"
               >
                 {cleaning === "previews" ? "비우는 중…" : "미리보기 캐시 비우기"}
               </button>
               <button
-                onClick={() => cleanup("panorama", "파노라마 프레임 캐시")}
+                onClick={() => setCleanupConfirm({ target: "panorama", label: "파노라마 프레임 캐시" })}
                 disabled={cleaning !== null}
                 className="text-[12px] px-3 py-1.5 rounded-lg border border-border/30 text-foreground/70 hover:text-foreground hover:bg-secondary/40 transition-colors disabled:opacity-50"
               >

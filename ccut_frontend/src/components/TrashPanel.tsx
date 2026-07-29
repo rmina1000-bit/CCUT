@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { Trash2, Trash, RotateCcw, AlertTriangle, RefreshCw } from "lucide-react";
 import { videoService } from "@/services/videoService";
+import { AppDialog } from "@/components/AppDialog";
 
 interface TrashItem {
   program_id: string;
@@ -21,6 +22,7 @@ export const TrashPanel: React.FC<TrashPanelProps> = ({ onChanged, reloadDep }) 
   const [busyId, setBusyId] = useState<string | null>(null);
   // 확인 모달: { kind: "purge", id } | { kind: "empty" } | null
   const [confirm, setConfirm] = useState<{ kind: "purge" | "empty"; id?: string; name?: string } | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -77,7 +79,7 @@ export const TrashPanel: React.FC<TrashPanelProps> = ({ onChanged, reloadDep }) 
     await load();
     setConfirm(null);
     if (failCount > 0) {
-      alert(`${targets.length}개 중 ${failCount}개 삭제 실패. 나머지는 삭제되었습니다.`);
+      setNotice(`${targets.length}개 중 ${failCount}개 삭제 실패. 나머지는 삭제되었습니다.`);
     }
   };
 
@@ -93,6 +95,12 @@ export const TrashPanel: React.FC<TrashPanelProps> = ({ onChanged, reloadDep }) 
 
   return (
     <div className="flex flex-col h-full bg-[hsl(228_10%_9%)] p-6 space-y-5 overflow-y-auto">
+      <AppDialog
+        open={!!notice}
+        message={notice ?? ""}
+        confirmText="OK"
+        onConfirm={() => setNotice(null)}
+      />
       {/* 헤더 */}
       <div className="flex items-start justify-between">
         <div>

@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { Plus } from "lucide-react";
 import { fetcher } from "@/services/api";
+import { AppDialog } from "@/components/AppDialog";
 
 // [War Room v1] 수익/구독/포인트 — 구독 요약(v0 유지) + 포인트 원장 + 상품 카탈로그.
 // provider 연동 전 원장은 "준비 중" 정직 표시. 상품 공개는 승인(approved) 전이 필수.
@@ -44,6 +45,7 @@ export const AdminRevenuePanel: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [form, setForm] = useState({ product_id: "", kind: "subscription", name: "", price: "" });
   const [showForm, setShowForm] = useState(false);
+  const [publishConfirm, setPublishConfirm] = useState<{ id: string; status: string } | null>(null);
 
   const load = () => {
     fetcher("/admin/revenue/summary").then(setSummary).catch(e => setError(String(e)));
@@ -64,8 +66,7 @@ export const AdminRevenuePanel: React.FC = () => {
     load();
   };
 
-  const transition = async (id: string, status: string) => {
-    if (status === "published" && !window.confirm(`상품 "${id}"을(를) 공개(published)합니다. 진행할까요?`)) return;
+  const runTransition = async (id: string, status: string) => {
     const r = await fetcher(`/admin/revenue/products/${encodeURIComponent(id)}/status`, {
       method: "POST", body: JSON.stringify({ status }),
     }).catch(e => ({ error: String(e) }));
@@ -73,8 +74,28 @@ export const AdminRevenuePanel: React.FC = () => {
     load();
   };
 
+  const transition = async (id: string, status: string) => {
+    if (status === "published") {
+      setPublishConfirm({ id, status });
+      return;
+    }
+    await runTransition(id, status);
+  };
+
   return (
     <div className="space-y-6">
+      <AppDialog
+        open={!!publishConfirm}
+        message={publishConfirm ? `상품 "${publishConfirm.id}"을(를) 공개(published)합니다. 진행할까요?` : ""}
+        confirmText="OK"
+        cancelText="Cancel"
+        onCancel={() => setPublishConfirm(null)}
+        onConfirm={() => {
+          const next = publishConfirm;
+          setPublishConfirm(null);
+          if (next) runTransition(next.id, next.status);
+        }}
+      />
       <div>
         <h1 className="text-lg font-bold text-foreground/90">수익/구독/포인트</h1>
         <p className="text-[11px] text-muted-foreground/50 mt-0.5">

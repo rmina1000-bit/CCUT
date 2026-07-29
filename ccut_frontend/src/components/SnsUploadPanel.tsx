@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { RotateCcw, Film, Clock, Calendar, Play, Edit3, X, Youtube, Tv2, Instagram, Check } from "lucide-react";
 import { videoService } from "@/services/videoService";
+import { AppDialog } from "@/components/AppDialog";
 
 interface ExportRecord {
   id: string;
@@ -49,6 +50,7 @@ export const SnsUploadPanel: React.FC<{
   const [uploading, setUploading] = useState(false);
   const [uploadDone, setUploadDone] = useState<Record<string, string>>({});
   const [infoKey, setInfoKey] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
 
   const fetchYt = async () => {
     try { setYt(await fetch("/api/sns/youtube/status").then((r) => r.json())); } catch { setYt(null); }
@@ -60,8 +62,8 @@ export const SnsUploadPanel: React.FC<{
     try {
       const r = await fetch("/api/sns/youtube/connect", { method: "POST" }).then((x) => x.json());
       if (r?.status === "OK") setYt((prev) => ({ ...(prev ?? { configured: true }), ...r } as any));
-      else alert(r?.message || "연결 실패");
-    } catch { alert("연결 중 오류 — 브라우저 로그인 창을 닫으셨나요?"); }
+      else setNotice(r?.message || "연결 실패");
+    } catch { setNotice("연결 중 오류 — 브라우저 로그인 창을 닫으셨나요?"); }
     setConnecting(false);
     fetchYt();
   };
@@ -79,9 +81,9 @@ export const SnsUploadPanel: React.FC<{
         setUploadDone((prev) => ({ ...prev, [uploadTarget.id]: r.url }));
         setUploadTarget(null);
       } else {
-        alert(r?.message || "업로드 실패");
+        setNotice(r?.message || "업로드 실패");
       }
-    } catch (e) { alert("업로드 중 오류가 났습니다."); }
+    } catch (e) { setNotice("업로드 중 오류가 났습니다."); }
     setUploading(false);
   };
 
@@ -119,6 +121,12 @@ export const SnsUploadPanel: React.FC<{
 
   return (
     <div className="flex flex-col h-full bg-[hsl(228_10%_9%)] overflow-y-auto">
+      <AppDialog
+        open={!!notice}
+        message={notice ?? ""}
+        confirmText="OK"
+        onConfirm={() => setNotice(null)}
+      />
       {/* Header */}
       <div className="flex items-center justify-between px-8 pt-8 pb-4 flex-shrink-0">
         <div>
