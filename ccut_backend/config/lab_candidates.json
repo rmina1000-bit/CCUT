@@ -297,6 +297,50 @@
         "ccut_backend/story_gate/proposal_axis.py:544-550 — evidence_board WHERE fragment_id IN (evidence_refs)",
         "ccut_backend/engine/proposal_engine.py:207-212 — source 증거 시간 겹침 평균"
       ]
+    },
+    {
+      "기록id": "REC_G1_SEVEN_NOT_APPROVABLE",
+      "회차": "LAB-16",
+      "제목": "G1 7건 승인 불가",
+      "사실": "G1 7건의 LAB-16 권한 판정은 USER_ONLY 3(source_rotation, source_diversity_guard, chronological_soft_order) / UNDECIDED 3(dead_air_removal, fast_pacing, gentle_pacing) / AI_ALLOWED 1(music_montage_rhythm)이다. 승인 즉시 배선 가능한 것은 0건이다. chronological_soft_order는 선언 재료 start_frame 컬럼이 semantic_fragments·fragment_index·evidence_board·fragment_vault 어디에도 없다. 유일한 AI_ALLOWED인 music_montage_rhythm은 audio_beat 42/670(6.3%)로 근거가 부족하다.",
+      "주의": "LAB-15 보고의 '7건 중 4건이 조각 삭제·순서·선택을 바꾼다'는 실행자 추론이었고, config 원문 기준 재판정 결과는 USER_ONLY 3건이다. 특히 dead_air_removal을 '조각 삭제'로 적은 것이 틀렸다 — 원문은 '구간을 삭제'이며 조각 전체인지 조각 내부 구간인지 구분하지 않아 UNDECIDED다.",
+      "근거": [
+        "ccut_backend/config/editing_techniques.json — 각 기법 authority.basis",
+        "D:\\CCUT_EXTERNAL_DATA\\lab9\relationship_decision_proposals.csv — group_if_none_required=G1 7행",
+        "실측 2026-07-29 start_frame 0/670 · audio_beat 42/670"
+      ]
+    },
+    {
+      "기록id": "REC_GROUP_IF_NONE_REQUIRED_IS_HYPOTHETICAL",
+      "회차": "LAB-16",
+      "제목": "group_if_none_required는 제안이 아니라 가정 컬럼",
+      "사실": "CSV 29행 전체에서 proposed_requires_rules가 NONE_REQUIRED인 행은 0건이다. 7행 모두 DIRECTOR_DECISION_REQUIRED이고, requires_rules_choices가 NONE_REQUIRED|RULE_ID|DIRECTOR_DECISION_REQUIRED 셋을 제시할 뿐이다. 컬럼명은 '국장이 NONE_REQUIRED를 고를 경우 속할 그룹'을 뜻한다.",
+      "근거": [
+        "D:\\CCUT_EXTERNAL_DATA\\lab9\relationship_decision_proposals.csv — proposed_requires_rules 열 29행",
+        "분포 실측 2026-07-29: G4 18 / G1 7 / G3 4"
+      ]
+    },
+    {
+      "기록id": "REC_RULE_NAMESPACE_SPLIT",
+      "회차": "LAB-16",
+      "제목": "룰 이름 공간 분리가 ID 교집합 0의 원인",
+      "사실": "production_hard_rules.json의 선언 12개는 소문자 무접두 형식(no_mid_word_cut 등)이고, 런타임 등록 6개는 RULE_* 대문자 형식이다. 두 집합의 교집합이 0이라 선언 12개는 전부 검사 함수 없이 NONE으로 남는다.",
+      "근거": [
+        "ccut_backend/config/production_hard_rules.json — rules[].rule_id",
+        "ccut_backend/engine/story_template_resolver.py:137 — register_rule_check(\"RULE_EDIT_STATE_NO_SHADOW\")",
+        "감사 실측 2026-07-29 identity_overlap=0"
+      ]
+    },
+    {
+      "기록id": "REC_CSV_KOREAN_CORRUPTED",
+      "회차": "LAB-16",
+      "제목": "제안 CSV의 한국어 일부가 파일 자체에서 깨짐",
+      "사실": "relationship_decision_proposals.csv의 rule_free_safety_basis·lab12_note 칸 한국어가 ????? 로 저장돼 있어 원문 판독이 불가능하다. 같은 행의 proposal_basis·current_material_status는 정상이다. 읽기 시점이 아니라 작성 시점의 인코딩 손실이다.",
+      "주의": "안전성 근거를 원문으로 확인할 수 없어 G1 판단 표에서 제외했다.",
+      "근거": [
+        "D:\\CCUT_EXTERNAL_DATA\\lab9\relationship_decision_proposals.csv",
+        "utf-8-sig 디코드 시 같은 행에서 일부 칸만 정상 — 디코더 문제가 아님"
+      ]
     }
   ]
 }

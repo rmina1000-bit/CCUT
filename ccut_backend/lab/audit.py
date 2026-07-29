@@ -602,7 +602,11 @@ def build_lab_context(audit):
         ),
         "기법": (
             f"선언 {audit['techniques']['declared']} / "
-            f"배선 {audit['techniques']['wired']}"
+            f"AI 가능 {audit['techniques']['ai_allowed']} / "
+            f"사용자 전용 {audit['techniques']['user_only']} / "
+            f"미정 {audit['techniques']['undecided']} / "
+            f"배선 {audit['techniques']['wired']} / "
+            f"가동 {audit['techniques']['active']}"
         ),
         "마지막_측정": audit["audited_at"],
     }
@@ -695,6 +699,17 @@ def run_audit():
     )
     material_by_id = {item["id"]: item for item in materials}
     wired_set = set(wired)
+    # [LAB-16] 배선 ≠ 가동. 코드 경로가 있어도 게이트가 꺼져 있으면 돌지 않는다.
+    technique_gates = config.get("technique_gates") or {}
+    gate_by_technique = {
+        technique: _gate_state(technique_gates.get(technique))
+        for technique in wired
+    }
+    active = sorted(
+        technique for technique in wired
+        if gate_by_technique[technique] is None or gate_by_technique[technique]["on"]
+    )
+    active_set = set(active)
 
     declared_rule_rows = _load_json(CONFIG_DIR / "production_hard_rules.json")["rules"]
     rule_items = []
@@ -776,6 +791,7 @@ def run_audit():
     }
     for item in techniques:
         technique_id = item["technique_id"]
+        authority = item["authority"]
         relationship = item.get("relationship_source") or {}
         relationship_source = relationship.get("type", "UNDECLARED")
         if technique_id == "punch_in":
@@ -831,9 +847,15 @@ def run_audit():
                         "kind": "룰 무동작",
                         "detail": rule_id,
                     })
+        # USER_ONLY 는 막힌 것이 아니라 AI 배선 대상이 아니다. 차단 사유를 붙이지 않는다.
+        if authority["verdict"] == "USER_ONLY":
+            blockers = []
         technique_items.append({
             "id": technique_id,
             "wired": technique_id in wired_set,
+            "active": technique_id in active_set,
+            "gate": gate_by_technique.get(technique_id),
+            "authority": authority,
             "declared_in": _line_evidence(
                 "ccut_backend/config/editing_techniques.json",
                 f'"technique_id": "{technique_id}"',
@@ -843,12 +865,23 @@ def run_audit():
             "relationship_source": relationship_source,
             "relationship_source_detail": relationship,
             "blockers": blockers,
-            "wireable_now": not blockers,
+            "wireable_now": authority["verdict"] == "AI_ALLOWED" and not blockers,
             "failure_check": item.get("failure_check"),
         })
     technique_items.append({
         "id": "as_is",
         "wired": "as_is" in wired_set,
+        "active": "as_is" in active_set,
+        "gate": gate_by_technique.get("as_is"),
+        "authority": {
+            "verdict": "AI_ALLOWED",
+            "basis": [
+                "ccut_backend/story_gate/proposal_axis.py: TECHNIQUE_AS_IS "
+                "— 원본 경계를 그대로 쓴다",
+            ],
+            "decided_in": "LAB-16",
+            "note": "선언 31개 밖의 기본값",
+        },
         "declared_in": _line_evidence(
             "ccut_backend/story_gate/proposal_axis.py",
             'TECHNIQUE_AS_IS = "as_is"',
@@ -946,7 +979,7 @@ def run_audit():
     audited_at = datetime.now().astimezone().isoformat(timespec="seconds")
     blocker_counts = {}
     for technique in technique_items:
-        if technique["wired"]:
+        if technique["wired"] or technique["authority"]["verdict"] == "USER_ONLY":
             continue
         for kind in {blocker["kind"] for blocker in technique["blockers"]}:
             blocker_counts[kind] = blocker_counts.get(kind, 0) + 1
@@ -976,8 +1009,27 @@ def run_audit():
         },
         "techniques": {
             "declared": len(declared_techniques),
+            "ai_allowed": sum(
+                1 for item in techniques
+                if item["authority"]["verdict"] == "AI_ALLOWED"
+            ),
+            "user_only": sum(
+                1 for item in techniques
+                if item["authority"]["verdict"] == "USER_ONLY"
+            ),
+            "undecided": sum(
+                1 for item in techniques
+                if item["authority"]["verdict"] == "UNDECIDED"
+            ),
             "wired": len(wired),
             "wired_ids": wired,
+            "active": len(active),
+            "active_ids": active,
+            "gates_off": [
+                {"technique": technique, **gate}
+                for technique, gate in gate_by_technique.items()
+                if gate and not gate["on"]
+            ],
             "wireable_unwired": sum(
                 1 for item in technique_items
                 if not item["wired"] and item["wireable_now"]

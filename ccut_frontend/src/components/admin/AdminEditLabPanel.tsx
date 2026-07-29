@@ -74,9 +74,20 @@ const ruleActionText = (item: RuleAudit) => {
   return acting.join(" + ") + (gateOff ? " (게이트 OFF)" : "");
 };
 
+type Authority = "AI_ALLOWED" | "USER_ONLY" | "UNDECIDED";
+
+const AUTHORITY_LABEL: Record<Authority, string> = {
+  AI_ALLOWED: "AI 가능",
+  USER_ONLY: "사용자 전용",
+  UNDECIDED: "미정",
+};
+
 interface TechniqueAudit {
   id: string;
   wired: boolean;
+  active: boolean;
+  gate: { env: string; value: string | null; on: boolean } | null;
+  authority: { verdict: Authority; basis: string[]; decided_in: string; note?: string };
   declared_in: string | null;
   requires_materials: string[] | "UNDECLARED";
   requires_rules: string[] | "UNDECLARED";
@@ -162,8 +173,14 @@ interface LabAudit {
   };
   techniques: {
     declared: number;
+    ai_allowed: number;
+    user_only: number;
+    undecided: number;
     wired: number;
     wired_ids: string[];
+    active: number;
+    active_ids: string[];
+    gates_off: Array<{ technique: string; env: string; value: string | null; on: boolean }>;
     items: TechniqueAudit[];
     wireable_unwired: number;
     blocker_counts: Record<string, number>;
@@ -387,7 +404,11 @@ const CapabilityMap: React.FC<{
               key={item.id}
               x={colX[3]} y={rowY(index)}
               title={shortId(item.id)}
-              subtitle={item.wired ? "실제 배선" : "미배선"}
+              subtitle={
+                item.active ? `가동 · ${AUTHORITY_LABEL[item.authority.verdict]}`
+                  : item.wired ? `배선 · 미가동 (게이트 OFF)`
+                    : `미배선 · ${AUTHORITY_LABEL[item.authority.verdict]}`
+              }
               status={status}
               locked={locked}
               onClick={() => onSelect({ kind: "technique", id: item.id })}
@@ -455,9 +476,22 @@ export const AdminEditLabPanel: React.FC = () => {
           <h1 className="text-lg font-bold text-foreground/90">편집연구실</h1>
           <p className="text-[11px] text-muted-foreground/50 mt-0.5">
             {audit
-              ? `재료 ${audit.materials.length - missingMaterials} 값 있음 / ${missingMaterials} 값 없음 · 하드룰 ${audit.rules.declared} 선언 / ${audit.rules.registered} 등록 / ${audit.rules.corrective} 보정 / ${audit.rules.veto} veto · 기법 ${audit.techniques.declared} 선언 / ${audit.techniques.wired} 배선`
+              ? `재료 ${audit.materials.length - missingMaterials} 값 있음 / ${missingMaterials} 값 없음 · 하드룰 ${audit.rules.declared} 선언 / ${audit.rules.registered} 등록 / ${audit.rules.corrective} 보정 / ${audit.rules.veto} veto`
               : "측정 결과 없음"}
           </p>
+          {audit && (
+            <p className="text-[11px] text-muted-foreground/50 mt-0.5">
+              기법 {audit.techniques.declared} 선언 · AI 가능 {audit.techniques.ai_allowed} / 사용자 전용 {audit.techniques.user_only} / 미정 {audit.techniques.undecided}
+              {" · "}
+              배선 {audit.techniques.wired} / 가동 {audit.techniques.active}
+              <span className="text-muted-foreground/40"> (분모 AI 가능 {audit.techniques.ai_allowed} · 구 표기 “{audit.techniques.declared} 선언 / {audit.techniques.wired} 배선”)</span>
+            </p>
+          )}
+          {audit && audit.techniques.gates_off.length > 0 && (
+            <p className="mt-0.5 text-[10px] text-amber-300/70">
+              배선됐으나 미가동: {audit.techniques.gates_off.map(g => `${g.technique} (${g.env}=${g.value ?? "미설정"} → OFF)`).join(" / ")}
+            </p>
+          )}
           {audit?.sensor_contract && audit.candidate_ledger_guard && (
             <div className="mt-2 flex flex-wrap gap-2 text-[9px] font-mono">
               <span className="border border-emerald-500/30 bg-emerald-500/10 px-1.5 py-0.5 text-emerald-200/80">
@@ -574,8 +608,22 @@ export const AdminEditLabPanel: React.FC = () => {
             )}
             {selectedTechnique && (
               <div className="space-y-1 text-[11px]">
-                <p className="text-sm font-semibold">{selectedTechnique.id}</p>
-                <p>{selectedTechnique.wired ? "실제 배선" : "미배선"} · 요구 재료 {Array.isArray(selectedTechnique.requires_materials) ? selectedTechnique.requires_materials.join(", ") : "관계 미선언"}</p>
+                <p className="text-sm font-semibold">
+                  {selectedTechnique.id}
+                  <span className="ml-2 text-[10px] font-normal text-foreground/70">
+                    권한 {AUTHORITY_LABEL[selectedTechnique.authority.verdict]}
+                  </span>
+                </p>
+                <div className="text-muted-foreground/60">
+                  {selectedTechnique.authority.basis.map(line => (
+                    <p key={line} className="break-all">판정 근거: {line}</p>
+                  ))}
+                </div>
+                <p>
+                  {selectedTechnique.active ? "가동" : selectedTechnique.wired ? "배선 · 미가동" : "미배선"}
+                  {selectedTechnique.gate && ` · 게이트 ${selectedTechnique.gate.env}=${selectedTechnique.gate.value ?? "미설정"} → ${selectedTechnique.gate.on ? "ON" : "OFF"}`}
+                  {" · 요구 재료 "}{Array.isArray(selectedTechnique.requires_materials) ? selectedTechnique.requires_materials.join(", ") : "관계 미선언"}
+                </p>
                 <p>요구 룰 {Array.isArray(selectedTechnique.requires_rules) ? selectedTechnique.requires_rules.join(", ") : "관계 미선언"}</p>
                 <p>관계 출처 {selectedTechnique.relationship_source}</p>
                 {selectedTechnique.relationship_source_detail.derived_from && (
@@ -607,21 +655,53 @@ export const AdminEditLabPanel: React.FC = () => {
             <div>
               <h2 className="text-xs font-black tracking-widest uppercase text-muted-foreground/55">기법 배선 관문</h2>
               <p className="mt-1 text-[10px] text-muted-foreground/45">
-                현재 미배선 중 즉시 가능 {audit.techniques.wireable_unwired} · {Object.entries(audit.techniques.blocker_counts).map(([key, value]) => `${key} ${value}`).join(" / ")}
+                모수 = AI 가능 {audit.techniques.ai_allowed} + 미정 {audit.techniques.undecided} (사용자 전용 {audit.techniques.user_only}은 아래 별도 구획) ·
+                미배선 중 즉시 가능 {audit.techniques.wireable_unwired} · {Object.entries(audit.techniques.blocker_counts).map(([key, value]) => `${key} ${value}`).join(" / ") || "차단 없음"}
               </p>
             </div>
             <div className="overflow-x-auto border border-border/15">
               <table className="w-full text-[11px]">
                 <thead className="bg-secondary/20 text-muted-foreground/60">
-                  <tr><th className="px-3 py-2 text-left">기법</th><th className="px-3 py-2 text-left">관계 출처</th><th className="px-3 py-2 text-left">상태</th><th className="px-3 py-2 text-left">막힌 사유</th></tr>
+                  <tr><th className="px-3 py-2 text-left">기법</th><th className="px-3 py-2 text-left">권한</th><th className="px-3 py-2 text-left">관계 출처</th><th className="px-3 py-2 text-left">상태</th><th className="px-3 py-2 text-left">막힌 사유</th></tr>
                 </thead>
                 <tbody className="divide-y divide-border/10">
-                  {audit.techniques.items.map(item => (
+                  {audit.techniques.items.filter(item => item.authority.verdict !== "USER_ONLY").map(item => (
                     <tr key={item.id}>
                       <td className="px-3 py-2 font-mono">{item.id}</td>
+                      <td className={`px-3 py-2 font-mono ${item.authority.verdict === "AI_ALLOWED" ? "text-emerald-300/80" : "text-muted-foreground/55"}`}>
+                        {AUTHORITY_LABEL[item.authority.verdict]}
+                      </td>
                       <td className="px-3 py-2 font-mono">{item.relationship_source}</td>
-                      <td className="px-3 py-2">{item.wired ? "배선됨" : item.wireable_now ? "배선 가능" : "차단"}</td>
+                      <td className="px-3 py-2">{item.active ? "가동" : item.wired ? "배선 · 미가동" : item.wireable_now ? "배선 가능" : "차단"}</td>
                       <td className="px-3 py-2 text-muted-foreground/65">{item.blockers.map(blocker => `${blocker.kind}: ${blocker.detail}`).join(" / ") || "없음"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </section>
+
+          <section className="space-y-3 border-t border-border/15 pt-4">
+            <div>
+              <h2 className="text-xs font-black tracking-widest uppercase text-muted-foreground/55">사용자 전용 — AI 배선 대상 아님</h2>
+              <p className="mt-1 text-[10px] text-muted-foreground/45">
+                조각 집합·순서·대사 중 하나라도 바꾸는 기법 {audit.techniques.user_only}건. 차단이 아니라 권한 밖이다.
+              </p>
+            </div>
+            <div className="overflow-x-auto border border-border/15">
+              <table className="w-full text-[11px]">
+                <thead className="bg-secondary/20 text-muted-foreground/60">
+                  <tr><th className="px-3 py-2 text-left">기법</th><th className="px-3 py-2 text-left">판정 근거 (config 원문)</th></tr>
+                </thead>
+                <tbody className="divide-y divide-border/10">
+                  {audit.techniques.items.filter(item => item.authority.verdict === "USER_ONLY").map(item => (
+                    <tr key={item.id}>
+                      <td className="px-3 py-2 font-mono align-top">{item.id}</td>
+                      <td className="px-3 py-2 text-muted-foreground/65">
+                        {item.authority.basis.map(line => (
+                          <p key={line} className="break-all">{line}</p>
+                        ))}
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -809,7 +889,7 @@ export const AdminEditLabPanel: React.FC = () => {
                 하드룰 선언 {audit.rules.declared} · 런타임 등록 {audit.rules.registered} · 보정 {audit.rules.corrective} · veto {audit.rules.veto} · veto 선언·도달 불가 {audit.rules.veto_unreachable} · ID 교집합 {audit.rules.identity_overlap}
               </p>
               <p className="text-[11px] text-muted-foreground/60">
-                편집기법 선언 {audit.techniques.declared} · 실제 배선 {audit.techniques.wired}
+                편집기법 선언 {audit.techniques.declared} · AI 가능 {audit.techniques.ai_allowed} · 사용자 전용 {audit.techniques.user_only} · 미정 {audit.techniques.undecided} · 배선 {audit.techniques.wired} · 가동 {audit.techniques.active}
               </p>
             </div>
           </details>

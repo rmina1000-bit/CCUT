@@ -160,6 +160,9 @@
       "consumer_paths": []
     }
   ],
+  "technique_gates": {
+    "word_boundary_snap": "CCUT_TECHNIQUE_WORD_SNAP"
+  },
   "wired_techniques": {
     "word_boundary_snap": [
       "ccut_backend/story_gate/proposal_axis.py",
