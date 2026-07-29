@@ -48,9 +48,17 @@ def _concat_filter_with_audio_splice_fade(durations: List[float]) -> str:
         f"fade_in={fade_in_sec * 1000:.1f}ms fade_out={fade_out_sec * 1000:.1f}ms "
         f"clips={count}"
     )
-    video_inputs = "".join(f"[{i}:v:0]" for i in range(count))
-    parts = [f"{video_inputs}concat=n={count}:v=1:a=0[v]"]
-    audio_inputs = []
+    # [LAB-22] 영상과 소리를 **하나의 concat**으로 잇는다.
+    #   구판은 영상만 잇는 concat 과 소리만 잇는 concat 을 따로 돌렸다. 그러면 두 스트림이
+    #   서로를 모른 채 각자 길이를 쌓아, 클립마다 생기는 미세한 차이가 그대로 누적된다.
+    #   차이의 뿌리는 1단계 추출이다 — `-r 30 -fps_mode cfr` 이 영상 길이를 33.3ms 격자로
+    #   올리는데 소리는 요청한 길이를 그대로 지킨다.
+    #   실측(Merope 20클립): 추출 직후 누적차 650.7ms → 최종본 2780.0ms.
+    #   국장 청감: 6번 클립부터 소리가 앞서 들림.
+    #   concat 에 v=1:a=1 로 함께 넣으면 세그먼트마다 두 스트림의 시작을 맞추므로
+    #   차이가 그 클립 안에서 끝나고 뒤로 넘어가지 않는다.
+    parts = []
+    segments = []
     for i, duration in enumerate(durations):
         half = max(0.0, duration) / 2.0
         fade_in = min(fade_in_sec, half)
@@ -60,8 +68,8 @@ def _concat_filter_with_audio_splice_fade(durations: List[float]) -> str:
             f"[{i}:a:0]afade=t=in:st=0:d={fade_in:.6f},"
             f"afade=t=out:st={fade_out_start:.6f}:d={fade_out:.6f}[aud{i}]"
         )
-        audio_inputs.append(f"[aud{i}]")
-    parts.append(f"{''.join(audio_inputs)}concat=n={count}:v=0:a=1[a]")
+        segments.append(f"[{i}:v:0][aud{i}]")
+    parts.append(f"{''.join(segments)}concat=n={count}:v=1:a=1[v][a]")
     return ";".join(parts)
 
 class RenderEngine:
@@ -250,7 +258,15 @@ class RenderEngine:
                     _pf = punch_filter(technique, clip.get("fragment_id"),
                                        float(clip["start"]), float(clip["end"]), 1920, 1080)
                     if _pf:
-                        _vf += "," + _pf
+                        # [LAB-24] zoompan 앞에서 입력 프레임률을 30으로 고정한다.
+                        #   zoompan 은 입력 1프레임당 1프레임을 내고 그 출력을 30fps 타임베이스에
+                        #   놓는다. 그래서 출력 길이 = 입력 프레임 수 ÷ 30 이 되고,
+                        #   원본 fps 가 30이 아니면 영상 길이와 속도가 그 비율로 뒤틀린다.
+                        #   실측(Merope A): 59.94fps 원본 3.500s → 6.967s(+99%),
+                        #                   14.98fps 원본 1.800s → 0.900s(-50%).
+                        #   소리는 어느 쪽도 아니라 영상만 따로 놀았다(국장 청감: 영상이 느려짐).
+                        #   입력을 미리 30fps 로 맞추면 zoompan 이 시간축에 대해 항등이 된다.
+                        _vf += ",fps=30," + _pf
                         print(f"[RENDER][PUNCH] clip {i} {clip.get('fragment_id')} -> {_pf[:70]}...")
                 except Exception as _pe:
                     print(f"[RENDER][PUNCH] 필터 생략 (비차단): {_pe}")
@@ -265,6 +281,13 @@ class RenderEngine:
                     "-g", "30", "-keyint_min", "30", "-sc_threshold", "0",
                     "-c:v", "libx264", "-preset", "ultrafast", "-crf", "23",
                     "-c:a", "aac", "-b:a", "128k", "-ar", "48000", "-ac", "2",
+                    # [LAB-23] 출력 길이를 조각 길이로 못 박는다.
+                    #   -ss/-to 는 입력을 자를 뿐, 필터가 프레임 수를 바꾸면 출력 길이가 따라간다.
+                    #   실측(Merope): punch_in 의 zoompan 이 선언 3.500s 를 6.967s 로(+99%),
+                    #   1.800s 를 0.900s 로(-50%) 만들었다. 소리는 요청 길이를 지키므로
+                    #   그만큼 영상과 소리가 어긋난다.
+                    #   소리를 진실로 두고 영상을 거기에 맞춘다 — 소리는 변형하지 않는다.
+                    "-t", f"{clip_duration:.6f}",
                     str(tmp),
                 ]
                 r = subprocess.run(cut_cmd, capture_output=True, text=True, encoding="utf-8", errors="replace")
