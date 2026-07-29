@@ -1669,6 +1669,28 @@ async def fragment_search_status():
     return {"status": "SUCCESS", **fsx.index_status()}
 
 
+@app.get("/fragment-similar/{fragment_id}")
+async def fragment_similar(fragment_id: str, top_k: int = 5):
+    """[LAB-41 RETINA] 시각 표식(CLIP) 기반 유사 조각 top-k.
+    표식이 없으면 NOT_MARKED — 텍스트 검색(/fragment-search)과 별개 축."""
+    from engine import visual_marker
+    try:
+        return visual_marker.similar(fragment_id, top_k=top_k)
+    except Exception as e:
+        return {"status": "ERROR", "error": str(e), "fragment_id": fragment_id,
+                "results": []}
+
+
+@app.get("/fragment-similar-status")
+async def fragment_similar_status():
+    """[LAB-41 RETINA] 시각 표식 현황."""
+    from engine import visual_marker
+    try:
+        return {"status": "SUCCESS", **visual_marker.status()}
+    except Exception as e:
+        return {"status": "ERROR", "error": str(e)}
+
+
 @app.post("/proposals/{proposal_id}/preview")
 async def make_proposal_preview(proposal_id: str, db: Session = Depends(get_db)):
     """[PROPOSAL-PREVIEW] 제안을 즉석 렌더(또는 캐시)하여 재생용 mp4 반환.

@@ -314,6 +314,7 @@ def index_fragments(source_filter=None, use_vl=True, only_curated=False,
 
     results = []
     vl_ok, vl_fail = 0, 0
+    mark_targets = []  # [LAB-41] 키프레임 확보된 조각 — 인덱싱 후 시각 표식(백그라운드)
     for i, meta in enumerate(targets):
         fid = meta["fragment_id"]
         visual_desc, desc_source = None, "meta_fallback"
@@ -330,8 +331,13 @@ def index_fragments(source_filter=None, use_vl=True, only_curated=False,
                         desc_source = "qwen_vl"
                         vl_ok += 1
                         meta["keyframe"] = f"/search_keyframes/{fid}.jpg"
+                        mark_targets.append((fid, meta["source_id"], kf_out))
                     else:
                         vl_fail += 1
+                        # [LAB-41] VL 실패여도 키프레임 파일이 실존하면 표식만 수집
+                        # (fragment_index.keyframe 기록 규칙은 불변 — 기존 동작 유지)
+                        if os.path.exists(kf_out) and os.path.getsize(kf_out) > 0:
+                            mark_targets.append((fid, meta["source_id"], kf_out))
         if not visual_desc and meta.get("transcript"):
             desc_source = "transcript"
 
@@ -373,6 +379,13 @@ def index_fragments(source_filter=None, use_vl=True, only_curated=False,
     if not dry_run:
         con.commit()
     con.close()
+    # [LAB-41] 시각 표식 자동 찍기 — 백그라운드, 실패해도 인덱싱 결과 불변(관문 금지)
+    if not dry_run and mark_targets:
+        try:
+            from engine import visual_marker
+            visual_marker.fire_background(mark_targets, marked_by="AUTO_INDEX")
+        except Exception as e:
+            print(f"[INDEXER][VISUAL-MARK] 발사 실패 — 인덱싱은 통과: {e}", flush=True)
     if verbose:
         print(f"[INDEXER] 완료: {len(results)}개 인덱싱, vl_ok={vl_ok}, vl_fail={vl_fail}", flush=True)
     return {"indexed": len(results), "vl_ok": vl_ok, "vl_fail": vl_fail,
