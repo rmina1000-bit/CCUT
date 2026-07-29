@@ -247,5 +247,56 @@
         "날짜": null
       }
     }
+  ],
+  "ledger_records": [
+    {
+      "기록id": "REC_WORD_BOUNDARY_SNAP_VERDICTS",
+      "회차": "LAB-13",
+      "제목": "RULE_WORD_BOUNDARY_SNAP 13조각 판정 분포",
+      "사실": "SNAP_APPLIED 2 / SNAP_REJECTED 4 / UNKNOWN 2 / VIOLATION_DETECTED 5 / EXECUTION_PATH_NOT_REACHED 0. VIOLATION 5건은 200ms 허용오차 밖으로 탐지된 것이며, 경계를 보정하지도 산출물을 막지도 않는다.",
+      "주의": "'집행'은 '차단'이 아니다. 위 라벨은 LAB-13 회차의 분류이고 코드 enum이 아니다 — 코드 판정값은 PASS/VIOLATION/UNKNOWN/NA 이다. VIOLATION을 낼 수 있는 경로(boundary_rule_results)는 로그 전용이고, 실제 veto 경로(punch_rule_results)는 program_id를 넘기지 않아 이 룰이 UNKNOWN만 반환한다.",
+      "근거": [
+        "ccut_backend/story_gate/proposal_axis.py:601-606 — boundary_rule_results 로그 전용",
+        "ccut_backend/story_gate/proposal_axis.py:589-598 — punch_rule_results ctx에 program_id 없음",
+        "ccut_backend/story_gate/proposal_axis.py:460-464 — program_id 없으면 spans None → UNKNOWN",
+        "ccut_backend/story_gate/proposal_axis.py:613-614 — UNKNOWN은 차단하지 않는다",
+        "실측 2026-07-29 punch_rule_results(SF_004256_SRC_452D7E10, 98.5, 104.76) → RULE_WORD_BOUNDARY_SNAP UNKNOWN 'spans 측정 실패'"
+      ]
+    },
+    {
+      "기록id": "REC_WORD_TIMESTAMPS_ABSENCE",
+      "회차": "LAB-14",
+      "제목": "word_timestamps 부재 조각 수 = 204",
+      "사실": "670 조각 중 466 조각만 구간 안에 단어 시각을 가진다. 부재 204의 내역은 자막 행이 없는 소스의 조각 99 + 자막은 있으나 구간 안 단어가 0인 조각 105 이다.",
+      "주의": "LAB-6의 99는 '현재 코드로 재현 불가'가 아니라 정의가 좁았던 값이다 — 99는 '자막 행 없는 소스의 조각' 부분집합과 정확히 일치한다. 소비 기준 분모로는 204를 채택한다.",
+      "근거": [
+        "ccut_backend/story_gate/proposal_axis.py:223-245 — _fragment_words",
+        "ccut_backend/lab/audit.py — _consumed_count subtitle_word_overlap",
+        "감사 실측 2026-07-29 word_timestamps 소비 466/670 · 저장 77/77"
+      ]
+    },
+    {
+      "기록id": "REC_DB_INVARIANCE_EVIDENCE_LIMIT",
+      "회차": "LAB-14",
+      "제목": "과거 'DB 불변' 판정의 증거 효력 제한",
+      "사실": "ccut_app.db 파일 SHA만으로 내린 'DB 불변' 판정은 WAL에 적용된 데이터의 불변을 증명하지 못한다. 해당 회차 판정들의 증거 효력은 제한적이다.",
+      "주의": "이후 DB 검증은 온라인 백업 스냅샷 → 논리 해시 절차를 따른다.",
+      "근거": [
+        "docs/CCUT_DB_VERIFICATION_CONTRACT.md — 커밋 1f28ed64"
+      ]
+    },
+    {
+      "기록id": "REC_PROJECTION_EVIDENCE_DANGLING",
+      "회차": "LAB-14",
+      "제목": "projection_evidence 심볼 2건이 코드에 없음",
+      "사실": "audio_beat의 'proposal_axis.py:_collect_fragment_beats' 와 audio_energy의 'proposal_engine.py:_load_evidence_features' 는 코드에 존재하지 않는 함수명이다. 실제 소비 지점은 각각 proposal_axis.py:538-550, proposal_engine.py:207-212 이다.",
+      "주의": "선언값은 지우지 않았다. 실재를 확인한 위치를 consumption.evidence에 따로 기록해 두 값이 화면에 함께 보이게 했다. audio_beat의 실제 경로는 시간 겹침이 아니라 semantic_json.evidence_refs 지목이다.",
+      "근거": [
+        "grep 'def _collect_fragment_beats' ccut_backend/story_gate/proposal_axis.py → 0건",
+        "grep 'def _load_evidence_features' ccut_backend/engine/proposal_engine.py → 0건",
+        "ccut_backend/story_gate/proposal_axis.py:544-550 — evidence_board WHERE fragment_id IN (evidence_refs)",
+        "ccut_backend/engine/proposal_engine.py:207-212 — source 증거 시간 겹침 평균"
+      ]
+    }
   ]
 }

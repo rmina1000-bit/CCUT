@@ -16,7 +16,6 @@ AUDIT_CONFIG = CONFIG_DIR / "lab_audit.json"
 CANDIDATES_CONFIG = CONFIG_DIR / "lab_candidates.json"
 SENSOR_CONTRACT_CONFIG = CONFIG_DIR / "sensor_contract.json"
 GOLDENSET_CONFIG = CONFIG_DIR / "lab_goldenset.json"
-_CACHE = None
 
 
 def _load_json(path):
@@ -235,6 +234,112 @@ def _material_count(con, material):
     return total, non_null, distinct
 
 
+def _value_condition(material, alias):
+    """_material_count 의 '값 있음' 판정을 다른 별칭에서 그대로 재사용한다."""
+    column = material["column"]
+    json_path = material.get("json_path")
+    if not json_path:
+        return f'{alias}."{column}" IS NOT NULL', ()
+    if material.get("numeric_only"):
+        return (
+            f'json_valid({alias}."{column}") AND '
+            f"json_type({alias}.\"{column}\", ?) IN ('integer', 'real')",
+            (json_path,),
+        )
+    return (
+        f'json_valid({alias}."{column}") AND '
+        f'json_extract({alias}."{column}", ?) IS NOT NULL',
+        (json_path,),
+    )
+
+
+def _span_has_words(segments_raw, start, end):
+    """proposal_axis._fragment_words 와 같은 판정 — 구간 안에 단어가 하나라도 있나.
+
+    이중 인코딩된 segments 도 같은 방식으로 한 번 더 푼다.
+    """
+    if not segments_raw:
+        return False
+    try:
+        segments = json.loads(segments_raw)
+        if isinstance(segments, str):
+            segments = json.loads(segments)
+    except (TypeError, ValueError):
+        return False
+    if not isinstance(segments, list):
+        return False
+    for segment in segments:
+        if not isinstance(segment, dict):
+            continue
+        for word in segment.get("words") or []:
+            if not isinstance(word, dict):
+                continue
+            if word.get("start") is None or word.get("end") is None:
+                continue
+            if float(word["end"]) > start and float(word["start"]) < end:
+                return True
+    return False
+
+
+def _json_list(raw, key):
+    try:
+        return (json.loads(raw or "{}") or {}).get(key) or []
+    except (TypeError, ValueError):
+        return []
+
+
+def _consumed_count(con, material, probe):
+    """기법·룰이 실제로 읽는 단위(조각)로 재료 보유량을 다시 센다.
+
+    저장 행 수를 그대로 보이면 분모가 과장된다. 예: word_timestamps 는
+    subtitles 77행 기준으로 77/77 이지만, 소비자는 조각마다 자기 구간의 단어를
+    찾으므로 실제로는 670 조각 중 일부만 값을 가진다.
+
+    method 는 선언이 아니라 실제 소비 코드 경로를 그대로 흉내낸다.
+    """
+    method = material["consumption"]["method"]
+    table = material["table"]
+    if method == "fragment_id_join":
+        condition, params = _value_condition(material, "t")
+        return con.execute(
+            "SELECT COUNT(*) FROM semantic_fragments f "
+            f'JOIN "{table}" t ON t.fragment_id = f.fragment_id '
+            f"WHERE {condition}",
+            params,
+        ).fetchone()[0]
+    if method == "temporal_overlap":
+        condition, params = _value_condition(material, "e")
+        return con.execute(
+            "SELECT COUNT(*) FROM semantic_fragments f WHERE EXISTS ("
+            f'SELECT 1 FROM "{table}" e WHERE e.source_id = f.source_id '
+            'AND e."end" > f.start AND e.start < f."end" '
+            f"AND {condition})",
+            params,
+        ).fetchone()[0]
+    if method == "evidence_refs_in_span":
+        # 소비자는 source_id 시간 겹침이 아니라 semantic_json.evidence_refs 로
+        # evidence_board 행을 지목한 뒤, 구간 안에 든 beat 만 쓴다.
+        hits = 0
+        for _, _, start, end, semantic_json in probe["fragments"]:
+            span_start, span_end = float(start or 0), float(end or 0)
+            for ref in _json_list(semantic_json, "evidence_refs"):
+                beats = _json_list(probe["evidence_meta"].get(ref), "audio_beat")
+                if any(span_start <= float(t) < span_end for t in beats):
+                    hits += 1
+                    break
+        return hits
+    if method == "subtitle_word_overlap":
+        return sum(
+            1 for _, source_id, start, end, _ in probe["fragments"]
+            if _span_has_words(
+                probe["subtitle_segments"].get(source_id),
+                float(start or 0),
+                float(end or 0),
+            )
+        )
+    raise ValueError(f"unknown consumption method: {method}")
+
+
 def _registered_rules():
     from engine.story_template_resolver import registered_rule_ids
 
@@ -306,7 +411,6 @@ def build_lab_context(audit):
 
 
 def run_audit():
-    global _CACHE
     started = time.perf_counter()
     config = _load_json(AUDIT_CONFIG)
     candidate_ledger = _load_json(CANDIDATES_CONFIG)
@@ -320,8 +424,24 @@ def run_audit():
     golden_set = _load_json(GOLDENSET_CONFIG)
     golden_resolutions = []
     try:
+        probe = {
+            "fragments": con.execute(
+                'SELECT fragment_id, source_id, start, "end", semantic_json '
+                "FROM semantic_fragments"
+            ).fetchall(),
+            "subtitle_segments": dict(
+                con.execute("SELECT source_id, segments FROM subtitles").fetchall()
+            ),
+            "evidence_meta": dict(
+                con.execute(
+                    "SELECT fragment_id, metadata_json FROM evidence_board"
+                ).fetchall()
+            ),
+        }
+        fragment_total = len(probe["fragments"])
         for item in config["materials"]:
             total, non_null, distinct = _material_count(con, item)
+            consumed = _consumed_count(con, item, probe)
             consumers = _code_reference_count(
                 item["consumer_terms"], extensions, item.get("consumer_paths")
             )
@@ -342,6 +462,15 @@ def run_audit():
                 "fragment_consumer_contract": item["fragment_consumer_contract"],
                 "projection": item["projection"],
                 "projection_evidence": item["projection_evidence"],
+                "consumption": {
+                    "unit": item["consumption"]["unit"],
+                    "non_null": consumed,
+                    "total": fragment_total,
+                    "method": item["consumption"]["method"],
+                    "evidence": item["consumption"]["evidence"],
+                    "same_as_storage": (consumed, fragment_total)
+                    == (non_null, total),
+                },
             })
         for item in golden_set["goldens"]:
             golden_resolutions.append({
@@ -648,6 +777,7 @@ def run_audit():
         },
         "edges": edges,
         "candidates": candidate_ledger["candidates"],
+        "ledger_records": candidate_ledger.get("ledger_records", []),
         "candidate_ledger_guard": candidate_guard,
         "sensor_contract": {
             "exists": True,
@@ -682,9 +812,14 @@ def run_audit():
         },
     }
     result["ai_context"] = build_lab_context(result)
-    _CACHE = result
     return result
 
 
 def get_audit():
-    return _CACHE or run_audit()
+    """조회마다 다시 측정한다.
+
+    이전에는 모듈 전역 캐시를 그대로 돌려줬다. 백필로 DB가 바뀌어도 첫 GET은
+    낡은 수치를 반환했고, 국장이 그 위에서 판정을 내릴 위험이 있었다.
+    감사는 read-only 이고 100ms 안쪽이라 매 조회 재측정이 부담이 되지 않는다.
+    """
+    return run_audit()

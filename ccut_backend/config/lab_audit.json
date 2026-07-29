@@ -9,6 +9,11 @@
       "fragment_consumer_contract": true,
       "projection": "direct_per_span",
       "projection_evidence": "ccut_backend/engine/fragment_indexer.py:_inject_motion_scores",
+      "consumption": {
+        "unit": "semantic_fragment",
+        "method": "fragment_id_join",
+        "evidence": "ccut_backend/story_gate/proposal_axis.py:516-518"
+      },
       "producer_terms": ["motion_scores_for_spans", "_inject_motion_scores"],
       "producer_paths": ["ccut_backend/engine/fragment_indexer.py", "ccut_backend/main.py"],
       "consumer_terms": ["motion_score"],
@@ -24,6 +29,11 @@
       "fragment_consumer_contract": true,
       "projection": "evidence_refs_in_span_earliest",
       "projection_evidence": "ccut_backend/story_gate/proposal_axis.py:_collect_fragment_beats",
+      "consumption": {
+        "unit": "semantic_fragment",
+        "method": "evidence_refs_in_span",
+        "evidence": "ccut_backend/story_gate/proposal_axis.py:538-550"
+      },
       "producer_terms": ["beat_times", "\"audio_beat\""],
       "producer_paths": ["ccut_backend/engine/signal_processor.py", "ccut_backend/main.py"],
       "consumer_terms": ["audio_beat"],
@@ -38,6 +48,11 @@
       "fragment_consumer_contract": true,
       "projection": "temporal_overlap_mean",
       "projection_evidence": "ccut_backend/engine/proposal_engine.py:_load_evidence_features",
+      "consumption": {
+        "unit": "semantic_fragment",
+        "method": "temporal_overlap",
+        "evidence": "ccut_backend/engine/proposal_engine.py:207-212"
+      },
       "producer_terms": ["\"audio_energy\": energy"],
       "producer_paths": ["ccut_backend/main.py"],
       "consumer_terms": ["audio_energy"],
@@ -53,6 +68,11 @@
       "fragment_consumer_contract": true,
       "projection": "source_id_fragment_overlap",
       "projection_evidence": "ccut_backend/story_gate/proposal_axis.py:_fragment_words",
+      "consumption": {
+        "unit": "semantic_fragment",
+        "method": "subtitle_word_overlap",
+        "evidence": "ccut_backend/story_gate/proposal_axis.py:223-245"
+      },
       "producer_terms": ["word_timestamps"],
       "producer_paths": ["ccut_backend/engine/ai_engine.py"],
       "consumer_terms": ["word_timestamps", "fragment_words"],
@@ -69,6 +89,11 @@
       "fragment_consumer_contract": false,
       "projection": "NONE",
       "projection_evidence": null,
+      "consumption": {
+        "unit": "semantic_fragment",
+        "method": "fragment_id_join",
+        "evidence": null
+      },
       "producer_terms": ["SENSOR_ID = \"silero_vad\"", "\"speech_ratio\""],
       "producer_paths": ["ccut_backend/engine/silero_sensor.py"],
       "consumer_terms": ["speech_presence"],
@@ -84,6 +109,11 @@
       "fragment_consumer_contract": false,
       "projection": "NONE",
       "projection_evidence": null,
+      "consumption": {
+        "unit": "semantic_fragment",
+        "method": "fragment_id_join",
+        "evidence": null
+      },
       "producer_terms": ["face_size"],
       "producer_paths": [],
       "consumer_terms": ["face_size"],
@@ -99,6 +129,11 @@
       "fragment_consumer_contract": false,
       "projection": "NONE",
       "projection_evidence": null,
+      "consumption": {
+        "unit": "semantic_fragment",
+        "method": "fragment_id_join",
+        "evidence": null
+      },
       "producer_terms": ["shot_size"],
       "producer_paths": [],
       "consumer_terms": ["shot_size"],
@@ -114,6 +149,11 @@
       "fragment_consumer_contract": false,
       "projection": "NONE",
       "projection_evidence": null,
+      "consumption": {
+        "unit": "semantic_fragment",
+        "method": "fragment_id_join",
+        "evidence": null
+      },
       "producer_terms": ["emotion_score"],
       "producer_paths": [],
       "consumer_terms": ["emotion_score"],

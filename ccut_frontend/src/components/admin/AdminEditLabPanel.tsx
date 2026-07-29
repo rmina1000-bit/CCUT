@@ -16,7 +16,28 @@ interface MaterialAudit {
   fragment_consumer_contract: boolean;
   projection: string;
   projection_evidence: string | null;
+  consumption: {
+    unit: "semantic_fragment";
+    non_null: number;
+    total: number;
+    method: string;
+    evidence: string | null;
+    same_as_storage: boolean;
+  };
 }
+
+const STORAGE_UNIT_LABEL: Record<MaterialAudit["storage_unit"], string> = {
+  semantic_fragment: "조각 단위",
+  evidence_chunk: "청크 단위",
+  source_timeline: "소스 시간축",
+};
+
+/** 소비 분모를 앞에 세우고, 저장 기준 수치는 부기로 남긴다. */
+const materialCounts = (item: MaterialAudit) => ({
+  consumed: `${item.consumption.non_null}/${item.consumption.total}`,
+  stored: `${item.non_null}/${item.total}`,
+  storedUnit: STORAGE_UNIT_LABEL[item.storage_unit],
+});
 
 type EdgeStatus = "LIVE" | "REGISTERED" | "LOCKED" | "BROKEN" | "UNDECLARED";
 type RuleState = "DECLARED" | "REGISTERED" | "ENFORCED";
@@ -78,6 +99,15 @@ interface LabCandidate {
   국장판정: { 상태: "미판정" | "채택" | "보류" | "폐기"; 날짜: string | null };
 }
 
+interface LedgerRecord {
+  기록id: string;
+  회차: string;
+  제목: string;
+  사실: string;
+  주의?: string;
+  근거: string[];
+}
+
 interface LabAudit {
   audited_at: string;
   duration_ms: number;
@@ -101,6 +131,7 @@ interface LabAudit {
   };
   edges: AuditEdge[];
   candidates: LabCandidate[];
+  ledger_records: LedgerRecord[];
   candidate_ledger_guard?: {
     status: "APPEND_ONLY";
     baseline: "git_HEAD";
@@ -139,7 +170,8 @@ const MaterialTable: React.FC<{ materials: MaterialAudit[] }> = ({ materials }) 
       <thead className="bg-secondary/20 text-muted-foreground/60">
         <tr>
           <th className="px-3 py-2 text-left font-semibold">이름</th>
-          <th className="px-3 py-2 text-right font-semibold">보유</th>
+          <th className="px-3 py-2 text-right font-semibold">보유 (조각 단위)</th>
+          <th className="px-3 py-2 text-right font-semibold">저장 기준</th>
           <th className="px-3 py-2 text-right font-semibold">구분값</th>
           <th className="px-3 py-2 text-right font-semibold">읽는 곳</th>
           <th className="px-3 py-2 text-right font-semibold">만드는 곳</th>
@@ -147,16 +179,22 @@ const MaterialTable: React.FC<{ materials: MaterialAudit[] }> = ({ materials }) 
         </tr>
       </thead>
       <tbody className="divide-y divide-border/10">
-        {materials.map(item => (
-          <tr key={item.id} className="hover:bg-secondary/10">
-            <td className="px-3 py-2 text-foreground/85">{item.label}</td>
-            <td className="px-3 py-2 text-right font-mono">{item.non_null}/{item.total}</td>
-            <td className="px-3 py-2 text-right font-mono">{item.distinct || "—"}</td>
-            <td className="px-3 py-2 text-right font-mono">{item.consumer_count}</td>
-            <td className="px-3 py-2 text-right font-mono">{item.producer_count}</td>
-            <td className="px-3 py-2 font-mono">{item.storage_unit}</td>
-          </tr>
-        ))}
+        {materials.map(item => {
+          const counts = materialCounts(item);
+          return (
+            <tr key={item.id} className="hover:bg-secondary/10">
+              <td className="px-3 py-2 text-foreground/85">{item.label}</td>
+              <td className="px-3 py-2 text-right font-mono">{counts.consumed}</td>
+              <td className={`px-3 py-2 text-right font-mono ${item.consumption.same_as_storage ? "text-muted-foreground/40" : "text-amber-300/70"}`}>
+                {counts.stored}
+              </td>
+              <td className="px-3 py-2 text-right font-mono">{item.distinct || "—"}</td>
+              <td className="px-3 py-2 text-right font-mono">{item.consumer_count}</td>
+              <td className="px-3 py-2 text-right font-mono">{item.producer_count}</td>
+              <td className="px-3 py-2 font-mono">{item.storage_unit}</td>
+            </tr>
+          );
+        })}
       </tbody>
     </table>
   </div>
@@ -259,12 +297,15 @@ const CapabilityMap: React.FC<{
 
         {materials.map((item, index) => {
           const locked = item.non_null === 0;
+          const counts = materialCounts(item);
           return (
             <Node
               key={item.id}
               x={colX[0]} y={rowY(index)}
               title={item.label}
-              subtitle={`${item.non_null}/${item.total} · ${item.storage_unit === "semantic_fragment" ? "조각 단위" : item.storage_unit === "evidence_chunk" ? "청크 단위" : "소스 시간축"}`}
+              subtitle={item.consumption.same_as_storage
+                ? `${counts.consumed} · 조각 단위`
+                : `${counts.consumed} 조각 · 저장 ${counts.stored}`}
               status={locked ? "LOCKED" : "LIVE"}
               locked={locked}
               onClick={() => onSelect({ kind: "material", id: item.id })}
@@ -436,14 +477,26 @@ export const AdminEditLabPanel: React.FC = () => {
             {!selection && <p className="text-[11px] text-muted-foreground/45">노드를 선택하면 근거가 표시됩니다.</p>}
             {selectedMaterial && (
               <div className="space-y-1 text-[11px]">
-                <p className="text-sm font-semibold">{selectedMaterial.label} {selectedMaterial.non_null}/{selectedMaterial.total}</p>
+                <p className="text-sm font-semibold">
+                  {selectedMaterial.label} {materialCounts(selectedMaterial).consumed}
+                  <span className="ml-1 text-[10px] font-normal text-muted-foreground/55">조각 단위 · 실제 소비 기준</span>
+                </p>
+                <p className={selectedMaterial.consumption.same_as_storage ? "text-muted-foreground/60" : "text-amber-300/75"}>
+                  저장 기준 {materialCounts(selectedMaterial).stored} ({materialCounts(selectedMaterial).storedUnit})
+                  {selectedMaterial.consumption.same_as_storage
+                    ? " · 소비 분모와 동일"
+                    : " · 소비 분모와 다름 — 저장 기준 수치는 과장이다"}
+                </p>
+                <p className="text-muted-foreground/60 break-all">
+                  소비 측정법 {selectedMaterial.consumption.method} · 근거: {selectedMaterial.consumption.evidence || "저장 단위 = 소비 단위 (투영 없음)"}
+                </p>
                 <p>구분값 {selectedMaterial.distinct} · producers {selectedMaterial.producer_count} · consumers {selectedMaterial.consumer_count}</p>
                 <p>저장 단위 {selectedMaterial.storage_unit} · 조각 소비 계약 {selectedMaterial.fragment_consumer_contract ? selectedMaterial.projection : "없음"}</p>
-                <p className="text-muted-foreground/60 break-all">투영 근거: {selectedMaterial.projection_evidence || "없음"}</p>
+                <p className="text-muted-foreground/60 break-all">투영 근거(선언): {selectedMaterial.projection_evidence || "없음"}</p>
                 <p className="text-muted-foreground/60 break-all">producers: {selectedMaterial.producers.join(" / ") || "없음"}</p>
                 <p className="text-muted-foreground/60 break-all">consumers: {selectedMaterial.consumers.join(" / ") || "없음"}</p>
                 <p>{selectedMaterial.non_null === 0
-                  ? `${selectedMaterial.label} ${selectedMaterial.non_null}/${selectedMaterial.total} → 생산기 없음 → 명시적으로 요구하는 하위 기법 잠김`
+                  ? `${selectedMaterial.label} ${materialCounts(selectedMaterial).consumed} → 생산기 없음 → 명시적으로 요구하는 하위 기법 잠김`
                   : `${selectedMaterial.label} 값이 존재하며 선언 또는 코드 참조가 있는 관계만 표시합니다.`}</p>
               </div>
             )}
@@ -585,6 +638,37 @@ export const AdminEditLabPanel: React.FC = () => {
                 </div>
               </div>
             )}
+          </section>
+
+          <section className="space-y-3 border-t border-border/15 pt-4">
+            <div>
+              <h2 className="text-xs font-black tracking-widest uppercase text-muted-foreground/55">장부 기록</h2>
+              <p className="mt-1 text-[10px] text-muted-foreground/45">
+                수리가 아니라 사실이다. 지우지 않고 쌓는다.
+              </p>
+            </div>
+            <div className="space-y-px border border-border/15 bg-border/10">
+              {(audit.ledger_records ?? []).map(record => (
+                <div key={record.기록id} className="bg-background/70 p-3 space-y-1">
+                  <p className="text-[11px] font-semibold text-foreground/85">
+                    <span className="mr-2 border border-border/25 px-1.5 py-0.5 font-mono text-[9px] text-muted-foreground/60">{record.회차}</span>
+                    {record.제목}
+                  </p>
+                  <p className="text-[11px] text-foreground/70">{record.사실}</p>
+                  {record.주의 && (
+                    <p className="text-[10px] text-amber-300/70">주의: {record.주의}</p>
+                  )}
+                  <ul className="space-y-0.5">
+                    {record.근거.map(item => (
+                      <li key={item} className="break-all font-mono text-[9px] text-muted-foreground/50">{item}</li>
+                    ))}
+                  </ul>
+                </div>
+              ))}
+              {(audit.ledger_records ?? []).length === 0 && (
+                <p className="bg-background/70 p-3 text-[10px] text-muted-foreground/45">기록 없음</p>
+              )}
+            </div>
           </section>
 
           <section className="space-y-3 border-t border-border/15 pt-4">
