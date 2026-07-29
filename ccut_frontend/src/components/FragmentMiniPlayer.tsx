@@ -5,7 +5,7 @@
 //
 // 입력 좌표 = sec 단일(canonical). 호출측이 frame→sec(readFragmentStartSec)·ms→sec(/1000)
 // 변환을 마친 sec spans를 넘긴다. 내부는 sec 하나로만 돈다.
-// 경계 정밀 로직: rAF 루프 + LEAD 0.02s + seek 중 가림 — LedgerPage와 동형(단위만 sec).
+// 경계 정밀 로직: rAF 루프 + seek guard + seek 중 영상·오디오 가림.
 import React, { useCallback, useEffect, useRef, useState } from "react";
 
 export type SecRange = [number, number];
@@ -17,7 +17,8 @@ export interface MiniPlayTarget {
 }
 
 const STOP_EPS = 0.006;   // LedgerPage PLAYBACK_STOP_EPS_MS(6) → sec
-const LEAD = 0.02;        // LedgerPage LEAD(20ms) → sec (CenterPanel BOUNDARY_LEAD_SEC과 동일)
+const LEAD_FALLBACK = 0.06;
+const AUDIO_PACKET_SEC = 1024 / 48000; // AAC-LC packet at the source audio sample rate
 
 // [STORY-TRACK-C C-2] 위치 지속 — 기존 ccut_center_width와 동일 localStorage 방식.
 const POS_KEY = "ccut_mini_player_pos";
@@ -43,7 +44,12 @@ const FragmentMiniPlayer: React.FC<Props> = ({ target, onClose }) => {
   const dragRef = useRef<{ dx: number; dy: number } | null>(null);
   const spansRef = useRef<SecRange[]>([]);
   const rafRef = useRef<number | null>(null);
+  const videoFrameRef = useRef<number | null>(null);
+  const lastMediaTimeRef = useRef<number | null>(null);
+  const frameDurationRef = useRef(1 / 30);
   const resumeRef = useRef(false);
+  const seekMutedRef = useRef<boolean | null>(null);
+  const unmuteTimerRef = useRef<number | null>(null);
   // [#9 커스텀 컨트롤 2026-07-19] 네이티브 <video controls> 폐기 — 브라우저 컨트롤바는
   // 진행바와 최대화(전체화면) 아이콘이 좁은 창에서 겹치고 CSS로 위치를 못 옮긴다. 재생 상태·
   // 시각을 직접 들고 커스텀 바(플레이버튼 + 진행바)를 하단에 여백 두고 배치한다.
@@ -52,6 +58,12 @@ const FragmentMiniPlayer: React.FC<Props> = ({ target, onClose }) => {
 
   const stopRaf = useCallback(() => {
     if (rafRef.current != null) { cancelAnimationFrame(rafRef.current); rafRef.current = null; }
+    const v = videoRef.current;
+    if (v && videoFrameRef.current != null && "cancelVideoFrameCallback" in v) {
+      v.cancelVideoFrameCallback(videoFrameRef.current);
+    }
+    videoFrameRef.current = null;
+    lastMediaTimeRef.current = null;
   }, []);
 
   // seek 중 잔상·중간 프레임 가림 (opacity 0 → seeked 복원, +400ms 백업)
@@ -59,12 +71,20 @@ const FragmentMiniPlayer: React.FC<Props> = ({ target, onClose }) => {
     const v = videoRef.current;
     if (!v) return;
     v.style.opacity = "0";
+    if (seekMutedRef.current === null) seekMutedRef.current = v.muted;
+    v.muted = true;
     let restored = false;
     const restore = () => {
       if (restored) return;
       restored = true;
       v.removeEventListener("seeked", restore);
       v.style.opacity = "1";
+      if (unmuteTimerRef.current != null) window.clearTimeout(unmuteTimerRef.current);
+      unmuteTimerRef.current = window.setTimeout(() => {
+        if (seekMutedRef.current !== null) v.muted = seekMutedRef.current;
+        seekMutedRef.current = null;
+        unmuteTimerRef.current = null;
+      }, Math.ceil(AUDIO_PACKET_SEC * 2000));
     };
     v.addEventListener("seeked", restore);
     setTimeout(restore, 400);
@@ -96,7 +116,11 @@ const FragmentMiniPlayer: React.FC<Props> = ({ target, onClose }) => {
       return true;
     }
     const [, e] = spans[idx];
-    if (idx < spans.length - 1 && t >= e - LEAD) {
+    const boundaryLead = Math.max(
+      LEAD_FALLBACK,
+      Math.min(0.15, frameDurationRef.current + AUDIO_PACKET_SEC),
+    );
+    if (idx < spans.length - 1 && t >= e - boundaryLead) {
       resumeRef.current = true;
       v.pause();
       hideForSeek();
@@ -117,6 +141,23 @@ const FragmentMiniPlayer: React.FC<Props> = ({ target, onClose }) => {
 
   const startRaf = useCallback(() => {
     if (rafRef.current == null) rafRef.current = requestAnimationFrame(rafTick);
+    const v = videoRef.current;
+    if (v && videoFrameRef.current == null && "requestVideoFrameCallback" in v) {
+      const observeFrame: VideoFrameRequestCallback = (_now, metadata) => {
+        const previous = lastMediaTimeRef.current;
+        if (previous !== null) {
+          const delta = metadata.mediaTime - previous;
+          if (delta > 0.01 && delta < 0.2) frameDurationRef.current = delta;
+        }
+        lastMediaTimeRef.current = metadata.mediaTime;
+        if (!v.paused && !v.ended) {
+          videoFrameRef.current = v.requestVideoFrameCallback(observeFrame);
+        } else {
+          videoFrameRef.current = null;
+        }
+      };
+      videoFrameRef.current = v.requestVideoFrameCallback(observeFrame);
+    }
   }, [rafTick]);
 
   const onSeeked = useCallback(() => {
@@ -284,7 +325,7 @@ const FragmentMiniPlayer: React.FC<Props> = ({ target, onClose }) => {
           onEnded={onPauseHandler}
           onClick={togglePlay}
           className="block cursor-pointer"
-          style={{ maxWidth: "min(360px, 40vw)", maxHeight: "48vh", width: "auto", height: "auto" }}
+          style={{ width: "min(360px, 40vw)", minWidth: 320, height: "auto", minHeight: 180, maxHeight: "48vh", objectFit: "contain" }}
         />
         {/* [#9 커스텀 컨트롤바] 네이티브 컨트롤 대체 — 하단에 여백(pb) 두고 재생버튼·진행바를
             간격(gap) 두고 배치. 최대화 아이콘 없음(겹침 원인 제거). 진행바는 조각 구간
