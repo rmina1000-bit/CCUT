@@ -80,8 +80,7 @@ interface ExportRecord {
   output_url: string;
   file_size: number | null;
   duration: number | null;
-  created_at: string | null;
-  program_last_updated_at: string | null;
+  created_at: string | null;   // [LAB-20] 이 행의 시각은 산출물 생성시각 하나뿐이다
   thumbnail_url?: string | null;
 }
 
@@ -699,7 +698,7 @@ export const ArchivePanel: React.FC<{
                     <div className="flex items-center gap-3 mt-1 text-[11px] text-muted-foreground/50">
                       {ex.duration != null && <span className="flex items-center gap-1"><Clock size={10} />{formatSecs(ex.duration)}</span>}
                       {ex.file_size != null && <span>{(ex.file_size / 1024 / 1024).toFixed(1)} MB</span>}
-                      {(ex.program_last_updated_at || ex.created_at) && <span className="flex items-center gap-1"><Calendar size={10} />{new Date(ex.program_last_updated_at || ex.created_at!).toLocaleString()}</span>}
+                      {ex.created_at && <span className="flex items-center gap-1"><Calendar size={10} />{new Date(ex.created_at).toLocaleString()}</span>}
                     </div>
                   </div>
                   <div className="flex items-center gap-2 flex-shrink-0">

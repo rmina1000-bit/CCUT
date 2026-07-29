@@ -850,7 +850,7 @@ class BAMSManager:
             import os as _os
             from engine import fragment_vault as _fv
             result = []
-            for r, live_name, live_updated_at in rows:
+            for r, live_name, _live_updated_at in rows:   # [LAB-20] 시각은 산출물 것만 쓴다
                 # [CACHE-BUST] 파일 mtime을 쿼리로 붙여 재렌더 후 브라우저 캐시 무력화
                 out_url = r.output_url
                 real_size = r.file_size
@@ -885,7 +885,14 @@ class BAMSManager:
                     "file_size": real_size,
                     "duration": r.duration,
                     "created_at": str(r.created_at) if r.created_at else None,
-                    "program_last_updated_at": str(live_updated_at) if live_updated_at else None,
+                    # [LAB-20] program_last_updated_at 는 더 이상 내려보내지 않는다.
+                    #   이 목록의 한 행은 '산출물 하나'다. 그런데 소비처 두 곳이
+                    #   (program_last_updated_at || created_at) 로 찍고 있어, 프로그램의
+                    #   최종수정시각이 산출물의 생성시각을 가렸다.
+                    #   실측 2026-07-29: 6행 중 5행에서 표시 시각 ≠ 실제 mp4 mtime.
+                    #     1행 Adhara 표시 07-21 13:38 vs 실제 파일 07-29 13:05 (오늘 만든 것)
+                    #   created_at 은 6/6 전부 파일 mtime 과 일치한다 — 그것이 산출물의 진실이다.
+                    #   정렬도 이미 created_at DESC(위 order_by)라 정렬 키와 표시 키가 이제 같다.
                     # [EXPORT-NAME-SNAPSHOT] 렌더 시점에 고정된 이름 — proposal 재생성과 무관
                     "display_name": getattr(r, "display_name", None),
                     "thumbnail_url": thumb,
