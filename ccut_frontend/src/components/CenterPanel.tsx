@@ -436,15 +436,69 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
     if (el.scrollHeight <= el.clientHeight + 4) return true; // 스크롤 자체가 없음 = 항상 하단
     return el.scrollHeight - el.scrollTop - el.clientHeight <= CHAT_BOTTOM_SLACK;
   }, []);
+  // [CHATSCROLL-FIX-02 2026-07-27] '위로 올려 읽는 중'은 사용자 손짓이 있었을 때만이다.
+  //   실사고(국장 화면, 앱 켜자마자): [CHATSCROLL][HOLD]{msgs:64,gens:11,
+  //     reason:'user_scrolled_up'} — 사용자는 스크롤한 적이 없다.
+  //   원인: 아래 handleChatScroll 이 '왜 스크롤됐는지'를 구분하지 못했다.
+  //     (a) scrollIntoView({behavior:'smooth'})가 중간 위치마다 scroll 이벤트를 쏜다
+  //     (b) 썸네일·영상이 뒤늦게 로드되며 높이가 늘어 하단이 밀린다
+  //   둘 다 사용자 행동이 아닌데 추종을 꺼서, 이후 새 글이 중간에 놓이고
+  //   '새 내용 ↓'를 일일이 눌러야 했다.
+  //   → 손짓(휠·터치·키보드·스크롤바 드래그) 없이 일어난 이동으로는 추종을 끄지 않는다.
+  const chatUserGestureRef = useRef(false);
   const handleChatScroll = useCallback(() => {
     const near = isChatNearBottom();
-    chatAtBottomRef.current = near;
-    if (near) setChatHasNew(false);
+    if (near) {
+      chatAtBottomRef.current = true;
+      chatUserGestureRef.current = false;
+      setChatHasNew(false);
+      return;
+    }
+    // 하단이 아님 — 사용자가 직접 올린 경우에만 추종을 끈다.
+    if (chatUserGestureRef.current) chatAtBottomRef.current = false;
+    // else: 프로그램 스크롤·늦은 이미지 로드 — 판정 보류(추종 유지)
   }, [isChatNearBottom]);
   const scrollChatToBottom = useCallback(() => {
     chatAtBottomRef.current = true;
+    chatUserGestureRef.current = false;
     setChatHasNew(false);
     chatEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+  }, []);
+  // [CHATSCROLL-FIX-02] 하단 정착 — 늦게 로드되는 썸네일·영상이 높이를 늘려 하단이
+  //   밀리는 구간(앱 최초 로드)에서만 잠깐 더 붙잡는다. 3회·900ms 로 한정하고,
+  //   그 사이 사용자가 손으로 올리면 chatAtBottomRef 가 꺼져 전부 무효가 된다.
+  const settleChatToBottom = useCallback(() => {
+    chatEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+    [200, 500, 900].forEach((ms) => setTimeout(() => {
+      if (chatAtBottomRef.current) {
+        chatEndRef.current?.scrollIntoView({ behavior: "auto", block: "end" });
+      }
+    }, ms));
+  }, []);
+  // [CHATSCROLL-FIX-02] 사용자 손짓 감지 — 이것이 있을 때만 '올려 읽는 중'으로 본다.
+  useEffect(() => {
+    const el = chatScrollRef.current;
+    if (!el) return;
+    const mark = () => { chatUserGestureRef.current = true; };
+    const onKey = (e: KeyboardEvent) => {
+      if (["ArrowUp", "ArrowDown", "PageUp", "PageDown", "Home", "End", " "]
+          .includes(e.key)) mark();
+    };
+    const onMouseDown = (e: MouseEvent) => {
+      // 스크롤바 영역 클릭(드래그 시작)만 손짓으로 본다 — 메시지 클릭은 아니다.
+      const r = el.getBoundingClientRect();
+      if (e.clientX > r.left + el.clientWidth) mark();
+    };
+    el.addEventListener("wheel", mark, { passive: true });
+    el.addEventListener("touchmove", mark, { passive: true });
+    el.addEventListener("keydown", onKey);
+    el.addEventListener("mousedown", onMouseDown);
+    return () => {
+      el.removeEventListener("wheel", mark);
+      el.removeEventListener("touchmove", mark);
+      el.removeEventListener("keydown", onKey);
+      el.removeEventListener("mousedown", onMouseDown);
+    };
   }, []);
   const consultationTextareaRef = useRef<HTMLTextAreaElement | null>(null);
 
@@ -698,14 +752,18 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
     // [CHATSCROLL-FIX-01] 하단 근처일 때만 따라간다 — 위에서 읽는 중이면 알림만.
     if (chatAtBottomRef.current || isChatNearBottom()) {
       chatAtBottomRef.current = true;
-      chatEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+      // [CHATSCROLL-FIX-02] 늦게 로드되는 썸네일이 높이를 늘려도 하단에 붙어 있게.
+      settleChatToBottom();
     } else {
       import.meta.env.DEV && console.log("[CHATSCROLL][HOLD]", {
         msgs, gens, reason: "user_scrolled_up",
+        // [CHATSCROLL-FIX-02] 손짓 없이 HOLD 가 찍히면 그건 오판이다 — 근거를 남긴다.
+        gesture: chatUserGestureRef.current,
       });
       setChatHasNew(true);
     }
-  }, [storyPlan?.messages?.length, proposalHistory.length, isChatNearBottom]);
+  }, [storyPlan?.messages?.length, proposalHistory.length, isChatNearBottom,
+      settleChatToBottom]);
 
   const setActivePlayerSafe = useCallback((player: "A" | "B" | null) => {
     activePlayerRef.current = player;
