@@ -164,7 +164,7 @@ const LeftNav: React.FC<LeftNavProps> = ({
               }`}
           >
             <div className="w-5 flex items-center justify-center flex-shrink-0">{item.icon}</div>
-            {!collapsed && <span className="text-[13px] truncate">{item.label}</span>}
+            {!collapsed && <span className="text-[12px] truncate">{item.label}</span>}
           </button>
         ))}
       </div>
@@ -203,7 +203,7 @@ const LeftNav: React.FC<LeftNavProps> = ({
                     {allSelected && <span className="text-white text-[10px] leading-none">✓</span>}
                     {!allSelected && someSelected && <span className="text-white text-[10px] leading-none">−</span>}
                   </span>
-                  <span className="text-[11px] text-foreground/50">
+                  <span className="text-[12px] text-foreground/50">
                     {someSelected ? `${selectedIds.size}개 선택` : "전체 선택"}
                   </span>
                 </label>
@@ -220,7 +220,7 @@ const LeftNav: React.FC<LeftNavProps> = ({
                   <button
                     onClick={exitSelecting}
                     title="취소"
-                    className="text-[11px] text-foreground/40 hover:text-foreground/70 px-1 transition-colors"
+                    className="text-[12px] text-foreground/40 hover:text-foreground/70 px-1 transition-colors"
                   >
                     취소
                   </button>
@@ -229,7 +229,7 @@ const LeftNav: React.FC<LeftNavProps> = ({
             ) : (
               /* 일반 헤더 */
               <>
-                <span className="text-[11px] font-medium text-foreground/40 uppercase tracking-widest">
+                <span className="text-[12px] font-medium text-foreground/40 uppercase tracking-widest">
                   프로젝트
                 </span>
                 <div className="flex items-center gap-0.5">
@@ -278,7 +278,7 @@ const LeftNav: React.FC<LeftNavProps> = ({
                         if (e.key === "Escape") setRenamingId(null);
                       }}
                       onBlur={() => setRenamingId(null)}
-                      className="w-full bg-secondary/60 text-foreground text-[13px] px-2 py-1 rounded outline-none border border-primary/40"
+                      className="w-full bg-secondary/60 text-foreground text-[12px] px-2 py-1 rounded outline-none border border-primary/40"
                     />
                   </div>
                 ) : (
@@ -327,7 +327,7 @@ const LeftNav: React.FC<LeftNavProps> = ({
                       )}
                       {!collapsed && (
                         <>
-                          <span className="text-[13px] font-normal truncate flex-1">{proj.name}</span>
+                          <span className="text-[12px] font-normal truncate flex-1">{proj.name}</span>
                           {!isSelecting && (
                             <button
                               onClick={(e) => {
@@ -343,7 +343,7 @@ const LeftNav: React.FC<LeftNavProps> = ({
                       )}
                     </div>
                     {!collapsed && (
-                      <span className="text-[11px] text-foreground/40 ml-[28px] block mt-0.5">
+                      <span className="text-[12px] text-foreground/40 ml-[28px] block mt-0.5">
                         {proj.date} · {proj.count}개 영상
                       </span>
                     )}
@@ -358,13 +358,13 @@ const LeftNav: React.FC<LeftNavProps> = ({
                         setRenamingId(proj.id);
                         setMenuOpenId(null);
                       }}
-                      className="w-full text-left px-3 py-2 text-[13px] text-foreground/70 hover:bg-secondary/50 hover:text-foreground transition-colors"
+                      className="w-full text-left px-3 py-2 text-[12px] text-foreground/70 hover:bg-secondary/50 hover:text-foreground transition-colors"
                     >
                       이름 변경
                     </button>
                     <button
                       onClick={() => requestDelete([proj.id], [proj.name])}
-                      className="w-full text-left px-3 py-2 text-[13px] text-red-400 hover:bg-red-500/10 transition-colors"
+                      className="w-full text-left px-3 py-2 text-[12px] text-red-400 hover:bg-red-500/10 transition-colors"
                     >
                       삭제
                     </button>
@@ -395,7 +395,7 @@ const LeftNav: React.FC<LeftNavProps> = ({
               }`}
           >
             <div className="w-5 flex items-center justify-center flex-shrink-0">{item.icon}</div>
-            {!collapsed && <span className="text-[13px]">{item.label}</span>}
+            {!collapsed && <span className="text-[12px]">{item.label}</span>}
           </button>
         ))}
       </div>
