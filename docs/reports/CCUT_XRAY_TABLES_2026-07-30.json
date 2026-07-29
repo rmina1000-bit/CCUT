@@ -1,0 +1,830 @@
+{
+ "admin_ai_runs": {
+  "rows": 14,
+  "orm_class": null,
+  "write_sites": [
+   "ccut_backend/admin/service.py:343",
+   "ccut_backend/admin/service.py:849"
+  ],
+  "read_sites": [
+   "ccut_backend/admin/service.py:1204",
+   "ccut_backend/admin/service.py:1229"
+  ]
+ },
+ "admin_audit_log": {
+  "rows": 9,
+  "orm_class": null,
+  "write_sites": [
+   "ccut_backend/admin/service.py:301",
+   "ccut_backend/admin/service.py:464"
+  ],
+  "read_sites": [
+   "ccut_backend/admin/service.py:1536",
+   "ccut_backend/admin/service.py:500",
+   "ccut_backend/admin/service.py:553",
+   "ccut_backend/admin/service.py:749"
+  ]
+ },
+ "admin_legal_requests": {
+  "rows": 0,
+  "orm_class": null,
+  "write_sites": [
+   "ccut_backend/admin/service.py:1497",
+   "ccut_backend/admin/service.py:1523",
+   "ccut_backend/admin/service.py:328"
+  ],
+  "read_sites": [
+   "ccut_backend/admin/service.py:1483",
+   "ccut_backend/admin/service.py:1516"
+  ]
+ },
+ "admin_point_events": {
+  "rows": 0,
+  "orm_class": null,
+  "write_sites": [
+   "ccut_backend/admin/service.py:382"
+  ],
+  "read_sites": [
+   "ccut_backend/admin/service.py:1099"
+  ]
+ },
+ "admin_products": {
+  "rows": 0,
+  "orm_class": null,
+  "write_sites": [
+   "ccut_backend/admin/service.py:1062",
+   "ccut_backend/admin/service.py:1087",
+   "ccut_backend/admin/service.py:394"
+  ],
+  "read_sites": [
+   "ccut_backend/admin/service.py:1040",
+   "ccut_backend/admin/service.py:1056",
+   "ccut_backend/admin/service.py:1078"
+  ]
+ },
+ "admin_saved_queries": {
+  "rows": 1,
+  "orm_class": null,
+  "write_sites": [
+   "ccut_backend/admin/service.py:311",
+   "ccut_backend/admin/service.py:638"
+  ],
+  "read_sites": []
+ },
+ "admin_security_events": {
+  "rows": 0,
+  "orm_class": null,
+  "write_sites": [
+   "ccut_backend/admin/service.py:1020",
+   "ccut_backend/admin/service.py:408",
+   "ccut_backend/admin/service.py:996"
+  ],
+  "read_sites": [
+   "ccut_backend/admin/service.py:1015",
+   "ccut_backend/admin/service.py:689",
+   "ccut_backend/admin/service.py:691",
+   "ccut_backend/admin/service.py:974"
+  ]
+ },
+ "admin_subscription_events": {
+  "rows": 0,
+  "orm_class": null,
+  "write_sites": [
+   "ccut_backend/admin/service.py:369"
+  ],
+  "read_sites": []
+ },
+ "admin_support_cases": {
+  "rows": 0,
+  "orm_class": null,
+  "write_sites": [
+   "ccut_backend/admin/service.py:423",
+   "ccut_backend/admin/service.py:886",
+   "ccut_backend/admin/service.py:949"
+  ],
+  "read_sites": [
+   "ccut_backend/admin/service.py:706",
+   "ccut_backend/admin/service.py:865",
+   "ccut_backend/admin/service.py:901",
+   "ccut_backend/admin/service.py:916"
+  ]
+ },
+ "admin_surface_configs": {
+  "rows": 0,
+  "orm_class": null,
+  "write_sites": [
+   "ccut_backend/admin/service.py:1143",
+   "ccut_backend/admin/service.py:1165",
+   "ccut_backend/admin/service.py:357"
+  ],
+  "read_sites": [
+   "ccut_backend/admin/service.py:1120",
+   "ccut_backend/admin/service.py:1159"
+  ]
+ },
+ "admin_work_items": {
+  "rows": 1,
+  "orm_class": null,
+  "write_sites": [
+   "ccut_backend/admin/service.py:440",
+   "ccut_backend/admin/service.py:803",
+   "ccut_backend/admin/service.py:829"
+  ],
+  "read_sites": [
+   "ccut_backend/admin/service.py:738",
+   "ccut_backend/admin/service.py:777",
+   "ccut_backend/admin/service.py:822"
+  ]
+ },
+ "archive_result_sets": {
+  "rows": 71,
+  "orm_class": null,
+  "write_sites": [
+   "ccut_backend/archive_chat_router.py:359",
+   "ccut_backend/archive_chat_router.py:53"
+  ],
+  "read_sites": [
+   "ccut_backend/archive_chat_router.py:394"
+  ]
+ },
+ "daily_service_metrics": {
+  "rows": 0,
+  "orm_class": null,
+  "write_sites": [
+   "ccut_backend/admin/service.py:319"
+  ],
+  "read_sites": [
+   "ccut_backend/admin/service.py:578",
+   "ccut_backend/admin/service.py:582"
+  ]
+ },
+ "decisions": {
+  "rows": 0,
+  "orm_class": "DecisionTable",
+  "write_sites": [],
+  "read_sites": []
+ },
+ "edit_overlay": {
+  "rows": 60,
+  "orm_class": "EditOverlayTable",
+  "write_sites": [],
+  "read_sites": [
+   "ccut_backend/edit_contract/shadow_compare.py:28",
+   "ccut_backend/engine/fragment_vault.py:310",
+   "ccut_backend/main.py:4207",
+   "ccut_backend/main.py:4266"
+  ]
+ },
+ "editing_pattern_memory": {
+  "rows": 0,
+  "orm_class": "EditingPatternMemoryTable",
+  "write_sites": [],
+  "read_sites": [
+   "ccut_backend/learning/pattern_memory.py:20",
+   "ccut_backend/learning/pattern_memory.py:67",
+   "ccut_backend/learning/pattern_memory.py:89"
+  ]
+ },
+ "evidence_board": {
+  "rows": 259,
+  "orm_class": "EvidenceTable",
+  "write_sites": [
+   "ccut_backend/archive/manager.py:272"
+  ],
+  "read_sites": [
+   "ccut_backend/archive/manager.py:270",
+   "ccut_backend/archive/manager.py:324",
+   "ccut_backend/archive/manager.py:374",
+   "ccut_backend/archive/manager.py:746",
+   "ccut_backend/engine/fragment_indexer.py:78",
+   "ccut_backend/lab/audit.py:665",
+   "ccut_backend/learning/weak_label_generator.py:41",
+   "ccut_backend/story_gate/proposal_axis.py:545"
+  ]
+ },
+ "export_input": {
+  "rows": 21,
+  "orm_class": "ExportInputTable",
+  "write_sites": [
+   "ccut_backend/archive/manager.py:662",
+   "ccut_backend/archive/manager.py:770",
+   "ccut_backend/archive/manager.py:773",
+   "ccut_backend/archive/manager.py:775"
+  ],
+  "read_sites": [
+   "ccut_backend/archive/manager.py:662",
+   "ccut_backend/archive/manager.py:770",
+   "ccut_backend/archive/manager.py:773",
+   "ccut_backend/archive/manager.py:792",
+   "ccut_backend/archive/manager.py:799",
+   "ccut_backend/engine/fragment_indexer.py:32",
+   "ccut_backend/engine/render_engine.py:92",
+   "ccut_backend/main.py:3029",
+   "ccut_backend/main.py:3066",
+   "ccut_backend/scripts/render_probe.py:47",
+   "ccut_backend/scripts/render_probe.py:88"
+  ]
+ },
+ "export_results": {
+  "rows": 6,
+  "orm_class": "ExportResultTable",
+  "write_sites": [
+   "ccut_backend/archive/manager.py:772",
+   "ccut_backend/main.py:213",
+   "ccut_backend/main.py:216",
+   "ccut_backend/main.py:222"
+  ],
+  "read_sites": [
+   "ccut_backend/admin/service.py:487",
+   "ccut_backend/admin/service.py:610",
+   "ccut_backend/admin/service.py:669",
+   "ccut_backend/archive/manager.py:772",
+   "ccut_backend/archive/manager.py:856",
+   "ccut_backend/archive/manager.py:929",
+   "ccut_backend/main.py:3744",
+   "ccut_backend/main.py:4510",
+   "ccut_backend/scripts/render_probe.py:157"
+  ]
+ },
+ "fragment_edit_state": {
+  "rows": 18,
+  "orm_class": "FragmentEditStateTable",
+  "write_sites": [
+   "ccut_backend/edit_contract/models.py:45",
+   "ccut_backend/edit_contract/service.py:198",
+   "ccut_backend/edit_contract/service.py:227"
+  ],
+  "read_sites": [
+   "ccut_backend/edit_contract/service.py:119",
+   "ccut_backend/edit_contract/service.py:132",
+   "ccut_backend/edit_contract/service.py:285",
+   "ccut_backend/engine/story_template_resolver.py:83",
+   "ccut_backend/ledger_r0.py:234",
+   "ccut_backend/ledger_r0.py:424",
+   "ccut_backend/story_gate/proposal_axis.py:254"
+  ]
+ },
+ "fragment_index": {
+  "rows": 677,
+  "orm_class": "FragmentIndexTable",
+  "write_sites": [
+   "ccut_backend/archive/db_models.py:211",
+   "ccut_backend/engine/face_palette.py:603",
+   "ccut_backend/engine/fragment_indexer.py:217",
+   "ccut_backend/engine/fragment_indexer.py:220",
+   "ccut_backend/engine/fragment_indexer.py:415",
+   "ccut_backend/engine/place_indexer.py:46",
+   "ccut_backend/main.py:5552"
+  ],
+  "read_sites": [
+   "ccut_backend/engine/archive_query.py:108",
+   "ccut_backend/engine/archive_query.py:99",
+   "ccut_backend/engine/face_palette.py:276",
+   "ccut_backend/engine/face_palette.py:569",
+   "ccut_backend/engine/face_palette.py:588",
+   "ccut_backend/engine/face_palette.py:658",
+   "ccut_backend/engine/fragment_indexer.py:217",
+   "ccut_backend/engine/fragment_indexer.py:220",
+   "ccut_backend/engine/fragment_search.py:106",
+   "ccut_backend/engine/fragment_search.py:64",
+   "ccut_backend/engine/fragment_vault.py:136",
+   "ccut_backend/engine/hub.py:63",
+   "ccut_backend/engine/place_indexer.py:25",
+   "ccut_backend/engine/proposal_engine.py:316",
+   "ccut_backend/engine/visual_marker.py:190",
+   "ccut_backend/ledger_r0.py:255",
+   "ccut_backend/ledger_r0.py:262",
+   "ccut_backend/ledger_r0.py:297",
+   "ccut_backend/ledger_r0.py:93",
+   "ccut_backend/main.py:5552",
+   "ccut_backend/pipeline_v2/retriever.py:57",
+   "ccut_backend/story_gate/proposal_axis.py:516"
+  ]
+ },
+ "fragment_places": {
+  "rows": 963,
+  "orm_class": null,
+  "write_sites": [
+   "ccut_backend/engine/fragment_indexer.py:197",
+   "ccut_backend/engine/fragment_indexer.py:440",
+   "ccut_backend/engine/fragment_indexer.py:443",
+   "ccut_backend/engine/place_indexer.py:48",
+   "ccut_backend/engine/place_indexer.py:51"
+  ],
+  "read_sites": [
+   "ccut_backend/archive_chat_router.py:114",
+   "ccut_backend/archive_chat_router.py:142",
+   "ccut_backend/archive_chat_router.py:171",
+   "ccut_backend/engine/archive_query.py:103",
+   "ccut_backend/engine/archive_query.py:111",
+   "ccut_backend/engine/archive_query.py:32",
+   "ccut_backend/engine/fragment_indexer.py:440",
+   "ccut_backend/engine/fragment_vault.py:145",
+   "ccut_backend/engine/place_indexer.py:48"
+  ]
+ },
+ "fragment_vault": {
+  "rows": 685,
+  "orm_class": null,
+  "write_sites": [
+   "ccut_backend/engine/fragment_vault.py:101",
+   "ccut_backend/engine/fragment_vault.py:109",
+   "ccut_backend/engine/fragment_vault.py:226",
+   "ccut_backend/engine/fragment_vault.py:57"
+  ],
+  "read_sites": [
+   "ccut_backend/admin/service.py:485",
+   "ccut_backend/admin/service.py:679",
+   "ccut_backend/archive_chat_router.py:159",
+   "ccut_backend/archive_chat_router.py:188",
+   "ccut_backend/archive_chat_router.py:201",
+   "ccut_backend/archive_chat_router.py:216",
+   "ccut_backend/archive_chat_router.py:323",
+   "ccut_backend/archive_export_router.py:52",
+   "ccut_backend/engine/fragment_vault.py:218",
+   "ccut_backend/engine/fragment_vault.py:316",
+   "ccut_backend/engine/fragment_vault.py:365",
+   "ccut_backend/engine/fragment_vault.py:381",
+   "ccut_backend/engine/fragment_vault.py:382",
+   "ccut_backend/engine/fragment_vault.py:383",
+   "ccut_backend/engine/fragment_vault.py:384",
+   "ccut_backend/engine/fragment_vault.py:385",
+   "ccut_backend/engine/fragment_vault.py:386",
+   "ccut_backend/engine/fragment_vault.py:387",
+   "ccut_backend/engine/fragment_vault.py:94"
+  ]
+ },
+ "fragment_visual_marks": {
+  "rows": 495,
+  "orm_class": null,
+  "write_sites": [
+   "ccut_backend/engine/visual_marker.py:119",
+   "ccut_backend/engine/visual_marker.py:32",
+   "ccut_backend/main.py:5557"
+  ],
+  "read_sites": [
+   "ccut_backend/engine/visual_marker.py:156",
+   "ccut_backend/engine/visual_marker.py:164",
+   "ccut_backend/engine/visual_marker.py:179",
+   "ccut_backend/engine/visual_marker.py:181",
+   "ccut_backend/main.py:5557"
+  ]
+ },
+ "fragments": {
+  "rows": 259,
+  "orm_class": "FragmentTable",
+  "write_sites": [
+   "ccut_backend/archive/db_models.py:18",
+   "ccut_backend/main.py:1337",
+   "ccut_backend/main.py:1351"
+  ],
+  "read_sites": [
+   "ccut_backend/archive/manager.py:157",
+   "ccut_backend/archive/manager.py:173",
+   "ccut_backend/archive/manager.py:188",
+   "ccut_backend/archive/manager.py:209",
+   "ccut_backend/archive/manager.py:21",
+   "ccut_backend/archive/manager.py:377",
+   "ccut_backend/engine/fragment_indexer.py:54",
+   "ccut_backend/learning/weak_label_generator.py:34",
+   "ccut_backend/main.py:1337",
+   "ccut_backend/main.py:1351",
+   "ccut_backend/scripts/l1_batch_scan.py:21",
+   "ccut_backend/storage_manager/janitor.py:34"
+  ]
+ },
+ "human_watch_sessions": {
+  "rows": 0,
+  "orm_class": "HumanWatchSessionTable",
+  "write_sites": [],
+  "read_sites": [
+   "ccut_backend/learning/human_watch_session.py:107"
+  ]
+ },
+ "mirror_ledger": {
+  "rows": 19,
+  "orm_class": null,
+  "write_sites": [],
+  "read_sites": [
+   "ccut_backend/engine/converse.py:208",
+   "ccut_backend/engine/intent_router.py:201",
+   "ccut_backend/main.py:459"
+  ]
+ },
+ "narrative_notes": {
+  "rows": 39,
+  "orm_class": null,
+  "write_sites": [
+   "ccut_backend/engine/narrative_ledger.py:30",
+   "ccut_backend/engine/narrative_ledger.py:80"
+  ],
+  "read_sites": [
+   "ccut_backend/engine/hub.py:106",
+   "ccut_backend/engine/narrative_ledger.py:107",
+   "ccut_backend/engine/narrative_ledger.py:130",
+   "ccut_backend/engine/narrative_ledger.py:94",
+   "ccut_backend/pipeline_v2/retriever.py:61"
+  ]
+ },
+ "person_faces": {
+  "rows": 667,
+  "orm_class": null,
+  "write_sites": [
+   "ccut_backend/engine/face_palette.py:108",
+   "ccut_backend/engine/face_palette.py:358",
+   "ccut_backend/engine/face_palette.py:465",
+   "ccut_backend/engine/face_palette.py:468"
+  ],
+  "read_sites": [
+   "ccut_backend/archive_chat_router.py:134",
+   "ccut_backend/archive_chat_router.py:168",
+   "ccut_backend/archive_chat_router.py:185",
+   "ccut_backend/archive_chat_router.py:197",
+   "ccut_backend/engine/archive_query.py:26",
+   "ccut_backend/engine/face_palette.py:277",
+   "ccut_backend/engine/face_palette.py:394",
+   "ccut_backend/engine/face_palette.py:466",
+   "ccut_backend/engine/face_palette.py:468",
+   "ccut_backend/engine/face_palette.py:501",
+   "ccut_backend/engine/face_palette.py:554",
+   "ccut_backend/engine/face_palette.py:568",
+   "ccut_backend/engine/face_palette.py:637",
+   "ccut_backend/engine/face_palette.py:656",
+   "ccut_backend/engine/fragment_show.py:79",
+   "ccut_backend/engine/fragment_vault.py:139"
+  ]
+ },
+ "persons": {
+  "rows": 64,
+  "orm_class": null,
+  "write_sites": [
+   "ccut_backend/engine/face_palette.py:227",
+   "ccut_backend/engine/face_palette.py:237",
+   "ccut_backend/engine/face_palette.py:247",
+   "ccut_backend/engine/face_palette.py:326",
+   "ccut_backend/engine/face_palette.py:332",
+   "ccut_backend/engine/face_palette.py:353",
+   "ccut_backend/engine/face_palette.py:469",
+   "ccut_backend/engine/face_palette.py:476",
+   "ccut_backend/engine/face_palette.py:528",
+   "ccut_backend/engine/face_palette.py:536",
+   "ccut_backend/engine/face_palette.py:634",
+   "ccut_backend/engine/face_palette.py:674",
+   "ccut_backend/engine/face_palette.py:99"
+  ],
+  "read_sites": [
+   "ccut_backend/admin/service.py:488",
+   "ccut_backend/archive_chat_router.py:77",
+   "ccut_backend/engine/archive_query.py:21",
+   "ccut_backend/engine/face_palette.py:282",
+   "ccut_backend/engine/face_palette.py:386",
+   "ccut_backend/engine/face_palette.py:395",
+   "ccut_backend/engine/face_palette.py:469",
+   "ccut_backend/engine/face_palette.py:496",
+   "ccut_backend/engine/face_palette.py:555",
+   "ccut_backend/engine/face_palette.py:623",
+   "ccut_backend/engine/face_palette.py:657",
+   "ccut_backend/engine/fragment_show.py:73",
+   "ccut_backend/engine/fragment_vault.py:140",
+   "ccut_backend/engine/hub.py:600",
+   "ccut_backend/engine/hub.py:604",
+   "ccut_backend/main.py:4651",
+   "ccut_backend/main.py:4652"
+  ]
+ },
+ "preference_pairs": {
+  "rows": 12,
+  "orm_class": "PreferencePairTable",
+  "write_sites": [],
+  "read_sites": []
+ },
+ "programs": {
+  "rows": 6,
+  "orm_class": "ProgramTable",
+  "write_sites": [
+   "ccut_backend/ledger_r0.py:515",
+   "ccut_backend/story_gate/service.py:257",
+   "ccut_backend/story_gate/service.py:59",
+   "ccut_backend/story_gate/service.py:61"
+  ],
+  "read_sites": [
+   "ccut_backend/admin/service.py:482",
+   "ccut_backend/admin/service.py:517",
+   "ccut_backend/engine/archive_query.py:79",
+   "ccut_backend/engine/hub.py:118",
+   "ccut_backend/ledger_r0.py:195",
+   "ccut_backend/ledger_r0.py:495",
+   "ccut_backend/main.py:2685",
+   "ccut_backend/main.py:3034",
+   "ccut_backend/main.py:3153",
+   "ccut_backend/main.py:3203",
+   "ccut_backend/main.py:3526",
+   "ccut_backend/main.py:4245",
+   "ccut_backend/main.py:4354",
+   "ccut_backend/main.py:4410",
+   "ccut_backend/main.py:5264",
+   "ccut_backend/main.py:5275",
+   "ccut_backend/main.py:5331",
+   "ccut_backend/main.py:5358",
+   "ccut_backend/main.py:5390",
+   "ccut_backend/main.py:5407",
+   "ccut_backend/main.py:5429",
+   "ccut_backend/main.py:5445",
+   "ccut_backend/main.py:5593",
+   "ccut_backend/storage_manager/janitor.py:54",
+   "ccut_backend/storage_manager/usage_api.py:36",
+   "ccut_backend/story_gate/service.py:196",
+   "ccut_backend/story_gate/service.py:252",
+   "ccut_backend/story_gate/service.py:93"
+  ]
+ },
+ "project_sources": {
+  "rows": 65,
+  "orm_class": "ProjectSourceTable",
+  "write_sites": [
+   "ccut_backend/main.py:2716",
+   "ccut_backend/main.py:4425",
+   "ccut_backend/main.py:4453",
+   "ccut_backend/main.py:5269",
+   "ccut_backend/main.py:5450"
+  ],
+  "read_sites": [
+   "ccut_backend/archive/manager.py:893",
+   "ccut_backend/engine/archive_query.py:77",
+   "ccut_backend/engine/converse.py:254",
+   "ccut_backend/engine/converse.py:257",
+   "ccut_backend/engine/converse.py:263",
+   "ccut_backend/engine/face_palette.py:269",
+   "ccut_backend/engine/face_palette.py:564",
+   "ccut_backend/engine/hub.py:118",
+   "ccut_backend/ledger_r0.py:69",
+   "ccut_backend/main.py:2365",
+   "ccut_backend/main.py:2714",
+   "ccut_backend/main.py:3528",
+   "ccut_backend/main.py:3598",
+   "ccut_backend/main.py:3724",
+   "ccut_backend/main.py:4423",
+   "ccut_backend/main.py:4451",
+   "ccut_backend/main.py:4465",
+   "ccut_backend/main.py:4736",
+   "ccut_backend/main.py:5254",
+   "ccut_backend/main.py:5269",
+   "ccut_backend/main.py:5450",
+   "ccut_backend/main.py:739",
+   "ccut_backend/storage_manager/usage_api.py:26",
+   "ccut_backend/story_gate/service.py:144"
+  ]
+ },
+ "project_timeline": {
+  "rows": 991,
+  "orm_class": null,
+  "write_sites": [
+   "ccut_backend/engine/timeline_store.py:27",
+   "ccut_backend/engine/timeline_store.py:53"
+  ],
+  "read_sites": [
+   "ccut_backend/engine/converse.py:164",
+   "ccut_backend/engine/converse.py:266",
+   "ccut_backend/engine/converse.py:698",
+   "ccut_backend/engine/narrative_ledger.py:179",
+   "ccut_backend/engine/timeline_store.py:67"
+  ]
+ },
+ "proposals": {
+  "rows": 172,
+  "orm_class": "ProposalTable",
+  "write_sites": [
+   "ccut_backend/archive/manager.py:625",
+   "ccut_backend/main.py:2918",
+   "ccut_backend/story_gate/proposal_axis.py:909",
+   "ccut_backend/story_gate/proposal_axis.py:912"
+  ],
+  "read_sites": [
+   "ccut_backend/admin/service.py:483",
+   "ccut_backend/archive/manager.py:376",
+   "ccut_backend/archive/manager.py:622",
+   "ccut_backend/archive/manager.py:643",
+   "ccut_backend/archive/manager.py:665",
+   "ccut_backend/archive/manager.py:701",
+   "ccut_backend/archive/manager.py:724",
+   "ccut_backend/archive/manager.py:742",
+   "ccut_backend/archive/manager.py:754",
+   "ccut_backend/engine/converse.py:239",
+   "ccut_backend/main.py:1723",
+   "ccut_backend/main.py:2362",
+   "ccut_backend/main.py:2893",
+   "ccut_backend/main.py:2963",
+   "ccut_backend/main.py:2969",
+   "ccut_backend/main.py:2971",
+   "ccut_backend/main.py:3031",
+   "ccut_backend/main.py:3524",
+   "ccut_backend/story_gate/proposal_axis.py:603",
+   "ccut_backend/story_gate/service.py:112"
+  ]
+ },
+ "published": {
+  "rows": 0,
+  "orm_class": "PublishedTable",
+  "write_sites": [
+   "ccut_backend/main.py:4153",
+   "ccut_backend/main.py:4522"
+  ],
+  "read_sites": [
+   "ccut_backend/main.py:3224",
+   "ccut_backend/main.py:3471",
+   "ccut_backend/main.py:3500"
+  ]
+ },
+ "quick_scan": {
+  "rows": 80,
+  "orm_class": "QuickScanTable",
+  "write_sites": [],
+  "read_sites": [
+   "ccut_backend/archive/manager.py:508",
+   "ccut_backend/archive/manager.py:524"
+  ]
+ },
+ "semantic_fragments": {
+  "rows": 677,
+  "orm_class": "SemanticFragmentTable",
+  "write_sites": [
+   "ccut_backend/archive/manager.py:543",
+   "ccut_backend/engine/silero_sensor.py:290"
+  ],
+  "read_sites": [
+   "ccut_backend/archive/manager.py:116",
+   "ccut_backend/archive/manager.py:128",
+   "ccut_backend/archive/manager.py:375",
+   "ccut_backend/archive/manager.py:543",
+   "ccut_backend/archive/manager.py:565",
+   "ccut_backend/archive/manager.py:744",
+   "ccut_backend/archive_chat_router.py:332",
+   "ccut_backend/archive_export_router.py:59",
+   "ccut_backend/engine/archive_query.py:63",
+   "ccut_backend/engine/converse.py:253",
+   "ccut_backend/engine/converse.py:262",
+   "ccut_backend/engine/converse.py:499",
+   "ccut_backend/engine/fragment_indexer.py:111",
+   "ccut_backend/engine/fragment_show.py:100",
+   "ccut_backend/engine/fragment_show.py:79",
+   "ccut_backend/engine/fragment_vault.py:154",
+   "ccut_backend/engine/hub.py:62",
+   "ccut_backend/engine/intent_router.py:231",
+   "ccut_backend/engine/silero_sensor.py:248",
+   "ccut_backend/engine/silero_sensor.py:322",
+   "ccut_backend/lab/audit.py:100",
+   "ccut_backend/lab/audit.py:306",
+   "ccut_backend/lab/audit.py:314",
+   "ccut_backend/lab/audit.py:658",
+   "ccut_backend/ledger_r0.py:293",
+   "ccut_backend/ledger_r0.py:80",
+   "ccut_backend/main.py:4649",
+   "ccut_backend/pipeline_v2/retriever.py:56",
+   "ccut_backend/storage_manager/janitor.py:36",
+   "ccut_backend/story_gate/proposal_axis.py:203",
+   "ccut_backend/story_gate/proposal_axis.py:227",
+   "ccut_backend/story_gate/proposal_axis.py:509",
+   "ccut_backend/story_gate/proposal_axis.py:741",
+   "ccut_backend/story_gate/service.py:143"
+  ]
+ },
+ "sources": {
+  "rows": 86,
+  "orm_class": "SourceTable",
+  "write_sites": [
+   "ccut_backend/engine/narrative_ledger.py:157",
+   "ccut_backend/engine/narrative_ledger.py:43",
+   "ccut_backend/main.py:2716",
+   "ccut_backend/main.py:278",
+   "ccut_backend/main.py:4425",
+   "ccut_backend/main.py:4453",
+   "ccut_backend/scripts/defense_demo_setup.py:65"
+  ],
+  "read_sites": [
+   "ccut_backend/admin/service.py:481",
+   "ccut_backend/admin/service.py:503",
+   "ccut_backend/admin/service.py:516",
+   "ccut_backend/admin/service.py:608",
+   "ccut_backend/archive/manager.py:106",
+   "ccut_backend/archive/manager.py:36",
+   "ccut_backend/archive/manager.py:51",
+   "ccut_backend/archive/manager.py:55",
+   "ccut_backend/archive/manager.py:73",
+   "ccut_backend/archive_chat_router.py:308",
+   "ccut_backend/archive_export_router.py:66",
+   "ccut_backend/engine/fragment_indexer.py:230",
+   "ccut_backend/engine/fragment_show.py:67",
+   "ccut_backend/engine/fragment_vault.py:123",
+   "ccut_backend/engine/fragment_vault.py:196",
+   "ccut_backend/engine/fragment_vault.py:219",
+   "ccut_backend/engine/fragment_vault.py:271",
+   "ccut_backend/engine/fragment_vault.py:303",
+   "ccut_backend/engine/hub.py:94",
+   "ccut_backend/engine/l1_scanner.py:17",
+   "ccut_backend/engine/narrative_ledger.py:151",
+   "ccut_backend/engine/narrative_ledger.py:174",
+   "ccut_backend/engine/pipeline_watchdog.py:56",
+   "ccut_backend/engine/proposal_engine.py:554",
+   "ccut_backend/engine/silero_sensor.py:257",
+   "ccut_backend/ledger_r0.py:248",
+   "ccut_backend/main.py:1293",
+   "ccut_backend/main.py:1344",
+   "ccut_backend/main.py:2384",
+   "ccut_backend/main.py:3074",
+   "ccut_backend/main.py:3615",
+   "ccut_backend/main.py:3656",
+   "ccut_backend/main.py:3719",
+   "ccut_backend/main.py:3801",
+   "ccut_backend/main.py:3815",
+   "ccut_backend/main.py:3843",
+   "ccut_backend/main.py:5467",
+   "ccut_backend/main.py:5520",
+   "ccut_backend/precision_alignment/service.py:51",
+   "ccut_backend/scripts/l1_batch_scan.py:16",
+   "ccut_backend/scripts/render_probe.py:97",
+   "ccut_backend/storage_manager/janitor.py:46",
+   "ccut_backend/story_gate/proposal_axis.py:741"
+  ]
+ },
+ "sqlite_sequence": {
+  "rows": 10,
+  "orm_class": null,
+  "write_sites": [],
+  "read_sites": []
+ },
+ "story_approval": {
+  "rows": 64,
+  "orm_class": null,
+  "write_sites": [],
+  "read_sites": []
+ },
+ "subtitles": {
+  "rows": 80,
+  "orm_class": "SubtitleTable",
+  "write_sites": [
+   "ccut_backend/archive/db_models.py:99"
+  ],
+  "read_sites": [
+   "ccut_backend/lab/audit.py:661",
+   "ccut_backend/ledger_r0.py:274",
+   "ccut_backend/main.py:1095",
+   "ccut_backend/story_gate/proposal_axis.py:232",
+   "ccut_backend/story_gate/proposal_axis.py:524"
+  ]
+ },
+ "temporal_flow_memory": {
+  "rows": 0,
+  "orm_class": "TemporalFlowMemoryTable",
+  "write_sites": [],
+  "read_sites": [
+   "ccut_backend/learning/temporal_flow_learner.py:35",
+   "ccut_backend/learning/temporal_flow_learner.py:78"
+  ]
+ },
+ "user_edit_decisions": {
+  "rows": 12,
+  "orm_class": "UserEditDecisionTable",
+  "write_sites": [],
+  "read_sites": [
+   "ccut_backend/learning/contrast_learner.py:110",
+   "ccut_backend/learning/proposal_ranker.py:53",
+   "ccut_backend/learning/teacher_mentor.py:88",
+   "ccut_backend/learning/temporal_flow_learner.py:168",
+   "ccut_backend/learning/youtube_robot.py:214",
+   "ccut_backend/main.py:5829"
+  ]
+ },
+ "user_intent": {
+  "rows": 0,
+  "orm_class": "UserIntentTable",
+  "write_sites": [],
+  "read_sites": [
+   "ccut_backend/archive/manager.py:586",
+   "ccut_backend/archive/manager.py:604"
+  ]
+ },
+ "vault_events": {
+  "rows": 4453,
+  "orm_class": null,
+  "write_sites": [
+   "ccut_backend/engine/fragment_vault.py:245",
+   "ccut_backend/engine/fragment_vault.py:282"
+  ],
+  "read_sites": [
+   "ccut_backend/admin/service.py:484",
+   "ccut_backend/engine/fragment_vault.py:335",
+   "ccut_backend/engine/fragment_vault.py:369"
+  ]
+ },
+ "weak_labels": {
+  "rows": 0,
+  "orm_class": "WeakLabelTable",
+  "write_sites": [],
+  "read_sites": [
+   "ccut_backend/learning/proposal_ranker.py:39",
+   "ccut_backend/learning/teacher_ai_evaluator.py:110",
+   "ccut_backend/learning/teacher_ai_evaluator.py:88",
+   "ccut_backend/learning/weak_label_generator.py:125"
+  ]
+ }
+}
