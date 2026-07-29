@@ -134,11 +134,14 @@ class RenderEngine:
         from story_gate.proposal_axis import technique_for_mode
         _tech = technique_for_mode(export_input.get("mode"))
         print(f"[RENDER][PUNCH] mode={export_input.get('mode')} technique={_tech}")
+        # [LAB-43] program_id 동반 — 없으면 경계 veto 가 영원히 UNKNOWN(도달 불가).
+        from story_gate.proposal_axis import program_id_for_proposal
         result = self._render_with_ffmpeg(
             clips=clips,
             source_paths=source_map["paths"],
             output_path=str(output_path),
-            technique=_tech
+            technique=_tech,
+            program_id=program_id_for_proposal(export_input.get("proposal_id")),
         )
 
         # 6. Render Result 저장
@@ -226,7 +229,7 @@ class RenderEngine:
             
         return {"ok": True, "paths": paths}
 
-    def _render_with_ffmpeg(self, clips: List[Dict[str, Any]], source_paths: Dict[str, str], output_path: str, technique: str = None) -> Dict[str, Any]:
+    def _render_with_ffmpeg(self, clips: List[Dict[str, Any]], source_paths: Dict[str, str], output_path: str, technique: str = None, program_id: str = None) -> Dict[str, Any]:
         """[STREAM-FIX] concat inpoint/outpoint는 timestamp를 손상시켜 실제 fps가
         1~2fps로 떨어진다(프레임당 1초 재생). 각 클립을 -ss/-to로 정밀 추출하면서
         30fps CFR · 1920x1080 · 48kHz로 정규화한 뒤 concat copy로 합친다.
@@ -256,7 +259,8 @@ class RenderEngine:
                 try:
                     from story_gate.proposal_axis import punch_filter
                     _pf = punch_filter(technique, clip.get("fragment_id"),
-                                       float(clip["start"]), float(clip["end"]), 1920, 1080)
+                                       float(clip["start"]), float(clip["end"]), 1920, 1080,
+                                       program_id=program_id)
                     if _pf:
                         # [LAB-24] zoompan 앞에서 입력 프레임률을 30으로 고정한다.
                         #   zoompan 은 입력 1프레임당 1프레임을 내고 그 출력을 30fps 타임베이스에

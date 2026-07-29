@@ -131,8 +131,11 @@ def ensure_proposal_preview(
             _vf = "scale=1280:720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=30"
             try:
                 from story_gate.proposal_axis import punch_filter, technique_for_mode
+                # [LAB-43] program_id 동반 — 없으면 경계 veto 가 영원히 UNKNOWN.
+                from story_gate.proposal_axis import program_id_for_proposal as _pid
                 _pf = punch_filter(technique_for_mode(variant), clip.get("fragment_id"),
-                                   float(clip["start"]), float(clip["end"]), 1280, 720)
+                                   float(clip["start"]), float(clip["end"]), 1280, 720,
+                                   program_id=_pid(proposal_id))
                 if _pf:
                     _vf += "," + _pf
                     print(f"[PREVIEW_RENDER][PUNCH] clip {idx} {clip.get('fragment_id')} -> {_pf[:70]}...")

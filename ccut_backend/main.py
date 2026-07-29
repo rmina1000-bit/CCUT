@@ -2635,6 +2635,9 @@ async def post_generate_project_proposals(req: ProjectProposalRequest):
                     # [PUNCH-1 P4] A/B가 갈리는 유일한 축. 조각·순서는 위 rebuild가 이미 동일하게 맞췄다.
                     _p["technique_id"] = _axis.technique_for_mode(_p.get("mode"))
                 proposals, _word_snap_report = _axis.apply_word_boundary_snap(proposals, project_id)
+                # [LAB-43] 경계 규칙 3종 집행 연결 — 구판은 정의만 되고 호출자가 0건이라
+                #   한 번도 돌지 않았다(무등작). 값은 바꾸지 않고 위반을 사실로 남긴다.
+                _boundary_report = _axis.run_boundary_checks(project_id, _appr_fids)
                 _axis_report = {
                     "story_approval_id": _appr_id,
                     "approval_item_count": len(_appr_fids),
@@ -2642,6 +2645,7 @@ async def post_generate_project_proposals(req: ProjectProposalRequest):
                     "unresolved_fids": _rb.get("unresolved_fids") or [],
                     "verify_violations": _violations,
                     "word_boundary_snap": _word_snap_report,
+                    "boundary_rules": _boundary_report,
                 }
                 print(f"[PROPOSAL-AXIS] approval_id={_appr_id} fids={len(_appr_fids)} "
                       f"technique={ {_p.get('mode'): _p.get('technique_id') for _p in proposals} } "
@@ -5546,6 +5550,12 @@ async def delete_source(source_id: str, mode: str = "source_only", db: Session =
             # fragment_index (raw, FTS 트리거 동반)
             db.execute(__import__("sqlalchemy").text(
                 "DELETE FROM fragment_index WHERE source_id = :sid"), {"sid": source_id})
+            # [LAB-43 ④] 시각 표식도 같은 삭제 이벤트에서 함께 지운다.
+            #   구판은 fragment_index 만 지워 표식이 홀로 남았다 — 소스를 지울 때마다
+            #   고아가 쌓이는 구조였다(LAB-43 STEP 0.5 ④ 실측: 표식 삭제 코드 0건).
+            db.execute(__import__("sqlalchemy").text(
+                "DELETE FROM fragment_visual_marks WHERE source_id = :sid"),
+                {"sid": source_id})
             db.delete(s)
             db.commit()
         except Exception as _e:

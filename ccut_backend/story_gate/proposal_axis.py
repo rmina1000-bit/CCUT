@@ -488,8 +488,14 @@ def _register_rules():
 
 # [BOUNDARY-1 B4 · INV-6] 사용자 오버레이는 집행 대상이 아니다.
 #   WORD_BOUNDARY_SNAP은 semantic_fragments AI 경계에만 적용된다.
-VETO_RULE_IDS = ("RULE_PUNCH_ZOOM_BOUND", "RULE_TECHNIQUE_PATH_UNIFORM",
-                 "RULE_WORD_BOUNDARY_SNAP")
+# [LAB-43 ⓐ 국장 판정 2026-07-30] RULE_WORD_BOUNDARY_SNAP 을 veto 에서 뺀다.
+#   근거: _check_word_boundary_snap 의 판정문이 스스로 "경고만(사용자 결정 우선,
+#   INV-6)"이라 적으면서 veto 목록에 있어, 검사 함수와 등록부가 어긋나 있었다.
+#   지금까지는 ctx 에 program_id 가 없어 늘 UNKNOWN 이라 모순이 드러나지 않았고,
+#   LAB-43 이 program_id 를 이어 붙이자 승인 4조각 중 2건의 punch_in 이 차단됐다
+#   (worst_ms 230·1200 > 임계 200). 경고는 경고로 집행한다 — WARN(run_boundary_checks)
+#   으로 위반은 계속 기록되고, 기법 적용을 막지는 않는다.
+VETO_RULE_IDS = ("RULE_PUNCH_ZOOM_BOUND", "RULE_TECHNIQUE_PATH_UNIFORM")
 
 
 def punch_spec(fragment_id):
@@ -586,16 +592,42 @@ def _punch_filter_raw(fragment_id, clip_start, clip_end, out_w, out_h, fps=30):
     ).format(t=t_rel, z=z, r=ramp, w=out_w, h=out_h, f=fps)
 
 
-def punch_rule_results(fragment_id, clip_start, clip_end):
+def program_id_for_proposal(proposal_id):
+    """[LAB-43] proposal → program_id. veto ctx 를 채우는 유일한 경로.
+
+    구판은 punch_rule_results ctx 에 program_id 가 없어 RULE_WORD_BOUNDARY_SNAP 이
+    항상 UNKNOWN 을 반환했고, has_veto 는 VIOLATION 만 보므로 차단이 서지 않았다
+    (LAB-15 감사가 'veto_unreachable' 로 값 확정). 여기서 값을 만들어 도달시킨다.
+    못 찾으면 None — 구동작(UNKNOWN, 차단 없음) 그대로다.
+    """
+    if not proposal_id:
+        return None
+    try:
+        con = _connect()
+        try:
+            row = con.execute(
+                "SELECT program_id FROM proposals WHERE proposal_id=?",
+                (proposal_id,)).fetchone()
+        finally:
+            con.close()
+        return row[0] if row and row[0] else None
+    except Exception:
+        return None
+
+
+def punch_rule_results(fragment_id, clip_start, clip_end, program_id=None):
     """[RULE-1 R3] 기법 적용 판정에 쓰는 규칙만 돌린다(Veto 대상). raw 로그는 check_rules가 남긴다.
 
-    경계 3종은 여기서 돌리지 않는다 — 로그 전용이고, 렌더 루프마다 EDL을 다시 뽑으면
-    비싸다. 경계 검사는 boundary_rule_results()로 따로 부른다.
+    경계 3종은 여기서 돌리지 않는다 — 렌더 루프마다 EDL을 다시 뽑으면 비싸다.
+    경계 검사는 boundary_rule_results()로 따로 부른다.
+    [LAB-43] program_id 전달 — 없으면 VETO_RULE_IDS 안의 경계 룰이 영원히 UNKNOWN 이었다.
     """
     from engine.story_template_resolver import check_rules
-    return check_rules({"fragment_id": fragment_id, "clip_start": clip_start,
-                        "clip_end": clip_end, "technique": TECHNIQUE_PUNCH_IN},
-                       rule_ids=list(VETO_RULE_IDS))
+    ctx = {"fragment_id": fragment_id, "clip_start": clip_start,
+           "clip_end": clip_end, "technique": TECHNIQUE_PUNCH_IN}
+    if program_id:
+        ctx["program_id"] = program_id
+    return check_rules(ctx, rule_ids=list(VETO_RULE_IDS))
 
 
 def boundary_rule_results(program_id, fragment_id):
@@ -606,7 +638,46 @@ def boundary_rule_results(program_id, fragment_id):
                                  "RULE_WORD_BOUNDARY_SNAP"])
 
 
-def punch_filter(technique, fragment_id, clip_start, clip_end, out_w, out_h, fps=30):
+def run_boundary_checks(program_id, fragment_ids):
+    """[LAB-43] 경계 규칙 3종을 실제로 돌린다.
+
+    구판은 boundary_rule_results() 를 정의만 하고 **아무도 부르지 않았다**
+    (LAB-43 STEP 0 실측: 호출자 0건). 감사기는 이 셋을 '로그 전용'이라 적었지만
+    실상은 한 번도 실행되지 않는 무등작이었다. 승인 직후 여기서 돌려 위반을
+    사실로 남긴다 — 값은 바꾸지 않는다(경고 전용, INV-6 사용자 경계 우선).
+    """
+    summary = {"checked": 0, "violations": [], "unknown": 0, "na": 0, "pass": 0}
+    for fid in fragment_ids or []:
+        try:
+            results = boundary_rule_results(program_id, fid)
+        except Exception as e:
+            print(f"[BOUNDARY-RULE][WARN] {fid} 검사 실패(비차단): {e}", flush=True)
+            continue
+        summary["checked"] += 1
+        for r in results:
+            verdict = r.get("verdict")
+            if verdict == "VIOLATION":
+                summary["violations"].append({
+                    "fragment_id": fid, "rule_id": r.get("rule_id"),
+                    "detail": r.get("detail"), "measured": r.get("measured"),
+                })
+            elif verdict == "UNKNOWN":
+                summary["unknown"] += 1
+            elif verdict == "NA":
+                summary["na"] += 1
+            else:
+                summary["pass"] += 1
+    print(f"[BOUNDARY-RULE] program={program_id} 조각={summary['checked']} "
+          f"pass={summary['pass']} 위반={len(summary['violations'])} "
+          f"unknown={summary['unknown']} na={summary['na']}", flush=True)
+    for v in summary["violations"][:5]:
+        print(f"[BOUNDARY-RULE][VIOLATION] {v['rule_id']} {v['fragment_id']}: "
+              f"{v['detail']}", flush=True)
+    return summary
+
+
+def punch_filter(technique, fragment_id, clip_start, clip_end, out_w, out_h, fps=30,
+                 program_id=None):
     """[PUNCH-1] 미리보기·렌더가 **같이 부르는 단일 함수**. ffmpeg -vf 조각 또는 None.
 
     좌표(clip_start/clip_end)는 읽기만 하고 바꾸지 않는다 — 경계 불변(INV-3).
@@ -620,7 +691,7 @@ def punch_filter(technique, fragment_id, clip_start, clip_end, out_w, out_h, fps
         return None
     try:
         from engine.story_template_resolver import has_veto
-        results = punch_rule_results(fragment_id, clip_start, clip_end)
+        results = punch_rule_results(fragment_id, clip_start, clip_end, program_id)
         if has_veto(results):
             bad = [r["rule_id"] for r in results if r.get("verdict") == "VIOLATION"]
             print(f"[RULE][VETO] punch_in 적용 차단 fragment={fragment_id} 위반규칙={bad}")
