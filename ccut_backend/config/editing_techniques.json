@@ -59,12 +59,15 @@
       "display_name": "문장 단위 컷팅",
       "category": "cutting",
       "authority": {
-        "verdict": "UNDECIDED",
+        "verdict": "AI_ALLOWED_CONDITIONAL",
         "basis": [
           "description: 문장이 끝나는 지점에서 컷을 생성하여",
           "미판정 사유: '컷을 생성'이 기존 경계를 옮기는 것인지 조각을 나누어 늘리는 것인지 원문이 구분하지 않음"
         ],
-        "decided_in": "LAB-16"
+        "source": "DIRECTOR",
+        "approved_at": "2026-07-29",
+        "condition": "조각 가장자리 경계를 안쪽으로 당기는 것만 허용. 조각이 분할되거나 조각 수가 변하면 즉시 중지. 중간 삭제는 사용자 기능(PBE 대사 에디터) 소관.",
+        "decided_in": "LAB-17"
       },
       "origin_model": ["broadcast", "video-use"],
       "description": "문장이 끝나는 지점에서 컷을 생성하여 의미 전달을 명확히 함",
@@ -78,13 +81,16 @@
       "display_name": "정적 구간 제거",
       "category": "cutting",
       "authority": {
-        "verdict": "UNDECIDED",
+        "verdict": "AI_ALLOWED_CONDITIONAL",
         "basis": [
           "description: 의미 없는 무음이나 움직임 없는 구간을 삭제하여",
           "engine_effect.min_duration_sec: 1.5",
           "미판정 사유: 삭제 대상이 '구간'이며 조각 가장자리인지 중간인지 원문에 없음"
         ],
-        "decided_in": "LAB-16"
+        "source": "DIRECTOR",
+        "approved_at": "2026-07-29",
+        "condition": "조각 가장자리 경계를 안쪽으로 당기는 것만 허용. 조각이 분할되거나 조각 수가 변하면 즉시 중지. 중간 삭제는 사용자 기능(PBE 대사 에디터) 소관.",
+        "decided_in": "LAB-17"
       },
       "origin_model": ["video-use", "opusclip"],
       "description": "의미 없는 무음이나 움직임 없는 구간을 삭제하여 템포 향상",
@@ -98,13 +104,16 @@
       "display_name": "말줄임 압축",
       "category": "pacing",
       "authority": {
-        "verdict": "UNDECIDED",
+        "verdict": "AI_ALLOWED_CONDITIONAL",
         "basis": [
           "description: 문장 사이의 긴 휴지기를 일정 비율로 단축",
           "engine_effect.compression_ratio: 0.8",
           "미판정 사유: 문장 사이는 조각 중간이므로 span 분할 여부가 원문에 없음"
         ],
-        "decided_in": "LAB-16"
+        "source": "DIRECTOR",
+        "approved_at": "2026-07-29",
+        "condition": "조각 가장자리 경계를 안쪽으로 당기는 것만 허용. 조각이 분할되거나 조각 수가 변하면 즉시 중지. 중간 삭제는 사용자 기능(PBE 대사 에디터) 소관.",
+        "decided_in": "LAB-17"
       },
       "origin_model": ["descript", "video-use"],
       "description": "문장 사이의 긴 휴지기를 일정 비율로 단축",
@@ -156,13 +165,16 @@
       "display_name": "텍스트 분석 캐싱",
       "category": "render",
       "authority": {
-        "verdict": "UNDECIDED",
+        "verdict": "NOT_A_TECHNIQUE",
         "basis": [
           "description: 동일 영상에 대한 재편집 시 Whisper 분석 결과 재사용",
           "engine_effect.cache_hit_priority: high",
           "미판정 사유: 산출물을 바꾸지 않는 분석 캐시 정책이라 세 분류 어디에도 원문 근거가 없음"
         ],
-        "decided_in": "LAB-16"
+        "source": "DIRECTOR",
+        "approved_at": "2026-07-29",
+        "director_reason": "산출물(조각·순서·대사·경계·타이밍·표시) 무변경. 인프라 정책이지 편집 기법이 아니다.",
+        "decided_in": "LAB-17"
       },
       "origin_model": ["video-use"],
       "description": "동일 영상에 대한 재편집 시 Whisper 분석 결과 재사용",
@@ -416,13 +428,16 @@
       "display_name": "빠른 템포 편집",
       "category": "pacing",
       "authority": {
-        "verdict": "UNDECIDED",
+        "verdict": "USER_ONLY",
         "basis": [
           "description: 조각 당 평균 길이를 3~6초 이내로 유지",
           "engine_effect.avg_duration_sec: 4.5",
           "미판정 사유: 평균 길이를 경계 조정으로 맞추는지 짧은 조각 선택으로 맞추는지 원문에 없음"
         ],
-        "decided_in": "LAB-16"
+        "source": "DIRECTOR",
+        "approved_at": "2026-07-29",
+        "director_reason": "평균 길이를 맞추려면 결국 조각 선택이 바뀐다.",
+        "decided_in": "LAB-17"
       },
       "origin_model": ["opusclip"],
       "description": "조각 당 평균 길이를 3~6초 이내로 유지",
@@ -436,13 +451,16 @@
       "display_name": "여유로운 템포 편집",
       "category": "pacing",
       "authority": {
-        "verdict": "UNDECIDED",
+        "verdict": "USER_ONLY",
         "basis": [
           "description: 조각 당 평균 길이를 10초 이상 유지",
           "engine_effect.avg_duration_sec: 12.0",
           "미판정 사유: 평균 길이를 경계 조정으로 맞추는지 긴 조각 선택으로 맞추는지 원문에 없음"
         ],
-        "decided_in": "LAB-16"
+        "source": "DIRECTOR",
+        "approved_at": "2026-07-29",
+        "director_reason": "평균 길이를 맞추려면 결국 조각 선택이 바뀐다.",
+        "decided_in": "LAB-17"
       },
       "origin_model": ["broadcast"],
       "description": "조각 당 평균 길이를 10초 이상 유지하여 몰입도 향상",
@@ -515,13 +533,16 @@
       "display_name": "사실적 무결성 보호",
       "category": "qa",
       "authority": {
-        "verdict": "UNDECIDED",
+        "verdict": "RULE_CANDIDATE",
         "basis": [
           "description: 원본의 텍스트 의미와 일치하는지 확인",
           "engine_effect.semantic_drift_limit: 0.3",
           "미판정 사유: 확인 결과가 제안을 바꾸는지 원문에 없음"
         ],
-        "decided_in": "LAB-16"
+        "source": "DIRECTOR",
+        "approved_at": "2026-07-29",
+        "director_reason": "'확인·평가'이고 처분이 원문에 없다. 기법이 아니라 하드룰 층 소관이다.",
+        "decided_in": "LAB-17"
       },
       "origin_model": ["video-use"],
       "description": "편집된 맥락이 원본의 텍스트 의미와 일치하는지 확인",
@@ -535,14 +556,17 @@
       "display_name": "온디맨드 시각 분석",
       "category": "selection",
       "authority": {
-        "verdict": "UNDECIDED",
+        "verdict": "USER_ONLY",
         "basis": [
           "category: selection",
           "description: 최종 제안 후보에 대해서만 Deep Visual 분석 수행",
           "engine_effect.lazy_analysis: true",
           "미판정 사유: category는 selection이나 description은 분석 범위만 말해 둘이 어긋남"
         ],
-        "decided_in": "LAB-16"
+        "source": "DIRECTOR",
+        "approved_at": "2026-07-29",
+        "director_reason": "분석 범위를 맞추려면 결국 조각 선택이 바뀐다.",
+        "decided_in": "LAB-17"
       },
       "origin_model": ["video-use"],
       "description": "모든 조각을 분석하지 않고, 최종 제안 후보에 대해서만 Deep Visual 분석 수행",
@@ -556,13 +580,16 @@
       "display_name": "EDL 우선 렌더링",
       "category": "render",
       "authority": {
-        "verdict": "UNDECIDED",
+        "verdict": "NOT_A_TECHNIQUE",
         "basis": [
           "description: 물리적인 컷팅 전에 편집 목록을 생성하여 비파괴 편집 수행",
           "engine_effect.generate_edl_before_mp4: true",
           "미판정 사유: 산출물 내용을 바꾸지 않는 렌더 순서 정책이라 세 분류 어디에도 원문 근거가 없음"
         ],
-        "decided_in": "LAB-16"
+        "source": "DIRECTOR",
+        "approved_at": "2026-07-29",
+        "director_reason": "산출물(조각·순서·대사·경계·타이밍·표시) 무변경. 인프라 정책이지 편집 기법이 아니다.",
+        "decided_in": "LAB-17"
       },
       "origin_model": ["video-use"],
       "description": "물리적인 컷팅 전에 편집 목록을 생성하여 비파괴 편집 수행",
@@ -576,13 +603,16 @@
       "display_name": "컷 경계 자기 평가",
       "category": "qa",
       "authority": {
-        "verdict": "UNDECIDED",
+        "verdict": "RULE_CANDIDATE",
         "basis": [
           "description: 생성된 컷 지점이 매끄러운지 자체 평가",
           "engine_effect.min_boundary_score: 0.9",
           "미판정 사유: 평가 결과의 처분이 원문에 없음"
         ],
-        "decided_in": "LAB-16"
+        "source": "DIRECTOR",
+        "approved_at": "2026-07-29",
+        "director_reason": "'확인·평가'이고 처분이 원문에 없다. 기법이 아니라 하드룰 층 소관이다.",
+        "decided_in": "LAB-17"
       },
       "origin_model": ["video-use"],
       "description": "생성된 컷 지점이 오디오/비디오 측면에서 매끄러운지 자체 평가",
@@ -596,13 +626,16 @@
       "display_name": "설명-전개 일치 검사",
       "category": "qa",
       "authority": {
-        "verdict": "UNDECIDED",
+        "verdict": "RULE_CANDIDATE",
         "basis": [
           "description: 제안 설명과 실제 선택된 조각들의 키워드가 일치하는지 확인",
           "engine_effect.matching_threshold: 0.65",
           "미판정 사유: 확인 결과의 처분이 원문에 없음"
         ],
-        "decided_in": "LAB-16"
+        "source": "DIRECTOR",
+        "approved_at": "2026-07-29",
+        "director_reason": "'확인·평가'이고 처분이 원문에 없다. 기법이 아니라 하드룰 층 소관이다.",
+        "decided_in": "LAB-17"
       },
       "origin_model": ["video-use"],
       "description": "AI가 작성한 제안 설명과 실제 선택된 조각들의 키워드가 일치하는지 확인",
@@ -616,13 +649,16 @@
       "display_name": "렌더링 QA 루프",
       "category": "render",
       "authority": {
-        "verdict": "UNDECIDED",
+        "verdict": "RULE_CANDIDATE",
         "basis": [
           "description: 오디오 싱크 및 프레임 드랍 여부 최종 확인",
           "engine_effect.post_render_validation: true",
           "미판정 사유: 확인 결과의 처분이 원문에 없음"
         ],
-        "decided_in": "LAB-16"
+        "source": "DIRECTOR",
+        "approved_at": "2026-07-29",
+        "director_reason": "'확인·평가'이고 처분이 원문에 없다. 기법이 아니라 하드룰 층 소관이다.",
+        "decided_in": "LAB-17"
       },
       "origin_model": ["video-use"],
       "description": "최종 렌더링 결과물에 대해 오디오 싱크 및 프레임 드랍 여부 최종 확인",

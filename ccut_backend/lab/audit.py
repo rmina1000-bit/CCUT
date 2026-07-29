@@ -586,6 +586,19 @@ def _collect_evidence_refs(audit_config, techniques, candidate_ledger):
     return resolved
 
 
+# [LAB-17] 국장 결정. 기법 모수에서 빼는 권한과, AI 배선 대상이 아닌 권한.
+#   NOT_A_TECHNIQUE / RULE_CANDIDATE 는 애초에 편집 기법이 아니므로 모수에서 뺀다.
+#   USER_ONLY 는 기법이지만 AI 권한 밖이라 모수에는 남고 차단 사유는 붙이지 않는다.
+NOT_TECHNIQUE_VERDICTS = ("NOT_A_TECHNIQUE", "RULE_CANDIDATE")
+OUT_OF_AI_SCOPE = ("USER_ONLY",) + NOT_TECHNIQUE_VERDICTS
+
+
+def _verdict_count(techniques, verdict):
+    return sum(
+        1 for item in techniques if item["authority"]["verdict"] == verdict
+    )
+
+
 def build_lab_context(audit):
     missing = [
         item["label"] for item in audit["materials"]
@@ -602,9 +615,12 @@ def build_lab_context(audit):
         ),
         "기법": (
             f"선언 {audit['techniques']['declared']} / "
+            f"모수 {audit['techniques']['scope']} / "
             f"AI 가능 {audit['techniques']['ai_allowed']} / "
+            f"조건부 {audit['techniques']['ai_allowed_conditional']} / "
             f"사용자 전용 {audit['techniques']['user_only']} / "
-            f"미정 {audit['techniques']['undecided']} / "
+            f"인프라 {audit['techniques']['not_a_technique']} / "
+            f"룰 이관 후보 {audit['techniques']['rule_candidate']} / "
             f"배선 {audit['techniques']['wired']} / "
             f"가동 {audit['techniques']['active']}"
         ),
@@ -847,8 +863,8 @@ def run_audit():
                         "kind": "룰 무동작",
                         "detail": rule_id,
                     })
-        # USER_ONLY 는 막힌 것이 아니라 AI 배선 대상이 아니다. 차단 사유를 붙이지 않는다.
-        if authority["verdict"] == "USER_ONLY":
+        # AI 배선 대상이 아닌 것은 막힌 것이 아니다. 차단 사유를 붙이지 않는다.
+        if authority["verdict"] in OUT_OF_AI_SCOPE:
             blockers = []
         technique_items.append({
             "id": technique_id,
@@ -979,7 +995,10 @@ def run_audit():
     audited_at = datetime.now().astimezone().isoformat(timespec="seconds")
     blocker_counts = {}
     for technique in technique_items:
-        if technique["wired"] or technique["authority"]["verdict"] == "USER_ONLY":
+        if (
+            technique["wired"]
+            or technique["authority"]["verdict"] in OUT_OF_AI_SCOPE
+        ):
             continue
         for kind in {blocker["kind"] for blocker in technique["blockers"]}:
             blocker_counts[kind] = blocker_counts.get(kind, 0) + 1
@@ -1009,18 +1028,18 @@ def run_audit():
         },
         "techniques": {
             "declared": len(declared_techniques),
-            "ai_allowed": sum(
+            "scope": sum(
                 1 for item in techniques
-                if item["authority"]["verdict"] == "AI_ALLOWED"
+                if item["authority"]["verdict"] not in NOT_TECHNIQUE_VERDICTS
             ),
-            "user_only": sum(
-                1 for item in techniques
-                if item["authority"]["verdict"] == "USER_ONLY"
+            "ai_allowed": _verdict_count(techniques, "AI_ALLOWED"),
+            "ai_allowed_conditional": _verdict_count(
+                techniques, "AI_ALLOWED_CONDITIONAL"
             ),
-            "undecided": sum(
-                1 for item in techniques
-                if item["authority"]["verdict"] == "UNDECIDED"
-            ),
+            "user_only": _verdict_count(techniques, "USER_ONLY"),
+            "undecided": _verdict_count(techniques, "UNDECIDED"),
+            "not_a_technique": _verdict_count(techniques, "NOT_A_TECHNIQUE"),
+            "rule_candidate": _verdict_count(techniques, "RULE_CANDIDATE"),
             "wired": len(wired),
             "wired_ids": wired,
             "active": len(active),
