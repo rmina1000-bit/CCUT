@@ -3080,9 +3080,13 @@ async def get_render_result(export_input_id: str):
     return result
 
 @app.get("/exports/list")
-async def get_exports_list(db: Session = Depends(get_db)):
-    """내보낸 영상 전체 목록 (아카이브/SNS 패널용)"""
-    exports = bams.get_all_exports()
+async def get_exports_list(history: bool = False, db: Session = Depends(get_db)):
+    """내보낸 영상 목록 (아카이브/SNS 패널용).
+
+    [LAB-29] 기본은 export_input 당 최신 1건. ?history=true 면 이전 렌더 이력까지
+    전부 준다 — 재렌더로 밀려난 산출물은 사라진 것이 아니라 여기에 있다.
+    """
+    exports = bams.get_all_exports(include_history=history)
     # [EXPORT-NAME-SNAPSHOT] 렌더 시점 스냅샷(display_name 컬럼)이 우선 — 제안이
     # 재생성돼 proposal_id가 사라져도 이름이 유실되지 않는다. 스냅샷이 없는
     # 레거시 행(백필 전/실패)만 하위호환 조인으로 보충.

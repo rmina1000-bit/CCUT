@@ -815,7 +815,13 @@ class BAMSManager:
         """[STEP 8] Render 결과 저장"""
         with SessionLocal() as db:
             from archive.db_models import ExportResultTable
-            db.query(ExportResultTable).filter_by(export_input_id=data["export_input_id"]).delete()
+            # [LAB-29] 구판은 여기서 같은 export_input 의 이전 행을 지웠다.
+            #   그래서 같은 영상을 다시 내보내면 앞의 산출물이 목록에서 사라지고
+            #   mp4 는 참조 없는 고아가 됐다(누적 91개, 그중 86개가 사용자 6~7월 산출물).
+            #   2026-07-29 에는 이 삭제가 국장 산출물까지 덮었다.
+            #   테이블에 유니크 제약이 없으므로(PK=id) 스키마를 바꾸지 않고
+            #   이 삭제만 걷어내면 렌더 이력이 그대로 쌓인다.
+            #   목록은 get_all_exports 에서 export_input 당 최신 1건만 기본으로 보인다.
             db_res = ExportResultTable(
                 id=data["id"],
                 export_input_id=data["export_input_id"],
@@ -836,8 +842,14 @@ class BAMSManager:
             db.commit()
             return db_res
 
-    def get_all_exports(self):
-        """내보낸 영상 전체 목록 (최신순, ProgramTable JOIN으로 최신 프로젝트명/작업시각 반영)"""
+    def get_all_exports(self, include_history: bool = False):
+        """내보낸 영상 목록 (최신순, ProgramTable JOIN으로 최신 프로젝트명 반영).
+
+        [LAB-29] 렌더 이력이 여러 행 남게 된 뒤로, 기본 목록은 같은 export_input 중
+        가장 최근 것 하나만 보인다. 이력을 다 쏟으면 사용자가 자기 영상을 못 찾는다.
+        include_history=True 면 모든 이력을 준다 — 이전 것도 사라진 게 아니라
+        여기로 접근할 수 있다. 화면을 새로 만들지 않는다.
+        """
         with SessionLocal() as db:
             from archive.db_models import ExportResultTable, ProgramTable, ProjectSourceTable
             rows = (
@@ -847,6 +859,17 @@ class BAMSManager:
                 .order_by(ExportResultTable.created_at.desc())
                 .all()
             )
+            if not include_history:
+                # created_at DESC 이므로 export_input 별 첫 등장이 곧 최신이다.
+                seen, latest = set(), []
+                for row in rows:
+                    key = row[0].export_input_id
+                    if key is not None and key in seen:
+                        continue
+                    if key is not None:
+                        seen.add(key)
+                    latest.append(row)
+                rows = latest
             import os as _os
             from engine import fragment_vault as _fv
             result = []
