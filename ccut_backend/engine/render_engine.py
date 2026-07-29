@@ -1,3 +1,4 @@
+import json
 import os
 import subprocess
 import uuid
@@ -6,19 +7,58 @@ from typing import Dict, Any, List
 from archive.manager import bams
 
 AUDIO_SPLICE_FADE_SEC = 0.008
+TECHNIQUES_CONFIG = Path(__file__).resolve().parents[1] / "config" / "editing_techniques.json"
+
+
+def _flag_on(name: str) -> bool:
+    return os.getenv(name, "").strip().upper() in ("1", "ON", "TRUE", "YES")
+
+
+def _audio_fade_spec():
+    """[LAB-18] 컷 연결부 오디오 페이드 길이(초). → (fade_in, fade_out, 게이트ON)
+
+    게이트 OFF면 기존 splice 클릭 억제용 8ms 그대로다 — 현행 무변.
+    ON이면 config/editing_techniques.json 의 audio_fade_30ms.engine_effect 를 쓴다.
+    길이를 코드 상수로 박지 않는다 — 규칙 값은 config 하나에 둔다.
+    """
+    if not _flag_on("CCUT_TECHNIQUE_AUDIO_FADE"):
+        return AUDIO_SPLICE_FADE_SEC, AUDIO_SPLICE_FADE_SEC, False
+    try:
+        with open(TECHNIQUES_CONFIG, "r", encoding="utf-8") as handle:
+            techniques = json.load(handle)["techniques"]
+        effect = next(
+            item for item in techniques
+            if item["technique_id"] == "audio_fade_30ms"
+        )["engine_effect"]
+        return (
+            float(effect["fade_in_ms"]) / 1000.0,
+            float(effect["fade_out_ms"]) / 1000.0,
+            True,
+        )
+    except Exception as exc:
+        print(f"[RENDER][AUDIO_FADE] config 읽기 실패 — 기본값 유지: {exc}")
+        return AUDIO_SPLICE_FADE_SEC, AUDIO_SPLICE_FADE_SEC, False
 
 
 def _concat_filter_with_audio_splice_fade(durations: List[float]) -> str:
     count = len(durations)
+    fade_in_sec, fade_out_sec, gated = _audio_fade_spec()
+    print(
+        f"[RENDER][AUDIO_FADE] gate={'ON' if gated else 'OFF'} "
+        f"fade_in={fade_in_sec * 1000:.1f}ms fade_out={fade_out_sec * 1000:.1f}ms "
+        f"clips={count}"
+    )
     video_inputs = "".join(f"[{i}:v:0]" for i in range(count))
     parts = [f"{video_inputs}concat=n={count}:v=1:a=0[v]"]
     audio_inputs = []
     for i, duration in enumerate(durations):
-        fade_dur = min(AUDIO_SPLICE_FADE_SEC, max(0.0, duration) / 2.0)
-        fade_out_start = max(0.0, duration - fade_dur)
+        half = max(0.0, duration) / 2.0
+        fade_in = min(fade_in_sec, half)
+        fade_out = min(fade_out_sec, half)
+        fade_out_start = max(0.0, duration - fade_out)
         parts.append(
-            f"[{i}:a:0]afade=t=in:st=0:d={fade_dur:.6f},"
-            f"afade=t=out:st={fade_out_start:.6f}:d={fade_dur:.6f}[aud{i}]"
+            f"[{i}:a:0]afade=t=in:st=0:d={fade_in:.6f},"
+            f"afade=t=out:st={fade_out_start:.6f}:d={fade_out:.6f}[aud{i}]"
         )
         audio_inputs.append(f"[aud{i}]")
     parts.append(f"{''.join(audio_inputs)}concat=n={count}:v=0:a=1[a]")
