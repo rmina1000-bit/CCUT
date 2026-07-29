@@ -1385,6 +1385,16 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
           fragUrl,
           currentSrc: ref.current?.currentSrc
         });
+        // [LAB-37 A] 소스 교체 순간 poster를 들어오는 조각의 썸네일로 바꾼다.
+        //   증거 3중(XRAY poster 값·국장 육안·아카이브 대조군 0회): 경계 노출 틈에 보이던 것은
+        //   제안 대표 poster(항상 1번 조각 썸네일)였다. 이제 그 틈에는 다음 장면이 미리 보인다.
+        //   썸네일 URL은 조각맵 <img>가 이미 로드한 것과 동일 — 캐시 적중이라 프리로드 불필요.
+        //   React의 poster 속성(getProposalPoster)은 자기 값이 변할 때만 DOM을 다시 쓰므로
+        //   재생 중의 이 명령형 갱신을 덮지 않는다 (제안 교체 렌더 시에만 되돌아가며, 그때
+        //   video는 프레임을 쥐고 있어 poster가 보이지 않는다).
+        const nextPoster =
+          (frag as any).thumbnail?.thumbnail_url ?? (frag as any).thumbnail_url ?? null;
+        if (nextPoster) ref.current.poster = nextPoster;
         // [STEP 10-K-C1-R11] Unify src control via state instead of ref.current.src
         if (isA) {
           pendingLocalTimeARef.current = startSec + seekOffset;
