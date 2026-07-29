@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useLayoutEffect, useState } from "react";
 import { ChevronDown, LockKeyhole, RefreshCw } from "lucide-react";
 import { fetcher } from "@/services/api";
 
@@ -74,20 +74,40 @@ const ruleActionText = (item: RuleAudit) => {
   return acting.join(" + ") + (gateOff ? " (게이트 OFF)" : "");
 };
 
-type Authority = "AI_ALLOWED" | "USER_ONLY" | "UNDECIDED";
+type Authority =
+  | "AI_ALLOWED"
+  | "AI_ALLOWED_CONDITIONAL"
+  | "USER_ONLY"
+  | "UNDECIDED"
+  | "NOT_A_TECHNIQUE"
+  | "RULE_CANDIDATE";
 
 const AUTHORITY_LABEL: Record<Authority, string> = {
   AI_ALLOWED: "AI 가능",
+  AI_ALLOWED_CONDITIONAL: "조건부 AI 가능",
   USER_ONLY: "사용자 전용",
   UNDECIDED: "미정",
+  NOT_A_TECHNIQUE: "인프라 정책",
+  RULE_CANDIDATE: "룰 이관 후보",
 };
+
+interface TechniqueAuthority {
+  verdict: Authority;
+  basis: string[];
+  decided_in: string;
+  source?: "DIRECTOR";
+  approved_at?: string;
+  condition?: string;
+  director_reason?: string;
+  note?: string;
+}
 
 interface TechniqueAudit {
   id: string;
   wired: boolean;
   active: boolean;
   gate: { env: string; value: string | null; on: boolean } | null;
-  authority: { verdict: Authority; basis: string[]; decided_in: string; note?: string };
+  authority: TechniqueAuthority;
   declared_in: string | null;
   requires_materials: string[] | "UNDECLARED";
   requires_rules: string[] | "UNDECLARED";
@@ -173,9 +193,13 @@ interface LabAudit {
   };
   techniques: {
     declared: number;
+    scope: number;
     ai_allowed: number;
+    ai_allowed_conditional: number;
     user_only: number;
     undecided: number;
+    not_a_technique: number;
+    rule_candidate: number;
     wired: number;
     wired_ids: string[];
     active: number;
@@ -214,6 +238,62 @@ const STATUS_STYLE: Record<EdgeStatus, { stroke: string; dash?: string; label: s
   BROKEN: { stroke: "#f97316", dash: "7 6", label: "BROKEN" },
   UNDECLARED: { stroke: "#64748b", dash: "2 7", label: "관계 미선언" },
 };
+
+// [LAB-17] 능력지도 치수. 전부 폰트 크기(em)의 배수 — 글자가 커지면 도표도 커진다.
+const NODE_W_EM = 15.6;
+const NODE_H_EM = 4.4;
+const ROW_STEP_EM = 5.8;
+const HEADER_H_EM = 6.2;
+const PAD_EM = 1.8;
+const MIN_H_EM = 49;
+const COL_X_EM = [1.8, 22.5, 43.3, 64, 84.7];
+const FONT_MIN_PX = 9;
+const FONT_MAX_PX = 24;
+
+/** 컨테이너의 실제 폭(px)과 상속 폰트 크기(px)를 실측한다.
+ *
+ * 폰트만 바뀌면 컨테이너 박스는 그대로라 ResizeObserver가 울리지 않는다.
+ * 그래서 1em 크기의 보이지 않는 자를 함께 관찰한다 — 폰트가 바뀌면 자의 크기가
+ * 바뀌므로 신호가 온다. 값 자체는 computed style에서 읽는다(확대 배율 영향 없음).
+ * 렌더마다 다시 읽어, 콜백이 오지 않는 환경에서도 리렌더가 값을 바로잡는다.
+ */
+const useBoxMetrics = () => {
+  const ref = React.useRef<HTMLDivElement>(null);
+  const rulerRef = React.useRef<HTMLSpanElement>(null);
+  const [metrics, setMetrics] = useState({ width: 0, fontPx: 11 });
+
+  const read = React.useCallback(() => {
+    const element = ref.current;
+    if (!element) return;
+    const parsed = parseFloat(getComputedStyle(element).fontSize);
+    const next = {
+      width: element.clientWidth,
+      fontPx: Math.min(
+        FONT_MAX_PX,
+        Math.max(FONT_MIN_PX, Number.isFinite(parsed) ? parsed : 11),
+      ),
+    };
+    setMetrics(prev =>
+      prev.width === next.width && prev.fontPx === next.fontPx ? prev : next,
+    );
+  }, []);
+
+  useLayoutEffect(read);
+
+  useEffect(() => {
+    const element = ref.current;
+    const ruler = rulerRef.current;
+    if (!element || !ruler) return;
+    const observer = new ResizeObserver(read);
+    observer.observe(element);
+    observer.observe(ruler);
+    return () => observer.disconnect();
+  }, [read]);
+
+  return [ref, rulerRef, metrics] as const;
+};
+
+const AI_SCOPE: Authority[] = ["AI_ALLOWED", "AI_ALLOWED_CONDITIONAL", "UNDECIDED"];
 
 const shortId = (value: string) => value
   .replace(/^RULE_/, "")
@@ -269,13 +349,30 @@ const CapabilityMap: React.FC<{
   const visibleTechniques = techniques.filter(
     item => item.wired || activeTechniqueIds.has(item.id),
   );
-  const nodeWidth = 172;
-  const nodeHeight = 48;
-  const colX = [20, 248, 476, 704, 932];
-  const rowY = (index: number) => 68 + index * 64;
+  // [LAB-17] 룰 이관 후보는 하드룰 열 아래에 붙인다. 간선은 만들지 않는다 — 아직 룰이 아니다.
+  const ruleCandidates = techniques.filter(
+    item => item.authority.verdict === "RULE_CANDIDATE",
+  );
+  // [LAB-17] 크기 체계는 폰트에 물린다.
+  //   구판은 고정 viewBox(1124) + width:100% 라 지도 전체가 컨테이너 폭에 맞춰
+  //   통째로 스케일됐다. 글자를 줄여 여백이 생기면 도표가 커지는 — 반대로 움직이는 —
+  //   현상이 그 때문이다. 이제 SVG 좌표 1단위 = CSS 1px 로 고정하고,
+  //   모든 치수를 측정된 폰트 크기(em)의 배수로 잡는다.
+  const [boxRef, rulerRef, { width: boxWidth, fontPx }] = useBoxMetrics();
+  const em = (value: number) => value * fontPx;
+  const nodeWidth = em(NODE_W_EM);
+  const nodeHeight = em(NODE_H_EM);
+  const colX = COL_X_EM.map(em);
+  const rowY = (index: number) => em(HEADER_H_EM) + index * em(ROW_STEP_EM);
+  const contentWidth = colX[4] + nodeWidth + em(PAD_EM);
+  const width = Math.max(contentWidth, boxWidth);
   const height = Math.max(
-    540,
-    rowY(Math.max(materials.length, rules.length, visibleTechniques.length)) + 16,
+    em(MIN_H_EM),
+    rowY(Math.max(
+      materials.length,
+      rules.length + ruleCandidates.length,
+      visibleTechniques.length,
+    )) + em(PAD_EM),
   );
   const positions = new Map<string, { x: number; y: number }>();
   materials.forEach((item, index) => positions.set(item.id, { x: colX[0], y: rowY(index) }));
@@ -294,37 +391,48 @@ const CapabilityMap: React.FC<{
     <g onClick={onClick} className="cursor-pointer" role="button" tabIndex={0}>
       <rect
         x={x} y={y} width={nodeWidth} height={nodeHeight}
-        rx={4}
+        rx={em(0.36)}
         fill={status === "LIVE" ? "#102820" : status === "REGISTERED" ? "#2a2110" : status === "BROKEN" ? "#291a12" : "#171a20"}
         stroke={STATUS_STYLE[status].stroke}
         strokeWidth={status === "LIVE" ? 1.5 : 1}
         strokeDasharray={STATUS_STYLE[status].dash}
       />
       {locked && (
-        <foreignObject x={x + 10} y={y + 14} width={18} height={18}>
-          <LockKeyhole size={14} className="text-slate-500" />
+        <foreignObject x={x + em(0.9)} y={y + em(1.27)} width={em(1.64)} height={em(1.64)}>
+          <LockKeyhole size={em(1.27)} className="text-slate-500" />
         </foreignObject>
       )}
-      <text x={x + (locked ? 32 : 12)} y={y + 20} fill="#e5e7eb" fontSize="11" fontWeight="700">
+      <text x={x + em(locked ? 2.9 : 1.1)} y={y + em(1.82)} fill="#e5e7eb" fontSize={em(1)} fontWeight="700">
         {title}
       </text>
-      <text x={x + 12} y={y + 37} fill="#94a3b8" fontSize="9">
+      <text x={x + em(1.1)} y={y + em(3.36)} fill="#94a3b8" fontSize={em(0.82)}>
         {subtitle}
       </text>
     </g>
   );
 
   return (
-    <div className="border border-border/20 bg-[#0c0f13] overflow-x-auto">
+    <div
+      ref={boxRef}
+      className="relative border border-border/20 bg-[#0c0f13] overflow-x-auto text-[11px]"
+    >
+      <span
+        ref={rulerRef}
+        aria-hidden="true"
+        className="pointer-events-none absolute left-0 top-0 block h-[1em] w-[1em] opacity-0"
+      />
       <svg
-        viewBox={`0 0 1124 ${height}`}
-        className="block min-w-[1040px] w-full"
+        width={width}
+        height={height}
+        viewBox={`0 0 ${width} ${height}`}
+        preserveAspectRatio="xMinYMin meet"
+        className="block"
         aria-label="편집 능력지도"
       >
         {["재료", "측정 / 판단", "하드룰", "편집기법", "결과검증"].map((label, index) => (
           <g key={label}>
-            <text x={colX[index]} y={28} fill="#94a3b8" fontSize="11" fontWeight="700">{label}</text>
-            <line x1={colX[index]} y1={40} x2={colX[index] + nodeWidth} y2={40} stroke="#29313d" />
+            <text x={colX[index]} y={em(2.55)} fill="#94a3b8" fontSize={em(1)} fontWeight="700">{label}</text>
+            <line x1={colX[index]} y1={em(3.64)} x2={colX[index] + nodeWidth} y2={em(3.64)} stroke="#29313d" />
           </g>
         ))}
 
@@ -392,6 +500,17 @@ const CapabilityMap: React.FC<{
             subtitle={ruleActionText(item)}
             status={item.acts ? "LIVE" : item.state === "REGISTERED" ? "REGISTERED" : "UNDECLARED"}
             onClick={() => onSelect({ kind: "rule", id: item.id })}
+          />
+        ))}
+
+        {ruleCandidates.map((item, index) => (
+          <Node
+            key={`candidate-${item.id}`}
+            x={colX[2]} y={rowY(rules.length + index)}
+            title={shortId(item.id)}
+            subtitle="이관 후보 · 미등록"
+            status="UNDECLARED"
+            onClick={() => onSelect({ kind: "technique", id: item.id })}
           />
         ))}
 
@@ -481,10 +600,10 @@ export const AdminEditLabPanel: React.FC = () => {
           </p>
           {audit && (
             <p className="text-[11px] text-muted-foreground/50 mt-0.5">
-              기법 {audit.techniques.declared} 선언 · AI 가능 {audit.techniques.ai_allowed} / 사용자 전용 {audit.techniques.user_only} / 미정 {audit.techniques.undecided}
+              기법 {audit.techniques.declared} 선언 → 모수 {audit.techniques.scope} · AI 가능 {audit.techniques.ai_allowed} / 조건부 {audit.techniques.ai_allowed_conditional} / 사용자 전용 {audit.techniques.user_only}
               {" · "}
               배선 {audit.techniques.wired} / 가동 {audit.techniques.active}
-              <span className="text-muted-foreground/40"> (분모 AI 가능 {audit.techniques.ai_allowed} · 구 표기 “{audit.techniques.declared} 선언 / {audit.techniques.wired} 배선”)</span>
+              <span className="text-muted-foreground/40"> (모수 밖 — 인프라 {audit.techniques.not_a_technique} · 룰 이관 후보 {audit.techniques.rule_candidate} · 구 표기 “{audit.techniques.declared} 선언 / {audit.techniques.wired} 배선 · 미정 12”)</span>
             </p>
           )}
           {audit && audit.techniques.gates_off.length > 0 && (
@@ -614,6 +733,15 @@ export const AdminEditLabPanel: React.FC = () => {
                     권한 {AUTHORITY_LABEL[selectedTechnique.authority.verdict]}
                   </span>
                 </p>
+                {selectedTechnique.authority.condition && (
+                  <p className="text-amber-300/75 break-all">조건: {selectedTechnique.authority.condition}</p>
+                )}
+                {selectedTechnique.authority.source === "DIRECTOR" && (
+                  <p className="text-muted-foreground/60">
+                    판정 출처: 국장 결정 {selectedTechnique.authority.approved_at} ({selectedTechnique.authority.decided_in})
+                    {selectedTechnique.authority.director_reason && ` — ${selectedTechnique.authority.director_reason}`}
+                  </p>
+                )}
                 <div className="text-muted-foreground/60">
                   {selectedTechnique.authority.basis.map(line => (
                     <p key={line} className="break-all">판정 근거: {line}</p>
@@ -655,8 +783,9 @@ export const AdminEditLabPanel: React.FC = () => {
             <div>
               <h2 className="text-xs font-black tracking-widest uppercase text-muted-foreground/55">기법 배선 관문</h2>
               <p className="mt-1 text-[10px] text-muted-foreground/45">
-                모수 = AI 가능 {audit.techniques.ai_allowed} + 미정 {audit.techniques.undecided} (사용자 전용 {audit.techniques.user_only}은 아래 별도 구획) ·
+                AI 배선 대상 = AI 가능 {audit.techniques.ai_allowed} + 조건부 {audit.techniques.ai_allowed_conditional} ·
                 미배선 중 즉시 가능 {audit.techniques.wireable_unwired} · {Object.entries(audit.techniques.blocker_counts).map(([key, value]) => `${key} ${value}`).join(" / ") || "차단 없음"}
+                {" · "}사용자 전용 {audit.techniques.user_only} / 인프라 {audit.techniques.not_a_technique} / 룰 이관 후보 {audit.techniques.rule_candidate}는 아래 별도 구획
               </p>
             </div>
             <div className="overflow-x-auto border border-border/15">
@@ -665,15 +794,20 @@ export const AdminEditLabPanel: React.FC = () => {
                   <tr><th className="px-3 py-2 text-left">기법</th><th className="px-3 py-2 text-left">권한</th><th className="px-3 py-2 text-left">관계 출처</th><th className="px-3 py-2 text-left">상태</th><th className="px-3 py-2 text-left">막힌 사유</th></tr>
                 </thead>
                 <tbody className="divide-y divide-border/10">
-                  {audit.techniques.items.filter(item => item.authority.verdict !== "USER_ONLY").map(item => (
+                  {audit.techniques.items.filter(item => AI_SCOPE.includes(item.authority.verdict)).map(item => (
                     <tr key={item.id}>
-                      <td className="px-3 py-2 font-mono">{item.id}</td>
-                      <td className={`px-3 py-2 font-mono ${item.authority.verdict === "AI_ALLOWED" ? "text-emerald-300/80" : "text-muted-foreground/55"}`}>
+                      <td className="px-3 py-2 font-mono align-top">{item.id}</td>
+                      <td className={`px-3 py-2 font-mono align-top ${item.authority.verdict === "AI_ALLOWED" ? "text-emerald-300/80" : "text-amber-300/75"}`}>
                         {AUTHORITY_LABEL[item.authority.verdict]}
+                        {item.authority.condition && (
+                          <p className="mt-1 max-w-[22rem] font-sans text-[10px] font-normal text-amber-200/60">
+                            조건: {item.authority.condition}
+                          </p>
+                        )}
                       </td>
-                      <td className="px-3 py-2 font-mono">{item.relationship_source}</td>
-                      <td className="px-3 py-2">{item.active ? "가동" : item.wired ? "배선 · 미가동" : item.wireable_now ? "배선 가능" : "차단"}</td>
-                      <td className="px-3 py-2 text-muted-foreground/65">{item.blockers.map(blocker => `${blocker.kind}: ${blocker.detail}`).join(" / ") || "없음"}</td>
+                      <td className="px-3 py-2 font-mono align-top">{item.relationship_source}</td>
+                      <td className="px-3 py-2 align-top">{item.active ? "가동" : item.wired ? "배선 · 미가동" : item.wireable_now ? "배선 가능" : "차단"}</td>
+                      <td className="px-3 py-2 align-top text-muted-foreground/65">{item.blockers.map(blocker => `${blocker.kind}: ${blocker.detail}`).join(" / ") || "없음"}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -681,33 +815,53 @@ export const AdminEditLabPanel: React.FC = () => {
             </div>
           </section>
 
-          <section className="space-y-3 border-t border-border/15 pt-4">
-            <div>
-              <h2 className="text-xs font-black tracking-widest uppercase text-muted-foreground/55">사용자 전용 — AI 배선 대상 아님</h2>
-              <p className="mt-1 text-[10px] text-muted-foreground/45">
-                조각 집합·순서·대사 중 하나라도 바꾸는 기법 {audit.techniques.user_only}건. 차단이 아니라 권한 밖이다.
-              </p>
-            </div>
-            <div className="overflow-x-auto border border-border/15">
-              <table className="w-full text-[11px]">
-                <thead className="bg-secondary/20 text-muted-foreground/60">
-                  <tr><th className="px-3 py-2 text-left">기법</th><th className="px-3 py-2 text-left">판정 근거 (config 원문)</th></tr>
-                </thead>
-                <tbody className="divide-y divide-border/10">
-                  {audit.techniques.items.filter(item => item.authority.verdict === "USER_ONLY").map(item => (
-                    <tr key={item.id}>
-                      <td className="px-3 py-2 font-mono align-top">{item.id}</td>
-                      <td className="px-3 py-2 text-muted-foreground/65">
-                        {item.authority.basis.map(line => (
-                          <p key={line} className="break-all">{line}</p>
-                        ))}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </section>
+          {([
+            ["USER_ONLY", "사용자 전용 — AI 배선 대상 아님", "조각 집합·순서·대사 중 하나라도 바꾸는 기법. 차단이 아니라 권한 밖이다."],
+            ["NOT_A_TECHNIQUE", "인프라 정책 — 기법 모수 밖", "산출물(조각·순서·대사·경계·타이밍·표시)을 바꾸지 않는다. 편집 기법이 아니다."],
+            ["RULE_CANDIDATE", "하드룰 이관 후보 — 기법 모수 밖", "전부 확인·평가이고 처분이 원문에 없다. 하드룰 층 소관. 등록·검사기 작성은 하지 않았다."],
+          ] as Array<[Authority, string, string]>).map(([verdict, title, note]) => {
+            const rows = audit.techniques.items.filter(item => item.authority.verdict === verdict);
+            if (rows.length === 0) return null;
+            return (
+              <section key={verdict} className="space-y-3 border-t border-border/15 pt-4">
+                <div>
+                  <h2 className="text-xs font-black tracking-widest uppercase text-muted-foreground/55">{title} {rows.length}건</h2>
+                  <p className="mt-1 text-[10px] text-muted-foreground/45">{note}</p>
+                </div>
+                <div className="overflow-x-auto border border-border/15">
+                  <table className="w-full text-[11px]">
+                    <thead className="bg-secondary/20 text-muted-foreground/60">
+                      <tr>
+                        <th className="px-3 py-2 text-left">기법</th>
+                        <th className="px-3 py-2 text-left">판정 출처</th>
+                        <th className="px-3 py-2 text-left">근거 (config 원문)</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-border/10">
+                      {rows.map(item => (
+                        <tr key={item.id}>
+                          <td className="px-3 py-2 font-mono align-top">{item.id}</td>
+                          <td className="px-3 py-2 align-top font-mono text-[9px] text-muted-foreground/60">
+                            {item.authority.source === "DIRECTOR"
+                              ? `국장 결정 ${item.authority.approved_at ?? ""}`
+                              : `유도 · ${item.authority.decided_in}`}
+                          </td>
+                          <td className="px-3 py-2 text-muted-foreground/65">
+                            {item.authority.director_reason && (
+                              <p className="mb-1 text-foreground/70">{item.authority.director_reason}</p>
+                            )}
+                            {item.authority.basis.map(line => (
+                              <p key={line} className="break-all">{line}</p>
+                            ))}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </section>
+            );
+          })}
 
           <section className="space-y-3 border-t border-border/15 pt-4">
             <div>
@@ -889,7 +1043,7 @@ export const AdminEditLabPanel: React.FC = () => {
                 하드룰 선언 {audit.rules.declared} · 런타임 등록 {audit.rules.registered} · 보정 {audit.rules.corrective} · veto {audit.rules.veto} · veto 선언·도달 불가 {audit.rules.veto_unreachable} · ID 교집합 {audit.rules.identity_overlap}
               </p>
               <p className="text-[11px] text-muted-foreground/60">
-                편집기법 선언 {audit.techniques.declared} · AI 가능 {audit.techniques.ai_allowed} · 사용자 전용 {audit.techniques.user_only} · 미정 {audit.techniques.undecided} · 배선 {audit.techniques.wired} · 가동 {audit.techniques.active}
+                편집기법 선언 {audit.techniques.declared} · 모수 {audit.techniques.scope} · AI 가능 {audit.techniques.ai_allowed} · 조건부 {audit.techniques.ai_allowed_conditional} · 사용자 전용 {audit.techniques.user_only} · 인프라 {audit.techniques.not_a_technique} · 룰 이관 후보 {audit.techniques.rule_candidate} · 배선 {audit.techniques.wired} · 가동 {audit.techniques.active}
               </p>
             </div>
           </details>
