@@ -151,6 +151,25 @@ export const ArchivePanel: React.FC<{
   const [exportsLoaded, setExportsLoaded] = useState(false);
   const [exportsLoading, setExportsLoading] = useState(false);
   const [playingId, setPlayingId] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  /** [LAB-21] 산출물 1건을 휴지통으로 보낸다. 파일은 storage/trash 에 남는다. */
+  const deleteExport = async (ex: ExportRecord) => {
+    const label = ex.display_name || ex.program_title || "내보낸 영상";
+    if (!window.confirm(`"${label}" 을(를) 휴지통으로 보냅니다.\n목록에서 사라지지만 파일은 보관됩니다.`)) return;
+    setDeletingId(ex.id);
+    try {
+      const res = await fetch(`${videoService.API_BASE_URL}/exports/${encodeURIComponent(ex.id)}`, { method: "DELETE" });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      setExports(prev => prev.filter(e => e.id !== ex.id));
+      if (playingId === ex.id) setPlayingId(null);
+    } catch (e) {
+      console.error("산출물 삭제 실패:", e);
+      window.alert("삭제하지 못했습니다. 로그를 확인해 주세요.");
+    } finally {
+      setDeletingId(null);
+    }
+  };
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState("");
   const [expandedSourceId, setExpandedSourceId] = useState<string | null>(null);
@@ -718,6 +737,16 @@ export const ArchivePanel: React.FC<{
                         다시 편집
                       </button>
                     )}
+                    {/* [LAB-21] 즉시 파기가 아니라 storage/trash 로 옮긴다 — 원본 삭제와 같은 방식. */}
+                    <button
+                      onClick={() => deleteExport(ex)}
+                      disabled={deletingId === ex.id}
+                      title="휴지통으로 이동"
+                      className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-white/5 hover:bg-red-500/15 text-foreground/60 hover:text-red-300 text-xs font-medium transition-colors border border-border/15 disabled:opacity-40"
+                    >
+                      <Trash2 size={13} />
+                      {deletingId === ex.id ? "삭제 중" : "삭제"}
+                    </button>
                   </div>
                 </div>
 

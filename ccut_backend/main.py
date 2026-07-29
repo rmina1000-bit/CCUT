@@ -5395,6 +5395,44 @@ async def rename_source(source_id: str, req: SourceNameRequest, db: Session = De
     return {"status": "SUCCESS", "source_id": source_id, "title": s.title, "display_name": s.display_name}
 
 
+@app.delete("/exports/{render_id}")
+async def delete_export(render_id: str, db: Session = Depends(get_db)):
+    """[LAB-21] 내보낸 산출물 1건 삭제.
+
+    국장 실측: 목록에서 영상을 지울 방법이 아예 없었다.
+    즉시 파기하지 않는다 — 원본 삭제(delete_source)와 같은 방식으로 mp4 를
+    storage/trash 로 옮기고 목록 행만 지운다. 파일은 복원 가능하다.
+    export_results 에는 deleted_at 컬럼이 없고 스키마는 불가침이라,
+    소프트 삭제 플래그 대신 '파일 보존 + 행 제거'로 같은 성질을 만든다.
+    """
+    from archive.db_models import ExportResultTable as _ERT
+    row = db.query(_ERT).filter_by(id=render_id).first()
+    if not row:
+        return JSONResponse(status_code=404, content={
+            "status": "NOT_FOUND", "render_id": render_id})
+
+    moved_to = None
+    path = row.output_path_internal
+    if path and os.path.exists(path):
+        try:
+            _trash_dir = STORAGE_DIR / "trash"
+            _trash_dir.mkdir(parents=True, exist_ok=True)
+            _dst = _trash_dir / f"{os.path.basename(path)}_{time.strftime('%Y%m%d_%H%M%S')}"
+            _shutil.move(path, str(_dst))
+            moved_to = str(_dst)
+            print(f"[EXPORT-DELETE] {render_id} trash로 이동: {_dst.name}")
+        except Exception as e:
+            print(f"[EXPORT-DELETE] {render_id} 파일 이동 실패(행은 유지): {e}")
+            return JSONResponse(status_code=500, content={
+                "status": "ERROR", "render_id": render_id, "message": str(e)})
+    else:
+        print(f"[EXPORT-DELETE] {render_id} 파일 없음(행만 제거): {path}")
+
+    db.delete(row)
+    db.commit()
+    return {"status": "SUCCESS", "render_id": render_id, "trashed_to": moved_to}
+
+
 @app.delete("/sources/{source_id}")
 async def delete_source(source_id: str, mode: str = "source_only", db: Session = Depends(get_db)):
     """[SOURCE] 원본 삭제.

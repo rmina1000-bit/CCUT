@@ -109,7 +109,13 @@ const Index: React.FC = () => {
 
   // [STORY-GATE P3] 승인 전에는 PBE(조각 정밀편집) 진입을 막는다 (S2).
   // 게이트 OFF면 awaitingApproval=false → 현행과 동일.
-  const storyGate = useStoryGate(activeNavItem, appState === "complete");
+  // [LAB-21] activeNavItem 은 프로젝트 id 와 화면 이름("upload"·"archive"…)을 겸한다.
+  //   가드 없이 넘기면 /api/story/upload 같은 요청이 나가 404 가 뜬다(콘솔 잡음).
+  //   아래 137행이 이미 쓰는 것과 같은 조건이다.
+  const storyGate = useStoryGate(
+    activeNavItem?.startsWith("proj_") ? activeNavItem : null,
+    appState === "complete",
+  );
   const uiStateSaveRef = useRef<Promise<unknown> | null>(null);
   const [compositionNotice, setCompositionNotice] = useState<string | null>(null);
   const [appDialog, setAppDialog] = useState<{
