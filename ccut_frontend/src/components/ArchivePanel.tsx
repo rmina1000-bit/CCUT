@@ -7,6 +7,7 @@ import { videoService } from "@/services/videoService";
 import { sourceDisplayName } from "@/lib/fragmentIdentity";
 import { SingleFragmentEditor } from "@/components/SingleFragmentEditor";
 import { ArchiveWorkbench } from "@/components/ArchiveWorkbench";
+import { AppDialog } from "@/components/AppDialog";
 
 // [Archive 단계B] hydrate 분리 — /archive/list 대형 응답 폐지.
 // summary(경량) + sources(페이징) + source 상세(lazy) + timeline(day 페이징)로 분리.
@@ -152,11 +153,12 @@ export const ArchivePanel: React.FC<{
   const [exportsLoading, setExportsLoading] = useState(false);
   const [playingId, setPlayingId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<ExportRecord | null>(null);
+  const [deleteNotice, setDeleteNotice] = useState<string | null>(null);
 
-  /** [LAB-21] 산출물 1건을 휴지통으로 보낸다. 파일은 storage/trash 에 남는다. */
-  const deleteExport = async (ex: ExportRecord) => {
-    const label = ex.display_name || ex.program_title || "내보낸 영상";
-    if (!window.confirm(`"${label}" 을(를) 휴지통으로 보냅니다.\n목록에서 사라지지만 파일은 보관됩니다.`)) return;
+  /** [LAB-25] 산출물 1건을 휴지통으로 보낸다. 파일은 storage/trash 에 남는다.
+   *  대화상자는 브라우저 기본창이 아니라 AppDialog 를 쓴다(앱 디자인 일관성). */
+  const runDeleteExport = async (ex: ExportRecord) => {
     setDeletingId(ex.id);
     try {
       const res = await fetch(`${videoService.API_BASE_URL}/exports/${encodeURIComponent(ex.id)}`, { method: "DELETE" });
@@ -165,7 +167,7 @@ export const ArchivePanel: React.FC<{
       if (playingId === ex.id) setPlayingId(null);
     } catch (e) {
       console.error("산출물 삭제 실패:", e);
-      window.alert("삭제하지 못했습니다. 로그를 확인해 주세요.");
+      setDeleteNotice("삭제하지 못했습니다. 로그를 확인해 주세요.");
     } finally {
       setDeletingId(null);
     }
@@ -739,7 +741,7 @@ export const ArchivePanel: React.FC<{
                     )}
                     {/* [LAB-21] 즉시 파기가 아니라 storage/trash 로 옮긴다 — 원본 삭제와 같은 방식. */}
                     <button
-                      onClick={() => deleteExport(ex)}
+                      onClick={() => setDeleteTarget(ex)}
                       disabled={deletingId === ex.id}
                       title="휴지통으로 이동"
                       className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-white/5 hover:bg-red-500/15 text-foreground/60 hover:text-red-300 text-xs font-medium transition-colors border border-border/15 disabled:opacity-40"
@@ -843,6 +845,28 @@ export const ArchivePanel: React.FC<{
         fragment={viewerFrag}
         projectName="아카이브"
         readOnly
+      />
+
+      {/* [LAB-25] 산출물 삭제 확인·결과 — 브라우저 기본창 대신 앱 대화상자 */}
+      <AppDialog
+        open={!!deleteTarget}
+        message={deleteTarget
+          ? `"${deleteTarget.display_name || deleteTarget.program_title || "내보낸 영상"}" 을(를) 휴지통으로 보냅니다.\n목록에서 사라지지만 파일은 보관됩니다.`
+          : ""}
+        confirmText="삭제"
+        cancelText="취소"
+        onCancel={() => setDeleteTarget(null)}
+        onConfirm={() => {
+          const target = deleteTarget;
+          setDeleteTarget(null);
+          if (target) void runDeleteExport(target);
+        }}
+      />
+      <AppDialog
+        open={!!deleteNotice}
+        message={deleteNotice ?? ""}
+        confirmText="OK"
+        onConfirm={() => setDeleteNotice(null)}
       />
     </div>
   );

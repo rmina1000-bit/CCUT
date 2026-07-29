@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { RotateCcw, Film, Clock, Calendar, Play, Edit3, X, Youtube, Tv2, Instagram, Check } from "lucide-react";
+import { RotateCcw, Film, Clock, Calendar, Play, Edit3, X, Youtube, Tv2, Instagram, Check, Trash2 } from "lucide-react";
 import { videoService } from "@/services/videoService";
 import { AppDialog } from "@/components/AppDialog";
 
@@ -51,6 +51,10 @@ export const SnsUploadPanel: React.FC<{
   const [uploadDone, setUploadDone] = useState<Record<string, string>>({});
   const [infoKey, setInfoKey] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  // [LAB-25] 산출물 삭제 — 백엔드 DELETE /exports/{id} 는 LAB-21에서 세워져 있었고
+  //   이 화면만 배선이 비어 있었다(파일이 다른 트랙 소유라 손대지 못했다).
+  const [deleteTarget, setDeleteTarget] = useState<ExportRecord | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   const fetchYt = async () => {
     try { setYt(await fetch("/api/sns/youtube/status").then((r) => r.json())); } catch { setYt(null); }
@@ -85,6 +89,20 @@ export const SnsUploadPanel: React.FC<{
       }
     } catch (e) { setNotice("업로드 중 오류가 났습니다."); }
     setUploading(false);
+  };
+
+  const runDeleteExport = async (ex: ExportRecord) => {
+    setDeletingId(ex.id);
+    try {
+      const res = await fetch(`${videoService.API_BASE_URL}/exports/${encodeURIComponent(ex.id)}`, { method: "DELETE" });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      setExports(prev => prev.filter(e => e.id !== ex.id));
+      if (playingId === ex.id) setPlayingId(null);
+    } catch {
+      setNotice("삭제하지 못했습니다. 로그를 확인해 주세요.");
+    } finally {
+      setDeletingId(null);
+    }
   };
 
   const fetchExports = async () => {
@@ -126,6 +144,21 @@ export const SnsUploadPanel: React.FC<{
         message={notice ?? ""}
         confirmText="OK"
         onConfirm={() => setNotice(null)}
+      />
+      <AppDialog
+        open={!!deleteTarget}
+        message={deleteTarget
+          ? `"${deleteTarget.program_title || deleteTarget.program_id || "프로젝트"}" 을(를) 휴지통으로 보냅니다.
+목록에서 사라지지만 파일은 보관됩니다.`
+          : ""}
+        confirmText="삭제"
+        cancelText="취소"
+        onCancel={() => setDeleteTarget(null)}
+        onConfirm={() => {
+          const target = deleteTarget;
+          setDeleteTarget(null);
+          if (target) void runDeleteExport(target);
+        }}
       />
       {/* Header */}
       <div className="flex items-center justify-between px-8 pt-8 pb-4 flex-shrink-0">
@@ -269,6 +302,16 @@ export const SnsUploadPanel: React.FC<{
                         다시 편집
                       </button>
                     )}
+                    {/* [LAB-25] 즉시 파기가 아니라 storage/trash 로 옮긴다. */}
+                    <button
+                      onClick={() => setDeleteTarget(ex)}
+                      disabled={deletingId === ex.id}
+                      title="휴지통으로 이동"
+                      className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-white/5 hover:bg-red-500/15 text-foreground/60 hover:text-red-300 text-xs font-medium transition-colors border border-border/15 disabled:opacity-40"
+                    >
+                      <Trash2 size={13} />
+                      {deletingId === ex.id ? "삭제 중" : "삭제"}
+                    </button>
                   </div>
                 </div>
 
