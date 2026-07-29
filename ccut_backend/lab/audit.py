@@ -404,12 +404,17 @@ RULE_ACTIONS = {
 
 # 등록됐지만 아무 동작도 하지 않는 룰의 사유. 선언만 된 12개는 아래 기본 사유를 쓴다.
 RULE_NO_ACTION_REASON = {
-    "RULE_BOUNDARY_PATH_UNIFORM":
-        "boundary_rule_results 로그 전용 — ccut_backend/story_gate/proposal_axis.py:601-606",
-    "RULE_NO_MID_WORD_CUT":
-        "boundary_rule_results 로그 전용 — ccut_backend/story_gate/proposal_axis.py:601-606",
     "RULE_EDIT_STATE_NO_SHADOW":
         "등록만 · check_rules 호출자 없음 — ccut_backend/engine/story_template_resolver.py:137",
+}
+
+# [LAB-43] 경고(WARN) — 값을 바꾸지도 차단하지도 않지만 **실제로 돌아** 위반을 남긴다.
+#   구판은 이 셋이 '로그 전용'이라 적혀 있었으나 boundary_rule_results 호출자가
+#   0건이라 한 번도 실행되지 않았다. run_boundary_checks 로 집행 경로에 연결됨.
+RULE_WARN_ACTIONS = {
+    "RULE_BOUNDARY_PATH_UNIFORM": "ccut_backend/story_gate/proposal_axis.py:run_boundary_checks",
+    "RULE_NO_MID_WORD_CUT": "ccut_backend/story_gate/proposal_axis.py:run_boundary_checks",
+    "RULE_WORD_BOUNDARY_SNAP": "ccut_backend/story_gate/proposal_axis.py:run_boundary_checks",
 }
 DECLARED_NO_ACTION_REASON = (
     "검사 함수 미등록 — ccut_enforcement_point 를 역참조하는 코드가 없다"
@@ -436,9 +441,14 @@ def _rule_action_view(rule_id, registered):
         actions.append("CORRECTIVE")
     if spec.get("veto"):
         actions.append("VETO")
+    # [LAB-43] 경고 집행 — 값은 안 바꾸지만 실제로 돌아 위반을 남긴다.
+    warn_evidence = RULE_WARN_ACTIONS.get(rule_id) if registered else None
+    if warn_evidence:
+        actions.append("WARN")
     gate = _gate_state(spec.get("corrective_gate"))
     return {
         "actions": actions or ["NONE"],
+        "warn_evidence": warn_evidence,
         "corrective_evidence": spec.get("corrective"),
         "corrective_entry": spec.get("corrective_entry"),
         "corrective_gate": gate,
@@ -700,11 +710,19 @@ def run_audit():
     finally:
         con.close()
 
-    declared_rules = {
-        item["rule_id"] for item in _load_json(CONFIG_DIR / "production_hard_rules.json")["rules"]
-    }
+    declared_rule_config = _load_json(CONFIG_DIR / "production_hard_rules.json")["rules"]
+    declared_rules = {item["rule_id"] for item in declared_rule_config}
     registered_rules = sorted(_registered_rules())
-    rule_identity_overlap = sorted(declared_rules.intersection(registered_rules))
+    # [LAB-43] 이름공간 통합. 선언 id 는 소문자, 등록 id 는 RULE_* 라 raw 교집합은
+    #   구조적으로 항상 0이었다(BROKEN 12의 정체). registered_as 다리로 대응을 센다.
+    declared_registered_as = {
+        item["rule_id"]: item.get("registered_as")
+        for item in declared_rule_config
+    }
+    rule_identity_overlap = sorted(
+        reg for reg in declared_registered_as.values()
+        if reg and reg in registered_rules
+    )
 
     techniques = _load_json(CONFIG_DIR / "editing_techniques.json")["techniques"]
     declared_techniques = {item["technique_id"] for item in techniques}
@@ -728,21 +746,37 @@ def run_audit():
     active_set = set(active)
 
     declared_rule_rows = _load_json(CONFIG_DIR / "production_hard_rules.json")["rules"]
+    # [LAB-43] 선언 루프가 이 표를 참조하므로 루프보다 먼저 세운다.
+    registered_material_checks = {
+        "RULE_NO_MID_WORD_CUT": ["word_timestamps"],
+        "RULE_WORD_BOUNDARY_SNAP": ["word_timestamps"],
+    }
     rule_items = []
     for item in declared_rule_rows:
         rule_id = item["rule_id"]
+        # [LAB-43] 선언 id 로는 등록 여부를 볼 수 없다 — registered_as 다리로 본다.
+        linked = item.get("registered_as")
+        is_registered = bool(linked) and linked in registered_rules
+        action_view = _rule_action_view(linked or rule_id, is_registered)
+        acts = action_view["actions"] != ["NONE"]
         rule_items.append({
             "id": rule_id,
+            "registered_as": linked,
+            "checker_status": item.get("checker_status", "UNKNOWN"),
+            "checker_note": item.get("checker_note"),
             "declared_in": _line_evidence(
                 "ccut_backend/config/production_hard_rules.json",
                 f'"rule_id": "{rule_id}"',
             ),
-            "registered": rule_id in registered_rules,
-            "acts": False,
-            "state": "DECLARED",
-            "checks_materials": "UNDECLARED",
-            "evidence": "ccut_backend/config/production_hard_rules.json:rules",
-            **_rule_action_view(rule_id, rule_id in registered_rules),
+            "registered": is_registered,
+            "acts": acts,
+            "state": ("ACTING" if acts else "REGISTERED" if is_registered
+                      else "DECLARED"),
+            "checks_materials": registered_material_checks.get(linked, "UNDECLARED")
+            if linked else "UNDECLARED",
+            "evidence": item.get("checker_evidence")
+            or "ccut_backend/config/production_hard_rules.json:rules",
+            **action_view,
         })
 
     registered_rule_sources = {
@@ -752,10 +786,6 @@ def run_audit():
         "RULE_BOUNDARY_PATH_UNIFORM": "ccut_backend/story_gate/proposal_axis.py",
         "RULE_NO_MID_WORD_CUT": "ccut_backend/story_gate/proposal_axis.py",
         "RULE_WORD_BOUNDARY_SNAP": "ccut_backend/story_gate/proposal_axis.py",
-    }
-    registered_material_checks = {
-        "RULE_NO_MID_WORD_CUT": ["word_timestamps"],
-        "RULE_WORD_BOUNDARY_SNAP": ["word_timestamps"],
     }
     registered_material_evidence = {
         "RULE_NO_MID_WORD_CUT": _line_evidence(
@@ -769,8 +799,14 @@ def run_audit():
             2,
         ),
     }
+    # [LAB-43] 선언서가 registered_as 로 이미 품은 등록 룰은 다시 만들지 않는다
+    #   (구판은 소문자↔RULE_* 라 교집합이 늘 0이어서 6건이 통째로 중복 등재됐다).
+    linked_registered = {
+        item.get("registered_as") for item in declared_rule_rows
+        if item.get("registered_as")
+    }
     for rule_id in registered_rules:
-        if rule_id in declared_rules:
+        if rule_id in declared_rules or rule_id in linked_registered:
             continue
         source = registered_rule_sources.get(rule_id)
         evidence = (
@@ -812,20 +848,28 @@ def run_audit():
         relationship_source = relationship.get("type", "UNDECLARED")
         if technique_id == "punch_in":
             relationship_source = "DERIVED"
+        # [LAB-43] '미선언'과 '명시적으로 재료가 필요 없음'은 다르다.
+        #   구판은 빈 목록도 미선언과 같이 취급해, 재료가 애초에 필요 없는 기법
+        #   (audio_fade_30ms 등)이 영원히 "관계 미선언"으로 차단됐다.
+        #   키의 존재 여부로 선언을 판정한다: 키 없음=미선언, []=재료 불필요 선언.
+        materials_declared = "requires_materials" in item
         required_materials = item.get("requires_materials")
         if required_materials is None and technique_id == "punch_in":
             required_materials = [
                 signal for signal in item.get("required_signals", [])
                 if signal in material_by_id
             ]
+            materials_declared = True
         required_materials = required_materials or []
+        rules_declared = "requires_rules" in item
         required_rules = item.get("requires_rules")
         if required_rules is None:
             required_rules = referenced_technique_rules.get(
                 technique_id, "UNDECLARED"
             )
+            rules_declared = technique_id in referenced_technique_rules
         blockers = []
-        if not required_materials:
+        if not materials_declared:
             blockers.append({
                 "kind": "관계 미선언",
                 "detail": "requires_materials 미선언",
@@ -851,12 +895,12 @@ def run_audit():
                     "kind": "재료 단위 불일치",
                     "detail": material_id,
                 })
-        if required_rules == "UNDECLARED":
+        if not rules_declared:
             blockers.append({
                 "kind": "관계 미선언",
                 "detail": "requires_rules 미선언",
             })
-        else:
+        elif required_rules != "UNDECLARED":
             for rule_id in required_rules:
                 if _rule_action_view(rule_id, True)["actions"] == ["NONE"]:
                     blockers.append({
@@ -902,10 +946,16 @@ def run_audit():
             "ccut_backend/story_gate/proposal_axis.py",
             'TECHNIQUE_AS_IS = "as_is"',
         ),
-        "requires_materials": "UNDECLARED",
-        "requires_rules": "UNDECLARED",
-        "relationship_source": "UNDECLARED",
-        "relationship_source_detail": {},
+        # [LAB-43] as_is 는 원본 경계를 그대로 쓴다 — 읽는 재료도 거는 룰도 없다.
+        #   '미선언'이 아니라 '불필요'가 참이므로 빈 목록으로 선언한다.
+        "requires_materials": [],
+        "requires_rules": [],
+        "relationship_source": "DECLARED",
+        "relationship_source_detail": {
+            "type": "DECLARED",
+            "decided_in": "LAB-43",
+            "basis": "원본 경계 그대로 — 재료·룰 불요",
+        },
         "blockers": [],
         "wireable_now": True,
         "failure_check": None,
@@ -1020,7 +1070,15 @@ def run_audit():
             "veto_unreachable": sum(
                 1 for item in rule_items if item["veto_unreachable"]
             ),
-            "unregistered": len(declared_rules - set(registered_rules)),
+            # [LAB-43] 검사기가 없는 선언 = 정직한 미집행 수치.
+            "unregistered": sum(
+                1 for item in declared_rule_rows
+                if not item.get("registered_as")
+            ),
+            "no_checker_ids": [
+                item["rule_id"] for item in declared_rule_rows
+                if not item.get("registered_as")
+            ],
             "identity_overlap": len(rule_identity_overlap),
             "identity_overlap_ids": rule_identity_overlap,
             "registered_ids": registered_rules,

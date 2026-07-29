@@ -105,6 +105,23 @@
         "quality_evidence"
       ],
       "unknown_reason": "MODEL_MISSING"
+    },
+    {
+      "sensor": "clip_visual_embed",
+      "version": "lab41_retina",
+      "values_keys": [
+        "embedding_512d"
+      ],
+      "model": "ViT-B-32-quickgelu (open_clip, openai safetensors, 오프라인)",
+      "measured_cost": {
+        "backfill_ms_per_image": 66,
+        "auto_index_ms_per_image": [
+          51,
+          81
+        ],
+        "source": "LAB-41 실측 (백필 469장 / AUTO_INDEX 3세션)"
+      },
+      "usage_limit": "장소·장면 후보 제시 전용. 인물 식별·의미 판정 금지."
     }
   ]
 }

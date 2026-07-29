@@ -14,10 +14,22 @@
         "method": "fragment_id_join",
         "evidence": "ccut_backend/story_gate/proposal_axis.py:516-518"
       },
-      "producer_terms": ["motion_scores_for_spans", "_inject_motion_scores"],
-      "producer_paths": ["ccut_backend/engine/fragment_indexer.py", "ccut_backend/main.py"],
-      "consumer_terms": ["motion_score"],
-      "consumer_paths": ["ccut_backend/story_gate/proposal_axis.py", "ccut_backend/engine/proposal_engine.py", "ccut_backend/ledger_r0.py"]
+      "producer_terms": [
+        "motion_scores_for_spans",
+        "_inject_motion_scores"
+      ],
+      "producer_paths": [
+        "ccut_backend/engine/fragment_indexer.py",
+        "ccut_backend/main.py"
+      ],
+      "consumer_terms": [
+        "motion_score"
+      ],
+      "consumer_paths": [
+        "ccut_backend/story_gate/proposal_axis.py",
+        "ccut_backend/engine/proposal_engine.py",
+        "ccut_backend/ledger_r0.py"
+      ]
     },
     {
       "id": "audio_beat",
@@ -34,10 +46,20 @@
         "method": "evidence_refs_in_span",
         "evidence": "ccut_backend/story_gate/proposal_axis.py:538-550"
       },
-      "producer_terms": ["beat_times", "\"audio_beat\""],
-      "producer_paths": ["ccut_backend/engine/signal_processor.py", "ccut_backend/main.py"],
-      "consumer_terms": ["audio_beat"],
-      "consumer_paths": ["ccut_backend/story_gate/proposal_axis.py"]
+      "producer_terms": [
+        "beat_times",
+        "\"audio_beat\""
+      ],
+      "producer_paths": [
+        "ccut_backend/engine/signal_processor.py",
+        "ccut_backend/main.py"
+      ],
+      "consumer_terms": [
+        "audio_beat"
+      ],
+      "consumer_paths": [
+        "ccut_backend/story_gate/proposal_axis.py"
+      ]
     },
     {
       "id": "audio_energy",
@@ -53,10 +75,18 @@
         "method": "temporal_overlap",
         "evidence": "ccut_backend/engine/proposal_engine.py:207-212"
       },
-      "producer_terms": ["\"audio_energy\": energy"],
-      "producer_paths": ["ccut_backend/main.py"],
-      "consumer_terms": ["audio_energy"],
-      "consumer_paths": ["ccut_backend/engine/proposal_engine.py"]
+      "producer_terms": [
+        "\"audio_energy\": energy"
+      ],
+      "producer_paths": [
+        "ccut_backend/main.py"
+      ],
+      "consumer_terms": [
+        "audio_energy"
+      ],
+      "consumer_paths": [
+        "ccut_backend/engine/proposal_engine.py"
+      ]
     },
     {
       "id": "word_timestamps",
@@ -73,10 +103,20 @@
         "method": "subtitle_word_overlap",
         "evidence": "ccut_backend/story_gate/proposal_axis.py:223-245"
       },
-      "producer_terms": ["word_timestamps"],
-      "producer_paths": ["ccut_backend/engine/ai_engine.py"],
-      "consumer_terms": ["word_timestamps", "fragment_words"],
-      "consumer_paths": ["ccut_backend/story_gate/proposal_axis.py", "ccut_backend/engine/semantic_engine.py"]
+      "producer_terms": [
+        "word_timestamps"
+      ],
+      "producer_paths": [
+        "ccut_backend/engine/ai_engine.py"
+      ],
+      "consumer_terms": [
+        "word_timestamps",
+        "fragment_words"
+      ],
+      "consumer_paths": [
+        "ccut_backend/story_gate/proposal_axis.py",
+        "ccut_backend/engine/semantic_engine.py"
+      ]
     },
     {
       "id": "speech_presence",
@@ -94,9 +134,16 @@
         "method": "fragment_id_join",
         "evidence": null
       },
-      "producer_terms": ["SENSOR_ID = \"silero_vad\"", "\"speech_ratio\""],
-      "producer_paths": ["ccut_backend/engine/silero_sensor.py"],
-      "consumer_terms": ["speech_presence"],
+      "producer_terms": [
+        "SENSOR_ID = \"silero_vad\"",
+        "\"speech_ratio\""
+      ],
+      "producer_paths": [
+        "ccut_backend/engine/silero_sensor.py"
+      ],
+      "consumer_terms": [
+        "speech_presence"
+      ],
       "consumer_paths": []
     },
     {
@@ -114,9 +161,13 @@
         "method": "fragment_id_join",
         "evidence": null
       },
-      "producer_terms": ["face_size"],
+      "producer_terms": [
+        "face_size"
+      ],
       "producer_paths": [],
-      "consumer_terms": ["face_size"],
+      "consumer_terms": [
+        "face_size"
+      ],
       "consumer_paths": []
     },
     {
@@ -134,9 +185,13 @@
         "method": "fragment_id_join",
         "evidence": null
       },
-      "producer_terms": ["shot_size"],
+      "producer_terms": [
+        "shot_size"
+      ],
       "producer_paths": [],
-      "consumer_terms": ["shot_size"],
+      "consumer_terms": [
+        "shot_size"
+      ],
       "consumer_paths": []
     },
     {
@@ -154,14 +209,74 @@
         "method": "fragment_id_join",
         "evidence": null
       },
-      "producer_terms": ["emotion_score"],
+      "producer_terms": [
+        "emotion_score"
+      ],
       "producer_paths": [],
-      "consumer_terms": ["emotion_score"],
+      "consumer_terms": [
+        "emotion_score"
+      ],
       "consumer_paths": []
+    },
+    {
+      "id": "visual_mark",
+      "label": "시각 표식",
+      "table": "fragment_visual_marks",
+      "column": "embedding",
+      "storage_unit": "semantic_fragment",
+      "fragment_consumer_contract": true,
+      "projection": "direct_per_span",
+      "projection_evidence": "ccut_backend/engine/visual_marker.py:mark_pairs",
+      "consumption": {
+        "unit": "semantic_fragment",
+        "method": "fragment_id_join",
+        "evidence": "ccut_backend/engine/visual_marker.py:similar"
+      },
+      "producer_terms": [
+        "mark_pairs",
+        "fire_background",
+        "backfill"
+      ],
+      "producer_paths": [
+        "ccut_backend/engine/visual_marker.py",
+        "ccut_backend/engine/fragment_indexer.py"
+      ],
+      "consumer_terms": [
+        "fragment_visual_marks",
+        "visual_marker"
+      ],
+      "consumer_paths": [
+        "ccut_backend/engine/visual_marker.py",
+        "ccut_backend/main.py"
+      ],
+      "usage_limit": {
+        "허용": "장소·장면 후보 제시 전용 (유사 조각 top-k)",
+        "금지": [
+          "인물 식별 — Q4/Q5 실측에서 인물 축으로 서지 않음(LAB-41 부속A)",
+          "의미 판정 — CLIP은 후보 제시일 뿐 편집 판단 근거가 아님"
+        ],
+        "decided_in": "LAB-41 부속A / LAB-43"
+      },
+      "relationships": [
+        {
+          "to": "/fragment-similar API",
+          "status": "LIVE",
+          "evidence": "ccut_backend/main.py:/fragment-similar/{fragment_id}"
+        },
+        {
+          "to": "유사 조각 UI",
+          "status": "예정",
+          "evidence": "ccut_frontend/src/components/FragmentTile.tsx (미연결)"
+        }
+      ]
     }
   ],
   "technique_gates": {
-    "word_boundary_snap": "CCUT_TECHNIQUE_WORD_SNAP"
+    "word_boundary_snap": "CCUT_TECHNIQUE_WORD_SNAP",
+    "audio_fade_30ms": "CCUT_TECHNIQUE_AUDIO_FADE",
+    "sentence_boundary_cut": "CCUT_TECHNIQUE_CONDITIONAL_CUT",
+    "dead_air_removal": "CCUT_TECHNIQUE_CONDITIONAL_CUT",
+    "pause_compression": "CCUT_TECHNIQUE_CONDITIONAL_CUT"
   },
   "wired_techniques": {
     "word_boundary_snap": [
@@ -175,7 +290,25 @@
     "as_is": [
       "ccut_backend/story_gate/proposal_axis.py",
       "ccut_backend/engine/proposal_preview_engine.py"
+    ],
+    "audio_fade_30ms": [
+      "ccut_backend/engine/render_engine.py"
+    ],
+    "sentence_boundary_cut": [
+      "ccut_backend/story_gate/conditional_cut_guard.py"
+    ],
+    "dead_air_removal": [
+      "ccut_backend/story_gate/conditional_cut_guard.py"
+    ],
+    "pause_compression": [
+      "ccut_backend/story_gate/conditional_cut_guard.py"
     ]
   },
-  "source_extensions": [".py", ".ts", ".tsx"]
+  "source_extensions": [
+    ".py",
+    ".ts",
+    ".tsx"
+  ],
+  "wired_evidence_note": "audio_fade_30ms: _audio_fade_spec()(render_engine.py:17) 가 게이트와 config 를 읽고 afade 필터를 클립마다 건다(render_engine.py:68-69). LAB-18 에 이미 시공됐으나 wired_techniques 에 등재되지 않아 감사 화면에서 '미배선'으로 보였다(LAB-43 실측).",
+  "conditional_guard_note": "조건부 3종은 conditional_cut_guard.apply_guarded 가 조건을 강제한다: 가장자리 안쪽 당김만 허용, 분할·조각수 변화·밖으로 확장은 변경 폐기(원본 경계 유지). 게이트 CCUT_TECHNIQUE_CONDITIONAL_CUT 기본 OFF — 신규 게이트 표준(LAB-43 국장 확정)."
 }

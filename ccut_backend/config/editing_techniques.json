@@ -12,11 +12,20 @@
         ],
         "decided_in": "LAB-16"
       },
-      "origin_model": ["video-use", "descript"],
+      "origin_model": [
+        "video-use",
+        "descript"
+      ],
       "description": "컷 지점을 가장 가까운 단어의 시작/끝 지점으로 자동 보정",
-      "required_signals": ["word_timestamps"],
-      "requires_materials": ["word_timestamps"],
-      "requires_rules": ["RULE_WORD_BOUNDARY_SNAP"],
+      "required_signals": [
+        "word_timestamps"
+      ],
+      "requires_materials": [
+        "word_timestamps"
+      ],
+      "requires_rules": [
+        "RULE_WORD_BOUNDARY_SNAP"
+      ],
       "relationship_source": {
         "type": "DERIVED",
         "derived_from": [
@@ -25,9 +34,13 @@
           "ccut_backend/story_gate/proposal_axis.py:_check_word_boundary_snap"
         ]
       },
-      "engine_effect": { "snap_threshold_ms": 200 },
+      "engine_effect": {
+        "snap_threshold_ms": 200
+      },
       "failure_check": "mid_word_cut_detected",
-      "best_for": ["all"]
+      "best_for": [
+        "all"
+      ]
     },
     {
       "technique_id": "punch_in",
@@ -41,18 +54,31 @@
         ],
         "decided_in": "LAB-16"
       },
-      "origin_model": ["broadcast"],
+      "origin_model": [
+        "broadcast"
+      ],
       "description": "조각 안 강조 지점(첫 말 또는 첫 비트)에서 화면을 확대해 시선을 모은다. 조각 경계·순서·대사는 건드리지 않는다.",
-      "required_signals": ["word_timestamps", "audio_beat", "motion_vector"],
-      "engine_effect": { "zoom_min": 1.10, "zoom_max": 1.15, "ramp_sec": 0.25 },
+      "required_signals": [
+        "word_timestamps",
+        "audio_beat",
+        "motion_vector"
+      ],
+      "engine_effect": {
+        "zoom_min": 1.1,
+        "zoom_max": 1.15,
+        "ramp_sec": 0.25
+      },
       "hard_bounds": {
-        "zoom_max_allowed": 2.50,
+        "zoom_max_allowed": 2.5,
         "zoom_min_allowed": 1.02,
         "ramp_min_sec": 0.08,
         "_origin": "PROVISIONAL · 국장 판정 대기. 기법이 요청하는 값(engine_effect)과 분리된 상한이라야 규칙이 반증 가능해진다. 근거: PUNCH-1 검증용 최대 2.20이 국장 화면 PASS를 받았으므로 그 값은 허용되어야 하고 그 위 여유 0.30. 업계 표준 출처 없음 — 줌 배율 상한을 규정한 방송 규격을 우리 자산에서 찾지 못했다."
       },
       "failure_check": "punch_without_evidence",
-      "best_for": ["people_focus", "highlights"]
+      "best_for": [
+        "people_focus",
+        "highlights"
+      ]
     },
     {
       "technique_id": "sentence_boundary_cut",
@@ -69,12 +95,35 @@
         "condition": "조각 가장자리 경계를 안쪽으로 당기는 것만 허용. 조각이 분할되거나 조각 수가 변하면 즉시 중지. 중간 삭제는 사용자 기능(PBE 대사 에디터) 소관.",
         "decided_in": "LAB-17"
       },
-      "origin_model": ["broadcast", "video-use"],
+      "origin_model": [
+        "broadcast",
+        "video-use"
+      ],
       "description": "문장이 끝나는 지점에서 컷을 생성하여 의미 전달을 명확히 함",
-      "required_signals": ["transcript"],
-      "engine_effect": { "cut_at_punctuation": [".", "?", "!"] },
+      "required_signals": [
+        "transcript"
+      ],
+      "engine_effect": {
+        "cut_at_punctuation": [
+          ".",
+          "?",
+          "!"
+        ]
+      },
       "failure_check": "incomplete_sentence_cut",
-      "best_for": ["educational", "interviews"]
+      "best_for": [
+        "educational",
+        "interviews"
+      ],
+      "requires_materials": [
+        "word_timestamps"
+      ],
+      "requires_rules": [],
+      "relationship_source": {
+        "type": "DECLARED",
+        "decided_in": "LAB-43",
+        "basis": "cut_at_punctuation 판정에 말 시각 필요"
+      }
     },
     {
       "technique_id": "dead_air_removal",
@@ -92,12 +141,33 @@
         "condition": "조각 가장자리 경계를 안쪽으로 당기는 것만 허용. 조각이 분할되거나 조각 수가 변하면 즉시 중지. 중간 삭제는 사용자 기능(PBE 대사 에디터) 소관.",
         "decided_in": "LAB-17"
       },
-      "origin_model": ["video-use", "opusclip"],
+      "origin_model": [
+        "video-use",
+        "opusclip"
+      ],
       "description": "의미 없는 무음이나 움직임 없는 구간을 삭제하여 템포 향상",
-      "required_signals": ["audio_energy", "motion_vector"],
-      "engine_effect": { "silence_threshold_db": -40, "min_duration_sec": 1.5 },
+      "required_signals": [
+        "audio_energy",
+        "motion_vector"
+      ],
+      "engine_effect": {
+        "silence_threshold_db": -40,
+        "min_duration_sec": 1.5
+      },
       "failure_check": "stale_frames_detected",
-      "best_for": ["fast_pacing", "vlogs"]
+      "best_for": [
+        "fast_pacing",
+        "vlogs"
+      ],
+      "requires_materials": [
+        "word_timestamps"
+      ],
+      "requires_rules": [],
+      "relationship_source": {
+        "type": "DECLARED",
+        "decided_in": "LAB-43",
+        "basis": "무음 구간 판정에 말 시각 필요"
+      }
     },
     {
       "technique_id": "pause_compression",
@@ -115,12 +185,31 @@
         "condition": "조각 가장자리 경계를 안쪽으로 당기는 것만 허용. 조각이 분할되거나 조각 수가 변하면 즉시 중지. 중간 삭제는 사용자 기능(PBE 대사 에디터) 소관.",
         "decided_in": "LAB-17"
       },
-      "origin_model": ["descript", "video-use"],
+      "origin_model": [
+        "descript",
+        "video-use"
+      ],
       "description": "문장 사이의 긴 휴지기를 일정 비율로 단축",
-      "required_signals": ["transcript_gaps"],
-      "engine_effect": { "max_pause_sec": 0.5, "compression_ratio": 0.8 },
+      "required_signals": [
+        "transcript_gaps"
+      ],
+      "engine_effect": {
+        "max_pause_sec": 0.5,
+        "compression_ratio": 0.8
+      },
       "failure_check": "unnatural_pause_detected",
-      "best_for": ["informational"]
+      "best_for": [
+        "informational"
+      ],
+      "requires_materials": [
+        "word_timestamps"
+      ],
+      "requires_rules": [],
+      "relationship_source": {
+        "type": "DECLARED",
+        "decided_in": "LAB-43",
+        "basis": "휴지 길이 판정에 말 시각 필요"
+      }
     },
     {
       "technique_id": "audio_fade_30ms",
@@ -134,12 +223,27 @@
         ],
         "decided_in": "LAB-16"
       },
-      "origin_model": ["broadcast", "video-use"],
+      "origin_model": [
+        "broadcast",
+        "video-use"
+      ],
       "description": "컷 연결부의 오디오 틱(Tick) 노이즈 방지를 위해 짧은 페이드 적용",
       "required_signals": [],
-      "engine_effect": { "fade_in_ms": 30, "fade_out_ms": 30 },
+      "engine_effect": {
+        "fade_in_ms": 30,
+        "fade_out_ms": 30
+      },
       "failure_check": "audio_click_detected",
-      "best_for": ["all"]
+      "best_for": [
+        "all"
+      ],
+      "requires_materials": [],
+      "requires_rules": [],
+      "relationship_source": {
+        "type": "DECLARED",
+        "decided_in": "LAB-43",
+        "basis": "engine_effect.fade_in_ms/fade_out_ms 만 사용 — 조각 재료 불요"
+      }
     },
     {
       "technique_id": "subtitle_last_filter",
@@ -153,12 +257,34 @@
         ],
         "decided_in": "LAB-16"
       },
-      "origin_model": ["video-use"],
+      "origin_model": [
+        "video-use"
+      ],
       "description": "모든 시각 효과가 적용된 후 마지막에 자막을 렌더링하여 가독성 보장",
-      "required_signals": ["subtitles"],
-      "engine_effect": { "render_order": 999 },
+      "required_signals": [
+        "subtitles"
+      ],
+      "engine_effect": {
+        "render_order": 999
+      },
       "failure_check": "subtitle_overlap_with_effects",
-      "best_for": ["shorts", "educational"]
+      "best_for": [
+        "shorts",
+        "educational"
+      ],
+      "requires_materials": [],
+      "requires_rules": [],
+      "relationship_source": {
+        "type": "DECLARED",
+        "decided_in": "LAB-43",
+        "basis": "engine_effect.render_order 만 사용 — 필터 순서 규칙, 조각 재료 불요"
+      },
+      "wiring_blocked": {
+        "reason": "선행 기능 부재 — 자막을 영상에 태우는 렌더 단계가 저장소에 없다",
+        "measured": "drawtext / subtitles= / ass= 실호출 0건 (ccut_backend 전수, LAB-43 2026-07-30)",
+        "note": "engine_effect.render_order=999 는 '자막을 필터체인 마지막에'라는 순서 규칙이다. 순서를 매길 자막 단계가 생긴 뒤에 배선한다.",
+        "decided_in": "LAB-43"
+      }
     },
     {
       "technique_id": "transcript_cache",
@@ -176,12 +302,20 @@
         "director_reason": "산출물(조각·순서·대사·경계·타이밍·표시) 무변경. 인프라 정책이지 편집 기법이 아니다.",
         "decided_in": "LAB-17"
       },
-      "origin_model": ["video-use"],
+      "origin_model": [
+        "video-use"
+      ],
       "description": "동일 영상에 대한 재편집 시 Whisper 분석 결과 재사용",
-      "required_signals": ["source_hash"],
-      "engine_effect": { "cache_hit_priority": "high" },
+      "required_signals": [
+        "source_hash"
+      ],
+      "engine_effect": {
+        "cache_hit_priority": "high"
+      },
       "failure_check": "cache_mismatch",
-      "best_for": ["all"]
+      "best_for": [
+        "all"
+      ]
     },
     {
       "technique_id": "source_rotation",
@@ -196,12 +330,20 @@
         ],
         "decided_in": "LAB-16"
       },
-      "origin_model": ["broadcast"],
+      "origin_model": [
+        "broadcast"
+      ],
       "description": "여러 소스를 규칙적으로 번갈아 가며 배치하여 시각적 단조로움 해제",
-      "required_signals": ["source_id"],
-      "engine_effect": { "max_consecutive_same_source": 2 },
+      "required_signals": [
+        "source_id"
+      ],
+      "engine_effect": {
+        "max_consecutive_same_source": 2
+      },
       "failure_check": "source_monotony",
-      "best_for": ["multi_source"]
+      "best_for": [
+        "multi_source"
+      ]
     },
     {
       "technique_id": "source_diversity_guard",
@@ -216,12 +358,20 @@
         ],
         "decided_in": "LAB-16"
       },
-      "origin_model": ["broadcast"],
+      "origin_model": [
+        "broadcast"
+      ],
       "description": "사용 가능한 모든 소스가 최소 한 번은 제안에 포함되도록 관리",
-      "required_signals": ["source_id"],
-      "engine_effect": { "min_source_coverage": 0.8 },
+      "required_signals": [
+        "source_id"
+      ],
+      "engine_effect": {
+        "min_source_coverage": 0.8
+      },
       "failure_check": "source_exclusion_detected",
-      "best_for": ["balanced_record"]
+      "best_for": [
+        "balanced_record"
+      ]
     },
     {
       "technique_id": "establishing_context_open",
@@ -236,12 +386,21 @@
         ],
         "decided_in": "LAB-16"
       },
-      "origin_model": ["broadcast"],
+      "origin_model": [
+        "broadcast"
+      ],
       "description": "시청자가 상황을 이해할 수 있도록 넓은 시야의 조각으로 시작",
-      "required_signals": ["shot_size", "scene_type"],
-      "engine_effect": { "initial_role": "establishing" },
+      "required_signals": [
+        "shot_size",
+        "scene_type"
+      ],
+      "engine_effect": {
+        "initial_role": "establishing"
+      },
       "failure_check": "missing_context_opening",
-      "best_for": ["narrative"]
+      "best_for": [
+        "narrative"
+      ]
     },
     {
       "technique_id": "wide_medium_close_sequence",
@@ -256,12 +415,20 @@
         ],
         "decided_in": "LAB-16"
       },
-      "origin_model": ["broadcast"],
+      "origin_model": [
+        "broadcast"
+      ],
       "description": "Wide-Medium-Close 순서로 시점을 좁혀가며 몰입감 유도",
-      "required_signals": ["shot_size"],
-      "engine_effect": { "sequence_progression": "zooming_in" },
+      "required_signals": [
+        "shot_size"
+      ],
+      "engine_effect": {
+        "sequence_progression": "zooming_in"
+      },
       "failure_check": "shot_size_jump",
-      "best_for": ["cinematic"]
+      "best_for": [
+        "cinematic"
+      ]
     },
     {
       "technique_id": "cutaway_bridge",
@@ -276,12 +443,20 @@
         ],
         "decided_in": "LAB-16"
       },
-      "origin_model": ["broadcast"],
+      "origin_model": [
+        "broadcast"
+      ],
       "description": "주요 장면 사이에 분위기 전환용 풍경/정물 조각 삽입",
-      "required_signals": ["structural_role"],
-      "engine_effect": { "insert_bridge_every_n": 4 },
+      "required_signals": [
+        "structural_role"
+      ],
+      "engine_effect": {
+        "insert_bridge_every_n": 4
+      },
       "failure_check": "visual_fatigue_detected",
-      "best_for": ["vlogs"]
+      "best_for": [
+        "vlogs"
+      ]
     },
     {
       "technique_id": "hook_first",
@@ -296,12 +471,21 @@
         ],
         "decided_in": "LAB-16"
       },
-      "origin_model": ["opusclip"],
+      "origin_model": [
+        "opusclip"
+      ],
       "description": "가장 높은 Hook Score 조각을 첫 5초 이내에 배치",
-      "required_signals": ["hook_score"],
-      "engine_effect": { "opening_hook_threshold": 0.8 },
+      "required_signals": [
+        "hook_score"
+      ],
+      "engine_effect": {
+        "opening_hook_threshold": 0.8
+      },
       "failure_check": "low_hook_opening",
-      "best_for": ["shorts", "highlights"]
+      "best_for": [
+        "shorts",
+        "highlights"
+      ]
     },
     {
       "technique_id": "payoff_early",
@@ -316,12 +500,20 @@
         ],
         "decided_in": "LAB-16"
       },
-      "origin_model": ["opusclip"],
+      "origin_model": [
+        "opusclip"
+      ],
       "description": "핵심 주제나 반전(Payoff)을 앞부분에 배치하여 시청 지속시간 확보",
-      "required_signals": ["structural_role"],
-      "engine_effect": { "payoff_position_limit": 0.3 },
+      "required_signals": [
+        "structural_role"
+      ],
+      "engine_effect": {
+        "payoff_position_limit": 0.3
+      },
       "failure_check": "payoff_hidden_too_late",
-      "best_for": ["shorts"]
+      "best_for": [
+        "shorts"
+      ]
     },
     {
       "technique_id": "face_visibility_boost",
@@ -336,12 +528,22 @@
         ],
         "decided_in": "LAB-16"
       },
-      "origin_model": ["video-use", "broadcast"],
+      "origin_model": [
+        "video-use",
+        "broadcast"
+      ],
       "description": "인물의 얼굴이 선명하게 나온 조각에 가산점 부여",
-      "required_signals": ["face_count", "face_size"],
-      "engine_effect": { "face_weight": 0.4 },
+      "required_signals": [
+        "face_count",
+        "face_size"
+      ],
+      "engine_effect": {
+        "face_weight": 0.4
+      },
       "failure_check": "no_face_in_selection",
-      "best_for": ["people_focus"]
+      "best_for": [
+        "people_focus"
+      ]
     },
     {
       "technique_id": "emotion_peak_selection",
@@ -356,12 +558,20 @@
         ],
         "decided_in": "LAB-16"
       },
-      "origin_model": ["video-use"],
+      "origin_model": [
+        "video-use"
+      ],
       "description": "웃음, 놀람 등 강렬한 표정이 나타난 지점을 우선 선택",
-      "required_signals": ["emotion_score"],
-      "engine_effect": { "emotion_peak_threshold": 0.75 },
+      "required_signals": [
+        "emotion_score"
+      ],
+      "engine_effect": {
+        "emotion_peak_threshold": 0.75
+      },
       "failure_check": "flat_emotion_selection",
-      "best_for": ["emotional"]
+      "best_for": [
+        "emotional"
+      ]
     },
     {
       "technique_id": "human_presence_boost",
@@ -376,12 +586,20 @@
         ],
         "decided_in": "LAB-16"
       },
-      "origin_model": ["video-use"],
+      "origin_model": [
+        "video-use"
+      ],
       "description": "사람이 등장하는 장면 전체에 기본 가중치 부여",
-      "required_signals": ["person_detected"],
-      "engine_effect": { "person_weight": 0.25 },
+      "required_signals": [
+        "person_detected"
+      ],
+      "engine_effect": {
+        "person_weight": 0.25
+      },
       "failure_check": "too_many_empty_scenes",
-      "best_for": ["people_focus"]
+      "best_for": [
+        "people_focus"
+      ]
     },
     {
       "technique_id": "reaction_shot_priority",
@@ -396,12 +614,20 @@
         ],
         "decided_in": "LAB-16"
       },
-      "origin_model": ["broadcast"],
+      "origin_model": [
+        "broadcast"
+      ],
       "description": "특정 사건(Action) 직후에 다른 인물의 반응(Reaction)을 배치",
-      "required_signals": ["structural_role"],
-      "engine_effect": { "pair_action_reaction": true },
+      "required_signals": [
+        "structural_role"
+      ],
+      "engine_effect": {
+        "pair_action_reaction": true
+      },
       "failure_check": "missing_reaction_after_action",
-      "best_for": ["people_focus"]
+      "best_for": [
+        "people_focus"
+      ]
     },
     {
       "technique_id": "chronological_soft_order",
@@ -416,12 +642,22 @@
         ],
         "decided_in": "LAB-16"
       },
-      "origin_model": ["broadcast", "video-use"],
+      "origin_model": [
+        "broadcast",
+        "video-use"
+      ],
       "description": "전체적인 흐름을 시간 순서대로 유지하되 극적 긴장감에 따른 순서 변경 허용",
-      "required_signals": ["start_frame"],
-      "engine_effect": { "time_order_weight": 0.7 },
+      "required_signals": [
+        "start_frame"
+      ],
+      "engine_effect": {
+        "time_order_weight": 0.7
+      },
       "failure_check": "excessive_time_jump",
-      "best_for": ["vlogs", "record"]
+      "best_for": [
+        "vlogs",
+        "record"
+      ]
     },
     {
       "technique_id": "fast_pacing",
@@ -439,12 +675,21 @@
         "director_reason": "평균 길이를 맞추려면 결국 조각 선택이 바뀐다.",
         "decided_in": "LAB-17"
       },
-      "origin_model": ["opusclip"],
+      "origin_model": [
+        "opusclip"
+      ],
       "description": "조각 당 평균 길이를 3~6초 이내로 유지",
-      "required_signals": ["duration"],
-      "engine_effect": { "avg_duration_sec": 4.5 },
+      "required_signals": [
+        "duration"
+      ],
+      "engine_effect": {
+        "avg_duration_sec": 4.5
+      },
       "failure_check": "slow_tempo_detected",
-      "best_for": ["shorts", "action"]
+      "best_for": [
+        "shorts",
+        "action"
+      ]
     },
     {
       "technique_id": "gentle_pacing",
@@ -462,12 +707,21 @@
         "director_reason": "평균 길이를 맞추려면 결국 조각 선택이 바뀐다.",
         "decided_in": "LAB-17"
       },
-      "origin_model": ["broadcast"],
+      "origin_model": [
+        "broadcast"
+      ],
       "description": "조각 당 평균 길이를 10초 이상 유지하여 몰입도 향상",
-      "required_signals": ["duration"],
-      "engine_effect": { "avg_duration_sec": 12.0 },
+      "required_signals": [
+        "duration"
+      ],
+      "engine_effect": {
+        "avg_duration_sec": 12.0
+      },
       "failure_check": "choppy_edit_detected",
-      "best_for": ["emotional", "cinematic"]
+      "best_for": [
+        "emotional",
+        "cinematic"
+      ]
     },
     {
       "technique_id": "captionability_boost",
@@ -482,12 +736,20 @@
         ],
         "decided_in": "LAB-16"
       },
-      "origin_model": ["video-use"],
+      "origin_model": [
+        "video-use"
+      ],
       "description": "자막이 들어갈 공간이 충분하거나 배경이 단순한 조각 우대",
-      "required_signals": ["visual_complexity"],
-      "engine_effect": { "complexity_penalty_threshold": 0.6 },
+      "required_signals": [
+        "visual_complexity"
+      ],
+      "engine_effect": {
+        "complexity_penalty_threshold": 0.6
+      },
       "failure_check": "visually_noisy_selection",
-      "best_for": ["shorts"]
+      "best_for": [
+        "shorts"
+      ]
     },
     {
       "technique_id": "music_montage_rhythm",
@@ -501,12 +763,30 @@
         ],
         "decided_in": "LAB-16"
       },
-      "origin_model": ["broadcast"],
+      "origin_model": [
+        "broadcast"
+      ],
       "description": "배경음악의 리듬에 맞춰 화면 전환 시점 결정",
-      "required_signals": ["audio_beat"],
-      "engine_effect": { "cut_at_beat": true },
+      "required_signals": [
+        "audio_beat"
+      ],
+      "engine_effect": {
+        "cut_at_beat": true
+      },
       "failure_check": "sync_drift_detected",
-      "best_for": ["music_video", "highlights"]
+      "best_for": [
+        "music_video",
+        "highlights"
+      ],
+      "requires_materials": [
+        "audio_beat"
+      ],
+      "requires_rules": [],
+      "relationship_source": {
+        "type": "DECLARED",
+        "decided_in": "LAB-43",
+        "basis": "required_signals.audio_beat = 감사 재료 audio_beat"
+      }
     },
     {
       "technique_id": "duplicate_thumbnail_avoidance",
@@ -521,12 +801,20 @@
         ],
         "decided_in": "LAB-16"
       },
-      "origin_model": ["video-use"],
+      "origin_model": [
+        "video-use"
+      ],
       "description": "시각적으로 거의 동일한 썸네일이 연속으로 나열되지 않도록 함",
-      "required_signals": ["visual_embedding"],
-      "engine_effect": { "max_visual_similarity": 0.85 },
+      "required_signals": [
+        "visual_embedding"
+      ],
+      "engine_effect": {
+        "max_visual_similarity": 0.85
+      },
       "failure_check": "duplicate_visuals_in_sequence",
-      "best_for": ["all"]
+      "best_for": [
+        "all"
+      ]
     },
     {
       "technique_id": "factual_integrity_guard",
@@ -544,12 +832,21 @@
         "director_reason": "'확인·평가'이고 처분이 원문에 없다. 기법이 아니라 하드룰 층 소관이다.",
         "decided_in": "LAB-17"
       },
-      "origin_model": ["video-use"],
+      "origin_model": [
+        "video-use"
+      ],
       "description": "편집된 맥락이 원본의 텍스트 의미와 일치하는지 확인",
-      "required_signals": ["transcript", "semantic_embedding"],
-      "engine_effect": { "semantic_drift_limit": 0.3 },
+      "required_signals": [
+        "transcript",
+        "semantic_embedding"
+      ],
+      "engine_effect": {
+        "semantic_drift_limit": 0.3
+      },
       "failure_check": "contextual_distortion_detected",
-      "best_for": ["all"]
+      "best_for": [
+        "all"
+      ]
     },
     {
       "technique_id": "visual_on_demand_inspection",
@@ -568,12 +865,20 @@
         "director_reason": "분석 범위를 맞추려면 결국 조각 선택이 바뀐다.",
         "decided_in": "LAB-17"
       },
-      "origin_model": ["video-use"],
+      "origin_model": [
+        "video-use"
+      ],
       "description": "모든 조각을 분석하지 않고, 최종 제안 후보에 대해서만 Deep Visual 분석 수행",
-      "required_signals": ["proposal_candidates"],
-      "engine_effect": { "lazy_analysis": true },
+      "required_signals": [
+        "proposal_candidates"
+      ],
+      "engine_effect": {
+        "lazy_analysis": true
+      },
       "failure_check": "unnecessary_bulk_analysis",
-      "best_for": ["all"]
+      "best_for": [
+        "all"
+      ]
     },
     {
       "technique_id": "edl_first_render",
@@ -591,12 +896,18 @@
         "director_reason": "산출물(조각·순서·대사·경계·타이밍·표시) 무변경. 인프라 정책이지 편집 기법이 아니다.",
         "decided_in": "LAB-17"
       },
-      "origin_model": ["video-use"],
+      "origin_model": [
+        "video-use"
+      ],
       "description": "물리적인 컷팅 전에 편집 목록을 생성하여 비파괴 편집 수행",
       "required_signals": [],
-      "engine_effect": { "generate_edl_before_mp4": true },
+      "engine_effect": {
+        "generate_edl_before_mp4": true
+      },
       "failure_check": "premature_rendering",
-      "best_for": ["all"]
+      "best_for": [
+        "all"
+      ]
     },
     {
       "technique_id": "cut_boundary_self_eval",
@@ -614,12 +925,20 @@
         "director_reason": "'확인·평가'이고 처분이 원문에 없다. 기법이 아니라 하드룰 층 소관이다.",
         "decided_in": "LAB-17"
       },
-      "origin_model": ["video-use"],
+      "origin_model": [
+        "video-use"
+      ],
       "description": "생성된 컷 지점이 오디오/비디오 측면에서 매끄러운지 자체 평가",
-      "required_signals": ["boundary_confidence"],
-      "engine_effect": { "min_boundary_score": 0.9 },
+      "required_signals": [
+        "boundary_confidence"
+      ],
+      "engine_effect": {
+        "min_boundary_score": 0.9
+      },
       "failure_check": "jittery_cut_detected",
-      "best_for": ["all"]
+      "best_for": [
+        "all"
+      ]
     },
     {
       "technique_id": "description_sequence_match_check",
@@ -637,12 +956,21 @@
         "director_reason": "'확인·평가'이고 처분이 원문에 없다. 기법이 아니라 하드룰 층 소관이다.",
         "decided_in": "LAB-17"
       },
-      "origin_model": ["video-use"],
+      "origin_model": [
+        "video-use"
+      ],
       "description": "AI가 작성한 제안 설명과 실제 선택된 조각들의 키워드가 일치하는지 확인",
-      "required_signals": ["proposal_text", "fragment_tags"],
-      "engine_effect": { "matching_threshold": 0.65 },
+      "required_signals": [
+        "proposal_text",
+        "fragment_tags"
+      ],
+      "engine_effect": {
+        "matching_threshold": 0.65
+      },
       "failure_check": "narrative_mismatch",
-      "best_for": ["all"]
+      "best_for": [
+        "all"
+      ]
     },
     {
       "technique_id": "render_qa_loop",
@@ -660,12 +988,20 @@
         "director_reason": "'확인·평가'이고 처분이 원문에 없다. 기법이 아니라 하드룰 층 소관이다.",
         "decided_in": "LAB-17"
       },
-      "origin_model": ["video-use"],
+      "origin_model": [
+        "video-use"
+      ],
       "description": "최종 렌더링 결과물에 대해 오디오 싱크 및 프레임 드랍 여부 최종 확인",
-      "required_signals": ["output_video_stats"],
-      "engine_effect": { "post_render_validation": true },
+      "required_signals": [
+        "output_video_stats"
+      ],
+      "engine_effect": {
+        "post_render_validation": true
+      },
       "failure_check": "render_artifacts_detected",
-      "best_for": ["all"]
+      "best_for": [
+        "all"
+      ]
     }
   ],
   "version": "1.1.0",
