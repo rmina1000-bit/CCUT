@@ -40,17 +40,39 @@ const materialCounts = (item: MaterialAudit) => ({
 });
 
 type EdgeStatus = "LIVE" | "REGISTERED" | "LOCKED" | "BROKEN" | "UNDECLARED";
-type RuleState = "DECLARED" | "REGISTERED" | "ENFORCED";
+type RuleState = "DECLARED" | "REGISTERED" | "ACTING";
+type RuleAction = "NONE" | "CORRECTIVE" | "VETO";
 
 interface RuleAudit {
   id: string;
   declared_in: string | null;
   registered: boolean;
-  enforced: boolean;
+  acts: boolean;
   state: RuleState;
   checks_materials: string[] | "UNDECLARED";
   evidence: string | null;
+  actions: RuleAction[];
+  corrective_evidence: string | null;
+  corrective_entry: string | null;
+  corrective_gate: { env: string; value: string | null; on: boolean } | null;
+  veto_evidence: string | null;
+  veto_unreachable: { declared_in: string; reason: string; evidence: string } | null;
+  no_action_reason: string | null;
 }
+
+const ACTION_LABEL: Record<RuleAction, string> = {
+  NONE: "무동작",
+  CORRECTIVE: "보정",
+  VETO: "veto",
+};
+
+/** 룰이 실제로 무엇을 하는지 한 줄로. '집행'이라는 단일 표기는 쓰지 않는다. */
+const ruleActionText = (item: RuleAudit) => {
+  const acting = item.actions.filter(a => a !== "NONE").map(a => ACTION_LABEL[a]);
+  if (acting.length === 0) return item.registered ? "등록 · 무동작" : "선언만";
+  const gateOff = item.corrective_gate && !item.corrective_gate.on;
+  return acting.join(" + ") + (gateOff ? " (게이트 OFF)" : "");
+};
 
 interface TechniqueAudit {
   id: string;
@@ -115,11 +137,28 @@ interface LabAudit {
   rules: {
     declared: number;
     registered: number;
-    enforced: number;
+    corrective: number;
+    veto: number;
+    veto_unreachable: number;
     identity_overlap: number;
     unregistered: number;
     registered_ids: string[];
     items: RuleAudit[];
+  };
+  evidence_audit: {
+    checked: number;
+    exists: number;
+    missing: number;
+    moved: number;
+    not_a_code_ref: number;
+    items: Array<{
+      source: string;
+      field: string;
+      declared: string;
+      status: "MISSING" | "MOVED" | "NOT_A_CODE_REF";
+      found_at: string | null;
+      detail?: string | null;
+    }>;
   };
   techniques: {
     declared: number;
@@ -333,8 +372,8 @@ const CapabilityMap: React.FC<{
             key={item.id}
             x={colX[2]} y={rowY(index)}
             title={shortId(item.id)}
-            subtitle={item.state === "ENFORCED" ? "집행" : item.state === "REGISTERED" ? "등록 · 경고전용" : "선언만"}
-            status={item.state === "ENFORCED" ? "LIVE" : item.state === "REGISTERED" ? "REGISTERED" : "UNDECLARED"}
+            subtitle={ruleActionText(item)}
+            status={item.acts ? "LIVE" : item.state === "REGISTERED" ? "REGISTERED" : "UNDECLARED"}
             onClick={() => onSelect({ kind: "rule", id: item.id })}
           />
         ))}
@@ -416,7 +455,7 @@ export const AdminEditLabPanel: React.FC = () => {
           <h1 className="text-lg font-bold text-foreground/90">편집연구실</h1>
           <p className="text-[11px] text-muted-foreground/50 mt-0.5">
             {audit
-              ? `재료 ${audit.materials.length - missingMaterials} 값 있음 / ${missingMaterials} 값 없음 · 하드룰 ${audit.rules.declared} 선언 / ${audit.rules.registered} 등록 / ${audit.rules.enforced} 집행 · 기법 ${audit.techniques.declared} 선언 / ${audit.techniques.wired} 배선`
+              ? `재료 ${audit.materials.length - missingMaterials} 값 있음 / ${missingMaterials} 값 없음 · 하드룰 ${audit.rules.declared} 선언 / ${audit.rules.registered} 등록 / ${audit.rules.corrective} 보정 / ${audit.rules.veto} veto · 기법 ${audit.techniques.declared} 선언 / ${audit.techniques.wired} 배선`
               : "측정 결과 없음"}
           </p>
           {audit?.sensor_contract && audit.candidate_ledger_guard && (
@@ -502,9 +541,35 @@ export const AdminEditLabPanel: React.FC = () => {
             )}
             {selectedRule && (
               <div className="space-y-1 text-[11px]">
-                <p className="text-sm font-semibold">{selectedRule.id}</p>
-                <p>{selectedRule.state === "ENFORCED" ? "실제 집행" : selectedRule.state === "REGISTERED" ? "등록됨 · 경고전용" : "선언만"} · 검사 재료 {Array.isArray(selectedRule.checks_materials) ? selectedRule.checks_materials.join(", ") : "관계 미선언"}</p>
-                <p className="text-muted-foreground/60 break-all">근거: {selectedRule.evidence || selectedRule.declared_in || "없음"}</p>
+                <p className="text-sm font-semibold">
+                  {selectedRule.id}
+                  <span className="ml-2 text-[10px] font-normal text-foreground/70">{ruleActionText(selectedRule)}</span>
+                </p>
+                <p>검사 재료 {Array.isArray(selectedRule.checks_materials) ? selectedRule.checks_materials.join(", ") : "관계 미선언"}</p>
+                {selectedRule.corrective_evidence && (
+                  <p className="text-muted-foreground/60 break-all">
+                    보정 근거: {selectedRule.corrective_evidence}
+                    {selectedRule.corrective_entry && ` · 진입 ${selectedRule.corrective_entry}`}
+                  </p>
+                )}
+                {selectedRule.corrective_gate && (
+                  <p className={selectedRule.corrective_gate.on ? "text-emerald-300/75" : "text-amber-300/75"}>
+                    보정 게이트 {selectedRule.corrective_gate.env}={selectedRule.corrective_gate.value ?? "미설정"} ·{" "}
+                    {selectedRule.corrective_gate.on ? "ON — 보정이 실제로 돈다" : "OFF — 코드는 있으나 돌지 않는다"}
+                  </p>
+                )}
+                {selectedRule.veto_evidence && (
+                  <p className="text-muted-foreground/60 break-all">veto 근거: {selectedRule.veto_evidence}</p>
+                )}
+                {selectedRule.veto_unreachable && (
+                  <p className="text-amber-300/75 break-all">
+                    veto 선언 · 도달 불가: {selectedRule.veto_unreachable.reason} (선언 {selectedRule.veto_unreachable.declared_in} / 근거 {selectedRule.veto_unreachable.evidence})
+                  </p>
+                )}
+                {selectedRule.no_action_reason && (
+                  <p className="text-muted-foreground/60 break-all">무동작 사유: {selectedRule.no_action_reason}</p>
+                )}
+                <p className="text-muted-foreground/60 break-all">선언 위치: {selectedRule.declared_in || "없음"}</p>
               </div>
             )}
             {selectedTechnique && (
@@ -642,6 +707,48 @@ export const AdminEditLabPanel: React.FC = () => {
 
           <section className="space-y-3 border-t border-border/15 pt-4">
             <div>
+              <h2 className="text-xs font-black tracking-widest uppercase text-muted-foreground/55">근거 실재 점검</h2>
+              <p className="mt-1 text-[10px] text-muted-foreground/45">
+                config가 지목한 코드 근거 {audit.evidence_audit.checked}건 ·
+                실재 {audit.evidence_audit.exists} ·
+                <span className={audit.evidence_audit.missing > 0 ? "text-red-400/80 font-semibold" : ""}> 없음 {audit.evidence_audit.missing}</span> ·
+                <span className={audit.evidence_audit.moved > 0 ? "text-amber-300/80" : ""}> 이동 {audit.evidence_audit.moved}</span> ·
+                코드참조 아님 {audit.evidence_audit.not_a_code_ref}
+              </p>
+            </div>
+            <div className="overflow-x-auto border border-border/15">
+              <table className="w-full text-[11px]">
+                <thead className="bg-secondary/20 text-muted-foreground/60">
+                  <tr>
+                    <th className="px-3 py-2 text-left">판정</th>
+                    <th className="px-3 py-2 text-left">선언 위치</th>
+                    <th className="px-3 py-2 text-left">선언된 근거</th>
+                    <th className="px-3 py-2 text-left">실재 위치</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border/10">
+                  {audit.evidence_audit.items.map((item, index) => (
+                    <tr key={`${item.field}-${index}`}>
+                      <td className={`px-3 py-2 font-mono ${item.status === "MISSING" ? "text-red-400/85" : item.status === "MOVED" ? "text-amber-300/80" : "text-muted-foreground/45"}`}>
+                        {item.status}
+                      </td>
+                      <td className="px-3 py-2 font-mono text-[9px] text-muted-foreground/60 break-all">{item.source} · {item.field}</td>
+                      <td className="px-3 py-2 break-all text-foreground/70">{item.declared}</td>
+                      <td className="px-3 py-2 break-all font-mono text-[9px] text-muted-foreground/60">
+                        {item.found_at || item.detail || "—"}
+                      </td>
+                    </tr>
+                  ))}
+                  {audit.evidence_audit.items.length === 0 && (
+                    <tr><td colSpan={4} className="px-3 py-2 text-muted-foreground/45">전부 실재</td></tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </section>
+
+          <section className="space-y-3 border-t border-border/15 pt-4">
+            <div>
               <h2 className="text-xs font-black tracking-widest uppercase text-muted-foreground/55">장부 기록</h2>
               <p className="mt-1 text-[10px] text-muted-foreground/45">
                 수리가 아니라 사실이다. 지우지 않고 쌓는다.
@@ -699,7 +806,7 @@ export const AdminEditLabPanel: React.FC = () => {
             <div className="mt-3 space-y-5">
               <MaterialTable materials={audit.materials} />
               <p className="text-[11px] text-muted-foreground/60">
-                하드룰 선언 {audit.rules.declared} · 런타임 등록 {audit.rules.registered} · 실제 집행 {audit.rules.enforced} · ID 교집합 {audit.rules.identity_overlap}
+                하드룰 선언 {audit.rules.declared} · 런타임 등록 {audit.rules.registered} · 보정 {audit.rules.corrective} · veto {audit.rules.veto} · veto 선언·도달 불가 {audit.rules.veto_unreachable} · ID 교집합 {audit.rules.identity_overlap}
               </p>
               <p className="text-[11px] text-muted-foreground/60">
                 편집기법 선언 {audit.techniques.declared} · 실제 배선 {audit.techniques.wired}

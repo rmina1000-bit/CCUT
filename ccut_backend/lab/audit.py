@@ -1,6 +1,7 @@
 import json
 import hashlib
 import os
+import re
 import sqlite3
 import subprocess
 import time
@@ -375,11 +376,80 @@ def _edge_status(material, target_live):
     return "LIVE" if target_live else "BROKEN"
 
 
-ENFORCED_RULES = {
-    "RULE_PUNCH_ZOOM_BOUND": "ccut_backend/story_gate/proposal_axis.py:428-469",
-    "RULE_TECHNIQUE_PATH_UNIFORM": "ccut_backend/story_gate/proposal_axis.py:428-469",
-    "RULE_WORD_BOUNDARY_SNAP": "ccut_backend/story_gate/proposal_axis.py:433-492",
+# [LAB-15] '집행'은 성격이 다른 둘을 뭉갠 말이었다. 갈라서 센다.
+#   CORRECTIVE = 값을 실제로 보정한다 (경계를 움직인다)
+#   VETO       = 위반 판정으로 기법 적용을 차단한다
+# 한 룰이 둘 다일 수 있고, 선언만 되고 도달하지 못하는 veto 도 있다.
+RULE_ACTIONS = {
+    "RULE_PUNCH_ZOOM_BOUND": {
+        "veto": "ccut_backend/story_gate/proposal_axis.py:621-627",
+    },
+    "RULE_TECHNIQUE_PATH_UNIFORM": {
+        "veto": "ccut_backend/story_gate/proposal_axis.py:621-627",
+    },
+    "RULE_WORD_BOUNDARY_SNAP": {
+        "corrective": "ccut_backend/story_gate/proposal_axis.py:322-323",
+        "corrective_entry": "ccut_backend/main.py:2593",
+        "corrective_gate": "CCUT_TECHNIQUE_WORD_SNAP",
+        "veto_unreachable": {
+            "declared_in": "ccut_backend/story_gate/proposal_axis.py:491-492",
+            "reason": (
+                "punch_rule_results ctx 에 program_id 가 없어 이 룰은 항상 "
+                "UNKNOWN 을 반환한다. has_veto 는 VIOLATION 만 보므로 차단이 서지 않는다."
+            ),
+            "evidence": "ccut_backend/story_gate/proposal_axis.py:596-598",
+        },
+    },
 }
+
+# 등록됐지만 아무 동작도 하지 않는 룰의 사유. 선언만 된 12개는 아래 기본 사유를 쓴다.
+RULE_NO_ACTION_REASON = {
+    "RULE_BOUNDARY_PATH_UNIFORM":
+        "boundary_rule_results 로그 전용 — ccut_backend/story_gate/proposal_axis.py:601-606",
+    "RULE_NO_MID_WORD_CUT":
+        "boundary_rule_results 로그 전용 — ccut_backend/story_gate/proposal_axis.py:601-606",
+    "RULE_EDIT_STATE_NO_SHADOW":
+        "등록만 · check_rules 호출자 없음 — ccut_backend/engine/story_template_resolver.py:137",
+}
+DECLARED_NO_ACTION_REASON = (
+    "검사 함수 미등록 — ccut_enforcement_point 를 역참조하는 코드가 없다"
+)
+
+
+def _gate_state(env_name):
+    """게이트가 실제로 켜져 있는가. 코드가 있어도 게이트가 꺼져 있으면 동작하지 않는다."""
+    if not env_name:
+        return None
+    raw = os.getenv(env_name, "")
+    return {
+        "env": env_name,
+        "value": raw or None,
+        "on": raw.strip().upper() in ("1", "ON", "TRUE", "YES"),
+    }
+
+
+def _rule_action_view(rule_id, registered):
+    """룰 하나를 NONE / CORRECTIVE / VETO 로 재판정한다. 복수 허용."""
+    spec = RULE_ACTIONS.get(rule_id, {}) if registered else {}
+    actions = []
+    if spec.get("corrective"):
+        actions.append("CORRECTIVE")
+    if spec.get("veto"):
+        actions.append("VETO")
+    gate = _gate_state(spec.get("corrective_gate"))
+    return {
+        "actions": actions or ["NONE"],
+        "corrective_evidence": spec.get("corrective"),
+        "corrective_entry": spec.get("corrective_entry"),
+        "corrective_gate": gate,
+        "veto_evidence": spec.get("veto"),
+        "veto_unreachable": spec.get("veto_unreachable"),
+        "no_action_reason": (
+            None if actions
+            else RULE_NO_ACTION_REASON.get(rule_id)
+            if registered else DECLARED_NO_ACTION_REASON
+        ),
+    }
 
 REGISTERED_RULE_EVIDENCE = {
     "RULE_BOUNDARY_PATH_UNIFORM": "ccut_backend/story_gate/proposal_axis.py:315-326",
@@ -387,6 +457,133 @@ REGISTERED_RULE_EVIDENCE = {
     "RULE_WORD_BOUNDARY_SNAP": "ccut_backend/story_gate/proposal_axis.py:315-326",
     "RULE_EDIT_STATE_NO_SHADOW": "ccut_backend/engine/story_template_resolver.py:62-70",
 }
+
+
+EVIDENCE_SUFFIXES = (".py", ".ts", ".tsx", ".json", ".md")
+_REF_PATTERN = re.compile(
+    r"^(?P<path>[\w\-./]+\.(?:py|ts|tsx|json|md))(?::(?P<anchor>[\w\-.]+))?$"
+)
+_LINE_ANCHOR = re.compile(r"^\d+(?:-\d+)?$")
+
+
+def _symbol_line(path, symbol):
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except (OSError, UnicodeDecodeError):
+        return None
+    for pattern in (f"def {symbol}", f"class {symbol}", symbol):
+        for line_no, raw in enumerate(lines, 1):
+            if pattern in raw:
+                return line_no
+    return None
+
+
+_DEFINITION = re.compile(r"^\s*(?:async\s+)?(?:def|class|function)\s+(\w+)")
+
+
+def _build_definition_index():
+    """심볼 → 첫 정의 위치. 못 찾은 심볼마다 트리를 다시 걷지 않도록 한 번만 만든다."""
+    index = {}
+    for path in _source_files({".py", ".ts", ".tsx"}):
+        try:
+            lines = path.read_text(encoding="utf-8").splitlines()
+        except (OSError, UnicodeDecodeError):
+            continue
+        relative = path.relative_to(REPO_DIR).as_posix()
+        for line_no, raw in enumerate(lines, 1):
+            match = _DEFINITION.match(raw)
+            if match:
+                index.setdefault(match.group(1), f"{relative}:{line_no}")
+    return index
+
+
+def _resolve_reference(token, definitions):
+    """config 에 적힌 근거 한 줄이 실재하는가.
+
+    EXISTS / MISSING / MOVED / NOT_A_CODE_REF 넷 중 하나로 판정한다.
+    선언값은 건드리지 않는다 — 판정만 따로 붙인다.
+    """
+    head = str(token or "").split()[0] if str(token or "").strip() else ""
+    match = _REF_PATTERN.match(head)
+    if not match:
+        return {"declared": token, "status": "NOT_A_CODE_REF", "found_at": None}
+    relative = match.group("path")
+    anchor = match.group("anchor")
+    path = REPO_DIR / relative
+    if not path.is_file():
+        return {"declared": token, "status": "MISSING", "found_at": None,
+                "detail": "파일 없음"}
+    if anchor is None:
+        return {"declared": token, "status": "EXISTS",
+                "found_at": relative, "detail": None}
+    if _LINE_ANCHOR.match(anchor):
+        try:
+            total = len(path.read_text(encoding="utf-8").splitlines())
+        except (OSError, UnicodeDecodeError):
+            total = 0
+        first = int(anchor.split("-")[0])
+        if 1 <= first <= total:
+            return {"declared": token, "status": "EXISTS",
+                    "found_at": f"{relative}:{anchor}", "detail": None}
+        return {"declared": token, "status": "MISSING", "found_at": None,
+                "detail": f"파일 {total}줄 — 선언 줄번호 초과"}
+    line_no = _symbol_line(path, anchor)
+    if line_no:
+        return {"declared": token, "status": "EXISTS",
+                "found_at": f"{relative}:{line_no}", "detail": None}
+    moved = definitions().get(anchor)
+    if moved:
+        return {"declared": token, "status": "MOVED", "found_at": moved,
+                "detail": "선언 파일에는 없고 다른 파일에 있음"}
+    return {"declared": token, "status": "MISSING", "found_at": None,
+            "detail": "심볼을 저장소 어디에서도 찾지 못함"}
+
+
+def _collect_evidence_refs(audit_config, techniques, candidate_ledger):
+    """세 config 파일이 근거로 지목한 코드 참조를 전부 모은다."""
+    refs = []
+
+    def add(source, field, token):
+        refs.append({"source": source, "field": field, "token": token})
+
+    source = "config/lab_audit.json"
+    for item in audit_config["materials"]:
+        add(source, f"{item['id']}.projection_evidence", item["projection_evidence"])
+        add(source, f"{item['id']}.consumption.evidence",
+            item["consumption"]["evidence"])
+        for path in item.get("producer_paths") or []:
+            add(source, f"{item['id']}.producer_paths", path)
+        for path in item.get("consumer_paths") or []:
+            add(source, f"{item['id']}.consumer_paths", path)
+    for technique, paths in audit_config["wired_techniques"].items():
+        for path in paths:
+            add(source, f"wired_techniques.{technique}", path)
+
+    source = "config/editing_techniques.json"
+    for item in techniques:
+        relationship = item.get("relationship_source") or {}
+        for token in relationship.get("derived_from") or []:
+            add(source, f"{item['technique_id']}.relationship_source.derived_from",
+                token)
+
+    source = "config/lab_candidates.json"
+    for record in candidate_ledger.get("ledger_records") or []:
+        for token in record.get("근거") or []:
+            add(source, f"{record['기록id']}.근거", token)
+
+    cache = {}
+
+    def definitions():
+        if "index" not in cache:
+            cache["index"] = _build_definition_index()
+        return cache["index"]
+
+    resolved = []
+    for ref in refs:
+        if ref["token"] is None:
+            continue
+        resolved.append({**ref, **_resolve_reference(ref["token"], definitions)})
+    return resolved
 
 
 def build_lab_context(audit):
@@ -400,7 +597,8 @@ def build_lab_context(audit):
         "값없는_재료": missing,
         "하드룰": (
             f"선언 {audit['rules']['declared']} / 등록 {audit['rules']['registered']} / "
-            f"집행 {audit['rules']['enforced']} / ID 교집합 {audit['rules']['identity_overlap']}"
+            f"보정 {audit['rules']['corrective']} / veto {audit['rules']['veto']} / "
+            f"ID 교집합 {audit['rules']['identity_overlap']}"
         ),
         "기법": (
             f"선언 {audit['techniques']['declared']} / "
@@ -509,10 +707,11 @@ def run_audit():
                 f'"rule_id": "{rule_id}"',
             ),
             "registered": rule_id in registered_rules,
-            "enforced": False,
+            "acts": False,
             "state": "DECLARED",
             "checks_materials": "UNDECLARED",
             "evidence": "ccut_backend/config/production_hard_rules.json:rules",
+            **_rule_action_view(rule_id, rule_id in registered_rules),
         })
 
     registered_rule_sources = {
@@ -547,18 +746,22 @@ def run_audit():
             _line_evidence(source, f'register_rule_check("{rule_id}"')
             if source else None
         )
+        action_view = _rule_action_view(rule_id, True)
+        acts = action_view["actions"] != ["NONE"]
         rule_items.append({
             "id": rule_id,
             "declared_in": evidence,
             "registered": True,
-            "enforced": rule_id in ENFORCED_RULES,
-            "state": "ENFORCED" if rule_id in ENFORCED_RULES else "REGISTERED",
+            "acts": acts,
+            "state": "ACTING" if acts else "REGISTERED",
             "checks_materials": registered_material_checks.get(rule_id, "UNDECLARED"),
             "evidence": (
-                ENFORCED_RULES.get(rule_id)
+                action_view["veto_evidence"]
+                or action_view["corrective_evidence"]
                 or REGISTERED_RULE_EVIDENCE.get(rule_id)
                 or registered_material_evidence.get(rule_id, evidence)
             ),
+            **action_view,
         })
 
     technique_items = []
@@ -623,9 +826,9 @@ def run_audit():
             })
         else:
             for rule_id in required_rules:
-                if rule_id not in ENFORCED_RULES:
+                if _rule_action_view(rule_id, True)["actions"] == ["NONE"]:
                     blockers.append({
-                        "kind": "룰 미집행",
+                        "kind": "룰 무동작",
                         "detail": rule_id,
                     })
         technique_items.append({
@@ -690,7 +893,7 @@ def run_audit():
                     "LOCKED"
                     if material["non_null"] == 0
                     else "LIVE"
-                    if rule["enforced"]
+                    if rule["acts"]
                     else "REGISTERED"
                     if rule["registered"]
                     else "BROKEN"
@@ -739,6 +942,7 @@ def run_audit():
             "evidence": evidence,
         })
 
+    evidence_refs = _collect_evidence_refs(config, techniques, candidate_ledger)
     audited_at = datetime.now().astimezone().isoformat(timespec="seconds")
     blocker_counts = {}
     for technique in technique_items:
@@ -757,7 +961,13 @@ def run_audit():
         "rules": {
             "declared": len(declared_rules),
             "registered": len(registered_rules),
-            "enforced": len(set(ENFORCED_RULES).intersection(registered_rules)),
+            "corrective": sum(
+                1 for item in rule_items if "CORRECTIVE" in item["actions"]
+            ),
+            "veto": sum(1 for item in rule_items if "VETO" in item["actions"]),
+            "veto_unreachable": sum(
+                1 for item in rule_items if item["veto_unreachable"]
+            ),
             "unregistered": len(declared_rules - set(registered_rules)),
             "identity_overlap": len(rule_identity_overlap),
             "identity_overlap_ids": rule_identity_overlap,
@@ -778,6 +988,16 @@ def run_audit():
         "edges": edges,
         "candidates": candidate_ledger["candidates"],
         "ledger_records": candidate_ledger.get("ledger_records", []),
+        "evidence_audit": {
+            "checked": len(evidence_refs),
+            "exists": sum(1 for r in evidence_refs if r["status"] == "EXISTS"),
+            "missing": sum(1 for r in evidence_refs if r["status"] == "MISSING"),
+            "moved": sum(1 for r in evidence_refs if r["status"] == "MOVED"),
+            "not_a_code_ref": sum(
+                1 for r in evidence_refs if r["status"] == "NOT_A_CODE_REF"
+            ),
+            "items": [r for r in evidence_refs if r["status"] != "EXISTS"],
+        },
         "candidate_ledger_guard": candidate_guard,
         "sensor_contract": {
             "exists": True,
