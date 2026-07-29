@@ -742,13 +742,28 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
   // 과거 제안 소환(activeProposalEntryId 변경)은 스크롤을 끌어내리지 않는다 — 무대가
   // 중간 슬롯으로 이동하는데 하단으로 튕기던 '흘러내림'을 절단. 소환 고지 메시지는
   // length 증가로 자연히 하단 정렬(그건 최신 사건이므로 정상).
-  const _prevChatLenRef = useRef({ msgs: 0, gens: 0 });
+  const _prevChatLenRef = useRef({ msgs: 0, gens: 0, activeGen: null as string | null });
   useEffect(() => {
     const msgs = storyPlan?.messages?.length ?? 0;
     const gens = proposalHistory.length;
-    const grew = msgs > _prevChatLenRef.current.msgs || gens > _prevChatLenRef.current.gens;
-    _prevChatLenRef.current = { msgs, gens };
-    if (!grew) return;
+    const activeGen = activeProposalEntryId ?? null;
+    const prev = _prevChatLenRef.current;
+    const msgsGrew = msgs > prev.msgs;
+    // [LAB-38 C 2회차] 세대 증가는 **무대가 그 세대로 이동했을 때만** 하단 추종한다.
+    //   실측(SCROLL_XRAY 2026-07-29): 승인 후 백그라운드 생성 도착 순간 이 효과의 gens
+    //   트리거가 settleChatToBottom을 발화, 채팅 컬럼(chatScrollRef)이 새 카드로
+    //   smooth 활강(34134→35371px)해 재생 중 화면을 빼앗았다. LAB-37이 무대를
+    //   제자리에 붙잡았으므로(출처 게이트) 스크롤도 같은 출처를 따른다:
+    //   무대 이동 없는 세대 증가(백그라운드 도착)는 카드만 쌓고 '새 내용' 배지만 켠다.
+    //   메시지 증가(대화 사건)는 기존대로 추종 — 소환(activeGen만 변경)도 기존대로 무추종.
+    const stageMoved = activeGen !== prev.activeGen;
+    const gensGrew = gens > prev.gens;
+    _prevChatLenRef.current = { msgs, gens, activeGen };
+    const grew = msgsGrew || (gensGrew && stageMoved);
+    if (!grew) {
+      if (gensGrew) setChatHasNew(true); // 도착 사실 알림은 유지 — 화면만 빼앗지 않는다
+      return;
+    }
     // [CHATSCROLL-FIX-01] 하단 근처일 때만 따라간다 — 위에서 읽는 중이면 알림만.
     if (chatAtBottomRef.current || isChatNearBottom()) {
       chatAtBottomRef.current = true;
@@ -762,8 +777,8 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
       });
       setChatHasNew(true);
     }
-  }, [storyPlan?.messages?.length, proposalHistory.length, isChatNearBottom,
-      settleChatToBottom]);
+  }, [storyPlan?.messages?.length, proposalHistory.length, activeProposalEntryId,
+      isChatNearBottom, settleChatToBottom]);
 
   const setActivePlayerSafe = useCallback((player: "A" | "B" | null) => {
     activePlayerRef.current = player;

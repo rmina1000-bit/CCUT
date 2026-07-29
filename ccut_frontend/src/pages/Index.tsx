@@ -2883,6 +2883,7 @@ const Index: React.FC = () => {
               activeSource={activeSource}
               onSourceChange={setActiveSource}
               highlightedFragmentId={highlightedPanoramaFrag}
+              focusOrigin={fragmentFocusOrigin}
               selectedFragmentId={selectedFragment?.fragment_id || null}
               onFragmentClick={handlePanoramaFragmentClick}
               onFragmentPlay={playImageFragmentInMini}

@@ -27,6 +27,8 @@ interface OriginalPanoramaProps {
   onBoundaryClick?: (leftFragId: string | null, rightFragId: string | null) => void;
   sourceFragments?: Fragment[];
   sources?: { source_id: string; label?: string; title?: string; file_path?: string; video_url?: string }[];
+  /** [LAB-38 C] 하이라이트 출처 — FragmentMap:127과 동일 게이트용. 기본 "user"(기존 동작 보존). */
+  focusOrigin?: "sequence" | "user";
 }
 
 const OriginalPanorama: React.FC<OriginalPanoramaProps> = ({
@@ -47,6 +49,7 @@ const OriginalPanorama: React.FC<OriginalPanoramaProps> = ({
   onRemoveSource,
   onRenameSource,
   compactLabels,
+  focusOrigin = "user",
 }) => {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [renamingSourceId, setRenamingSourceId] = useState<string | null>(null);
@@ -55,10 +58,15 @@ const OriginalPanorama: React.FC<OriginalPanoramaProps> = ({
 
   useEffect(() => {
     if (highlightedFragmentId && scrollRef.current) {
+      // [LAB-38 C] 스크롤 따라가기는 **사용자 클릭일 때만** — FragmentMap.tsx:127과 같은 게이트.
+      //   시퀀스 재생 진행(origin="sequence")마다 scrollIntoView가 조상 스크롤을 끌어
+      //   화면이 위/아래로 튀었다(실측: 매 경계 SCROLL_REPORT 발화와 튐 일치, 2026-07-29).
+      //   하이라이트는 렌더가 담당하므로 여기서 스크롤만 생략하면 추적 표시는 산다.
+      if (focusOrigin !== "user") return;
       const el = scrollRef.current.querySelector(`[data-fid="${highlightedFragmentId}"]`);
       if (el) el.scrollIntoView({ behavior: "smooth", inline: "center", block: "nearest" });
     }
-  }, [highlightedFragmentId]);
+  }, [highlightedFragmentId, focusOrigin]);
 
   useEffect(() => {
     if (boundaryHighlightIds && boundaryHighlightIds.length > 0 && scrollRef.current) {
