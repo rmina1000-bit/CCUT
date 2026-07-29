@@ -3394,22 +3394,23 @@ from auth.sns_api import sns_publisher
 
 @app.post("/export/{program_id}")
 async def export_program(program_id: str, platform: str = "YOUTUBE", db: Session = Depends(get_db)):
-    """[4단계: PRODUCTION RENDER] Virtual-to-Physical 렌더링 수행"""
-    print(f"[{program_id}] 렌더링 요청 수신 (Platform: {platform})")
+    """[LAB-19] 미구현 — 조용히 실패하던 경로를 시끄럽게 바꿨다.
 
-    try:
-        final_path = export_engine.render_virtual_program(program_id)
-    except Exception as e:
-        return {"status": "ERROR", "message": f"렌더링 엔진 오류: {str(e)}"}
-
-    if not final_path:
-        return {"status": "ERROR", "message": "렌더링 가능한 실제 조각 파일이 없습니다."}
-
-    return {
-        "status": "SUCCESS",
-        "download_url": build_export_static_url(os.path.basename(final_path)),
-        "ai_msg": "렌더링이 완료되었습니다.",
-    }
+    구판은 `export_engine.render_virtual_program(program_id)`을 불렀다. 그 이름은
+    전역에도 ExportEngine 클래스에도 없다(NameError). 그런데 except가 예외를 삼키고
+    {"status":"ERROR"}만 돌려줘, 지도에는 렌더 경로가 둘인 것처럼 보였다.
+    프론트엔드 호출부는 0건이다(2026-07-29 전수 검색). 실사용 렌더 경로는
+    POST /render/{export_input_id} 하나뿐이다.
+    삭제하지 않는 이유: 외부에서 부르는 곳이 있으면 501로 드러나야 하기 때문이다.
+    """
+    print(f"[EXPORT][501] /export/{program_id} 는 미구현 경로다 "
+          f"(platform={platform}). 실사용 경로는 POST /render/{{export_input_id}}.")
+    return JSONResponse(status_code=501, content={
+        "status": "NOT_IMPLEMENTED",
+        "error": "EXPORT_PROGRAM_NOT_IMPLEMENTED",
+        "program_id": program_id,
+        "message": "이 경로는 구현되어 있지 않습니다. 렌더는 /render/{export_input_id} 를 사용하세요.",
+    })
 
 
 @app.post("/publish/{publish_id}")

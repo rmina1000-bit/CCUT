@@ -777,7 +777,11 @@ def rebuild_from_approval(proposals, approval_fids, pool_fragments=None):
         p["duration"] = round(sum(
             float(s.get("duration_sec") or s.get("duration") or 0) for s in p["sequence"]
         ), 2)
-        p["technique_id"] = TECHNIQUE_AS_IS
+        # [LAB-19] 구판은 여기서 as_is 를 박았고, 호출부(main.py)가 그 뒤에
+        # technique_for_mode 로 다시 세팅해 결과적으로 맞았다. 순서가 바뀌면
+        # 게이트가 조용히 무력화되는 시한폭탄이라 순서 의존을 끊는다 —
+        # 여기서도 같은 상수 사상을 쓴다(호출부와 같은 함수, 같은 답).
+        p["technique_id"] = technique_for_mode(p.get("mode"))
     return proposals, {"unresolved_fids": unresolved}
 
 

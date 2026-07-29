@@ -89,7 +89,9 @@ class RenderEngine:
                 "export_id": row.export_id,
                 "source_id": row.source_id,
                 "proposal_id": row.proposal_id,
-                "mode": row.mode,          # [PUNCH-1 P4] 기법 결정에 필요 (A=punch_in / B=as_is)
+                # [LAB-19] mode → technique 는 technique_for_mode 가 결정한다.
+                #   A=punch_in / B=word_boundary_snap(게이트 ON) 또는 as_is(OFF).
+                "mode": row.mode,
                 "clips": row.clips,
                 "total_duration": row.total_duration,
                 "status": row.status
