@@ -160,6 +160,14 @@ export const useProposalState = (
   // 세션 수명 — 프로젝트 전환 시 초기화 (영속은 범위 밖, 한계로 보고).
   const activeIntentRef = useRef<string | null>(null);
 
+  // [LAB-37 B] 무대 이동은 사용자 출처만. 새 세대가 도착할 때마다 activeProposalEntryId를
+  //   무조건 옮기면 CenterPanel의 무대 portal(:3060)이 새 슬롯으로 이사하며 플레이어를
+  //   파괴한다 — 실측: 승인 후 백그라운드 생성분 도착 순간 VIDEO_ELEM unmount→mount,
+  //   재생 중이던 video가 t=0에서 사망(2026-07-29). 재생 여부를 판정하지 않는다(LAB-30
+  //   교훈: 판정은 새는 자리다) — 출처로 가른다(PLAYSTABILITY seqAutoReportedFidRef와 같은 결).
+  //   true = 다음 도착분은 사용자가 요청한 생성(재제안·상담)이므로 무대가 따라간다.
+  const stageFollowNextRef = useRef(false);
+
   // 프로젝트 전환 시 세대 기록 초기화 (storyPlan과 동일 수명)
   useEffect(() => {
     setProposalHistory([]);
@@ -171,7 +179,12 @@ export const useProposalState = (
   useEffect(() => {
     if (!proposals?.A || !proposals?.B) return;
     const sig = `${(proposals.A as any).proposal_id ?? "A"}|${(proposals.B as any).proposal_id ?? "B"}`;
-    setActiveProposalEntryId(sig);
+    // [LAB-37 B] 무대가 따라가는 경우: 첫 세대(prev 없음) / 같은 세대 스냅샷 갱신 /
+    //   사용자 요청 생성분(stageFollowNextRef). 그 외(승인 후 백그라운드 도착)는
+    //   카드만 쌓고 무대는 제자리 — 사용자가 새 카드를 눌러 소환한다(restoreProposalEntry).
+    const follow = stageFollowNextRef.current;
+    stageFollowNextRef.current = false;
+    setActiveProposalEntryId((prev) => (prev == null || prev === sig || follow) ? sig : prev);
     setProposalHistory((prev) => {
       const i = prev.findIndex((h) => h.id === sig);
       if (i >= 0) {
@@ -436,6 +449,7 @@ export const useProposalState = (
             sourceDistribution: proposalData.source_usage || {}
           }, null, 2));
 
+          stageFollowNextRef.current = true; // [LAB-37 B] 사용자가 요청한 재제안 — 무대가 따라간다
           setProposals(generatedProposals);
           setSelectedProposalId(generatedProposals.B ? "B" : "A");
           setCommittedProposalId(null);
@@ -1165,6 +1179,7 @@ export const useProposalState = (
           }
 
           setCommittedProposalId(null);
+          stageFollowNextRef.current = true; // [LAB-37 B] 사용자가 요청한 상담 결과 — 무대가 따라간다
           setProposals(generatedProposals);
           setSelectedProposalId(generatedProposals.B ? "B" : "A");
           recordMirrorEvent({
