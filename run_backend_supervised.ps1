@@ -50,14 +50,18 @@ Write-Sup "=== supervisor start ==="
 Write-Sup "gates: (ccut_backend/.env 단일 출처 — 런처는 세우지 않음)"
 $fails = 0
 while ($true) {
+    # [LAB-42] stdout 리다이렉트 제거 — 백엔드가 스스로 logs/backend.log에 쓴다
+    #   (runtime_log.install()). 구판 backend_<ts>.out.log 는 그 내용의 중복이었고,
+    #   bat/ps1 기동에는 아예 없어서 "어느 런처로 띄웠나"가 로그 유무를 갈랐다.
+    #   stderr 리다이렉트는 유지: 파이썬 tee가 못 잡는 네이티브 크래시 출력이
+    #   여기로만 남고, 아래 crash-tail 진단이 이 파일을 읽는다.
     $stamp = Get-Date -Format "yyyyMMdd_HHmmss"
-    $out = Join-Path $LogDir "backend_$stamp.out.log"
     $err = Join-Path $LogDir "backend_$stamp.err.log"
-    Write-Sup "starting backend  (out=$([System.IO.Path]::GetFileName($out)))"
+    Write-Sup "starting backend  (stdout=logs/backend.log, err=$([System.IO.Path]::GetFileName($err)))"
     $start = Get-Date
 
     $p = Start-Process -FilePath $Python -ArgumentList "main.py" -WorkingDirectory $BackendDir `
-         -RedirectStandardOutput $out -RedirectStandardError $err -PassThru -NoNewWindow
+         -RedirectStandardError $err -PassThru -NoNewWindow
     $p.WaitForExit()
     $code = $p.ExitCode
     $dur  = [int](New-TimeSpan -Start $start -End (Get-Date)).TotalSeconds

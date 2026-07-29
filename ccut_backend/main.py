@@ -9,6 +9,16 @@ try:
 except Exception:
     pass
 
+# [LAB-42] 단일 로그 라인 — 런처가 아니라 백엔드가 로그를 장착한다.
+# 왜 여기인가: 아래 모든 import·print 보다 먼저 stdout/stderr를 물어야
+# 기동 초기 오류(모듈 로드 실패 등)까지 파일에 남는다. bat/ps1 어느 경로로
+# 띄워도 logs/backend.log 하나로 모인다 (구판: bat=파일로그 0건).
+try:
+    import runtime_log as _runtime_log
+    _runtime_log.install()
+except Exception as _rl_err:
+    print(f"[RUNTIME-LOG][WARN] 초기화 실패 — 콘솔만 사용: {_rl_err}")
+
 # [ENV-FIX-01 2026-07-25] 게이트 환경값을 .env에 고정 — 재시작 휘발 차단.
 # 왜 여기인가: 아래 import 사슬이 **모듈 로드 시점에** os.getenv를 읽는다
 # (예: engine/hub.py `SPECULATIVE_DRAFT = os.getenv("CCUT_SPECULATIVE", ...)`).
@@ -778,16 +788,22 @@ def _background_whisper_impl(source_id: str, video_path: str, fragments: list):
         log_hook_distribution,
     )
 
+    # [LAB-42] 로드 실패는 더 이상 즉사가 아니다 — CPU 폴백 안전망으로 넘긴다.
+    #   구판: 여기서 job FAILED 확정 → 사용자에겐 그냥 "실패". (Vulkan 부재 = 전멸)
+    asr, _asr_load_error = None, None
     try:
         asr = get_registry().get_asr()
         if not asr._loaded:
             asr._ensure_loaded()
     except Exception as e:
+        _asr_load_error = str(e)
         print(f"[ASR BG] Adapter 로드 실패: {e}")
-        if source_id in _fragment_job_registry:
-            _fragment_job_registry[source_id]["status"] = "FAILED"
-            _fragment_job_registry[source_id]["error"] = str(e)
-        return
+        from ai import asr_fallback as _afb
+        if not _afb.enabled():
+            if source_id in _fragment_job_registry:
+                _fragment_job_registry[source_id]["status"] = "FAILED"
+                _fragment_job_registry[source_id]["error"] = str(e)
+            return
 
     if not fragments:
         print(f"[ASR BG] {source_id} - 조각 없음")
@@ -850,8 +866,11 @@ def _background_whisper_impl(source_id: str, video_path: str, fragments: list):
             print(f"[PRE_PROFILE] {source_id} static 판정 — DRY-RUN: ASR 계속 진행")
 
         with _ASR_SEMAPHORE:
-            whisper_res    = asr.transcribe_fragments(video_path, fragments)
-        
+            # [LAB-42] GPU 실패 시 CPU 자동 강하 (게이트 CCUT_ASR_CPU_FALLBACK).
+            from ai import asr_fallback as _afb
+            whisper_res = _afb.transcribe_with_fallback(
+                asr, video_path, fragments, load_error=_asr_load_error)
+
         transcripts  = whisper_res.get("fragment_transcripts", {})
         all_segments = whisper_res.get("all_segments", [])
         fragment_words = whisper_res.get("fragment_words", {})
@@ -1005,7 +1024,10 @@ def _background_whisper_impl(source_id: str, video_path: str, fragments: list):
                         "asr_model_size": current_model_size,  # [R14]
                         "asr_provider_error": provider_error,
                         "asr_rejected_reason": rejected_fragments.get(frag_id),
-                        "asr_has_text": bool(transcript)
+                        "asr_has_text": bool(transcript),
+                        # [LAB-42] 조용한 강하 금지 — 폴백 사실을 원장에 남긴다.
+                        "asr_fallback": whisper_res.get("asr_fallback"),
+                        "asr_fallback_reason": whisper_res.get("asr_fallback_reason"),
                     }
                 })
                 bams.flush_evidence(frag["fragment_id"])
@@ -4570,6 +4592,31 @@ async def settings_cleanup(req: CleanupRequest):
         return {"status": "ERROR", "message": "unknown target"}
     print(f"[SETTINGS] cleanup {req.target}: {removed} files, {freed//1024//1024}MB freed")
     return {"status": "OK", "removed": removed, "freed_bytes": freed}
+
+
+@app.get("/settings/log")
+async def settings_log(tail: int = 0):
+    """[LAB-42] 문제 기록(로그) 위치·상태. 베타 테스터가 "로그 어디 있냐"를
+    묻지 않아도 되게 기존 설정 화면에서 경로를 보여준다. tail>0이면 끝부분도."""
+    import datetime as _dt
+    try:
+        import runtime_log as _rl
+        p = _rl.LOG_PATH
+        exists = os.path.exists(p)
+        info = {
+            "status": "OK",
+            "path": p,
+            "exists": exists,
+            "bytes": os.path.getsize(p) if exists else 0,
+            "updated_at": (_dt.datetime.fromtimestamp(os.path.getmtime(p)).isoformat()
+                           if exists else None),
+        }
+        if tail and exists:
+            with open(p, "r", encoding="utf-8", errors="replace") as f:
+                info["tail"] = "".join(f.readlines()[-int(tail):])
+        return info
+    except Exception as e:
+        return {"status": "ERROR", "error": str(e)}
 
 
 @app.get("/settings/gates")

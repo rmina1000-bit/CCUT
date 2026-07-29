@@ -38,6 +38,7 @@ export const SettingsPanel: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [storage, setStorage] = useState<{ items: Array<{ label: string; bytes: number }>; disk_free_bytes: number | null } | null>(null);
   const [gates, setGates] = useState<Record<string, string> | null>(null);
+  const [logInfo, setLogInfo] = useState<{ path: string; exists: boolean; bytes: number; updated_at: string | null } | null>(null);
   const [cleaning, setCleaning] = useState<string | null>(null);
   const [cleanNote, setCleanNote] = useState<string | null>(null);
   const [cleanupConfirm, setCleanupConfirm] = useState<{ target: string; label: string } | null>(null);
@@ -59,6 +60,8 @@ export const SettingsPanel: React.FC = () => {
       if (s?.status === "OK") setStorage(s);
       const g = await fetch("/api/settings/gates").then((r) => r.json());
       if (g?.status === "OK") setGates(g.gates);
+      const lg = await fetch("/api/settings/log").then((r) => r.json());
+      if (lg?.status === "OK") setLogInfo(lg);
     } catch { /* 표시만 생략 */ }
   }, []);
 
@@ -229,6 +232,24 @@ export const SettingsPanel: React.FC = () => {
                   </div>
                 );
               })}
+            </div>
+          </div>
+        )}
+
+        {/* ── 문제 기록(로그) 위치 — [LAB-42] 베타 노출 최소 표기 ───── */}
+        {logInfo && (
+          <div className="mt-8 mb-10">
+            <h2 className="text-[15px] font-bold mb-1">문제 기록</h2>
+            <p className="text-[12px] text-muted-foreground mb-3">
+              문제가 생기면 아래 파일을 보내주세요. 기동 방식과 상관없이 이 파일 하나에 기록됩니다.
+            </p>
+            <div className="rounded-xl border border-border/15 bg-[hsl(228,12%,10%)] px-4 py-3">
+              <div className="text-[12px] text-foreground/70 break-all">{logInfo.path}</div>
+              <div className="text-[12px] text-muted-foreground mt-1">
+                {logInfo.exists
+                  ? `${fmtBytes(logInfo.bytes)} · 마지막 기록 ${logInfo.updated_at?.replace("T", " ").slice(0, 19) ?? "—"}`
+                  : "아직 기록 없음 (백엔드 기동 시 생성됩니다)"}
+              </div>
             </div>
           </div>
         )}
