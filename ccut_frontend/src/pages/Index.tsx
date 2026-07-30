@@ -1218,6 +1218,23 @@ const Index: React.FC = () => {
               markTiming("story_visible"); // Set at same time as proposals are mapped
               setSemanticFragments(Object.values(semanticResults).flat());
 
+              // [STORY-RESYNC] 분석이 새 세대 조각을 냈으면, 사용자 원고가 아닌 화면 원고는
+              //   새 세대로 다시 세운다. 실측(2026-07-31 Dubhe): 분석 초반에 STORY-LOAD 가
+              //   1세대 id 135개를 실었는데 품질 재분석이 2세대로 갈아타, 원고↔조각 교집합이
+              //   0이 되며 조각맵이 통째로 비었다(새로고침 전까지 복구 불가).
+              //   사용자가 만든 원고(user/ui_state)는 절대 덮지 않는다 — 서버 폴백 표시분만.
+              if (storyOriginRef.current !== "user" && storyOriginRef.current !== "ui_state") {
+                const freshFids = finalEditFragments
+                  .map((f: any) => String(f.fragment_id ?? ""))
+                  .filter(Boolean);
+                if (freshFids.length > 0) {
+                  setStoryFids(freshFids);
+                  storyFidsRef.current = freshFids;   // 가드(:2403)가 다음 렌더 전에 읽어도 새 세대
+                  storyOriginRef.current = "server";  // 표시용 — 저장 자격 없음(가드 2-2 그대로)
+                  console.info(`[STORY-RESYNC] 분석 완료 — 원고를 새 세대 ${freshFids.length}조각으로 재동기 (출처=server · 저장 금지)`);
+                }
+              }
+
               setAnalyzeProgress(100);
               setAnalyzeMessage(
                 proposalNotice
