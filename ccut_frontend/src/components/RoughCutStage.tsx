@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Loader2, Play } from "lucide-react";
 
 import type { MiniPlayTarget } from "@/components/FragmentMiniPlayer";
@@ -31,6 +31,7 @@ const RoughCutStage: React.FC<RoughCutStageProps> = ({
   const [data, setData] = useState<RoughCutData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const stageRef = useRef<HTMLElement>(null);
 
   useEffect(() => {
     let active = true;
@@ -122,6 +123,14 @@ const RoughCutStage: React.FC<RoughCutStageProps> = ({
     };
   }, [projectId, selectedSpans, sourceUrls]);
 
+  useEffect(() => {
+    if (!data) return;
+    const frame = window.requestAnimationFrame(() => {
+      stageRef.current?.scrollIntoView({ block: "start" });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [data]);
+
   if (loading) {
     return (
       <div className="flex min-h-[280px] w-full max-w-[800px] items-center justify-center">
@@ -143,7 +152,8 @@ const RoughCutStage: React.FC<RoughCutStageProps> = ({
 
   return (
     <section
-      className="w-full max-w-[800px] px-1 py-2"
+      ref={stageRef}
+      className="max-h-[calc(100vh-160px)] w-full max-w-[800px] shrink-0 overflow-y-auto px-1 py-2"
       data-rough-cut-stage="ready"
       data-selected-count={data.selected_count}
       data-eligible-count={data.eligible_count}
