@@ -926,7 +926,19 @@ const Index: React.FC = () => {
               if (completedSourceIds.includes(sid) || failedSourceIds.includes(sid)) continue;
               
               const statusData = await videoService.getFragmentStatus(sid);
-              sourceStatusMap[sid] = statusData.status;
+              // [PROGRESS-VOICE 2] 백엔드가 이미 주는 stage·progress 를 화면에 흘린다
+              //   (새 계측 없음 — /generate-fragments/status 응답 그대로).
+              //   구판은 status 만 보고 나머지를 버려서, 사용자는 도는지 멈췄는지 알 수 없었다.
+              //   폴마다 찍으면 로그가 넘치므로 값이 바뀔 때만 남긴다.
+              const _mark = `${statusData.status}/${statusData.stage ?? "-"}/${statusData.progress ?? "-"}`;
+              if (sourceStatusMap[sid] !== _mark) {
+                const _label = collectedEntries.find((e) => e.source_id === sid)?.label ?? sid;
+                pushAnalysisLog(
+                  `[분석] ${_label} ${statusData.stage ?? statusData.status}`
+                  + (statusData.progress != null ? ` ${statusData.progress}%` : "")
+                );
+              }
+              sourceStatusMap[sid] = _mark;
 
               if (statusData.status === "ANALYSIS_COMPLETE") {
                 completedSourceIds.push(sid);
@@ -1209,6 +1221,32 @@ const Index: React.FC = () => {
                     messages: [],
                   }),
                   messages: [...((prev?.messages) ?? []), failMsg],
+                }));
+              } else {
+                // [PROGRESS-VOICE 3] 끝났다는 말을 화면에 남긴다. 분석 배너는 complete 전환과
+                //   함께 사라지므로, 지속 표면(채팅)에 결과를 한 줄로 남겨야 사용자가
+                //   "끝난 건가?"를 다시 묻지 않는다. 실패 경로(위)와 같은 골격을 쓴다.
+                const _fragCount = Object.values(semanticResults).flat().length;
+                const _doneMsg = {
+                  id: `ai_analysis_done_${Date.now()}`,
+                  sender: "ai" as const,
+                  text: `분석을 마쳤습니다 — 조각 ${_fragCount}개를 만들었습니다`
+                    + (failedSourceIds.length > 0 ? ` (영상 ${failedSourceIds.length}개는 분석 실패)` : "")
+                    + ". 편집안(A·B)도 준비됐습니다.",
+                  timestamp: Date.now(),
+                };
+                setStoryPlan((prev: any) => ({
+                  ...(prev ?? {
+                    story_plan_id: `STP_${Date.now()}`,
+                    source_count: updatedEntries.length,
+                    consultation_status: "draft_ready",
+                    confirmation_status: "pending",
+                    direction_options: [],
+                    detected_theme: "",
+                    selected_direction: undefined,
+                    messages: [],
+                  }),
+                  messages: [...((prev?.messages) ?? []), _doneMsg],
                 }));
               }
               setAppState("complete");
