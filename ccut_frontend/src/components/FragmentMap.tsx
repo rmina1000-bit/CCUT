@@ -684,7 +684,15 @@ const FragmentMap: React.FC<FragmentMapProps> = ({
                         <span className={`min-w-0 flex-1 whitespace-normal break-words text-[12px] leading-snug ${selected ? "text-foreground" : "text-muted-foreground/60"}`}>
                           {txt.stage && <span className="italic text-muted-foreground">{txt.stage}</span>}
                           {txt.stage && txt.dialogue && <span> </span>}
-                          {textEditing?.itemId === (storyTextByFragmentId.get(fid) ?? storyTextItems[sourceIndex])?.timelineItemId ? (
+                          {/* [LAB-47] textEditing null 가드 — 없으면 지도 전체가 죽는다.
+                              구판: textEditing?.itemId === (...)?.timelineItemId
+                              편집 중이 아니고(textEditing=null) 그 조각의 원고 항목도 없으면
+                              양변이 모두 undefined 라 === 가 true 가 되어 분기에 진입했고,
+                              곧바로 textEditing.chars 를 읽어 TypeError 로 화면이 무너졌다.
+                              초벌(VF) 프로젝트는 /api/ledger 행이 없어 항상 이 조건에 걸린다 —
+                              초벌은 비정상이 아니라 정상 상태이므로 크래시가 아니라 그냥
+                              편집 UI 를 띄우지 않는 것이 맞다(가짜 chars 를 채우지 않는다). */}
+                          {textEditing && textEditing.itemId === (storyTextByFragmentId.get(fid) ?? storyTextItems[sourceIndex])?.timelineItemId ? (
                             textEditing.chars.map((c, i) => (
                               <React.Fragment key={i}>
                                 {textEditing.caret === i && <TextCaret />}
