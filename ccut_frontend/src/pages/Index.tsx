@@ -483,7 +483,8 @@ const Index: React.FC = () => {
         intelligence: {
           // [UNKNOWN-NOFAKE STEP1-0] 증거 없으면 null(UNKNOWN). ||→?? : 실측 0점이 0.5로 위장되던 버그 동반 수리.
           hook_score: f.intelligence?.hook_score ?? f.structural?.market_value ?? null,
-          role: f.intelligence?.role || f.structural?.role || "Main",
+          // [UNKNOWN-NOFAKE STEP1-1] 증거 없으면 null(UNKNOWN). "Main" 기본배역 위장 제거.
+          role: f.intelligence?.role ?? f.structural?.role ?? null,
           description: f.intelligence?.description || f.intelligence?.visual_description || f.semantic?.summary || "",
         },
         preview_clip_url: f.preview_clip_url ?? null,
