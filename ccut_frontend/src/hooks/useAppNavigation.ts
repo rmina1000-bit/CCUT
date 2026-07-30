@@ -75,6 +75,12 @@ export function useAppNavigation({
     videoService.deleteProject(id).catch(() => {});
     setProjects((prev) => prev.filter((p) => p.id !== id));
     if (activeNavItem === id) {
+      // [LAB-48] 화면 잔재 정리 — 구판은 activeNavItem 만 __new__ 로 바꾸고 분석 상태를
+      //   그대로 뒀다. 그래서 지운 프로젝트의 조각맵·채팅이 빈 작업실 위에 남아
+      //   '유령 화면'이 됐다. onNewProject 는 이미 같은 자리에서 정리하고 있었다 —
+      //   삭제도 같은 정리를 거친다. 다음 프로젝트를 대신 골라주지는 않는다
+      //   (시스템이 앞서가지 않는다 — 빈 작업실로 두고 사용자가 고른다).
+      resetAnalysisState();
       setActiveNavItem("__new__");
     }
   };

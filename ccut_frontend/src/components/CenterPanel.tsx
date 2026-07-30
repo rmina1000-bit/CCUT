@@ -518,7 +518,14 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
   // [FLOW-STAGE] 무대가 이식될 타임라인 내 슬롯 (활성 제안 카드 위치)
   const [stageSlot, setStageSlot] = useState<HTMLDivElement | null>(null);
   // [STORY-GATE P3] 승인 관문 — 게이트 OFF면 enabled=false로 아무것도 바뀌지 않는다 (I-4)
-  const storyGate = useStoryGate(programId, appState === "complete");
+  // [LAB-48] programId 는 프로젝트 id 와 화면 이름("__new__"·"upload"…)을 겸한다.
+  //   LAB-21 이 Index.tsx 에 같은 가드를 넣었는데 이 호출부는 빠져 있었다 — 그래서
+  //   프로젝트를 지우면 activeNavItem 이 "__new__" 로 바뀌고, 그 값이 여기로 흘러
+  //   /api/story/__new__ 를 계속 노크했다(404 유령 폴). 유효 프로젝트가 아니면 폴하지 않는다.
+  const storyGate = useStoryGate(
+    programId?.startsWith("proj_") ? programId : null,
+    appState === "complete",
+  );
   const [storyViewKey, setStoryViewKey] = useState(0);       // '반영하기' 누를 때만 원고 재로드 (S5)
   const storyRefreshNonceRef = useRef(storyRefreshNonce);
   // [GATE-LOOP-01 2-1] 실재하는 무대 게이트 — 구판 hideEditUI는 정의만 있고 소비처가 0인
