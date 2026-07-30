@@ -2757,7 +2757,11 @@ const Index: React.FC = () => {
       {/* [GATE-LOOP-01 3번] 단계 배지 — "지금 어느 단계인가"를 화면이 말한다.
           오늘 국장이 스토리 승인 화면을 '임시 페이지'로 오인한 사고의 재발 방지책.
           storyGate가 켜져 있고 프로젝트가 열려 있을 때만. 상태기계 파생값이라 자기 상태 없음. */}
-      {storyGate.enabled && activeNavItem?.startsWith("proj_") && hasProjectMedia && (
+      {/* [PROGRESS-VOICE 1] '분석 중'일 때는 이 배지를 띄우지 않는다 — 원본맵 위에 겹쳐
+          원본 이름을 가렸고(국장 실사용 판정), 같은 사실을 중앙(로딩 화면·채팅)이 더 자세히
+          말하기 때문이다. 나머지 단계(협의중·승인대기·편집협의·확정)는 그대로 둔다 —
+          승인 화면을 임시 페이지로 오인한 사고의 재발 방지책(GATE-LOOP-01 3번)이라 지우지 않는다. */}
+      {storyGate.enabled && activeNavItem?.startsWith("proj_") && hasProjectMedia && storyStage.key !== "scanned" && (
         <div
           className="absolute left-1/2 top-2 z-50 -translate-x-1/2 flex items-center gap-2 rounded-full border border-border/30 bg-background/90 px-3 py-1 shadow-sm backdrop-blur"
           data-story-stage={storyStage.key}
