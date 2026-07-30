@@ -691,6 +691,13 @@ const Index: React.FC = () => {
   useEffect(() => {
     storySnapshotSigRef.current = null;
     storyOriginRef.current = "none";
+    // [STORY-RELOAD-FIX] ref 도 같은 자리에서 즉시 비운다.
+    //   storyFidsRef 는 렌더 중에 state 를 미러링하는데(:349), setStoryFids([]) 는
+    //   다음 렌더에야 반영된다. 같은 커밋에서 뒤이어 도는 서버 원고 적재 effect(:2400)가
+    //   `storyFidsRef.current.length > 0` 가드에 걸려 재적재를 건너뛰었다.
+    //   그 뒤로는 deps(activeNavItem·uiRestoredFor)가 다시 안 바뀌어 영영 안 돌아온다 —
+    //   실측: 조각이 다 떴다가 사라진 뒤 복구되지 않던 증상(2026-07-31 Buttercup).
+    storyFidsRef.current = [];
     setStoryFids([]);
     setStoryFragments([]);
     setHoldPositions({});
