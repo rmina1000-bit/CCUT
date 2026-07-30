@@ -493,7 +493,10 @@ def _service_counts(con) -> dict:
         "program_count": _one("SELECT COUNT(*) FROM programs"),
         "proposal_count": _one("SELECT COUNT(*) FROM proposals"),
         "vault_event_count": _one("SELECT COUNT(*) FROM vault_events"),
+        # [NERVE-1] 조각 수는 테이블이 둘이다. 같은 이름으로 뭉치면 두 화면이 다른 수를 낸다
+        #   (감사 C-2-c: 상황실 685 vs 편집연구실 812). 이름을 갈라 둘 다 보인다.
         "fragment_vault_count": _one("SELECT COUNT(*) FROM fragment_vault"),
+        "semantic_fragment_count": _one("SELECT COUNT(*) FROM semantic_fragments"),
         "export_success_count": _one(
             "SELECT COUNT(*) FROM export_results WHERE status='RENDER_SUCCESS'"),
         "person_count": _one("SELECT COUNT(*) FROM persons"),
@@ -669,6 +672,45 @@ def insights_query(query: str) -> dict:
 _PROBE_FAILED = object()   # 조회 실패 표식 — '값 없음(None)'과 절대 섞지 않는다.
 
 
+def edit_capability() -> dict:
+    """[NERVE-1] 편집 능력 요약 — 편집연구실 실측에서 필요한 수치만 가져온다.
+
+    새 계산을 만들지 않는다. 판정 기준도 편집연구실과 같은 것을 쓴다
+    (재료 결손 = non_null 0, ccut_backend/lab/audit.py:build_lab_context 와 동일).
+    조회 실패는 status="UNKNOWN" 으로 정직하게 남긴다 — 0건으로 위장하지 않는다.
+    """
+    try:
+        from lab.audit import get_audit
+        audit = get_audit()
+    except Exception as e:
+        return {"status": "UNKNOWN", "error": str(e)}
+
+    materials = [m for m in (audit.get("materials") or []) if isinstance(m, dict)]
+    missing = [m for m in materials if not m.get("non_null")]
+    rules = audit.get("rules") or {}
+    techniques = audit.get("techniques") or {}
+    edges = [e for e in (audit.get("edges") or []) if isinstance(e, dict)]
+    return {
+        "status": "OK",
+        "audited_at": audit.get("audited_at"),
+        "material_total": len(materials),
+        "material_missing": len(missing),
+        "material_missing_labels": [m.get("label") for m in missing],
+        "rules_declared": rules.get("declared"),
+        "rules_registered": rules.get("registered"),
+        "rules_unregistered": rules.get("unregistered"),
+        # [NERVE-1] 미배선 정의는 wireable_unwired 하나로 통일(국장 결정 2026-07-30).
+        #   구 계산 declared-wired 는 모수가 어긋나 폐기.
+        "techniques_scope": techniques.get("scope"),
+        "techniques_wired": techniques.get("wired"),
+        "techniques_active": techniques.get("active"),
+        "techniques_wireable_unwired": techniques.get("wireable_unwired"),
+        "edges_total": len(edges),
+        "edges_broken": sum(1 for e in edges if e.get("status") == "BROKEN"),
+        "evidence_missing": (audit.get("evidence_audit") or {}).get("missing"),
+    }
+
+
 def _situation_alerts(con):
     """v1 경보 규칙 — 계약서(CONTRACT_V1 §2) 그대로. 전부 실 DB 조회.
 
@@ -742,6 +784,37 @@ def _situation_alerts(con):
     return alerts, probe_failures
 
 
+def _capability_alerts(cap: dict) -> list:
+    """[NERVE-1] 편집 능력 결손을 경보로 올린다 — 운영이 초록인데 제작이 멈춘 상태를 덮지 않는다."""
+    if cap.get("status") != "OK":
+        return []
+    alerts = []
+    if cap.get("material_missing"):
+        labels = ", ".join(l for l in (cap.get("material_missing_labels") or []) if l)
+        alerts.append({
+            "severity": "P1", "title": "편집 재료 결손",
+            "reason": f"재료 {cap['material_missing']}/{cap['material_total']} 값 없음"
+                      + (f" ({labels})" if labels else ""),
+            "target_type": "edit_lab", "target_id": None,
+            "recommended_action": "편집연구실에서 생산 경로 확인 — 값 없는 재료를 요구하는 기법은 잠긴다",
+        })
+    if cap.get("rules_unregistered"):
+        alerts.append({
+            "severity": "P2", "title": "검사기 없는 하드룰 선언",
+            "reason": f"선언 {cap.get('rules_declared')} 중 미등록 {cap['rules_unregistered']}건",
+            "target_type": "edit_lab", "target_id": None,
+            "recommended_action": "편집연구실 하드룰 열에서 선언↔registry 대응 확인",
+        })
+    if cap.get("edges_broken"):
+        alerts.append({
+            "severity": "P2", "title": "끊긴 능력 간선",
+            "reason": f"BROKEN 간선 {cap['edges_broken']}/{cap.get('edges_total')}건",
+            "target_type": "edit_lab", "target_id": None,
+            "recommended_action": "편집연구실 능력지도에서 BROKEN 간선 근거 확인",
+        })
+    return alerts
+
+
 def situation() -> dict:
     """상황실 홈 — 30초 안에 전군 파악. 원장 없는 항목은 null/빈 배열(하드코딩 금지)."""
     con = _connect()
@@ -750,6 +823,18 @@ def situation() -> dict:
     kpis["api_cost_estimate"] = None    # 비용 원장 미도입 — 정직 null
 
     alerts, probe_failures = _situation_alerts(con)
+
+    # [NERVE-1] 편집 능력(편집연구실 실측)을 상황실 판정에 합친다.
+    #   구판은 운영 원장만 봐서, 재료 3종이 0/812인 동안에도 초록이었다(감사 C-1).
+    capability = edit_capability()
+    if capability.get("status") == "OK":
+        alerts.extend(_capability_alerts(capability))
+    else:
+        probe_failures.append({
+            "probe": "edit_capability",
+            "error": capability.get("error") or "unknown",
+        })
+
     # [LAB-52 ①] 점검 자체가 실패했으면 그 사실을 경보로 세운다 — 조용히 넘어가지 않는다.
     if probe_failures:
         alerts.append({
@@ -795,6 +880,7 @@ def situation() -> dict:
         "generated_at": datetime.datetime.now().isoformat(),
         "global_state": {"service_level": level, "reason": reason},
         "kpis": kpis,
+        "edit_capability": capability,
         "alerts": alerts,
         "probe_failures": probe_failures,
         "action_queue": action_queue,
@@ -1346,11 +1432,10 @@ def _lab_transfer_context(context: dict) -> dict:
         "edges": edges,
         "status_summary": {
             **status_counts,
-            "unwired_techniques": max(
-                0,
-                int(technique_block.get("declared") or 0)
-                - int(technique_block.get("wired") or 0),
-            ),
+            # [NERVE-1] 미배선 정의 통일(국장 결정 2026-07-30) — wireable_unwired 하나만 쓴다.
+            #   구 계산 declared-wired 는 declared 에 모수 밖 기법(사용자 전용·인프라·룰 후보)이
+            #   섞이고 wired 에는 declared 에 없는 as_is 가 들어가 모집단이 어긋났다(실측 24 vs 2).
+            "wireable_unwired_techniques": technique_block.get("wireable_unwired"),
         },
         "omitted": {
             "materials": max(0, len(audit.get("materials", [])) - len(materials)),

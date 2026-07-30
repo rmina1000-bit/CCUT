@@ -21,7 +21,7 @@ interface SituationLite {
 interface LabAudit {
   materials?: { id: string; label: string; non_null: number; total: number }[];
   rules?: { declared: number; registered: number; unregistered: number };
-  techniques?: { declared: number; wired: number };
+  techniques?: { declared: number; wired: number; wireable_unwired: number };
   edges?: { status: string }[];
 }
 
@@ -87,8 +87,10 @@ export const AdminAIPanel: React.FC<{
     (labAudit.rules?.unregistered ?? 0) > 0
       ? `[BROKEN ${labAudit.rules?.unregistered}] 하드룰 선언·registry ID 연결 확인`
       : null,
-    (labAudit.techniques?.declared ?? 0) > (labAudit.techniques?.wired ?? 0)
-      ? `[미배선 ${(labAudit.techniques?.declared ?? 0) - (labAudit.techniques?.wired ?? 0)}] 기법 배선 후보 검토`
+    // [NERVE-1] 미배선 정의 통일(국장 결정 2026-07-30) — declared-wired(모수 어긋난 24) 폐기,
+    //   편집연구실 화면과 같은 wireable_unwired(즉시 배선 가능) 하나만 쓴다.
+    (labAudit.techniques?.wireable_unwired ?? 0) > 0
+      ? `[즉시 배선 가능 ${labAudit.techniques?.wireable_unwired}] 기법 배선 후보 검토`
       : null,
   ].filter((item): item is string => Boolean(item)) : [];
   const recommended = contextSource === "lab"

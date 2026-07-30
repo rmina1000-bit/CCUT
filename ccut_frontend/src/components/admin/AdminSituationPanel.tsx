@@ -20,7 +20,9 @@ const KPI_LABELS: Record<string, string> = {
   program_count: "프로젝트",
   proposal_count: "편집 제안",
   vault_event_count: "조각 사건(원장)",
-  fragment_vault_count: "인지 조각",
+  // [NERVE-1] 조각 수 두 개는 테이블이 다르다 — 이름으로 갈라 표기(감사 C-2-c).
+  fragment_vault_count: "인지 조각(아카이브)",
+  semantic_fragment_count: "전체 조각(제작중)",
   export_success_count: "내보내기 성공",
   person_count: "등록 인물",
   storage_bytes: "저장소(원장 미도입)",
