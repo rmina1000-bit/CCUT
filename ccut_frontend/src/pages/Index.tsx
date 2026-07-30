@@ -2736,6 +2736,42 @@ const Index: React.FC = () => {
   }, []);
   const hasProjectMedia = sourceEntries.length > 0 || sourceFragments.length > 0 || resolvedFragments.length > 0;
 
+  // [STAGE-VOICE] "지금 어느 단계인가"를 채팅이 말한다 — 철거한 오버레이 배지의 대체.
+  //   원본맵 위에 얹지 않는다(국장 확정 원칙). 단계가 바뀔 때만 한 줄, 같은 단계 반복 금지.
+  //   판정은 그대로 storyStageBadge(상태기계 파생) — 문구도 그 값을 그대로 읽는다.
+  //   여기서 자기 상태를 만들지 않는다(분열 방지).
+  const stageVoiceRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!storyGate.enabled) return;
+    if (!activeNavItem?.startsWith("proj_")) return;
+    if (!hasProjectMedia) return;
+    const sig = `${activeNavItem}:${storyStage.key}`;
+    if (stageVoiceRef.current === sig) return;
+    stageVoiceRef.current = sig;
+    const stageMsg = {
+      id: `ai_stage_${storyStage.key}_${Date.now()}`,
+      sender: "ai" as const,
+      text: `지금은 ${storyStage.label}입니다. ${storyStage.hint}`,
+      timestamp: Date.now(),
+    };
+    // 실패 경로(:1200)와 같은 null-안전 골격 — storyPlan이 아직 없어도 말이 삼켜지지 않는다.
+    setStoryPlan((prev: any) => ({
+      ...(prev ?? {
+        story_plan_id: `STP_${Date.now()}`,
+        source_count: sourceEntries.length,
+        consultation_status: "draft_ready",
+        confirmation_status: "pending",
+        direction_options: [],
+        detected_theme: "",
+        selected_direction: undefined,
+        messages: [],
+      }),
+      messages: [...((prev?.messages) ?? []), stageMsg],
+    }));
+  }, [storyGate.enabled, activeNavItem, hasProjectMedia,
+      storyStage.key, storyStage.label, storyStage.hint,
+      sourceEntries.length, setStoryPlan]);
+
   return (
     <div
       ref={containerRef}
@@ -2754,28 +2790,10 @@ const Index: React.FC = () => {
           await next?.onConfirm?.();
         }}
       />
-      {/* [GATE-LOOP-01 3번] 단계 배지 — "지금 어느 단계인가"를 화면이 말한다.
-          오늘 국장이 스토리 승인 화면을 '임시 페이지'로 오인한 사고의 재발 방지책.
-          storyGate가 켜져 있고 프로젝트가 열려 있을 때만. 상태기계 파생값이라 자기 상태 없음. */}
-      {/* [PROGRESS-VOICE 1] '분석 중'일 때는 이 배지를 띄우지 않는다 — 원본맵 위에 겹쳐
-          원본 이름을 가렸고(국장 실사용 판정), 같은 사실을 중앙(로딩 화면·채팅)이 더 자세히
-          말하기 때문이다. 나머지 단계(협의중·승인대기·편집협의·확정)는 그대로 둔다 —
-          승인 화면을 임시 페이지로 오인한 사고의 재발 방지책(GATE-LOOP-01 3번)이라 지우지 않는다. */}
-      {storyGate.enabled && activeNavItem?.startsWith("proj_") && hasProjectMedia && storyStage.key !== "scanned" && (
-        <div
-          className="absolute left-1/2 top-2 z-50 -translate-x-1/2 flex items-center gap-2 rounded-full border border-border/30 bg-background/90 px-3 py-1 shadow-sm backdrop-blur"
-          data-story-stage={storyStage.key}
-          title={storyStage.hint}
-        >
-          <span className={`h-1.5 w-1.5 rounded-full ${
-            storyStage.key === "final" ? "bg-emerald-500"
-              : storyStage.key === "awaiting" ? "bg-amber-500"
-              : storyStage.key === "edit_consult" ? "bg-primary"
-              : "bg-muted-foreground/50"}`} />
-          <span className="text-[11px] font-bold tracking-wider text-foreground/80">{storyStage.label}</span>
-          <span className="text-[11px] text-muted-foreground/60">{storyStage.hint}</span>
-        </div>
-      )}
+      {/* [STAGE-VOICE] 단계 배지(GATE-LOOP-01 3번) 오버레이 철거 — 국장 확정 원칙:
+          원본맵 위에는 어떤 오버레이도 얹지 않는다. 원본 영상 이름을 가렸다.
+          배지가 담당하던 "지금 어느 단계인가"는 아래 effect가 채팅 문장으로 말한다.
+          도입 취지(승인 화면을 임시 페이지로 오인한 사고 방지)는 문장으로 살아 있다. */}
 
       <div className="relative flex-shrink-0" style={{ width: navCollapsed ? 48 : navWidth }}>
         <LeftNav
