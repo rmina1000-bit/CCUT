@@ -6,6 +6,7 @@ import FragmentMap from "@/components/FragmentMap";
 import ReservedFragments from "@/components/ReservedFragments";
 import LedgerPage from "@/pages/LedgerPage";
 import FragmentMiniPlayer from "@/components/FragmentMiniPlayer";
+import RoughCutStage from "@/components/RoughCutStage";
 // [dev ESM 안전] 타입 전용 import는 반드시 `import type` — 혼합 import는 esbuild가 못 벗겨
 // 런타임에 존재하지 않는 named export(interface)를 요청해 모듈 에러가 난다(build는 통과).
 import type { MiniPlayTarget } from "@/components/FragmentMiniPlayer";
@@ -2932,6 +2933,7 @@ const Index: React.FC = () => {
             activeStoryFragmentId={selectedFragment ? String((selectedFragment as any).fragment_id ?? getUid(selectedFragment)) : highlightedPanoramaFrag}
             modeGateEnabled={modeGateOn}
             activeFragmentId={selectedFragment ? String((selectedFragment as any).fragment_id ?? getUid(selectedFragment)) : null}
+            roughCutStage={activeNavItem?.startsWith("proj_") ? <RoughCutStage projectId={activeNavItem} sourceEntries={sourceEntries} onPlay={setMiniTarget} /> : undefined}
             storyReplacement={modeGateOn ? (
               <FragmentMap
                 fragments={resolvedFragments}

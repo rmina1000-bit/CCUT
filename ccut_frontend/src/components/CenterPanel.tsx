@@ -153,6 +153,7 @@ interface CenterPanelProps {
   activeFragmentId?: string | null;
   activeStoryFragmentId?: string | null;
   storyReplacement?: React.ReactNode;
+  roughCutStage?: React.ReactNode;
   programId?: string | null;
   programTitle?: string | null;
   onExportDone?: () => void;
@@ -406,6 +407,7 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
   activeFragmentId,
   activeStoryFragmentId: activeStoryFragmentIdProp,
   storyReplacement,
+  roughCutStage,
   programId,
   programTitle,
   onExportDone,
@@ -2960,7 +2962,7 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
         //   탭·아코디언 없음 — 세 블록이 동시에 존재한다.
         const finalContent = (
           <>
-            {storyContent}
+            {roughCutStage ?? storyContent}
             {editStageAllowed && stageContent}
           </>
         );
