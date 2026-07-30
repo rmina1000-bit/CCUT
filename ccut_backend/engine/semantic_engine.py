@@ -223,6 +223,16 @@ class SemanticFragmentGenerator:
         for frag in final_fragments:
             frag["fallback_reason"] = self.calculate_fallback_reason(frag)
 
+        # 8.5 [FID-STABLE 3] id 확정은 경계 확정 **뒤**다.
+        #   build_fragments(4단계)가 찍은 id는 초기 경계에서 나오는데, merge/split(8단계)과
+        #   문장 스냅(R16)이 그 뒤에 경계를 바꾼다. 위스퍼 재실행마다 초기 경계는 미세하게
+        #   흔들리지만 스냅·병합이 최종 경계를 같은 곳으로 수렴시킨다 — 그래서 실측
+        #   (2026-07-31 SRC_FCA88F1A): 두 세대의 최종 프레임이 전 조각 동일한데 id 만
+        #   두 벌(SF_B28A3A… vs SF_E06926…)이었고, 먼저 뜬 원고가 죽은 id 를 물어
+        #   조각맵이 비었다. 최종 경계로 다시 찍으면 어느 세대든 같은 이름이 나온다.
+        #   (4단계의 발급은 그대로 둔다 — 파이프라인 내부 임시 키로 여전히 필요하다.)
+        final_fragments = self._finalize_stable_ids(final_fragments, source_id)
+
         # 9. DB 저장
         self.bams.save_semantic_fragments(source_id, final_fragments)
         try:
@@ -1057,6 +1067,41 @@ class SemanticFragmentGenerator:
                 final.append(frag)
 
         return final
+
+    def _finalize_stable_ids(self, fragments, source_id):
+        """[FID-STABLE 3] 최종 경계 기준으로 id 를 다시 찍는다 — generate() 마지막 단계 전용.
+
+        규칙:
+          · _P00N 형제는 같은 base 를 유지한다(바깥 코드가 접미사를 벗겨 그룹을 묶는다 —
+            proposal_engine.py:696). base 키는 그룹 전체 구간(min start ~ max end)에서 나온다.
+          · 단독 조각은 자기 구간에서 키가 나온다.
+          · 접미사 번호는 시간순으로 다시 매긴다(병합·삭제로 구멍 난 번호 정리).
+          · 여기서 경계는 절대 바꾸지 않는다 — 이름만 바꾼다.
+        """
+        import re as _re
+        groups = {}
+        order = []
+        for frag in fragments:
+            fid = str(frag.get("fragment_id") or "")
+            base = _re.sub(r"_P\d{3}$", "", fid)
+            if base not in groups:
+                groups[base] = []
+                order.append(base)
+            groups[base].append(frag)
+
+        taken = set()
+        for base in order:
+            members = groups[base]
+            g_start = min(fr["start"] for fr in members)
+            g_end = max(fr["end"] for fr in members)
+            key = stable_fragment_key(source_id, g_start, g_end, taken)
+            new_base = f"SF_{key}_{source_id}"
+            if len(members) == 1:
+                members[0]["fragment_id"] = new_base
+            else:
+                for idx, fr in enumerate(sorted(members, key=lambda x: x["start"]), 1):
+                    fr["fragment_id"] = f"{new_base}_P{idx:03d}"
+        return fragments
 
     def _split_long_fragment(self, frag, boundaries, max_duration=20.0, evidences=None):
         """[STEP 1-R3] 긴 조각을 _P001/_P002 형식으로 안정 분할.
