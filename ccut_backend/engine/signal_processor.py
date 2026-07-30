@@ -77,23 +77,47 @@ class SignalProcessor:
         print(f"[SignalProcessor] Created {len(segments)} dynamic segments (10-30s).")
         return segments, triggers
 
-    def get_rms_energy(self, start: float, duration: float) -> float:
-        """[STEP 2] 구간의 오디오 에너지(RMS) 계산"""
+    def get_rms_energy(self, start: float, duration: float):
+        """[STEP 2] 구간의 오디오 에너지(RMS) 계산. 실패하면 None.
+
+        [LAB-51] 반환 계약 변경: 실패 시 0.0 이 아니라 **None**.
+          구판은 예외를 삼키고 0.0 을 돌려줘 '측정 실패'와 '무음'을 같은 값으로 뭉갰다.
+          그래서 main.py 의 "RMS 측정 실패 → pending 처리(static 오판 금지)" 방어가
+          영영 도달하지 못했다 — except 가 발동할 예외가 없었으니까.
+          실측 사고(2026-07-30 SRC_3111FA4F, 28분): timeout 10s 초과 → 0.0 →
+          static 오판(임계 0.02) → ASR 강제 스킵 → 자막 0·SF 0.
+          같은 파일을 넉넉한 timeout 으로 재면 -16.0 dB = 0.1585 로, 임계의 8배다.
+          모르는 것을 0으로 위장하지 않는다.
+
+        timeout: 길이에 비례시킨다. 실측 28분(1685s) 전체 스캔에 22.7s 가 걸렸다
+          (≈ 재생시간의 1.35%). 여유를 4배쯤 두고 하한 30s —
+          max(30, duration × 0.05) 이면 28분 영상에 84s 로 실측의 3.7배 여유다.
+        """
+        timeout_sec = max(30.0, float(duration or 0.0) * 0.05)
         cmd = [
             "ffmpeg", "-y", "-ss", str(start), "-t", str(duration), "-i", self.video_path,
             "-af", "volumedetect", "-f", "null", "NUL"
         ]
+        proc = None
         try:
             proc = subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True, encoding="utf-8", errors="replace")
-            _, stderr = proc.communicate(timeout=10)
+            _, stderr = proc.communicate(timeout=timeout_sec)
             match = re.search(r"mean_volume:\s*([\-\d.]+) dB", stderr)
             if match:
                 db = float(match.group(1))
                 # dB to linear (approximate)
                 return round(pow(10, db/20), 4)
+            print(f"[SignalProcessor] RMS: mean_volume 미검출 — 측정 불가(None) {self.video_path}")
+            return None
+        except subprocess.TimeoutExpired:
+            if proc:
+                proc.kill()
+            print(f"[SignalProcessor] RMS timeout {timeout_sec:.0f}s 초과 — 측정 불가(None), "
+                  f"duration={duration}s")
+            return None
         except Exception as e:
-            print(f"[SignalProcessor] RMS calculation failed: {e}")
-        return 0.0
+            print(f"[SignalProcessor] RMS calculation failed — 측정 불가(None): {e}")
+            return None
 
     def _detect_silence(self) -> list[float]:
         # Quick FFmpeg run for silence detection

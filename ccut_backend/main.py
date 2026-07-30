@@ -825,9 +825,16 @@ def _background_whisper_impl(source_id: str, video_path: str, fragments: list):
         _total_dur = max(
             (float(f.get("end_time", 0) or 0) for f in fragments), default=0.0
         )
+        # [LAB-51] get_rms_energy 는 실패 시 None 을 준다(구판은 0.0 을 줘서 '무음'으로
+        #   위장했고, 그래서 아래 "static 오판 금지" 방어가 도달하지 못했다).
+        #   None = 모른다 → 빈 리스트 → pre_profile 이 pending 을 반환한다.
         try:
-            _full_rms = float(_SP(video_path).get_rms_energy(0.0, _total_dur))
-            _rms_list = [_full_rms]
+            _rms_raw = _SP(video_path).get_rms_energy(0.0, _total_dur)
+            if _rms_raw is None:
+                print("[PRE_PROFILE] RMS 측정 불가(None) — pending 처리 (static 오판 금지)")
+                _rms_list = []
+            else:
+                _rms_list = [float(_rms_raw)]
         except Exception as _e:
             print(f"[PRE_PROFILE] RMS 측정 실패 — pending 처리: {_e}")
             _rms_list = []  # pre_profile이 pending 반환 (static 오판 금지)
@@ -847,8 +854,20 @@ def _background_whisper_impl(source_id: str, video_path: str, fragments: list):
         )
         print(f"[PRE_PROFILE] {source_id} -> {_pre}")
 
+        # [LAB-51 국장 확정] ASR 은 기본 실행한다. 스킵은 **고확신일 때만**.
+        #   조건: confidence >= 0.9 AND asr 관련 신호 일치(asr_yield == 0).
+        #   근거: confidence 0.3 짜리 추측으로 되돌릴 수 없는 스킵을 집행해
+        #   28분 영상의 전사·SF 를 통째로 잃은 사고(2026-07-30 SRC_3111FA4F).
+        #   현 static 판정은 confidence 0.3 고정이라 이 문은 사실상 휴면 상태다 —
+        #   프로파일은 '참고 기록'으로 남고 ASR 은 돈다. 판정 근거를 한 줄로 남긴다.
         _enforce = _os.getenv("CCUT_PROFILE_ENFORCE", "1") == "1"
-        if _pre.get("profile") == "static" and _enforce:
+        _conf = float(_pre.get("confidence") or 0.0)
+        _asr_signal_agrees = (_pre.get("asr_yield") == 0.0)
+        _skip_ok = (_pre.get("profile") == "static" and _conf >= 0.9 and _asr_signal_agrees)
+        print(f"[PRE_PROFILE] {source_id} 판정근거 profile={_pre.get('profile')} "
+              f"confidence={_conf} asr_yield={_pre.get('asr_yield')} "
+              f"enforce={_enforce} -> ASR {'스킵' if (_skip_ok and _enforce) else '실행'}")
+        if _skip_ok and _enforce:
             print(f"[PRE_PROFILE] {source_id} static 확정 — ASR 스킵 (ENFORCE)")
             _ps(
                 source_id=source_id,
@@ -1787,7 +1806,12 @@ async def get_punch_specs(program_id: str):
             # [RULE-1 R4] 규칙 값의 출처는 config JSON 하나. 프론트도 그 값을 그대로 쓴다.
             "config": _cfg,
             "ramp_sec": (_cfg or {}).get("ramp_sec"),
-            "mode_technique": _axis.MODE_TECHNIQUE,
+            # [LAB-51] mode_technique 제거 — proposal_axis.MODE_TECHNIQUE 는 f19d5f0c 에서
+            #   정의가 사라졌는데 이 참조만 남아 AttributeError 로 **응답 전체가 죽고 있었다**
+            #   ([PUNCH][ERROR] ... has no attribute 'MODE_TECHNIQUE', 프론트는 specs·count 를
+            #   통째로 못 받아 undefined 를 봤다). 무엇을 담을 값이었는지 원 설계 이력이 없어
+            #   복원하지 않고 제거한다. mode→technique 사상이 필요하면 technique_for_mode(mode)
+            #   가 이미 있다(순수 상수 사상). 프론트 소비는 CenterPanel:1129 로그 한 곳뿐.
             "count": len(specs), "specs": specs,
         }
     except Exception as e:
