@@ -15,8 +15,17 @@ def stable_fragment_key(source_id: str, start_sec: float, end_sec: float,
     원고(story.fids)·편집·제안이 죽은 id를 가리켜 조각맵이 통째로 비었다.
     같은 구간이면 같은 이름이어야 한다 — 그래야 다시 분석해도 사용자의 작업이 살아남는다.
 
-    주소는 v0.4 계약의 시간 권위(ms 정수)를 쓴다. 초 부동소수를 그대로 해싱하면
-    같은 경계가 실행마다 다른 비트로 보일 수 있다 — 변환은 to_ms 하나뿐(CLAUDE.md).
+    주소는 v0.4 계약의 시간 권위(ms 정수)로 변환한 뒤 **deciseconds(0.1초)로 접는다**.
+    변환은 to_ms 하나뿐(CLAUDE.md) — 접는 것은 그 다음 단계다.
+
+    왜 0.1초인가: 어머님 서랍장(조각 금고 fragment_vault)의 자연키가
+    (원본 hash, start_ds, end_ds) — deciseconds 이기 때문이다
+    (engine/fragment_vault.py:norm_key, "경계 흔들림 <0.05s 는 같은 조각으로 본다").
+    ms 로 두면 경계가 0.01초만 흔들려도 금고는 '같은 조각'이라 인지를 이어받는데
+    조각 이름만 갈려서, 금고는 이어졌는데 원고는 끊기는 어긋남이 생긴다.
+    두 층이 같은 것을 같은 조각이라고 불러야 한다 — 해상도를 금고에 맞춘다.
+    (실측: 실 DB 922조각 88소스에서 ds 해상도 충돌 0건. 조각 최소 길이 0.2초
+     제약이 있어 0.1초 해상도로도 구간은 충분히 구별된다.)
 
     형식·길이는 구판과 동일(대문자 6자리 hex). 바깥에서 id를 쪼개 보는 코드
     (`_P001` 접미사, `_c1` 분할, base id 복원)가 그대로 성립한다.
@@ -24,7 +33,9 @@ def stable_fragment_key(source_id: str, start_sec: float, end_sec: float,
     taken: 같은 실행에서 이미 쓴 앞자리. 충돌하면 결정론적으로 다음 후보를 만든다
     (6자리 hex는 유한하므로 실측 기반 방어 — 조용히 덮어쓰지 않는다).
     """
-    base = f"{source_id}|{to_ms(float(start_sec))}|{to_ms(float(end_sec))}"
+    start_ds = round(to_ms(float(start_sec)) / 100)
+    end_ds = round(to_ms(float(end_sec)) / 100)
+    base = f"{source_id}|{start_ds}|{end_ds}"
     attempt = 0
     while True:
         raw = base if attempt == 0 else f"{base}|{attempt}"
