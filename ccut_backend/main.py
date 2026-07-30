@@ -5759,6 +5759,237 @@ async def get_project_state(program_id: str, db: Session = Depends(get_db)):
         "ui_state": pg.ui_state,
     }
 
+_ROUGH_CUT_UI_KEY = "roughCut"
+
+
+def _rough_cut_input_hash(project_id: str, source_ids, spans) -> str:
+    import hashlib
+
+    payload = {
+        "project_id": project_id,
+        "source_ids": list(source_ids),
+        "spans": [
+            [
+                span.span_id,
+                span.source_id,
+                span.start_ms,
+                span.end_ms,
+                span.text,
+            ]
+            for span in spans
+        ],
+    }
+    raw = json.dumps(
+        payload,
+        ensure_ascii=False,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    return hashlib.sha256(raw).hexdigest()
+
+
+def _rough_cut_generation_spans(spans, limit: int = 120):
+    if len(spans) <= limit:
+        return tuple(spans)
+    last_index = len(spans) - 1
+    return tuple(
+        spans[round(index * last_index / (limit - 1))]
+        for index in range(limit)
+    )
+
+
+def _rough_cut_ui_object(raw_ui_state) -> dict:
+    if not isinstance(raw_ui_state, str) or not raw_ui_state.strip():
+        return {}
+    try:
+        parsed = json.loads(raw_ui_state)
+    except (TypeError, ValueError):
+        return {}
+    return parsed if isinstance(parsed, dict) else {}
+
+
+def _rough_cut_response(record: dict, transcript) -> dict:
+    selected_ids = {
+        str(span_id)
+        for span_id in (record.get("ordered_span_ids") or [])
+    }
+    transcript_spans = [span.to_dict() for span in transcript.spans]
+    span_by_id = {
+        span["span_id"]: span
+        for span in transcript_spans
+    }
+    acts = []
+    for act in record.get("acts") or []:
+        span_ids = [str(span_id) for span_id in (act.get("span_ids") or [])]
+        acts.append({
+            "phase": act.get("phase"),
+            "summary": act.get("summary") or "",
+            "span_ids": span_ids,
+            "spans": [
+                span_by_id[span_id]
+                for span_id in span_ids
+                if span_id in span_by_id
+            ],
+        })
+    return {
+        "status": "OK",
+        "project_id": transcript.project_id,
+        "owner": record.get("owner"),
+        "input_hash": record.get("input_hash"),
+        "premise": record.get("premise") or "",
+        "acts": acts,
+        "ordered_span_ids": list(record.get("ordered_span_ids") or []),
+        "selected_count": len(selected_ids),
+        "eligible_count": len(transcript_spans),
+        "generation_input_count": record.get(
+            "generation_input_count",
+            len(transcript_spans),
+        ),
+        "mapping": record.get("mapping") or {
+            "auto": 0,
+            "candidate": 0,
+            "unknown": 0,
+            "items": [],
+        },
+        "transcript": [
+            {**span, "selected": span["span_id"] in selected_ids}
+            for span in transcript_spans
+        ],
+        "excluded_count": len(transcript.exclusions),
+        "created_at": record.get("created_at"),
+    }
+
+
+def _load_current_rough_cut(
+    program_id: str,
+    pg: ProgramTable,
+):
+    from rough_cut.transcript_reader import read_project_transcript
+
+    transcript = read_project_transcript(program_id)
+    input_hash = _rough_cut_input_hash(
+        program_id,
+        transcript.source_ids,
+        transcript.spans,
+    )
+    ui_state = _rough_cut_ui_object(pg.ui_state)
+    record = ui_state.get(_ROUGH_CUT_UI_KEY)
+    owner = record.get("owner") if isinstance(record, dict) else None
+    expected_owner = {
+        "program_id": program_id,
+        "source_ids": list(transcript.source_ids),
+    }
+    current = (
+        isinstance(record, dict)
+        and owner == expected_owner
+        and record.get("input_hash") == input_hash
+    )
+    return transcript, input_hash, ui_state, record if current else None
+
+
+@app.get("/rough-cut/project/{program_id}")
+async def get_rough_cut(
+    program_id: str,
+    db: Session = Depends(get_db),
+):
+    """현재 전사와 소유권 지문이 일치하는 가편집안만 조회한다."""
+    pg = db.query(ProgramTable).filter_by(program_id=program_id).first()
+    if not pg:
+        raise HTTPException(status_code=404, detail="project_not_found")
+    try:
+        transcript, _, _, record = _load_current_rough_cut(program_id, pg)
+    except Exception as exc:
+        raise HTTPException(
+            status_code=409,
+            detail=f"rough_cut_transcript_unavailable:{exc}",
+        ) from exc
+    if record is None:
+        raise HTTPException(status_code=404, detail="rough_cut_not_generated")
+    return _rough_cut_response(record, transcript)
+
+
+@app.post("/rough-cut/project/{program_id}")
+async def generate_rough_cut(
+    program_id: str,
+    db: Session = Depends(get_db),
+):
+    """텍스트 전사만으로 가편집안을 만들고 ui_state 전용 키에 병합 저장한다."""
+    import asyncio
+    import datetime as _datetime
+
+    from rough_cut.qwen_story_adapter import QwenStoryAdapter
+    from rough_cut.story_builder import RoughCutStoryBuilder
+
+    pg = db.query(ProgramTable).filter_by(program_id=program_id).first()
+    if not pg:
+        raise HTTPException(status_code=404, detail="project_not_found")
+    try:
+        transcript, input_hash, ui_state, current = _load_current_rough_cut(
+            program_id,
+            pg,
+        )
+    except Exception as exc:
+        raise HTTPException(
+            status_code=409,
+            detail=f"rough_cut_transcript_unavailable:{exc}",
+        ) from exc
+    if current is not None:
+        return _rough_cut_response(current, transcript)
+
+    builder = RoughCutStoryBuilder(
+        QwenStoryAdapter(timeout_seconds=120),
+    )
+    generation_spans = _rough_cut_generation_spans(transcript.spans)
+    result = await asyncio.to_thread(
+        builder.build_two_pass,
+        program_id,
+        generation_spans,
+    )
+    if not result.ok or result.draft is None:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "error": "rough_cut_generation_failed",
+                "status": result.status.value,
+                "message": result.error_message,
+                "issues": [
+                    issue.to_dict()
+                    for issue in result.failure_issues
+                ],
+            },
+        )
+
+    evidence = result.generation_evidence or {}
+    record = {
+        "version": 1,
+        "owner": {
+            "program_id": program_id,
+            "source_ids": list(transcript.source_ids),
+        },
+        "input_hash": input_hash,
+        "generation_input_count": len(generation_spans),
+        "premise": evidence.get("pass1_prose") or result.draft.premise,
+        "acts": [act.to_dict() for act in result.draft.acts],
+        "ordered_span_ids": list(result.draft.ordered_span_ids),
+        "mapping": evidence.get("mapping") or {
+            "auto": 0,
+            "candidate": 0,
+            "unknown": 0,
+            "items": [],
+        },
+        "created_at": _datetime.datetime.now(
+            _datetime.timezone.utc,
+        ).isoformat(),
+    }
+    ui_state[_ROUGH_CUT_UI_KEY] = record
+    pg.ui_state = _strip_dead_ui_keys(json.dumps(
+        ui_state,
+        ensure_ascii=False,
+        separators=(",", ":"),
+    ))
+    db.commit()
+    return _rough_cut_response(record, transcript)
+
+
 class TimelineAppendRequest(BaseModel):
     entries: list = []
 
