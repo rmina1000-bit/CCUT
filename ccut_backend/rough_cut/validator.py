@@ -1,9 +1,14 @@
 import re
 from dataclasses import dataclass
 from enum import Enum
-from typing import Dict, Iterable, List, Sequence, Tuple
+from typing import Any, Dict, Iterable, List, Sequence, Tuple
 
-from .contracts import ChunkSelectionDraft, RoughCutStoryDraft, TranscriptSpan
+from .contracts import (
+    ChunkSelectionDraft,
+    RoughCutAct,
+    RoughCutStoryDraft,
+    TranscriptSpan,
+)
 
 
 class RoughCutRejectionCode(str, Enum):
@@ -179,6 +184,104 @@ def validate_story_draft(
     return RoughCutValidationResult(tuple(_unique_issues(issues)))
 
 
+def condense_story_draft(
+    draft: RoughCutStoryDraft,
+    allowed_spans: Sequence[TranscriptSpan],
+    *,
+    total_transcript_span_count: int,
+    target_count: int = 0,
+) -> Tuple[RoughCutStoryDraft, Dict[str, Any]]:
+    span_by_id = {span.span_id: span for span in allowed_spans}
+    available_count = len({
+        span_id
+        for act in draft.acts
+        for span_id in act.span_ids
+        if span_id in span_by_id
+    })
+    if target_count <= 0:
+        target_count = max(4, round(total_transcript_span_count * 0.4))
+    target_count = min(
+        max(4, target_count),
+        max(4, total_transcript_span_count - 1),
+        available_count,
+    )
+
+    act_ids = [
+        [span_id for span_id in act.span_ids if span_id in span_by_id]
+        for act in draft.acts
+    ]
+    if any(not ids for ids in act_ids) or target_count < len(act_ids):
+        return draft, {
+            "applied": False,
+            "reason": "cannot_preserve_all_acts",
+            "target_count": target_count,
+        }
+
+    quotas = [1] * len(act_ids)
+    remaining = target_count - len(act_ids)
+    while remaining > 0:
+        progressed = False
+        for index, ids in enumerate(act_ids):
+            if quotas[index] >= len(ids):
+                continue
+            quotas[index] += 1
+            remaining -= 1
+            progressed = True
+            if remaining == 0:
+                break
+        if not progressed:
+            break
+
+    selected_by_act = [
+        _evenly_spaced_ids(ids, quota)
+        for ids, quota in zip(act_ids, quotas)
+    ]
+    _preserve_source_representatives(
+        selected_by_act,
+        act_ids,
+        span_by_id,
+        target_count,
+    )
+    condensed_acts = tuple(
+        RoughCutAct(
+            phase=act.phase,
+            summary=span_by_id[selected_ids[0]].text,
+            span_ids=tuple(selected_ids),
+        )
+        for act, selected_ids in zip(draft.acts, selected_by_act)
+    )
+    ordered_ids = tuple(
+        span_id
+        for selected_ids in selected_by_act
+        for span_id in selected_ids
+    )
+    condensed = RoughCutStoryDraft(
+        project_id=draft.project_id,
+        premise=span_by_id[ordered_ids[0]].text,
+        acts=condensed_acts,
+        ordered_span_ids=ordered_ids,
+    )
+    before_sources = {
+        span_by_id[span_id].source_id
+        for ids in act_ids
+        for span_id in ids
+    }
+    after_sources = {
+        span_by_id[span_id].source_id
+        for span_id in ordered_ids
+    }
+    return condensed, {
+        "applied": True,
+        "reason": "server_target_condense",
+        "before_count": available_count,
+        "target_count": target_count,
+        "after_count": len(ordered_ids),
+        "act_quotas": quotas,
+        "source_count_before": len(before_sources),
+        "source_count_after": len(after_sources),
+    }
+
+
 def _append_unknown_issue(
     issues: List[RoughCutValidationIssue],
     span_ids: Iterable[str],
@@ -238,3 +341,66 @@ def _unique_issues(
             seen.add(key)
     return unique
 
+
+def _evenly_spaced_ids(span_ids: Sequence[str], count: int) -> List[str]:
+    if count >= len(span_ids):
+        return list(span_ids)
+    if count <= 1:
+        return [span_ids[len(span_ids) // 2]]
+    indices = [
+        round(index * (len(span_ids) - 1) / (count - 1))
+        for index in range(count)
+    ]
+    return [span_ids[index] for index in indices]
+
+
+def _preserve_source_representatives(
+    selected_by_act: List[List[str]],
+    act_ids: Sequence[Sequence[str]],
+    span_by_id: Dict[str, TranscriptSpan],
+    target_count: int,
+) -> None:
+    all_sources = []
+    for ids in act_ids:
+        for span_id in ids:
+            source_id = span_by_id[span_id].source_id
+            if source_id not in all_sources:
+                all_sources.append(source_id)
+    required_sources = set(all_sources[:target_count])
+
+    def selected_sources() -> set:
+        return {
+            span_by_id[span_id].source_id
+            for ids in selected_by_act
+            for span_id in ids
+        }
+
+    for source_id in required_sources - selected_sources():
+        replacement = None
+        for act_index, ids in enumerate(act_ids):
+            for span_id in ids:
+                if span_by_id[span_id].source_id == source_id:
+                    replacement = (act_index, span_id)
+                    break
+            if replacement:
+                break
+        if replacement is None:
+            continue
+        act_index, span_id = replacement
+        selected = selected_by_act[act_index]
+        replace_index = next(
+            (
+                index
+                for index, selected_id in enumerate(selected)
+                if sum(
+                    span_by_id[item].source_id
+                    == span_by_id[selected_id].source_id
+                    for group in selected_by_act
+                    for item in group
+                ) > 1
+            ),
+            None,
+        )
+        if replace_index is not None:
+            selected[replace_index] = span_id
+            selected.sort(key=lambda item: span_by_id[item].start_ms)

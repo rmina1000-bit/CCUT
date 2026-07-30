@@ -13,6 +13,7 @@ from .contracts import (
 from .qwen_story_adapter import QwenStoryAdapter
 from .validator import (
     RoughCutValidationIssue,
+    condense_story_draft,
     validate_chunk_selection,
     validate_story_draft,
 )
@@ -398,6 +399,34 @@ class RoughCutStoryBuilder:
                     total_transcript_span_count=total_span_count,
                 )
                 last_issues = validation.issues
+                if (
+                    use_two_pass
+                    and "not_shortened" in validation.codes
+                ):
+                    condensed, condense_evidence = condense_story_draft(
+                        result.draft,
+                        candidate_spans,
+                        total_transcript_span_count=total_span_count,
+                    )
+                    last_evidence = dict(last_evidence or {})
+                    last_evidence["server_condense"] = condense_evidence
+                    validation = validate_story_draft(
+                        condensed,
+                        candidate_spans,
+                        total_transcript_span_count=total_span_count,
+                    )
+                    result = result.__class__(
+                        status=result.status,
+                        project_id=result.project_id,
+                        model=result.model,
+                        prompt_version=result.prompt_version,
+                        input_span_count=result.input_span_count,
+                        latency_ms=result.latency_ms,
+                        draft=condensed,
+                        raw_output=last_evidence,
+                        error_message=result.error_message,
+                    )
+                    last_issues = validation.issues
                 fingerprint = ("validation",) + validation.codes
                 attempts.append(
                     RoughCutAttempt(
