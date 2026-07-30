@@ -1993,6 +1993,142 @@ def _inject_display_names(fragments: list, source_id: str, title: str = None):
     return fragments
 
 
+_EVIDENCE_FIELDS = ("audio_beat", "audio_energy", "word_timestamps",
+                    "speech_presence", "face_size", "shot_size", "emotion_score")
+
+
+def _inject_evidence(fragments: list, source_id: str):
+    """[EVIDENCE-REACH STEP1-1] 조각 payload에 재료 7종을 그대로 실어 보낸다.
+
+    새로 계측하지 않는다 — 이미 DB에 있는 값을 소비 단위(조각)로 접어 넘길 뿐이다.
+    소비 경로는 편집연구실 감사기(ccut_backend/lab/audit.py:_consumed_count)와 같은 것을 쓴다.
+    값이 없으면 null + evidence_status "UNKNOWN" — 0으로 위장하지 않는다.
+      · 실측 0 (예: 구간 안 비트 0개)은 VALUE 다. UNKNOWN 과 구별한다.
+      · face_size·shot_size·emotion_score 는 2026-07-30 /lab/audit 실측 소비 0/812 —
+        미계측 확정이라 필드만 존재하고 값은 UNKNOWN 이다(여기서 새로 채우지 않는다).
+    """
+    if not fragments:
+        return fragments
+
+    import json as _json
+    from sqlalchemy import text as _sql_text
+    from database import SessionLocal
+    from archive.db_models import EvidenceTable, SubtitleTable
+
+    def _num(v):
+        return v if isinstance(v, (int, float)) and not isinstance(v, bool) else None
+
+    def _as_obj(raw):
+        """JSON 컬럼이 dict 로도 문자열로도 온다. 이중 인코딩도 한 번 더 푼다."""
+        for _ in range(2):
+            if not isinstance(raw, str):
+                break
+            try:
+                raw = _json.loads(raw)
+            except (TypeError, ValueError):
+                return None
+        return raw
+
+    def _dig(obj, *keys):
+        cur = obj
+        for key in keys:
+            if not isinstance(cur, dict):
+                return None
+            cur = cur.get(key)
+        return cur
+
+    evidence_rows = []
+    evidence_by_id = {}
+    subject_by_id = {}
+    subtitle_words = None      # None = 자막 원장 자체가 없음(UNKNOWN)
+    load_error = None
+    try:
+        with SessionLocal() as db:
+            for r in db.query(EvidenceTable).filter_by(source_id=source_id).all():
+                meta = _as_obj(r.metadata_json)
+                row = (r.start, r.end, _num(r.audio_energy), meta)
+                evidence_rows.append(row)
+                evidence_by_id[r.fragment_id] = meta
+            for sub in db.query(SubtitleTable).filter_by(source_id=source_id).all():
+                segments = _as_obj(sub.segments)
+                if not isinstance(segments, list):
+                    continue
+                if subtitle_words is None:
+                    subtitle_words = []
+                for seg in segments:
+                    for word in (seg.get("words") or []) if isinstance(seg, dict) else []:
+                        if not isinstance(word, dict):
+                            continue
+                        ws, we = _num(word.get("start")), _num(word.get("end"))
+                        if ws is not None and we is not None:
+                            subtitle_words.append((float(ws), float(we)))
+            # fragment_index.main_subjects 는 ORM(JSON 컬럼)으로 못 읽는다 — 812행 중
+            # 68행이 '[],사람' 꼴로 깨져 있어 SQLAlchemy 역직렬화가 조회 전체를 터뜨린다
+            # (실측 2026-07-30, 영향 source 22개). 깨진 행 하나가 나머지 재료까지
+            # 못 싣게 만들지 않도록 원문으로 읽고 행 단위로 판독한다.
+            for fid, subjects in db.execute(
+                _sql_text("SELECT fragment_id, main_subjects FROM fragment_index"
+                          " WHERE source_id = :sid"),
+                {"sid": source_id},
+            ):
+                subject_by_id[fid] = _as_obj(subjects)
+    except Exception as e:
+        # 조회 실패를 0/없음으로 위장하지 않는다 — 전부 UNKNOWN 으로 두고 사유를 싣는다.
+        load_error = str(e)
+        print(f"[EVIDENCE-REACH] source_id={source_id} 재료 조회 실패 (비차단): {e}")
+
+    for f in fragments:
+        if not isinstance(f, dict):
+            continue
+        st = _num(f.get("start")) or _num(f.get("start_time")) or 0.0
+        en = _num(f.get("end")) or _num(f.get("end_time")) or st
+        st, en = float(st), float(en)
+        fid = f.get("fragment_id")
+        semantic = _as_obj(f.get("semantic")) or {}
+        structural = _as_obj(f.get("structural")) or {}
+        subjects = subject_by_id.get(fid)
+
+        # 소리 크기: 구간과 겹치는 evidence 행들의 평균 (proposal_engine 과 같은 방식)
+        overlapped = [e for (es, ee, e, _m) in evidence_rows
+                      if e is not None and ee is not None and es is not None
+                      and float(ee) > st and float(es) < en]
+        audio_energy = sum(overlapped) / len(overlapped) if overlapped else None
+
+        # 소리 비트: semantic.evidence_refs 가 지목한 행의 audio_beat 중 구간 안에 든 것
+        beats = None
+        for ref in (semantic.get("evidence_refs") or []):
+            declared = _dig(evidence_by_id.get(ref), "audio_beat")
+            if isinstance(declared, list):
+                beats = (beats or []) + [
+                    float(t) for t in declared if _num(t) is not None and st <= float(t) < en
+                ]
+
+        # 말 시각: 구간과 겹치는 단어 수 (0 은 실측 0이지 UNKNOWN 이 아니다)
+        word_count = (
+            None if subtitle_words is None
+            else sum(1 for (ws, we) in subtitle_words if we > st and ws < en)
+        )
+
+        evidence = {
+            "audio_beat": beats,
+            "audio_energy": audio_energy,
+            "word_timestamps": word_count,
+            "speech_presence": _num(
+                _dig(structural, "sensor_evidence", "silero_vad", "values", "speech_ratio")
+            ),
+            "face_size": _dig(subjects, "face_size"),
+            "shot_size": _dig(subjects, "shot_size"),
+            "emotion_score": _num(semantic.get("emotion_score")),
+        }
+        f["evidence"] = {k: evidence[k] for k in _EVIDENCE_FIELDS}
+        f["evidence_status"] = {
+            k: ("UNKNOWN" if evidence[k] is None else "VALUE") for k in _EVIDENCE_FIELDS
+        }
+        if load_error:
+            f["evidence_error"] = load_error
+    return fragments
+
+
 def inject_preview_clips(fragments: list, background: bool = True) -> list:
     """
     [PREVIEW_CLIP_INJECT] 각 Semantic Fragment에 preview_clip_url 필드를 주입.
@@ -2245,6 +2381,9 @@ async def get_semantic_fragments(source_id: str):
     # [STEP 10-I.5.22-C] Inject thumbnails
     fragments = inject_semantic_thumbnails(fragments)
 
+    # [EVIDENCE-REACH STEP1-1] 재료 7종 동반 — 조립은 헬퍼 하나로 수렴
+    fragments = _inject_evidence(fragments, source_id)
+
     # [PREVIEW_CLIP] inject_preview_clips 제거 — 최종 해결은 proposal_preview_engine이뮼로 fragment 단위 clip 주입 불필요
     # (preview_clip_engine.py 미존재 시 ImportError 상승 방지)
     
@@ -2441,6 +2580,9 @@ async def get_project_sources(project_id: str):
 
             # [DISPLAY-NAME] 단일 권위 주입 — 공용 헬퍼로 수렴 (커밋 A 인라인 대체)
             frags = _inject_display_names(frags, sid, title=src.title or sid)
+
+            # [EVIDENCE-REACH STEP1-1] 복원 경로에도 재료 7종 동반
+            frags = _inject_evidence(frags, sid)
 
             # 비디오 URL 변환 — 파일명을 URL 인코딩하여 한글/공백/특수문자 안전 보장
             video_name = os.path.basename(src.file_path) if src.file_path else f"{sid}.mp4"
