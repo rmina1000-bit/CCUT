@@ -1,6 +1,39 @@
 import datetime
+import hashlib
 import math
 import uuid
+
+from edit_contract.time_units import to_ms
+
+
+def stable_fragment_key(source_id: str, start_sec: float, end_sec: float,
+                        taken: set = None) -> str:
+    """[FID-STABLE] 조각 id의 앞자리를 내용 좌표에서 결정론으로 만든다.
+
+    왜: 구판은 `uuid4().hex[:6]` — 내용과 무관한 난수였다. 같은 영상을 다시 분석하면
+    경계는 같은데 id만 전부 갈렸고(실측 2026-07-30: SF_EDD33C_… -> SF_E7B3F2_…),
+    원고(story.fids)·편집·제안이 죽은 id를 가리켜 조각맵이 통째로 비었다.
+    같은 구간이면 같은 이름이어야 한다 — 그래야 다시 분석해도 사용자의 작업이 살아남는다.
+
+    주소는 v0.4 계약의 시간 권위(ms 정수)를 쓴다. 초 부동소수를 그대로 해싱하면
+    같은 경계가 실행마다 다른 비트로 보일 수 있다 — 변환은 to_ms 하나뿐(CLAUDE.md).
+
+    형식·길이는 구판과 동일(대문자 6자리 hex). 바깥에서 id를 쪼개 보는 코드
+    (`_P001` 접미사, `_c1` 분할, base id 복원)가 그대로 성립한다.
+
+    taken: 같은 실행에서 이미 쓴 앞자리. 충돌하면 결정론적으로 다음 후보를 만든다
+    (6자리 hex는 유한하므로 실측 기반 방어 — 조용히 덮어쓰지 않는다).
+    """
+    base = f"{source_id}|{to_ms(float(start_sec))}|{to_ms(float(end_sec))}"
+    attempt = 0
+    while True:
+        raw = base if attempt == 0 else f"{base}|{attempt}"
+        key = hashlib.sha1(raw.encode("utf-8")).hexdigest()[:6].upper()
+        if taken is None or key not in taken:
+            if taken is not None:
+                taken.add(key)
+            return key
+        attempt += 1
 
 def snap_fragment_end_to_sentence(
     fragment_end_sec: float,
@@ -767,6 +800,8 @@ class SemanticFragmentGenerator:
         import json as _json
         final_fragments = []
         raw_vf_fragments = self.bams.get_fragments_by_source(source_id)
+        # [FID-STABLE] 이 실행에서 이미 쓴 앞자리 — 6자리 hex 충돌 시 결정론적으로 비켜간다.
+        taken_keys = set()
 
         # boundaries는 이미 0.0부터 total_duration까지 정렬되어 있음
         for i in range(len(boundaries)-1):
@@ -804,7 +839,9 @@ class SemanticFragmentGenerator:
             if not isinstance(primary_vf_intel, dict):
                 primary_vf_intel = {}
 
-            sf_id = f"SF_{uuid.uuid4().hex[:6].upper()}_{source_id}"
+            # [FID-STABLE] 난수 uuid4 폐기 — 같은 구간이면 같은 이름.
+            #   구판: f"SF_{uuid.uuid4().hex[:6].upper()}_{source_id}"
+            sf_id = f"SF_{stable_fragment_key(source_id, start, end, taken_keys)}_{source_id}"
             final_fragments.append({
                 "fragment_id": sf_id,
                 "source_id": source_id,
