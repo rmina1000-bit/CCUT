@@ -603,7 +603,8 @@ export const AdminEditLabPanel: React.FC = () => {
               기법 {audit.techniques.declared} 선언 → 모수 {audit.techniques.scope} · AI 가능 {audit.techniques.ai_allowed} / 조건부 {audit.techniques.ai_allowed_conditional} / 사용자 전용 {audit.techniques.user_only}
               {" · "}
               배선 {audit.techniques.wired} / 가동 {audit.techniques.active}
-              <span className="text-muted-foreground/40"> (모수 밖 — 인프라 {audit.techniques.not_a_technique} · 룰 이관 후보 {audit.techniques.rule_candidate} · 구 표기 “{audit.techniques.declared} 선언 / {audit.techniques.wired} 배선 · 미정 12”)</span>
+              {/* [LAB-52 ④] '미정 12' 리터럴 제거 — 죽은 수치였다. 실측 undecided 로 교체. */}
+              <span className="text-muted-foreground/40"> (모수 밖 — 인프라 {audit.techniques.not_a_technique} · 룰 이관 후보 {audit.techniques.rule_candidate} · 구 표기 “{audit.techniques.declared} 선언 / {audit.techniques.wired} 배선 · 미정 {audit.techniques.undecided}”)</span>
             </p>
           )}
           {audit && audit.techniques.gates_off.length > 0 && (

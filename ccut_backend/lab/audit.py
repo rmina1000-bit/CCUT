@@ -599,6 +599,12 @@ def _collect_evidence_refs(audit_config, techniques, candidate_ledger):
 # [LAB-17] 국장 결정. 기법 모수에서 빼는 권한과, AI 배선 대상이 아닌 권한.
 #   NOT_A_TECHNIQUE / RULE_CANDIDATE 는 애초에 편집 기법이 아니므로 모수에서 뺀다.
 #   USER_ONLY 는 기법이지만 AI 권한 밖이라 모수에는 남고 차단 사유는 붙이지 않는다.
+# [LAB-52 ⑤] 감정 근거 후보 — 순서만 여기서 정하고 상태는 실측에서 받는다.
+EMOTION_EVIDENCE_IDS = (
+    "facial_expression_delta", "prosody_delta", "laughter_event",
+    "speech_presence", "acoustic_event",
+)
+
 NOT_TECHNIQUE_VERDICTS = ("NOT_A_TECHNIQUE", "RULE_CANDIDATE")
 OUT_OF_AI_SCOPE = ("USER_ONLY",) + NOT_TECHNIQUE_VERDICTS
 
@@ -1129,14 +1135,16 @@ def run_audit():
         },
         "candidate_ledger_guard": candidate_guard,
         "sensor_contract": {
-            "exists": True,
+            # [LAB-52 ⑤] 리터럴 True 제거 — 파일 실재를 그때그때 확인한다.
+            "exists": SENSOR_CONTRACT_CONFIG.is_file(),
             "path": SENSOR_CONTRACT_CONFIG.relative_to(REPO_DIR).as_posix(),
             "schema_version": sensor_contract["schema_version"],
             "required_fields": sensor_contract["record"]["required"],
             "sensor_count": len(sensor_contract["sensors"]),
         },
         "golden_set": {
-            "exists": True,
+            # [LAB-52 ⑤] 리터럴 True 제거 — 파일 실재를 그때그때 확인한다.
+            "exists": GOLDENSET_CONFIG.is_file(),
             "path": GOLDENSET_CONFIG.relative_to(REPO_DIR).as_posix(),
             "address_authority": "source_id+start_ms+end_ms+span_hash",
             "fragment_id_authority": "reference_only_may_change",
@@ -1147,15 +1155,17 @@ def run_audit():
                 "id": "emotion_score",
                 "status": "재설계",
             },
+            # [LAB-52 ⑤] 리터럴 판정 제거. 상태는 실측 재료에서만 나온다 —
+            #   재료로 등록돼 있지 않으면 측정기가 없다는 뜻이라 UNKNOWN 이다.
+            #   구판은 prosody_delta 를 "VALUE" 리터럴로 박아, 측정한 적 없는 근거를
+            #   값이 있는 것처럼 보이게 했다.
             "items": [
-                {"id": "facial_expression_delta", "status": "UNKNOWN"},
-                {"id": "prosody_delta", "status": "VALUE"},
-                {"id": "laughter_event", "status": "UNKNOWN"},
                 {
-                    "id": "speech_presence",
-                    "status": material_status.get("speech_presence", "UNKNOWN"),
-                },
-                {"id": "acoustic_event", "status": "UNKNOWN"},
+                    "id": item_id,
+                    "status": material_status.get(item_id, "UNKNOWN"),
+                    "measured_by": item_id if item_id in material_status else None,
+                }
+                for item_id in EMOTION_EVIDENCE_IDS
             ],
             "aggregation": "금지",
         },
