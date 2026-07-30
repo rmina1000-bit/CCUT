@@ -23,7 +23,9 @@ interface ApiProvider {
   model: string | null;
   issue_url: string | null;
   docs_url: string | null;
-  connection: "unset" | "connected" | "error";
+  // [LAB-52 ③] unverified = 키는 저장됐지만 연결 테스트를 통과한 기록이 없음.
+  connection: "unset" | "connected" | "unverified" | "error";
+  verified?: boolean;
   last_checked_at: string | null;
   error: string | null;
 }
@@ -173,11 +175,14 @@ export const AdminAIOpsPanel: React.FC = () => {
         <div className="border-y border-border/15 divide-y divide-border/10">
           {providers.map(provider => {
             const isEditing = !provider.configured || keyEditing[provider.id];
+            // [LAB-52 ③] 키가 있다 ≠ 연결됐다. 확인 안 된 상태를 연결됨으로 찍지 않는다.
             const badge = provider.connection === "error"
               ? { text: "오류", classes: "text-red-300 bg-red-500/10" }
-              : provider.configured
-                ? { text: "연결됨", classes: "text-emerald-300 bg-emerald-500/10" }
-                : { text: "미설정", classes: "text-muted-foreground bg-secondary/30" };
+              : provider.connection === "unverified"
+                ? { text: "미확인", classes: "text-amber-300 bg-amber-500/10" }
+                : provider.configured
+                  ? { text: "연결됨", classes: "text-emerald-300 bg-emerald-500/10" }
+                  : { text: "미설정", classes: "text-muted-foreground bg-secondary/30" };
             return (
               <div key={provider.id} className="py-4 space-y-2">
                 <div className="flex items-center gap-3">
@@ -246,6 +251,8 @@ export const AdminAIOpsPanel: React.FC = () => {
                   <span>
                     {provider.connection === "error"
                       ? "키는 저장됐지만 관리자 AI를 사용할 수 없습니다."
+                      : provider.connection === "unverified"
+                      ? "키는 저장돼 있습니다. 연결을 확인한 기록이 없어 사용 가능 여부는 미확인입니다."
                       : provider.configured
                       ? "연결되어 있습니다. 다시 설정할 필요가 없습니다."
                       : "발급 페이지에서 키를 복사해 붙여넣고 한 번만 누르십시오."}

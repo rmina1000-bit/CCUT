@@ -7,7 +7,8 @@ import { fetcher } from "@/services/api";
 interface Situation {
   status: string;
   generated_at: string;
-  global_state: { service_level: "normal" | "watch" | "critical"; reason: string | null };
+  // [LAB-52 ①] unknown = 경보 점검 자체가 실패해 상태를 판정할 수 없음(정상 아님).
+  global_state: { service_level: "normal" | "watch" | "critical" | "unknown"; reason: string | null };
   kpis: Record<string, number | null>;
   alerts: { severity: string; title: string; reason: string; recommended_action: string }[];
   action_queue: { kind: string; title: string; priority: string; target: string | null }[];
@@ -30,6 +31,8 @@ const LEVEL_STYLE: Record<string, string> = {
   normal: "bg-emerald-500/15 text-emerald-400 border-emerald-500/30",
   watch: "bg-amber-500/15 text-amber-400 border-amber-500/30",
   critical: "bg-red-500/15 text-red-400 border-red-500/30",
+  // [LAB-52 ①] 판정 불가 — 초록·빨강과 헷갈리지 않는 색. 무색 배지 방지.
+  unknown: "bg-slate-500/20 text-slate-300 border-slate-400/40",
 };
 
 const SEV_STYLE: Record<string, string> = {
