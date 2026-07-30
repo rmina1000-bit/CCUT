@@ -148,8 +148,8 @@ def _ollama_json(prompt: str, timeout: int = 60, temperature: float = 0) -> dict
         "stream": False,
         "format": "json",
         "keep_alive": OLLAMA_KEEP_ALIVE,
-        "options": {"temperature": temperature, "num_predict": 1024,
-                    "num_ctx": OLLAMA_NUM_CTX},
+        "options": {"temperature": temperature, "num_predict": 2048,
+                    "num_ctx": 8192},
     }
     body = json.dumps(payload).encode("utf-8")
     req = urllib.request.Request(
