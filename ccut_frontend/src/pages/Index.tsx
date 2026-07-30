@@ -605,8 +605,29 @@ const Index: React.FC = () => {
       );
       return { status: "REJECTED_STORY_SPIKE" } as any;
     }
+    // [FOREIGN-STORY-GUARD] 남의 원고 저장 차단 — 급증 안전망과 같은 자리, 조건만 하나 더.
+    //   실측된 사고(2026-07-30): 신규 프로젝트 Marigold 가 직전 프로젝트의 원고 13조각을
+    //   그대로 물려받아 저장했다. 그 13개는 이 프로젝트 소스(SRC_3111FA4F)와 교집합 0이라
+    //   조각맵이 통째로 비었다(135개를 로드하고도 렌더 대상이 0).
+    //   판정은 '전량 외래'일 때만 한다 — 분할(_cN)·재조각화로 일부 fid가 어긋나는 것은
+    //   정상 상황이라 한 건이라도 걸치면 통과시킨다(정상 저장 회귀 방지).
+    //   조각이 아직 안 실린 시점(editFragments 0)은 판정하지 않는다 — 모르는 것을 막지 않는다.
+    if (nextFids && nextFids.length > 0 && editFragments.length > 0) {
+      const known = new Set<string>();
+      for (const fragment of editFragments) {
+        for (const alias of collectFragmentAliases(fragment as any)) known.add(alias);
+      }
+      if (!nextFids.some((id: string) => known.has(id))) {
+        console.error(
+          `[STORY-WRITE-GUARD][REJECT] 외래 원고 — 저장 거부. `
+          + `program=${programId} fids=${nextFids.length} 이 프로젝트 조각=${editFragments.length} `
+          + `교집합=0 origin=${storyOriginRef.current} first3=[${nextFids.slice(0, 3).join(", ")}]`,
+        );
+        return { status: "REJECTED_FOREIGN_STORY" } as any;
+      }
+    }
     return videoService.saveProjectState(programId, { ui_state: JSON.stringify({ ...unknown, ...snapshot }) });
-  }, [OWNED_UI_FIELDS, setStoryPlan]);
+  }, [OWNED_UI_FIELDS, setStoryPlan, editFragments]);
 
   const saveUiStateMergedTracked = useCallback((programId: string, snapshot: Record<string, any>) => {
     const p = saveUiStateMerged(programId, snapshot);
