@@ -673,7 +673,19 @@ const Index: React.FC = () => {
     }
   }, [storyFids, committedProposalId, selectedProposalId, activeNavItem, uiRestoredFor, saveUiStateMergedTracked, buildUiSnapshot]);
   // 프로젝트가 바뀌면 지문 기준을 새로 잡는다 (다음 프로젝트의 첫 스토리가 저장되도록)
-  useEffect(() => { storySnapshotSigRef.current = null; }, [activeNavItem]);
+  // [FOREIGN-STORY-GUARD 2] 원고 상태도 함께 내린다 — 잔류가 새 프로젝트의 원고로 저장되던 뿌리.
+  //   resetAnalysisFlow(useAnalysisFlow.ts:48)는 13개 state를 지우지만 story 계열은 목록에 없어,
+  //   +버튼·삭제·전환 어느 경로로 와도 이전 프로젝트의 원고가 화면과 스냅샷에 그대로 남았다.
+  //   출처(origin)도 함께 내린다 — 이전 프로젝트에서 얻은 'ui_state' 자격이 승계되면
+  //   저장 가드(2-2)가 남의 원고를 사용자 결정으로 오인한다.
+  //   지우기만 한다. 새 값은 서버 복원(ui_state → proposals → 조각)이 넣는다.
+  useEffect(() => {
+    storySnapshotSigRef.current = null;
+    storyOriginRef.current = "none";
+    setStoryFids([]);
+    setStoryFragments([]);
+    setHoldPositions({});
+  }, [activeNavItem]);
 
   const {
     resetAnalysisState,
