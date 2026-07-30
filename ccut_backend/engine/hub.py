@@ -32,10 +32,10 @@ DB_PATH = os.path.join(BACKEND_DIR, "ccut_app.db")
 
 OLLAMA_URL = os.getenv("CCUT_OLLAMA_URL", "http://127.0.0.1:11434")
 HUB_MODEL = os.getenv("CCUT_HUB_MODEL", os.getenv("CCUT_CMD_MODEL", "qwen2.5:7b-instruct"))
-# [QWEN-R2 STAGE B 국장 결정 2026-07-18] 서빙 전환 보류 — Ollama 유지 + num_ctx 16384
-# 명시(실측 KV 896MiB·VRAM 예산 내) + keep_alive 연장(콜드 재로드 +6.5s 실측 관리).
+# [QWEN ROUGH-CUT 2PASS 2026-07-31] 자유출력/JSON 단일 러너 — num_ctx 8192.
+# keep_alive 연장(콜드 재로드 +6.5s 실측 관리)은 그대로 유지한다.
 # 전 호출 단일 ctx 유지 — 요청별 num_ctx가 다르면 Ollama가 러너를 재적재한다(스왑 비용).
-OLLAMA_NUM_CTX = int(os.getenv("CCUT_OLLAMA_NUM_CTX", "16384"))
+OLLAMA_NUM_CTX = int(os.getenv("CCUT_OLLAMA_NUM_CTX", "8192"))
 OLLAMA_KEEP_ALIVE = os.getenv("CCUT_OLLAMA_KEEP_ALIVE", "30m")
 # [⑨ 투기 연결부 — OFF 고정(국장 결정)] Ollama는 draft 미지원(B 실측: 효과 0)이라
 # 이 플래그는 연결부일 뿐 동작하지 않는다. llama-server 전환 시 이 지점에서 배선.
@@ -149,7 +149,7 @@ def _ollama_json(prompt: str, timeout: int = 60, temperature: float = 0) -> dict
         "format": "json",
         "keep_alive": OLLAMA_KEEP_ALIVE,
         "options": {"temperature": temperature, "num_predict": 2048,
-                    "num_ctx": 8192},
+                    "num_ctx": OLLAMA_NUM_CTX},
     }
     body = json.dumps(payload).encode("utf-8")
     req = urllib.request.Request(
@@ -168,7 +168,7 @@ def _ollama_json(prompt: str, timeout: int = 60, temperature: float = 0) -> dict
             "num_ctx": OLLAMA_NUM_CTX,
             "keep_alive": OLLAMA_KEEP_ALIVE,
             "temperature": temperature,
-            "num_predict": 1024,
+            "num_predict": 2048,
             "stop": None,
             "timeout": timeout,
             "payload": payload,
