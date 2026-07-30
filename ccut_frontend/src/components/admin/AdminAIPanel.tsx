@@ -36,6 +36,8 @@ export const AdminAIPanel: React.FC<{
   const [loading, setLoading] = useState(false);
   const [history, setHistory] = useState<QueryResult[]>([]);
   const [labAudit, setLabAudit] = useState<LabAudit | null>(null);
+  // [LAB-52 ②] 감사 조회 실패를 '이상 없음'과 구분한다 (상황실 쪽 situationError와 같은 방식).
+  const [labError, setLabError] = useState<string | null>(null);
 
   useEffect(() => {
     fetcher("/admin/situation")
@@ -46,11 +48,13 @@ export const AdminAIPanel: React.FC<{
   useEffect(() => {
     if (contextSource !== "lab") {
       setLabAudit(null);
+      setLabError(null);
       return;
     }
+    setLabError(null);
     fetcher("/lab/audit")
-      .then(setLabAudit)
-      .catch(() => setLabAudit(null));
+      .then(audit => { setLabAudit(audit); setLabError(null); })
+      .catch(e => { setLabAudit(null); setLabError(String(e)); });
   }, [contextSource]);
 
   const ask = async () => {
@@ -126,8 +130,13 @@ export const AdminAIPanel: React.FC<{
 
       <div className="px-4 py-3 border-b border-border/10">
         <p className="text-[10px] font-semibold text-muted-foreground/50 uppercase mb-1.5">권장 다음 행동</p>
-        {contextSource !== "lab" && situationError ? (
-          <p className="text-[11px] text-muted-foreground/40">상황실 데이터 연결 실패 — {situationError}</p>
+        {/* [LAB-52 ②] 조회 실패·측정 전은 '이상 없음'이 아니다. 셋을 각각 다르게 표기한다. */}
+        {contextSource === "lab" && labError ? (
+          <p className="text-[11px] text-red-400/80">편집연구실 감사 조회 실패 — {labError}</p>
+        ) : contextSource !== "lab" && situationError ? (
+          <p className="text-[11px] text-red-400/80">상황실 데이터 연결 실패 — {situationError}</p>
+        ) : contextSource === "lab" && !labAudit ? (
+          <p className="text-[11px] text-muted-foreground/40">감사 결과 확인 중...</p>
         ) : recommended.length === 0 ? (
           <p className="text-[11px] text-muted-foreground/40">현재 경보·대기 작업 없음</p>
         ) : (
