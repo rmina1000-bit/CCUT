@@ -151,6 +151,36 @@ const FragmentMap: React.FC<FragmentMapProps> = ({
     [fragments]
   );
 
+  // [PREVIEW-CUT STEP2] 먼저 보기 — visibleFragments(선택 필터)는 건드리지 않고 그 아래에
+  //   보기 필터를 하나 더 얹는다. 안 보임 ≠ 제외이므로 조각 자체는 그대로 살아 있고,
+  //   전환은 백엔드가 미리 계산해 실어 보낸 recommend_tier 로 즉시(재요청 없이) 한다.
+  //   기본값은 '전체' — 시스템이 사용자보다 먼저 화면을 줄이지 않는다.
+  const [previewTier, setPreviewTier] = useState<"simple" | "rich" | "all">("all");
+  // [PREVIEW-CUT STEP3] 사용자가 직접 넣고 뺀 것(visible)은 selected 와 별개이며
+  //   필터를 다시 계산해도 사용자 행위가 이긴다.
+  const [manualShow, setManualShow] = useState<Set<string>>(new Set());
+  const [manualHide, setManualHide] = useState<Set<string>>(new Set());
+
+  const tierRank = { simple: 0, rich: 1, all: 2 } as const;
+  const inTier = useCallback((f: Fragment) => {
+    const tier = (f as any).recommend_tier as keyof typeof tierRank | null | undefined;
+    if (previewTier === "all") return true;
+    if (!tier) return true;   // 추천값이 아직 없는 조각을 숨기지 않는다(미도달 ≠ 제외)
+    return tierRank[tier] <= tierRank[previewTier];
+  }, [previewTier]);
+
+  const shownFragments = useMemo(() => {
+    if (previewTier === "all" && manualHide.size === 0) return visibleFragments;
+    return visibleFragments.filter(({ fragment }) => {
+      const uid = getUid(fragment);
+      if (manualShow.has(uid)) return true;     // 사용자가 넣은 것은 항상 보인다
+      if (manualHide.has(uid)) return false;
+      return inTier(fragment);
+    });
+  }, [visibleFragments, previewTier, manualShow, manualHide, inTier]);
+
+  const previewCount = shownFragments.length;
+
   const handleDragStart = useCallback((e: React.DragEvent, frag: Fragment) => {
     const uid = getUid(frag);
     e.dataTransfer.setData("text/plain", uid);
@@ -488,9 +518,42 @@ const FragmentMap: React.FC<FragmentMapProps> = ({
               {activeCount}
               {excludedCount > 0 ? ` · ${excludedCount}` : ""}
             </span>
+            {/* [PREVIEW-CUT STEP2] 먼저 보기 N / 전체 M — 상시 표시. 숨긴 조각은 제외가 아니다. */}
+            <span className="text-[9px] text-primary/70">
+              먼저 보기 {previewCount} / 전체 {activeCount}
+            </span>
+            {manualHide.size > 0 && (
+              <button
+                type="button"
+                onClick={() => setManualHide(new Set())}
+                title="내가 뺀 조각을 먼저 보기로 되돌립니다"
+                className="text-[9px] text-muted-foreground/50 underline hover:text-foreground/70"
+              >
+                내가 뺀 {manualHide.size}개 되돌리기
+              </button>
+            )}
             {modeGateEnabled && modeRound > 1 && (
               <span className="text-[9px] text-primary/70">{modeRound}차</span>
             )}
+            {/* [PREVIEW-CUT STEP2] 3단 프리셋. 슬라이더 없음. 필터만 바꾸고 재요청하지 않는다.
+                누른다고 재생·포커스·스크롤이 따라 움직이지 않는다(상태만 바뀐다). */}
+            <div className="ml-1 flex items-center gap-0.5">
+              {([["simple", "간단히"], ["rich", "넉넉히"], ["all", "전체"]] as const).map(([key, label]) => (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => setPreviewTier(key)}
+                  title={key === "all" ? "조각 전부 보기" : "먼저 볼 조각만 추려 보기 (나머지도 그대로 있습니다)"}
+                  className={`px-1.5 py-0.5 rounded text-[9px] font-semibold transition-colors ${
+                    previewTier === key
+                      ? "bg-primary/20 text-primary"
+                      : "text-muted-foreground/50 hover:text-foreground/70"
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
           </div>
           {modeGateEnabled && showFaceControls && (
             <div className="flex items-center gap-1">
@@ -588,13 +651,15 @@ const FragmentMap: React.FC<FragmentMapProps> = ({
             onFragmentsChange(newFrags);
           }}
         >
-          {(modeGateEnabled && fragmentFace === "text" ? transcriptRows : visibleFragments.map(({ fragment, realIndex }, sourceIndex) => ({ fragment, sourceIndex, realIndex, selectedIndex: sourceIndex, selected: true }))).map(({ fragment: f, realIndex, sourceIndex, selectedIndex, selected }, visIdx) => {
+          {/* [PREVIEW-CUT STEP2] 이미지면 목록만 '먼저 보기' 필터를 탄다. realIndex 는
+              원본 인덱스라 드래그·재정렬은 필터와 무관하게 그대로 동작한다. */}
+          {(modeGateEnabled && fragmentFace === "text" ? transcriptRows : shownFragments.map(({ fragment, realIndex }, sourceIndex) => ({ fragment, sourceIndex, realIndex, selectedIndex: sourceIndex, selected: true }))).map(({ fragment: f, realIndex, sourceIndex, selectedIndex, selected }, visIdx) => {
             const uid = getUid(f);
             const seam = seamAfterVisible.get(uid);
             const seamKey = seam
               ? `${seam.leftVisibleFragmentId}-${seam.rightVisibleFragmentId}`
               : null;
-            const nextVisible = visIdx < visibleFragments.length - 1 ? visibleFragments[visIdx + 1] : null;
+            const nextVisible = visIdx < shownFragments.length - 1 ? shownFragments[visIdx + 1] : null;
             const fid = (f as any).fragment_id ?? uid;
             const activeId = activeFragmentId || selectedFragmentId;
             const fragmentActive = activeId === uid || activeId === fid || activeTextRowId === uid || activeTextRowId === fid;
@@ -627,7 +692,42 @@ const FragmentMap: React.FC<FragmentMapProps> = ({
                   {dragOverIndex === realIndex && draggedId !== uid && (
                     <div className="absolute left-0 top-0 bottom-0 w-0.5 bg-primary rounded-full z-50 pointer-events-none" style={{ transform: "translateX(-2px)" }} />
                   )}
-                  {visIdx === visibleFragments.length - 1 && dragOverIndex === fragments.length && (
+                  {/* [PREVIEW-CUT STEP3] 먼저 보기에서 빼기 — visible 만 바꾼다.
+                      선택(selected)·제외(excluded)는 건드리지 않는다. '전체' 뷰에선 안 띄운다
+                      (거기선 뺄 대상이 아니라 전부 보는 자리다). */}
+                  {previewTier !== "all" && !(modeGateEnabled && fragmentFace === "text") && (
+                    <button
+                      type="button"
+                      title="먼저 보기에서 빼기 (조각은 그대로 남습니다)"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setManualShow((prev) => { const n = new Set(prev); n.delete(uid); return n; });
+                        setManualHide((prev) => new Set(prev).add(uid));
+                      }}
+                      className="absolute right-0.5 top-0.5 z-40 hidden h-4 w-4 items-center justify-center rounded bg-background/80 text-[10px] text-muted-foreground/70 hover:text-foreground group-hover/frag:flex"
+                    >
+                      −
+                    </button>
+                  )}
+                  {/* [PREVIEW-CUT STEP3] 먼저 보기에 넣기 — 전체 뷰에서 추천 밖 조각을 집어넣는다.
+                      사용자가 넣은 것은 필터를 다시 계산해도 계속 보인다(사용자 행위 우선). */}
+                  {previewTier === "all" && !(modeGateEnabled && fragmentFace === "text")
+                    && (f as any).recommend_tier && (f as any).recommend_tier !== "simple"
+                    && !manualShow.has(uid) && (
+                    <button
+                      type="button"
+                      title="먼저 보기에 넣기 (간단히 뷰에서도 계속 보입니다)"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setManualHide((prev) => { const n = new Set(prev); n.delete(uid); return n; });
+                        setManualShow((prev) => new Set(prev).add(uid));
+                      }}
+                      className="absolute right-0.5 top-0.5 z-40 hidden h-4 w-4 items-center justify-center rounded bg-background/80 text-[10px] text-muted-foreground/70 hover:text-primary group-hover/frag:flex"
+                    >
+                      +
+                    </button>
+                  )}
+                  {visIdx === shownFragments.length - 1 && dragOverIndex === fragments.length && (
                     <div className="absolute right-0 top-0 bottom-0 w-0.5 bg-primary rounded-full z-50 pointer-events-none" style={{ transform: "translateX(2px)" }} />
                   )}
                   <div

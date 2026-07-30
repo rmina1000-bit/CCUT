@@ -488,6 +488,15 @@ const Index: React.FC = () => {
           description: f.intelligence?.description || f.intelligence?.visual_description || f.semantic?.summary || "",
         },
         preview_clip_url: f.preview_clip_url ?? null,
+        // [PREVIEW-CUT STEP2] 백엔드 산출을 그대로 통과시킨다. mapFragments 는 새 객체를
+        //   만들기 때문에 여기 적지 않은 필드는 조용히 사라진다 — STEP1-1 의 evidence 도
+        //   응답에는 있었지만 이 지점에서 버려지고 있었다. 프론트는 계산하지 않고 읽기만 한다.
+        evidence: f.evidence ?? null,
+        evidence_status: f.evidence_status ?? null,
+        recommend_tier: f.recommend_tier ?? null,
+        recommended: f.recommended ?? null,
+        recommend_reason: f.recommend_reason ?? null,
+        recommend_status: f.recommend_status ?? null,
       } as any;
     });
 
