@@ -792,7 +792,10 @@ def _capability_alerts(cap: dict) -> list:
     if cap.get("material_missing"):
         labels = ", ".join(l for l in (cap.get("material_missing_labels") or []) if l)
         alerts.append({
-            "severity": "P1", "title": "편집 재료 결손",
+            # [NERVE-2] P1 -> P2 (국장 판정 2026-07-30). 결손 3종은 '미계측 확정'(측정기 없음)
+            #   이라 매일 뜨는 상수 상태다. P1로 두면 상태등이 영구 watch 가 되어 경보 피로가
+            #   생기고, 정작 새로 터진 P1을 덮는다. 사실은 그대로 P2 경보로 남긴다.
+            "severity": "P2", "title": "편집 재료 결손",
             "reason": f"재료 {cap['material_missing']}/{cap['material_total']} 값 없음"
                       + (f" ({labels})" if labels else ""),
             "target_type": "edit_lab", "target_id": None,
