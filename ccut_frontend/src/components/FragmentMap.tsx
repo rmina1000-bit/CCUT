@@ -181,6 +181,19 @@ const FragmentMap: React.FC<FragmentMapProps> = ({
 
   const previewCount = shownFragments.length;
 
+  // [PREVIEW-CUT 표시 정정] '먼저 보기 N'은 어느 모드에서든 **간단히에 들 조각 수**다.
+  //   구판은 지금 보이는 수를 표시해, '전체' 모드에서 '먼저 보기 30 / 전체 30'이 되어
+  //   추천이 있는지조차 안 보였다(국장 실사용 혼란 2026-07-31). 수동 넣기/빼기 반영.
+  const recommendedCount = useMemo(
+    () => visibleFragments.filter(({ fragment }) => {
+      const uid = getUid(fragment);
+      if (manualHide.has(uid)) return false;
+      if (manualShow.has(uid)) return true;
+      return (fragment as any).recommend_tier === "simple";
+    }).length,
+    [visibleFragments, manualShow, manualHide]
+  );
+
   const handleDragStart = useCallback((e: React.DragEvent, frag: Fragment) => {
     const uid = getUid(frag);
     e.dataTransfer.setData("text/plain", uid);
@@ -518,9 +531,10 @@ const FragmentMap: React.FC<FragmentMapProps> = ({
               {activeCount}
               {excludedCount > 0 ? ` · ${excludedCount}` : ""}
             </span>
-            {/* [PREVIEW-CUT STEP2] 먼저 보기 N / 전체 M — 상시 표시. 숨긴 조각은 제외가 아니다. */}
+            {/* [PREVIEW-CUT STEP2] 먼저 보기 N / 전체 M — 상시 표시. 숨긴 조각은 제외가 아니다.
+                N은 어느 모드에서든 간단히에 들 조각 수(추천 규모)를 말한다. */}
             <span className="text-[9px] text-primary/70">
-              먼저 보기 {previewCount} / 전체 {activeCount}
+              먼저 보기 {recommendedCount} / 전체 {activeCount}
             </span>
             {manualHide.size > 0 && (
               <button
