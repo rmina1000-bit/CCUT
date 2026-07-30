@@ -1194,6 +1194,15 @@ const Index: React.FC = () => {
               // — 헌장 §5 거짓말 금지·침묵 실패 금지. 분석 결과(조각)는 그대로 보존하고
               //   실패 이유를 화면에 표시한다. 재시도는 사용자가 결정한다.
               const proposalsEmpty = Object.keys(generatedProposals).length === 0;
+              // [PROPOSAL-TRUTH] 승인 전에 A·B를 만들지 않는 것은 실패가 아니라 설계다
+              //   (main.py:GATE-LOOP-01 2-1 — 제안은 '승인된 스토리를 어떻게 편집할지'다).
+              //   백엔드는 status=STORY_NOT_APPROVED 와 안내 문구까지 실어 보내는데,
+              //   구판은 proposals 배열이 빈 것만 보고 '생성 실패'라고 화면에 적었다.
+              //   정상 동작을 실패로 보고하는 것도 거짓말이다 — 백엔드가 준 말을 그대로 쓴다.
+              const storyNotApproved = proposalData?.status === "STORY_NOT_APPROVED";
+              const proposalNotice = storyNotApproved
+                ? (proposalData?.message || "원고를 먼저 승인해 주세요. 승인하면 편집안(A·B)을 만듭니다.")
+                : null;
 
               setEditFragments(finalEditFragments);
               setSourceFragments(updatedEntries[0]?.fragments || []);
@@ -1204,11 +1213,13 @@ const Index: React.FC = () => {
 
               setAnalyzeProgress(100);
               setAnalyzeMessage(
-                proposalsEmpty
+                proposalNotice
+                  ? `분석 완료 — ${proposalNotice}`
+                  : proposalsEmpty
                   ? `분석은 끝났지만 편집 제안 생성에 실패했습니다 — ${proposalError ?? "백엔드가 제안을 반환하지 않았습니다"}. 조각은 보존되어 있으니 다시 시도해 주세요.`
                   : (failedSourceIds.length > 0 ? `일부 분석 실패 (${failedSourceIds.length}개), 제안 생성 완료` : "모든 영상 분석 및 제안 완료")
               );
-              if (proposalsEmpty) {
+              if (proposalsEmpty && !proposalNotice) {
                 // 분석 배너는 complete 전환과 함께 사라지므로, 지속 표면(지휘부 채팅)에 이유를 남긴다.
                 // 제안 실패 시엔 storyPlan 골격 effect(:1169, proposals 필수)가 못 태어나므로
                 // 여기서 null-안전하게 최소 골격을 세운다 — 침묵 화면 금지.
@@ -1236,12 +1247,14 @@ const Index: React.FC = () => {
                 //   함께 사라지므로, 지속 표면(채팅)에 결과를 한 줄로 남겨야 사용자가
                 //   "끝난 건가?"를 다시 묻지 않는다. 실패 경로(위)와 같은 골격을 쓴다.
                 const _fragCount = Object.values(semanticResults).flat().length;
+                const _failNote = failedSourceIds.length > 0
+                  ? ` (영상 ${failedSourceIds.length}개는 분석 실패)` : "";
+                // 승인 전이면 A·B가 없는 게 정상이다 — 그 사실을 그대로 말한다.
+                const _tail = proposalNotice ?? "편집안(A·B)도 준비됐습니다.";
                 const _doneMsg = {
                   id: `ai_analysis_done_${Date.now()}`,
                   sender: "ai" as const,
-                  text: `분석을 마쳤습니다 — 조각 ${_fragCount}개를 만들었습니다`
-                    + (failedSourceIds.length > 0 ? ` (영상 ${failedSourceIds.length}개는 분석 실패)` : "")
-                    + ". 편집안(A·B)도 준비됐습니다.",
+                  text: `분석을 마쳤습니다 — 조각 ${_fragCount}개를 만들었습니다${_failNote}. ${_tail}`,
                   timestamp: Date.now(),
                 };
                 setStoryPlan((prev: any) => ({
