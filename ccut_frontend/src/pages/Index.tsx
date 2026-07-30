@@ -481,7 +481,8 @@ const Index: React.FC = () => {
           thumbnail_url: fullThumbUrl,
         },
         intelligence: {
-          hook_score: f.intelligence?.hook_score || f.structural?.market_value || 0.5,
+          // [UNKNOWN-NOFAKE STEP1-0] 증거 없으면 null(UNKNOWN). ||→?? : 실측 0점이 0.5로 위장되던 버그 동반 수리.
+          hook_score: f.intelligence?.hook_score ?? f.structural?.market_value ?? null,
           role: f.intelligence?.role || f.structural?.role || "Main",
           description: f.intelligence?.description || f.intelligence?.visual_description || f.semantic?.summary || "",
         },
