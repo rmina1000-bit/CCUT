@@ -122,6 +122,18 @@ def api_key_status() -> dict:
         provider_id = item["id"]
         value = os.getenv(item["env_key"], "").strip()
         check = _API_KEY_CHECKS.get(provider_id, {})
+        # [LAB-52 ③] 키가 있다 ≠ 연결됐다. 구판은 문자열 존재만으로 "connected" 를 냈고,
+        #   last_checked_at 이 null 인 채로 초록 배지가 떴다(실측 2026-07-30).
+        #   실제 연결 테스트를 통과한 기록이 있을 때만 connected. 나머지는 unverified.
+        checked_at = check.get("last_checked_at")
+        if not value:
+            connection = "unset"
+        elif check.get("connection") == "error":
+            connection = "error"
+        elif check.get("connection") == "connected" and checked_at:
+            connection = "connected"
+        else:
+            connection = "unverified"
         providers.append({
             "id": provider_id,
             "display_name": item["display_name"],
@@ -130,10 +142,9 @@ def api_key_status() -> dict:
             "model": os.getenv(item.get("model_env", ""), "").strip() or None,
             "issue_url": item.get("issue_url"),
             "docs_url": item.get("docs_url"),
-            "connection": check.get("connection") or (
-                "connected" if value else "unset"
-            ),
-            "last_checked_at": check.get("last_checked_at"),
+            "connection": connection,
+            "verified": connection == "connected",
+            "last_checked_at": checked_at,
             "error": check.get("error"),
         })
     return {"providers": providers}
@@ -655,20 +666,32 @@ def insights_query(query: str) -> dict:
 #   [War Room v1] 상황실 — 글로벌 상태등·경보·작전 큐 (전부 실 DB 규칙 기반)
 # ═══════════════════════════════════════════════════════════════════
 
-def _situation_alerts(con) -> list:
-    """v1 경보 규칙 — 계약서(CONTRACT_V1 §2) 그대로. 전부 실 DB 조회."""
-    alerts = []
+_PROBE_FAILED = object()   # 조회 실패 표식 — '값 없음(None)'과 절대 섞지 않는다.
 
-    def _try(sql, params=()):
+
+def _situation_alerts(con):
+    """v1 경보 규칙 — 계약서(CONTRACT_V1 §2) 그대로. 전부 실 DB 조회.
+
+    [LAB-52 ①] 반환은 (alerts, probe_failures).
+      구판은 조회 예외를 None 으로 삼키고 `if 값:` 으로 판정해, 경보 쿼리가 실패하면
+      경보가 0건이 되고 상태등이 초록(normal)으로 떴다 — 측정 실패의 정상 위장.
+      이제 실패는 실패로 세어 올려보내고, 판정은 호출부가 한다.
+    """
+    alerts = []
+    probe_failures = []
+
+    def _try(sql, probe, params=()):
         try:
             return con.execute(sql, params).fetchone()[0]
-        except Exception:
-            return None
+        except Exception as e:
+            probe_failures.append({"probe": probe, "error": str(e)})
+            return _PROBE_FAILED
 
     render_failed_7d = _try(
         "SELECT COUNT(*) FROM export_results WHERE status='RENDER_FAILED'"
-        " AND created_at >= datetime('now','-7 day')")
-    if render_failed_7d is not None and render_failed_7d >= 3:
+        " AND created_at >= datetime('now','-7 day')", "render_failed_7d")
+    if (render_failed_7d is not _PROBE_FAILED
+            and render_failed_7d is not None and render_failed_7d >= 3):
         alerts.append({
             "severity": "P1", "title": "렌더 실패 반복",
             "reason": f"최근 7일 렌더 실패 {render_failed_7d}건",
@@ -676,8 +699,9 @@ def _situation_alerts(con) -> list:
             "recommended_action": "최근 실패 export_results의 ffmpeg_stderr 확인",
         })
 
-    source_lost = _try("SELECT COUNT(*) FROM fragment_vault WHERE source_alive = 0")
-    if source_lost:
+    source_lost = _try(
+        "SELECT COUNT(*) FROM fragment_vault WHERE source_alive = 0", "source_lost")
+    if source_lost is not _PROBE_FAILED and source_lost:
         alerts.append({
             "severity": "P1", "title": "원본 유실 조각 존재",
             "reason": f"fragment_vault source_alive=0 {source_lost}건",
@@ -686,16 +710,18 @@ def _situation_alerts(con) -> list:
         })
 
     sec_p0 = _try(
-        "SELECT COUNT(*) FROM admin_security_events WHERE status='open' AND severity='P0'")
+        "SELECT COUNT(*) FROM admin_security_events WHERE status='open' AND severity='P0'",
+        "security_open_p0")
     sec_rest = _try(
-        "SELECT COUNT(*) FROM admin_security_events WHERE status='open' AND severity!='P0'")
-    if sec_p0:
+        "SELECT COUNT(*) FROM admin_security_events WHERE status='open' AND severity!='P0'",
+        "security_open_rest")
+    if sec_p0 is not _PROBE_FAILED and sec_p0:
         alerts.append({
             "severity": "P0", "title": "미처리 P0 보안 이벤트",
             "reason": f"open P0 {sec_p0}건", "target_type": "security", "target_id": None,
             "recommended_action": "보안 관제에서 즉시 triage",
         })
-    if sec_rest:
+    if sec_rest is not _PROBE_FAILED and sec_rest:
         alerts.append({
             "severity": "P2", "title": "미처리 보안 이벤트",
             "reason": f"open {sec_rest}건", "target_type": "security", "target_id": None,
@@ -703,8 +729,9 @@ def _situation_alerts(con) -> list:
         })
 
     support_high = _try(
-        "SELECT COUNT(*) FROM admin_support_cases WHERE status='open' AND severity='high'")
-    if support_high:
+        "SELECT COUNT(*) FROM admin_support_cases WHERE status='open' AND severity='high'",
+        "support_open_high")
+    if support_high is not _PROBE_FAILED and support_high:
         alerts.append({
             "severity": "P1", "title": "고심각 문의 대기",
             "reason": f"open high {support_high}건",
@@ -712,7 +739,7 @@ def _situation_alerts(con) -> list:
             "recommended_action": "지원/문의에서 우선 응대",
         })
 
-    return alerts
+    return alerts, probe_failures
 
 
 def situation() -> dict:
@@ -722,10 +749,24 @@ def situation() -> dict:
     kpis["storage_bytes"] = None        # 저장소 원장 미도입 — 정직 null
     kpis["api_cost_estimate"] = None    # 비용 원장 미도입 — 정직 null
 
-    alerts = _situation_alerts(con)
+    alerts, probe_failures = _situation_alerts(con)
+    # [LAB-52 ①] 점검 자체가 실패했으면 그 사실을 경보로 세운다 — 조용히 넘어가지 않는다.
+    if probe_failures:
+        alerts.append({
+            "severity": "P1", "title": "경보 점검 실패",
+            "reason": f"경보 규칙 {len(probe_failures)}건 조회 실패 — 해당 지표는 판정 불가",
+            "target_type": "situation", "target_id": None,
+            "recommended_action":
+                "실패 항목 확인: " + ", ".join(f["probe"] for f in probe_failures),
+        })
+
     severities = {a["severity"] for a in alerts}
+    # 알려진 위험(P0)이 최우선. 그 다음이 '판정 불가'. 실패는 절대 normal 로 내려가지 않는다.
     if "P0" in severities:
         level, reason = "critical", "P0 경보 존재"
+    elif probe_failures:
+        level = "unknown"
+        reason = f"경보 점검 {len(probe_failures)}건 실패 — 상태 판정 불가"
     elif "P1" in severities:
         level, reason = "watch", "P1 경보 존재"
     else:
@@ -755,6 +796,7 @@ def situation() -> dict:
         "global_state": {"service_level": level, "reason": reason},
         "kpis": kpis,
         "alerts": alerts,
+        "probe_failures": probe_failures,
         "action_queue": action_queue,
         "recent_audit": recent_audit,
     }
