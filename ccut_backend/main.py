@@ -1693,11 +1693,34 @@ async def chat_fragment_search(req: ChatSearchRequest):
         return {"status": "SUCCESS", "is_search": False, "query": "",
                 "count": 0, "results": []}
     try:
-        result = fsx.search(intent["query"], top_k=req.top_k or 12,
+        # [LAB-50 ④] 검색 스코프를 현재 프로젝트로 한정한다.
+        #   구판은 program_id 를 받아 놓고 쓰지 않아(ChatSearchRequest 에 필드는 있었다)
+        #   "보여줘" 한마디에 fragment_index 전체를 뒤져 남의 프로젝트 조각을 들이밀었다.
+        #   fsx.search 는 단일 source_id 만 받으므로(engine/fragment_search.py:43),
+        #   program → sources 를 풀어 결과를 그 집합으로 한정한다.
+        #   program_id 가 없으면 구동작(전역 검색) 그대로 — 조용히 바꾸지 않는다.
+        _scope = set()
+        if req.program_id:
+            import sqlite3 as _sq_scope
+            _c = _sq_scope.connect(str(BACKEND_DIR / "ccut_app.db"))
+            try:
+                _scope = {r[0] for r in _c.execute(
+                    "SELECT source_id FROM project_sources WHERE program_id=?",
+                    (req.program_id,))}
+            finally:
+                _c.close()
+        # 스코프가 있으면 넉넉히 받아 걸러낸다(한정 후 top_k 를 채우기 위해)
+        _want = req.top_k or 12
+        result = fsx.search(intent["query"], top_k=(_want * 5 if _scope else _want),
                             only_curated=bool(req.only_curated))
+        _rows = result["results"]
+        if _scope:
+            _rows = [r for r in _rows if r.get("source_id") in _scope][:_want]
+            print(f"[CHAT-SEARCH] program={req.program_id} 소스 {len(_scope)}개로 한정 "
+                  f"-> {len(_rows)}건 (전역 {result['count']}건 중)", flush=True)
         return {"status": "SUCCESS", "is_search": True,
                 "query": intent["query"], "confidence": intent["confidence"],
-                "count": result["count"], "results": result["results"]}
+                "count": len(_rows), "results": _rows}
     except Exception as e:
         return {"status": "ERROR", "is_search": True, "error": str(e),
                 "query": intent["query"], "count": 0, "results": []}

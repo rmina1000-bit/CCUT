@@ -718,7 +718,12 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
     // [FRAGMENT-SEARCH] (레거시 입력구 한정) 검색 의도면 조각 검색 먼저.
     try {
       setFragSearch({ query: raw, searching: true, results: [], done: false });
-      const sr = await videoService.chatFragmentSearch(raw, { top_k: 12 });
+      // [LAB-50 ④] 현재 프로젝트로 검색 스코프 한정 — videoService 는 이미 program_id 를
+      //   실어 보내는데 호출부가 넘기지 않아 전 아카이브를 뒤지고 있었다.
+      const sr = await videoService.chatFragmentSearch(raw, {
+        top_k: 12,
+        program_id: programId ?? undefined,
+      });
       if (sr.is_search) {
         setFragSearch({ query: sr.query, searching: false, results: sr.results, done: true });
         return;
@@ -732,8 +737,12 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
     if (parsedDirection) {
       onReproposal?.(parsedDirection);
     } else {
-      // [STEP 10-I.5.28-E9-R2] Fallback to raw text for narrative intent
-      onReproposal?.(raw as any);
+      // [LAB-50 ①] 판별 실패의 기본값을 '편집'에서 '상담'으로 반전한다.
+      //   구판은 파싱에 실패해도 원문을 그대로 재제안으로 보냈다(onReproposal(raw)).
+      //   그래서 "분석중인건가?" 같은 질문이 편집 지시로 오배송돼, 조각 0개 상태에서
+      //   제안 생성을 태우고 빈 결과로 돌아왔다(실측 2026-07-30: sequenceLength A:0 B:0).
+      //   모르면 사용자에게 되묻는 쪽이 맞다 — 위 713행의 consultation 경로를 그대로 쓴다.
+      onConsultation?.(raw);
     }
   }, [storyPlan, onAnalyze, onConsultation, onReproposal]);
 

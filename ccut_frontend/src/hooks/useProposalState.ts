@@ -322,7 +322,18 @@ export const useProposalState = (
   const handleReproposal = useCallback(
     async (nextDirection: Direction | string) => {
       if (!sourceFragments.length) {
+        // [LAB-50 ③] 분석 미완 차단 — 구판은 콘솔 경고만 남기고 조용히 return 해서
+        //   사용자는 자기 말이 삼켜진 것으로 느꼈다(막다른 골목). 채팅으로 알린다.
         console.warn("[Reproposal] sourceFragments is empty. Skipping reproposal.");
+        setStoryPlan((prev: any) => prev ? {
+          ...prev,
+          messages: [...(prev.messages ?? []), {
+            id: `reproposal_blocked_${Date.now()}`,
+            sender: "ai" as const,
+            text: "아직 조각이 준비되지 않았습니다. 분석이 끝난 뒤에 다시 말씀해 주세요.",
+            timestamp: Date.now(),
+          }],
+        } : prev);
         return;
       }
 
@@ -463,10 +474,30 @@ export const useProposalState = (
             total_ms: proposalTotalMs,
           });
         } else {
+          // [LAB-50 ②] 빈 결과를 콘솔에만 남기지 않는다 — 사용자에게 말한다.
           console.warn("[Reproposal] No proposals returned from server");
+          setStoryPlan((prev: any) => prev ? {
+            ...prev,
+            messages: [...(prev.messages ?? []), {
+              id: `reproposal_empty_${Date.now()}`,
+              sender: "ai" as const,
+              text: "제안을 만들지 못했습니다. 조건을 조금 바꿔서 다시 말씀해 주세요.",
+              timestamp: Date.now(),
+            }],
+          } : prev);
         }
       } catch (err: any) {
+        // [LAB-50 ②] 예외도 마찬가지 — 침묵은 막다른 골목이다.
         console.error("[Reproposal] Failed to fetch reproposaled project proposals:", err);
+        setStoryPlan((prev: any) => prev ? {
+          ...prev,
+          messages: [...(prev.messages ?? []), {
+            id: `reproposal_error_${Date.now()}`,
+            sender: "ai" as const,
+            text: "제안을 만드는 중에 문제가 생겼습니다. 잠시 뒤 다시 시도해 주세요.",
+            timestamp: Date.now(),
+          }],
+        } : prev);
       }
     },
     [
