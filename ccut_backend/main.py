@@ -2129,6 +2129,179 @@ def _inject_evidence(fragments: list, source_id: str):
     return fragments
 
 
+_RECOMMEND_TIERS = ("simple", "rich", "all")
+
+
+def _inject_recommendation(fragments: list):
+    """[PREVIEW-CUT STEP1-2] '먼저 보기' 추천 — 결정론. 모델·학습 없음.
+
+    _inject_evidence 가 이미 실은 재료 7종만 다시 읽는다(새 계측 0).
+    핵심 규칙(국장 확정):
+      · 안 보임 ≠ 제외 — 추천에서 빠져도 조각은 그대로 살아 있다.
+      · UNKNOWN ≠ 중요하지 않음 — 증거가 없으면 0점으로 치환하지 않고 UNKNOWN 으로 남긴다.
+      · 추천 ≠ 스토리 확정 — selection_state/excluded 는 건드리지 않는다.
+    산출은 3단(simple ⊂ rich ⊂ all) 계단 하나뿐이다. 화면은 이 값으로 즉시 필터만 하고
+    다시 계산하지 않는다(전환 때 재요청 금지).
+    """
+    if not fragments:
+        return fragments
+
+    def _num(v):
+        return v if isinstance(v, (int, float)) and not isinstance(v, bool) else None
+
+    rows = []
+    for f in fragments:
+        if not isinstance(f, dict):
+            continue
+        st = _num(f.get("start")) or _num(f.get("start_time")) or 0.0
+        en = _num(f.get("end")) or _num(f.get("end_time")) or st
+        st, en = float(st), float(en)
+        ev = f.get("evidence") or {}
+        status = f.get("evidence_status") or {}
+        known = [k for k, v in status.items() if v == "VALUE"]
+        words = _num(ev.get("word_timestamps"))
+        energy = _num(ev.get("audio_energy"))
+        speech = _num(ev.get("speech_presence"))
+        beats = ev.get("audio_beat")
+        rows.append({
+            "f": f,
+            "source_id": f.get("source_id"),
+            "start": st,
+            "dur": max(0.0, en - st),
+            "known": len(known),
+            "words": words,
+            "energy": energy,
+            "speech": speech,
+            "beats": len(beats) if isinstance(beats, list) else None,
+            # 대사/무대사 · 동적/정적 — 한쪽만 뽑히지 않도록 균형 축으로 쓴다.
+            "voiced": (words is not None and words > 0) or (speech is not None and speech > 0),
+            "motion": (beats is not None and len(beats) > 0) or (energy is not None and energy > 0.15),
+        })
+
+    total_sec = sum(r["dur"] for r in rows) or 1.0
+    # 예산은 재생시간 기준. 고정 비율로 상위 n%를 자르지 않는다 —
+    # 아래 선발 절차(소스별 최소·시간 분산·재료 균형)가 실제 구성을 정한다.
+    simple_budget = max(60.0, min(total_sec * 0.25, 300.0))
+    rich_budget = max(simple_budget * 2, min(total_sec * 0.5, 600.0))
+
+    def _blocked(r):
+        """배제 신호 — '나쁜 조각'이 아니라 '먼저 보기에 부적합'이라는 뜻이다."""
+        if r["dur"] <= 0:
+            return "깨진 구간(길이 0)"
+        if r["dur"] < 1.5:
+            return "과단문(1.5초 미만)"
+        # 측정된 값이 있을 때만 무음을 말한다 — 미계측을 무음으로 단정하지 않는다.
+        if (r["speech"] is not None and r["speech"] == 0
+                and r["words"] == 0 and r["energy"] is not None and r["energy"] < 0.02):
+            return "극단 무음(실측)"
+        return None
+
+    def _score(r):
+        """VALUE 재료만으로 만든 점수. UNKNOWN 은 점수에 참여하지 않는다."""
+        s = 0.0
+        if r["words"] is not None:
+            s += min(r["words"], 20) * 0.5          # 말이 있으면 먼저 보여줄 가치
+        if r["speech"] is not None:
+            s += r["speech"] * 6.0
+        if r["energy"] is not None:
+            s += min(r["energy"], 0.5) * 8.0
+        if r["beats"] is not None:
+            s += min(r["beats"], 20) * 0.1
+        s += min(r["dur"], 20.0) * 0.05            # 너무 짧은 조각보다는 볼 만한 길이
+        return s
+
+    by_source = {}
+    for r in rows:
+        r["blocked"] = _blocked(r)
+        r["score"] = _score(r)
+        by_source.setdefault(r["source_id"], []).append(r)
+    for lst in by_source.values():
+        lst.sort(key=lambda x: x["start"])
+
+    picked, order = [], []
+    def _take(r, reason):
+        if r.get("_taken"):
+            return False
+        r["_taken"] = True
+        r["reason"] = reason
+        picked.append(r)
+        order.append(r)
+        return True
+
+    # ① 소스별 최소 노출 + 시간 분산 — 앞/중/뒤에서 각 1개.
+    #    특정 소스가 전량 UNKNOWN 이어도 대표 1개는 반드시 넣는다(그 소스가 사라지지 않게).
+    for sid, lst in by_source.items():
+        usable = [r for r in lst if not r["blocked"]] or lst
+        n = len(usable)
+        for bi, label in enumerate(("앞", "중간", "뒤")):
+            bucket = usable[bi * n // 3:(bi + 1) * n // 3] or usable
+            best = max(bucket, key=lambda x: (x["known"], x["score"]))
+            _take(best, f"{label} 구간 대표")
+        if all(r["known"] == 0 for r in lst):
+            rep = max(lst, key=lambda x: x["dur"])
+            _take(rep, "증거 없는 소스의 대표 — 통째로 사라지지 않게 강제 포함")
+
+    # ② 재료 균형 — 대사/무대사, 동적/정적 각 축에서 최소 1개씩.
+    for axis, label in (("voiced", "대사 있는 대표"), ("motion", "움직임 있는 대표")):
+        for want in (True, False):
+            if any(r[axis] is want for r in picked):
+                continue
+            cands = [r for r in rows if r[axis] is want and not r["blocked"] and not r.get("_taken")]
+            if cands:
+                _take(max(cands, key=lambda x: x["score"]),
+                      f"{label}" if want else f"{label}의 반대편 — 한쪽 전멸 방지")
+
+    # ③ 남은 예산은 점수순. 같은 소스가 연달아 독점하지 않도록 소스를 번갈아 채운다.
+    rest = sorted([r for r in rows if not r.get("_taken") and not r["blocked"]],
+                  key=lambda x: (-x["score"], x["start"]))
+    queues = {}
+    for r in rest:
+        queues.setdefault(r["source_id"], []).append(r)
+    while sum(r["dur"] for r in picked) < rich_budget and any(queues.values()):
+        for sid in list(queues.keys()):
+            if not queues[sid]:
+                continue
+            r = queues[sid].pop(0)
+            _take(r, "점수순 보강")
+            if sum(x["dur"] for x in picked) >= rich_budget:
+                break
+
+    # ④ 계단 확정 — simple 예산까지가 '간단히', rich 예산까지가 '넉넉히', 나머지는 '전체'.
+    #   단, 소스별 최소 노출은 예산보다 앞선다. 예산 순서대로만 자르면 뒤쪽 소스가 통째로
+    #   '간단히'에서 사라진다(실측: Merope 10소스 중 5개, Adhara 40소스 중 29개 미노출).
+    #   그래서 각 소스의 첫 대표 1개는 예산과 무관하게 simple 에 넣는다.
+    #   소스가 많으면 '간단히'가 소스 수만큼 커지는데, 그게 규칙이 뜻하는 바다.
+    first_of_source = {}
+    for r in order:
+        first_of_source.setdefault(r["source_id"], r)
+    running = 0.0
+    for r in order:
+        if first_of_source.get(r["source_id"]) is r:
+            r["tier"] = "simple"
+            running += r["dur"]
+    for r in order:
+        if r.get("tier"):
+            continue
+        running += r["dur"]
+        r["tier"] = "simple" if running <= simple_budget else "rich"
+
+    for r in rows:
+        f = r["f"]
+        tier = r.get("tier") or "all"
+        f["recommend_tier"] = tier
+        f["recommended"] = tier == "simple"
+        f["recommend_status"] = "UNKNOWN" if r["known"] == 0 else "VALUE"
+        if r["blocked"]:
+            f["recommend_reason"] = f"먼저 보기 제외: {r['blocked']} (조각은 그대로 있습니다)"
+        elif r.get("reason"):
+            f["recommend_reason"] = r["reason"]
+        elif r["known"] == 0:
+            f["recommend_reason"] = "증거 없음(UNKNOWN) — 추천 대상이 아닐 뿐, 쓸모없다는 뜻이 아닙니다"
+        else:
+            f["recommend_reason"] = "나머지 보기 — 예산 밖"
+    return fragments
+
+
 def inject_preview_clips(fragments: list, background: bool = True) -> list:
     """
     [PREVIEW_CLIP_INJECT] 각 Semantic Fragment에 preview_clip_url 필드를 주입.
@@ -2383,6 +2556,8 @@ async def get_semantic_fragments(source_id: str):
 
     # [EVIDENCE-REACH STEP1-1] 재료 7종 동반 — 조립은 헬퍼 하나로 수렴
     fragments = _inject_evidence(fragments, source_id)
+    # [PREVIEW-CUT STEP1-2] 먼저 보기 추천 계단(simple/rich/all) — 재료에서 파생만 한다
+    fragments = _inject_recommendation(fragments)
 
     # [PREVIEW_CLIP] inject_preview_clips 제거 — 최종 해결은 proposal_preview_engine이뮼로 fragment 단위 clip 주입 불필요
     # (preview_clip_engine.py 미존재 시 ImportError 상승 방지)
@@ -2614,6 +2789,11 @@ async def get_project_sources(project_id: str):
                 "file_size_bytes": 0, # mock size
                 "duration_sec": src.duration or 0.0
             })
+
+        # [PREVIEW-CUT STEP1-2] 추천은 프로그램 단위로 한 번 — 소스별 최소 노출·예산이
+        #   프로그램 전체를 봐야 성립하므로, 소스 루프 안이 아니라 여기서 합쳐 계산한다.
+        _all_frags = [fr for s in collected_sources for fr in (s.get("fragments") or [])]
+        _inject_recommendation(_all_frags)
 
         # [B-5-FIX] 저장된 프로젝트 제안도 함께 복원 (program_id 기준 props 재사용) — 돌아오면 A/B 그대로
         # [#57 REV 체인] mode별 최신 1건만 노출 — REV_* 수정본이 부모를 화면에서 대체한다.
