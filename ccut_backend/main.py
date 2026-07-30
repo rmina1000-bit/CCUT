@@ -4201,6 +4201,28 @@ class EditOverlayRequest(BaseModel):
 
 @app.post("/edit-overlay")
 async def upsert_edit_overlay(req: EditOverlayRequest, db: Session = Depends(get_db)):
+    """[LAB-45 폐쇄] 이 경로는 폐쇄됨 — 편집 저장은 /edit-state (fragment_edit_state) 를 쓴다.
+
+    폐쇄 근거(2026-07-30 실측):
+      - Edit State 진실은 fragment_edit_state 하나여야 한다(CONCEPT_CODE_MAP: "유일 권위").
+        edit_overlay 는 같은 진실을 초 단위 부동소수로 이중 보유해 절대 규칙 2건을
+        어기고 있었다(진실 하나 / ms 정수 단일 권위).
+      - 실제 쓰기는 이미 죽어 있었다: EDIT_CONTRACT_V2 기본 ON → 프론트가 EC-V2 분기로
+        빠져 이 라우트에 도달하지 않는다(POST 실호출 0건, 마지막 행 2026-07-15).
+      - 유일한 살아있는 독자였던 fragment_vault 는 fragment_edit_state 로 이관 완료.
+    기존 60행은 삭제하지 않는다 — 격리 보존(원복은 이 함수 본문 복구 한 번).
+    """
+    return JSONResponse(status_code=410, content={
+        "ok": False,
+        "error": "EDIT_OVERLAY_CLOSED",
+        "use_instead": "POST /edit-state",
+        "reason": ("Edit State 진실은 fragment_edit_state 하나(ms 정수). "
+                   "edit_overlay 는 LAB-45 에서 폐쇄됐다."),
+    })
+
+
+async def _upsert_edit_overlay_closed(req, db):
+    """[LAB-45] 구판 본문 — 실행 경로 아님. 되살리려면 위 라우트를 이 함수로 돌린다."""
     from archive.db_models import EditOverlayTable
     import datetime as _dt
     oid = req.overlay_id or f"OVL_{req.source_id}_{req.fragment_id}"

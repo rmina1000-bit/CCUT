@@ -303,11 +303,27 @@ def source_fragment_history(source_id):
     src = con.execute("SELECT hash_value FROM sources WHERE source_id=?",
                       (source_id,)).fetchone()
     anchor = (src[0] if src and src[0] else source_id)
-    # [최종 수정 기준] 사용자가 정밀조정한 경계(edit_overlay)가 있으면 그것이
-    # 조각의 '현재 모습'이다 — 파노라마·뷰어는 이 기준으로 그린다.
-    overlays = {fid: (es, ee, bool(ex)) for fid, es, ee, ex in con.execute(
-        "SELECT fragment_id, effective_start_sec, effective_end_sec, excluded "
-        "FROM edit_overlay WHERE source_id=?", (source_id,))}
+    # [최종 수정 기준] 사용자가 정밀조정한 경계가 있으면 그것이 조각의 '현재 모습'이다
+    #   — 파노라마·뷰어는 이 기준으로 그린다.
+    # [LAB-45] 출처를 edit_overlay → fragment_edit_state 로 이관.
+    #   구판은 edit_overlay(초 단위)를 읽었는데 그 표는 EDIT_CONTRACT_V2 게이트가 ON이 된
+    #   뒤 신규 쓰기가 0이다(POST /edit-overlay 실호출 0건, 마지막 행 2026-07-15).
+    #   그래서 뷰어는 2주 전 레거시 60행을 '현재 모습'으로 그리고, 정작 지금 사용자가
+    #   PBE 로 만든 편집(fragment_edit_state)은 반영하지 못했다.
+    #   진실은 fragment_edit_state 하나(ms 정수) — 여기서 초로 환산해 같은 형태로 넘긴다.
+    #   excluded_ranges(중간 삭제)는 이 뷰어 구조가 조각당 단일 (start,end) 만 담아
+    #   표현할 수 없다 — 구판 edit_overlay 도 같은 한계였고, 없는 표현을 지어내지 않는다.
+    overlays = {}
+    try:
+        for fid, ts, te, removed in con.execute(
+                "SELECT parent_fragment_id, trim_start_ms, trim_end_ms, removed "
+                "FROM fragment_edit_state WHERE source_id=?", (source_id,)):
+            if fid is None or ts is None or te is None:
+                continue
+            overlays[fid] = (float(ts) / 1000.0, float(te) / 1000.0, bool(removed))
+    except sqlite3.OperationalError as exc:
+        # 표가 아직 없는 환경 — 경계 보정 없이 원본 좌표로 그린다(조용한 실패 금지)
+        print(f"[VAULT] fragment_edit_state 읽기 실패 — 원본 경계로 그린다: {exc}")
     thumbs_dir = os.path.join(os.path.dirname(BACKEND_DIR), "storage", "thumbnails")
     frags = []
     for r in con.execute(

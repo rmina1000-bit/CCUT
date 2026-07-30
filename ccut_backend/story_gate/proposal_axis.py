@@ -245,8 +245,14 @@ def _fragment_words(fragment_id):
         con.close()
 
 
-def _has_edit_overlay(program_id, fragment_id):
-    """사용자 오버레이가 있으면 semantic 경계 보정 대상이 아니다(INV-6)."""
+def _has_user_edit_state(program_id, fragment_id):
+    """사용자가 직접 만진 경계가 있으면 semantic 경계 보정 대상이 아니다(INV-6).
+
+    [LAB-45] 이름 정정: 구명 _has_edit_overlay 는 edit_overlay 를 읽는다고 읽혔으나
+    실제 조회 대상은 처음부터 fragment_edit_state 였다. 이름이 거짓말을 해서
+    'INV-6 보호가 폐기된 표를 본다'는 오진을 유발했다(LAB-45 실측으로 기각 —
+    18/18 보호 정상). 이름을 실제와 맞춘다.
+    """
     con = _connect()
     try:
         try:
@@ -290,7 +296,7 @@ def _snap_sequence_item(program_id, item, tol_ms):
     fid = item.get("fragment_id")
     if not fid:
         return dict(item), {"verdict": VERDICT_UNKNOWN, "detail": "fragment_id 없음"}
-    if _has_edit_overlay(program_id, fid):
+    if _has_user_edit_state(program_id, fid):
         return dict(item), {
             "verdict": VERDICT_NA,
             "fragment_id": fid,
@@ -448,7 +454,7 @@ def _check_word_boundary_snap(ctx):
         return {"verdict": VERDICT_UNKNOWN, "measured": None, "threshold": None,
                 "detail": "snap_threshold_ms 없음 — 허용오차를 모른다"}
     fid, prog = ctx.get("fragment_id"), ctx.get("program_id")
-    if prog and fid and _has_edit_overlay(prog, fid):
+    if prog and fid and _has_user_edit_state(prog, fid):
         from engine.story_template_resolver import VERDICT_NA
         return {"verdict": VERDICT_NA, "measured": {"fragment_id": fid},
                 "threshold": {"snap_threshold_ms": tol_ms},
