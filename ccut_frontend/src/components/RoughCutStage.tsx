@@ -179,13 +179,21 @@ const RoughCutStage: React.FC<RoughCutStageProps> = ({
   const playSpan = useCallback((span: RoughCutSpan) => {
     const videoUrl = sourceUrls.get(span.source_id);
     if (!videoUrl) return;
+    const linkedSpans = span.fragment_id
+      ? displayData?.transcript.filter((candidate) => (
+        candidate.fragment_id === span.fragment_id
+        && candidate.source_id === span.source_id
+      )) ?? [span]
+      : [span];
+    const startMs = Math.min(...linkedSpans.map((candidate) => candidate.start_ms));
+    const endMs = Math.max(...linkedSpans.map((candidate) => candidate.end_ms));
     onPlay({
       videoUrl,
-      spans: [[span.start_ms / 1000, span.end_ms / 1000]],
-      fragmentId: span.span_id,
-      label: span.text,
+      spans: [[startMs / 1000, endMs / 1000]],
+      fragmentId: span.fragment_id ?? span.span_id,
+      label: linkedSpans.map((candidate) => candidate.text).join(" "),
     });
-  }, [onPlay, sourceUrls]);
+  }, [displayData, onPlay, sourceUrls]);
 
   if (loading) {
     return (

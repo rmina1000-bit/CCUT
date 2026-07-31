@@ -94,6 +94,15 @@ const RoughCutOutline: React.FC<RoughCutOutlineProps> = ({
     }
     return orderByFragment;
   }, [data.transcript, selectedSpanIds]);
+  const firstSpanIdByFragment = useMemo(() => {
+    const firstByFragment = new Map<string, string>();
+    for (const span of data.transcript) {
+      if (span.fragment_id && !firstByFragment.has(span.fragment_id)) {
+        firstByFragment.set(span.fragment_id, span.span_id);
+      }
+    }
+    return firstByFragment;
+  }, [data.transcript]);
 
   useEffect(() => {
     if (!activeFragmentId || focusOrigin !== "user") return;
@@ -110,11 +119,14 @@ const RoughCutOutline: React.FC<RoughCutOutlineProps> = ({
       data-rough-cut-transcript-count={data.transcript.length}
     >
       {data.transcript.map((span) => {
-        const selected = selectedIds.has(span.span_id);
-        const active = !!activeFragmentId && span.fragment_id === activeFragmentId;
         const storyOrder = span.fragment_id
           ? selectedOrderByFragment.get(span.fragment_id)
           : undefined;
+        const selected = selectedIds.has(span.span_id) || storyOrder !== undefined;
+        const active = !!activeFragmentId && span.fragment_id === activeFragmentId;
+        const isFirstFragmentRow = !span.fragment_id
+          || firstSpanIdByFragment.get(span.fragment_id) === span.span_id;
+        const continuation = !!span.fragment_id && !isFirstFragmentRow;
         return (
           <div
             key={span.span_id}
@@ -124,6 +136,8 @@ const RoughCutOutline: React.FC<RoughCutOutlineProps> = ({
             data-rough-cut-span={span.span_id}
             data-fragment-id={span.fragment_id}
             data-fragment-display-id={span.display_id}
+            data-fragment-label-visible={isFirstFragmentRow ? "true" : "false"}
+            data-fragment-continuation={continuation ? "true" : "false"}
             data-story-order={storyOrder}
             data-transcript-active={active ? "true" : "false"}
             data-story-selected={selected ? "true" : "false"}
@@ -139,16 +153,24 @@ const RoughCutOutline: React.FC<RoughCutOutlineProps> = ({
               title={selected ? "스토리에 들어간 문장" : "스토리에 추가"}
             >
               <span className="flex h-[18px] w-[18px] shrink-0 items-center justify-center">
-                {storyOrder && (
+                {isFirstFragmentRow && storyOrder && (
                   <span className="flex h-[18px] w-[18px] items-center justify-center rounded-[5px] bg-primary font-mono text-[11px] font-medium leading-none text-primary-foreground">
                     {storyOrder}
                   </span>
+                )}
+                {continuation && (
+                  <span
+                    className={`h-full w-px ${
+                      storyOrder ? "bg-primary/40" : "bg-white/10"
+                    }`}
+                    aria-hidden="true"
+                  />
                 )}
               </span>
               <span className={`w-7 shrink-0 pt-0.5 font-mono text-[12px] font-medium leading-none ${
                 storyOrder ? "text-primary" : "text-secondary-foreground/45"
               }`}>
-                {span.display_id}
+                {isFirstFragmentRow ? span.display_id : null}
               </span>
               <span className="min-w-0 break-words">
                 {span.display_words?.length
