@@ -199,31 +199,31 @@ export interface AnatomyRelation {
   bow?: number;
 }
 
-export const ANATOMY_CANVAS = { width: 118, height: 41 };   // em 단위 — 픽셀이 아니다
+export const ANATOMY_CANVAS = { width: 82.8, height: 84 };   // em 단위 — 픽셀이 아니다
 
-/* 좌표는 **em(폰트 배수)**다. 편집연구실 능력지도와 같은 방식 —
- * 07-29 사고 기록: 컨테이너 폭에 결속했더니 글자를 줄이면 도표가 커졌다. 폰트에 결속한다.
- * 열 간격은 편집연구실 ROW_STEP_EM 5.8 / PAD_EM 1.8 을 그대로 쓰고, 본선 가로 간격만
- * 순환 구조에 맞게 배수로 잡았다(값 하나만 바꾼다 — 나머지는 같게). */
+/* 좌표는 em(폰트 배수)이고 **세로로 흐른다**(편집연구실도 세로로 길다 — 같은 방향으로 스크롤).
+ * 간격은 국장 지시로 편집연구실 기준선의 배수를 쓴다 — 선이 옹색해서 넓혔다:
+ *   행 간격 1.40em x4 = 5.60em  (행 step 4.4+5.6 = 10.0)
+ *   열 간격 5.10em x2 = 10.20em (열 step 15.6+10.2 = 25.8)
+ * 노드 폭·높이·서체·색은 편집연구실 값 그대로다. 넓힌 것은 **간격뿐**이다.
+ *   왼쪽 열 = 사용자의 말   가운데 열 = 재료의 본선   오른쪽 열 = 곁가지
+ */
 export const ANATOMY_PLACEMENT: AnatomyNodePlacement[] = [
-  // 위쪽 — 사용자의 말
-  { id: "chat", x: 49.4, y: 4.2, band: "chat" },
-  { id: "intent", x: 49.4, y: 10.0, band: "chat" },
-  { id: "consult", x: 20, y: 16.6, band: "chat" },
-  { id: "search", x: 49.4, y: 16.6, band: "chat" },
-  { id: "editcmd", x: 74, y: 16.6, band: "chat" },
-  { id: "proposal", x: 92, y: 16.6, band: "chat" },
-  // 가운데 — 재료의 본선
-  { id: "upload", x: 8.0, y: 27.5, band: "main" },
-  { id: "analysis", x: 21.8, y: 27.5, band: "main" },
-  { id: "transcript", x: 35.6, y: 27.5, band: "main" },
-  { id: "fragment", x: 49.4, y: 27.5, band: "main" },
-  { id: "story", x: 63.2, y: 27.5, band: "main" },
-  { id: "edit", x: 77.0, y: 27.5, band: "main" },
-  { id: "render", x: 90.8, y: 27.5, band: "main" },
-  { id: "export", x: 104.6, y: 27.5, band: "main" },
-  // 아래 — 본선에 매달린 것
-  { id: "hold", x: 49.4, y: 35.6, band: "aside" },
+  { id: "chat", x: 21.6, y: 8.4, band: "chat" },
+  { id: "intent", x: 21.6, y: 18.4, band: "chat" },
+  { id: "consult", x: 21.6, y: 28.4, band: "chat" },
+  { id: "search", x: 21.6, y: 38.4, band: "chat" },
+  { id: "editcmd", x: 21.6, y: 48.4, band: "chat" },
+  { id: "proposal", x: 21.6, y: 58.4, band: "chat" },
+  { id: "upload", x: 47.4, y: 8.4, band: "main" },
+  { id: "analysis", x: 47.4, y: 18.4, band: "main" },
+  { id: "transcript", x: 47.4, y: 28.4, band: "main" },
+  { id: "fragment", x: 47.4, y: 38.4, band: "main" },
+  { id: "story", x: 47.4, y: 48.4, band: "main" },
+  { id: "edit", x: 47.4, y: 58.4, band: "main" },
+  { id: "render", x: 47.4, y: 68.4, band: "main" },
+  { id: "export", x: 47.4, y: 78.4, band: "main" },
+  { id: "hold", x: 73.2, y: 38.4, band: "aside" },
 ];
 
 export const ANATOMY_RELATIONS: AnatomyRelation[] = [
@@ -232,11 +232,11 @@ export const ANATOMY_RELATIONS: AnatomyRelation[] = [
     evidence: "CenterPanel.tsx:732 fragment search -> parseDirectionFromText -> 상담" },
   { from: "intent", to: "consult", kind: "branch",
     evidence: "CenterPanel.tsx:745 판별 실패 기본값 = 상담 (LAB-50 ①)" },
-  { from: "intent", to: "search", kind: "branch",
+  { from: "intent", to: "search", kind: "branch", bow: -9.5,
     evidence: "CenterPanel.tsx:732 sr.is_search -> setFragSearch" },
-  { from: "intent", to: "editcmd", kind: "branch",
+  { from: "intent", to: "editcmd", kind: "branch", bow: -9.5,
     evidence: "CenterPanel.tsx:743 parsedDirection -> onReproposal" },
-  { from: "consult", to: "chat", kind: "back", bow: -4.2,
+  { from: "consult", to: "chat", kind: "back", bow: -7.5,
     evidence: "상담은 채팅으로 돌아온다 (onConsultation)" },
   { from: "editcmd", to: "proposal", kind: "forward",
     evidence: "useProposalState.ts:660 /intent/route-edit -> handleReproposal" },
@@ -254,7 +254,7 @@ export const ANATOMY_RELATIONS: AnatomyRelation[] = [
   { from: "edit", to: "render", kind: "forward", evidence: "fragment_edit_state -> compile_spans (ledger_r0)" },
   { from: "render", to: "export", kind: "forward", evidence: "EDL clips -> render_engine" },
   // 되돌아가는 길 — 이 선이 보이는 순간 시간표가 지도가 된다
-  { from: "edit", to: "story", kind: "back", bow: 6.6,
+  { from: "edit", to: "story", kind: "back",
     evidence: "useStoryGate.ts:54 reopenStory -> story_review 복귀 (Index.tsx:252)" },
   // 왕복
   { from: "fragment", to: "hold", kind: "bidir",

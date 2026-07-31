@@ -282,6 +282,53 @@ export const AdminAnatomyPanel: React.FC = () => {
     [data],
   );
 
+  /** 선 보고 — 이 선에 기장된 경계 카드에서 **읽기만** 한다. 새 계산은 없다.
+   *  기장이 없으면 빈칸이 아니라 "왜 미계측인지"가 내용이다. */
+  const edgeReport = useMemo(() => {
+    if (!selectedEdge) return null;
+    const hits = (boundaries ?? []).filter(
+      (b) =>
+        (b.from === selectedEdge.from && b.to === selectedEdge.to) ||
+        (b.from === selectedEdge.to && b.to === selectedEdge.from),
+    );
+    const title = `${selectedEdge.from} → ${selectedEdge.to}`;
+    if (hits.length === 0) {
+      return {
+        title,
+        line: boundaryError ? "조회실패" : "미계측",
+        kind: "기장 없음",
+        why: "이 선을 지나는 값·기본값·순서·권위가 아직 감사되지 않았습니다. 감사해서 기장하기 전에는 정상이라고 그리지 않습니다.",
+        order: "UNKNOWN",
+        authority: "UNKNOWN",
+        first: "UNKNOWN",
+        latest: "UNKNOWN",
+        failures: "UNKNOWN",
+        caution: null as string | null,
+        evidence: {
+          relation: { from: selectedEdge.from, to: selectedEdge.to },
+          evidence: selectedEdge.evidence,
+          boundary: null,
+          note: "경계 미기장 — 원장과 이을 자리가 아직 없다",
+        },
+      };
+    }
+    const b = hits[0];
+    const ledger = b.ledger as Record<string, unknown>;
+    return {
+      title: `${title} · ${b.label}`,
+      line: b.state?.line ?? "미계측",
+      kind: `${b.kind}${b.user_decision_overwritten ? " · 사용자 결정 덮음" : ""}`,
+      why: b.state?.why ?? "UNKNOWN",
+      order: b.static.order,
+      authority: b.static.authority,
+      first: String(ledger?.first_occurrence ?? "UNKNOWN"),
+      latest: String(ledger?.latest ?? "UNKNOWN"),
+      failures: String(ledger?.failure_count ?? "UNKNOWN"),
+      caution: b.state?.caution ?? null,
+      evidence: hits.length === 1 ? b : hits,
+    };
+  }, [selectedEdge, boundaries, boundaryError]);
+
   const boundariesBetween = useCallback(
     (from: AnatomyNodeId, to: AnatomyNodeId) =>
       (boundaries ?? []).filter(
@@ -373,8 +420,13 @@ export const AdminAnatomyPanel: React.FC = () => {
 
       {/* [MAP-R2] 일렬 배치를 판으로 교체했다 — 위치·곡률·화살촉이 정보를 나른다.
           선의 상태는 경계 판정(LINE-STATE)에서 그대로 받아 쓴다. 여기서 재계산하지 않는다. */}
-      <section className="overflow-x-auto py-2" aria-label="CCUT 흐름 지도">
-        <div className="min-w-[860px]">
+      {/* 지도와 보고를 좌우로 — 지도를 보면서 그 부위의 설명·증거를 같은 화면에서 읽는다.
+          보고는 오른쪽에 위(일반 설명)·아래(기술 증거)로 쌓인다. */}
+      <section
+        className="grid gap-5 py-2 lg:grid-cols-[minmax(0,1fr)_minmax(300px,26rem)]"
+        aria-label="CCUT 흐름 지도"
+      >
+        <div className="min-w-0 overflow-x-auto">
           <AnatomyMap
             selectedId={selectedId}
             onSelect={(id) => {
@@ -392,17 +444,129 @@ export const AdminAnatomyPanel: React.FC = () => {
               setOpenBoundaryId(hit[0]?.id ?? null);   // 한 건이면 바로 펼친다
             }}
             hasBoundary={(from, to) => boundariesBetween(from, to).length > 0}
+            subtitleFor={(id) => {
+              // 편집연구실이 "930 · 조각 단위"를 적는 자리 — 실값이 우선이다.
+              const def = ANATOMY_NODES.find((n) => n.id === id);
+              const v = def?.metricKey ? data?.operations.metrics[def.metricKey]?.value : null;
+              if (v != null) return `${v.toLocaleString()} · ${def?.metricLabel ?? ""}`.trim();
+              // 지표가 없는 부위는 이 부위에 닿는 **기장된 경계 수**가 실값이다.
+              const n = (boundaries ?? []).filter((b) => b.from === id || b.to === id).length;
+              return n > 0 ? `경계 ${n} · 감사됨` : "경계 0 · 미감사";
+            }}
+            lockedFor={(id) => {
+              // 잠김 = 지표를 가져야 하는데 못 읽은 부위. 그 외엔 자물쇠를 달지 않는다.
+              const def = ANATOMY_NODES.find((n) => n.id === id);
+              if (!def?.metricKey) return false;
+              return (data?.operations.metrics[def.metricKey]?.value ?? null) == null;
+            }}
             lineStateFor={lineStateFor}
             metricFor={metricFor}
             statusLabelFor={(id) => ANATOMY_STATUS[nodeStatus(id, data)]?.label ?? "미계측"}
           />
+          <div className="mt-2 flex flex-wrap gap-x-5 gap-y-1 text-[9px] text-muted-foreground/55">
+            <span>왼쪽 = 사용자의 말 · 가운데 = 재료의 본선 · 오른쪽 = 곁가지</span>
+            <span className="text-fuchsia-300/80">보라 = 되돌아감(재승인)</span>
+            <span className="text-sky-300/80">하늘 = 왕복</span>
+            <span>선을 누르면 경계 카드</span>
+          </div>
         </div>
-        <div className="mt-1 flex flex-wrap gap-x-5 gap-y-1 text-[9px] text-muted-foreground/55">
-          <span>↑ 위쪽 = 사용자의 말 · 아래 띠 = 재료의 본선</span>
-          <span className="text-fuchsia-300/80">보라 = 되돌아감(재승인)</span>
-          <span className="text-sky-300/80">하늘 = 왕복</span>
-          <span>선 위에 올리면 근거가 보입니다</span>
+        {/* 지도 오른쪽 보고 — 위: 일반 설명, 아래: 기술 증거 */}
+        <aside className="flex min-w-0 flex-col gap-5 border-l border-border/15 pl-5">
+        {selectedEdge ? (
+          // 선을 골랐으면 **선의** 설명과 증거다. 문제는 늘 선에서 나므로 여기가 본체다.
+          <>
+            <div>
+              <p className="text-[10px] font-bold uppercase text-muted-foreground/45">
+                일반 설명 — 선
+              </p>
+              <div className="mt-3 flex flex-wrap items-center gap-2">
+                <h2 className="text-base font-bold text-foreground/90">
+                  {edgeReport.title}
+                </h2>
+                <span className={`border px-1.5 py-0.5 text-[9px] ${lineStyle(edgeReport.line).border} ${lineStyle(edgeReport.line).text}`}>
+                  {edgeReport.line}
+                </span>
+              </div>
+              <p className="mt-2 text-sm leading-6 text-foreground/70">
+                {edgeReport.why}
+              </p>
+              <dl className="mt-5 grid grid-cols-[92px_1fr] gap-x-3 gap-y-2 text-[11px]">
+                <dt className="text-muted-foreground/45">관계</dt>
+                <dd className="text-foreground/70">{edgeReport.kind}</dd>
+                <dt className="text-muted-foreground/45">근거</dt>
+                <dd className="break-words font-mono text-[10px] text-foreground/65">
+                  {selectedEdge.evidence}
+                </dd>
+                <dt className="text-muted-foreground/45">★순서</dt>
+                <dd className="text-foreground/70">{edgeReport.order}</dd>
+                <dt className="text-muted-foreground/45">★권위</dt>
+                <dd className="text-foreground/70">{edgeReport.authority}</dd>
+                <dt className="text-muted-foreground/45">최초 발생</dt>
+                <dd className="font-mono text-foreground/65">{edgeReport.first}</dd>
+                <dt className="text-muted-foreground/45">최근</dt>
+                <dd className="font-mono text-foreground/65">{edgeReport.latest}</dd>
+                <dt className="text-muted-foreground/45">실패</dt>
+                <dd className="font-mono text-foreground/65">{edgeReport.failures}</dd>
+              </dl>
+              {edgeReport.caution && (
+                <p className="mt-3 border border-amber-500/40 bg-amber-500/5 px-2 py-1.5 text-[10px] text-amber-200/85">
+                  주의: {edgeReport.caution}
+                </p>
+              )}
+            </div>
+            <div className="min-w-0">
+              <p className="text-[10px] font-bold uppercase text-muted-foreground/45">
+                기술 증거 — 선
+              </p>
+              <pre className="mt-3 max-h-96 overflow-auto border border-border/20 bg-black/20 p-3 text-[10px] leading-5 text-cyan-100/70">
+                {JSON.stringify(edgeReport.evidence, null, 2)}
+              </pre>
+            </div>
+          </>
+        ) : (
+        <>
+        <div>
+          <p className="text-[10px] font-bold uppercase text-muted-foreground/45">
+            일반 설명
+          </p>
+          <div className="mt-3 flex items-center gap-2">
+            <h2 className="text-base font-bold text-foreground/90">{selected.label}</h2>
+            <span className={`border px-1.5 py-0.5 text-[9px] ${STATUS_STYLE[selectedStatus]}`}>
+              {ANATOMY_STATUS[selectedStatus].label}
+            </span>
+          </div>
+          <p className="mt-2 text-sm leading-6 text-foreground/70">
+            {selected.description}
+          </p>
+          <dl className="mt-5 grid grid-cols-[92px_1fr] gap-x-3 gap-y-2 text-[11px]">
+            <dt className="text-muted-foreground/45">관련 부위</dt>
+            <dd className="text-foreground/70">{related.join(" · ") || "UNKNOWN"}</dd>
+            <dt className="text-muted-foreground/45">최초 발생</dt>
+            <dd className="font-mono text-foreground/65">
+              {selected.id === "story" ? qwen?.first_occurrence ?? "UNKNOWN" : "UNKNOWN"}
+            </dd>
+            <dt className="text-muted-foreground/45">최근 성공</dt>
+            <dd className="font-mono text-foreground/65">
+              {selected.id === "story" ? qwen?.latest_success ?? "UNKNOWN" : "UNKNOWN"}
+            </dd>
+            <dt className="text-muted-foreground/45">재시도</dt>
+            <dd className="font-mono text-foreground/65">
+              {selected.id === "story" ? qwen?.retry_count ?? "UNKNOWN" : "UNKNOWN"}
+            </dd>
+          </dl>
         </div>
+
+        <div className="min-w-0">
+          <p className="text-[10px] font-bold uppercase text-muted-foreground/45">
+            기술 증거
+          </p>
+          <pre className="mt-3 max-h-80 overflow-auto border border-border/20 bg-black/20 p-3 text-[10px] leading-5 text-cyan-100/70">
+            {JSON.stringify(technicalEvidence(selected, data), null, 2)}
+          </pre>
+        </div>
+        </>
+        )}
+        </aside>
       </section>
 
       {/* [BOUNDARY-MAP] 노드 클릭 -> 그 노드에 닿는 **경계(화살표)** 확대.
@@ -589,47 +753,6 @@ export const AdminAnatomyPanel: React.FC = () => {
         )}
       </section>
 
-      <section className="grid gap-6 border-t border-border/20 pt-5 lg:grid-cols-[minmax(240px,0.8fr)_minmax(0,1.4fr)]">
-        <div>
-          <p className="text-[10px] font-bold uppercase text-muted-foreground/45">
-            일반 설명
-          </p>
-          <div className="mt-3 flex items-center gap-2">
-            <h2 className="text-base font-bold text-foreground/90">{selected.label}</h2>
-            <span className={`border px-1.5 py-0.5 text-[9px] ${STATUS_STYLE[selectedStatus]}`}>
-              {ANATOMY_STATUS[selectedStatus].label}
-            </span>
-          </div>
-          <p className="mt-2 text-sm leading-6 text-foreground/70">
-            {selected.description}
-          </p>
-          <dl className="mt-5 grid grid-cols-[92px_1fr] gap-x-3 gap-y-2 text-[11px]">
-            <dt className="text-muted-foreground/45">관련 부위</dt>
-            <dd className="text-foreground/70">{related.join(" · ") || "UNKNOWN"}</dd>
-            <dt className="text-muted-foreground/45">최초 발생</dt>
-            <dd className="font-mono text-foreground/65">
-              {selected.id === "story" ? qwen?.first_occurrence ?? "UNKNOWN" : "UNKNOWN"}
-            </dd>
-            <dt className="text-muted-foreground/45">최근 성공</dt>
-            <dd className="font-mono text-foreground/65">
-              {selected.id === "story" ? qwen?.latest_success ?? "UNKNOWN" : "UNKNOWN"}
-            </dd>
-            <dt className="text-muted-foreground/45">재시도</dt>
-            <dd className="font-mono text-foreground/65">
-              {selected.id === "story" ? qwen?.retry_count ?? "UNKNOWN" : "UNKNOWN"}
-            </dd>
-          </dl>
-        </div>
-
-        <div className="min-w-0">
-          <p className="text-[10px] font-bold uppercase text-muted-foreground/45">
-            기술 증거
-          </p>
-          <pre className="mt-3 max-h-80 overflow-auto border border-border/20 bg-black/20 p-3 text-[10px] leading-5 text-cyan-100/70">
-            {JSON.stringify(technicalEvidence(selected, data), null, 2)}
-          </pre>
-        </div>
-      </section>
     </div>
   );
 };
