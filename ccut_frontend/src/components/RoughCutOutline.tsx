@@ -19,6 +19,10 @@ export interface RoughCutAct {
 
 export interface RoughCutData {
   project_id: string;
+  owner: {
+    program_id: string;
+    source_ids: string[];
+  };
   input_hash?: string | null;
   premise: string;
   acts: RoughCutAct[];

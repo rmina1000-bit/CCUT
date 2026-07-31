@@ -1,4 +1,5 @@
 import React, { useState, useCallback, useRef, useEffect, useMemo } from "react";
+import { toast } from "sonner";
 import LeftNav from "@/components/LeftNav";
 import CenterPanel from "@/components/CenterPanel";
 import OriginalPanorama from "@/components/OriginalPanorama";
@@ -356,6 +357,8 @@ const Index: React.FC = () => {
   //   없앴다 — 그 편의가 정확히 사고의 통로였다. 호출부는 storyFidsRef에서 파생해야 한다.
   const storyFidsRef = useRef<string[]>([]);
   storyFidsRef.current = storyFids;
+  const roughCutSaveQueueRef = useRef<Promise<void>>(Promise.resolve());
+  const roughCutExplicitSaveSigRef = useRef<string | null>(null);
   // 가드 2 (출처 표식): 저장은 '사용자 행위'로 만들어진 스토리만. 서버 폴백·씨앗·재수화로
   //   화면에 올라온 목록은 저장 경로에 진입하지 못한다 (2-1/2-2).
   const storyOriginRef = useRef<"none" | "ui_state" | "server" | "user">("none");
@@ -687,6 +690,11 @@ const Index: React.FC = () => {
     const sig = JSON.stringify([storyFids, committedProposalId, selectedProposalId, roughCutPlacement]);
     if (storySnapshotSigRef.current === sig) return;
     storySnapshotSigRef.current = sig;
+    const roughCutSig = JSON.stringify([
+      storyFids,
+      roughCutPlacement?.selectedSpanIds ?? [],
+    ]);
+    if (roughCutExplicitSaveSigRef.current === roughCutSig) return;
     if (activeNavItem && activeNavItem.startsWith("proj_")) {
       saveUiStateMergedTracked(activeNavItem, buildUiSnapshot()).catch(() => {});
     }
@@ -2207,6 +2215,61 @@ const Index: React.FC = () => {
     [roughCutData?.ordered_span_ids, roughCutPlacement?.selectedSpanIds],
   );
 
+  const persistRoughCutDecision = useCallback((fids: string[], selectedSpanIds: string[]) => {
+    const programId = activeNavItem;
+    const sourceIds = roughCutData?.owner?.source_ids;
+    const inputHash = roughCutPlacement?.inputHash ?? roughCutData?.input_hash;
+    if (!programId?.startsWith("proj_") || !sourceIds || !inputHash) {
+      toast.error("가편집 변경을 저장하지 못했습니다.", {
+        description: "프로젝트 소유권 정보를 확인할 수 없습니다.",
+      });
+      return Promise.resolve();
+    }
+
+    roughCutExplicitSaveSigRef.current = JSON.stringify([fids, selectedSpanIds]);
+    const save = roughCutSaveQueueRef.current
+      .catch(() => undefined)
+      .then(async () => {
+        try {
+          const response = await fetch(
+            `/api/rough-cut/project/${encodeURIComponent(programId)}/promote`,
+            {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                source_ids: sourceIds,
+                input_hash: inputHash,
+                fids,
+                selected_span_ids: selectedSpanIds,
+              }),
+            },
+          );
+          const body = await response.json().catch(() => null);
+          if (!response.ok) {
+            const detail = body?.detail;
+            const reason = typeof detail === "string"
+              ? detail
+              : detail?.error || `HTTP ${response.status}`;
+            throw new Error(String(reason));
+          }
+          toast.success("가편집 변경을 저장했습니다.");
+        } catch (reason) {
+          const message = reason instanceof Error ? reason.message : "unknown_error";
+          console.error("[ROUGH-CUT-PROMOTE][FAIL]", message);
+          toast.error("가편집 변경을 저장하지 못했습니다.", {
+            description: message,
+          });
+        }
+      });
+    roughCutSaveQueueRef.current = save;
+    return save;
+  }, [
+    activeNavItem,
+    roughCutData?.input_hash,
+    roughCutData?.owner?.source_ids,
+    roughCutPlacement?.inputHash,
+  ]);
+
   // 가편집은 기존 원고를 자동 확정하지 않는다. 배치 표식이 없는 프로젝트에서만
   // 화면용 씨앗으로 올리고, 첫 사용자 조작 뒤 기존 story.fids 저장 경로로 승격한다.
   useEffect(() => {
@@ -2258,8 +2321,10 @@ const Index: React.FC = () => {
       selectedSpanIds,
     });
     applyStory(roughCutFragmentsForFids(nextFids), nextFids);
+    void persistRoughCutDecision(nextFids, selectedSpanIds);
   }, [
     applyStory,
+    persistRoughCutDecision,
     roughCutData?.input_hash,
     roughCutFragmentForSpan,
     roughCutFragmentsForFids,
@@ -2294,9 +2359,11 @@ const Index: React.FC = () => {
       selectedSpanIds: nextSpanIds,
     });
     applyStory(reorderedFragments, nextFids);
+    void persistRoughCutDecision(nextFids, nextSpanIds);
   }, [
     applyStory,
     orderRoughCutSpanIds,
+    persistRoughCutDecision,
     roughCutData?.input_hash,
     roughCutPlacement?.inputHash,
     roughCutSelectedSpanIds,
@@ -2316,8 +2383,10 @@ const Index: React.FC = () => {
       selectedSpanIds: nextSpanIds,
     });
     applyStory(roughCutFragmentsForFids(nextFids), nextFids);
+    void persistRoughCutDecision(nextFids, nextSpanIds);
   }, [
     applyStory,
+    persistRoughCutDecision,
     roughCutData,
     roughCutFragmentForSpan,
     roughCutFragmentsForFids,
@@ -2347,9 +2416,11 @@ const Index: React.FC = () => {
       selectedSpanIds: nextSpanIds,
     });
     applyStory(roughCutFragmentsForFids(nextFids), nextFids);
+    void persistRoughCutDecision(nextFids, nextSpanIds);
   }, [
     applyStory,
     orderRoughCutSpanIds,
+    persistRoughCutDecision,
     removeByUid,
     roughCutData,
     roughCutFragmentForSpan,
