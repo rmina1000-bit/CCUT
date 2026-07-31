@@ -2,13 +2,14 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { RefreshCw } from "lucide-react";
 import { fetcher } from "@/services/api";
 import {
-  ANATOMY_EDGES,
+  ANATOMY_CHAT_NODES,
   ANATOMY_NODES,
   ANATOMY_STATUS,
   AnatomyNodeDefinition,
   AnatomyNodeId,
   AnatomyStatus,
 } from "./adminAnatomyConfig";
+import { AnatomyMap, MapLineState } from "./AnatomyMap";
 
 interface ProjectSummary {
   program_id: string;
@@ -183,24 +184,6 @@ function technicalEvidence(node: AnatomyNodeDefinition, data: AnatomyPayload | n
   };
 }
 
-const FlowConnector: React.FC<{ index: number }> = ({ index }) => {
-  const edge = ANATOMY_EDGES[index];
-  return (
-    <div className="relative flex h-10 w-full items-center justify-center lg:h-auto lg:w-12 lg:flex-none">
-      <div
-        className={`h-full border-l-2 lg:h-0 lg:w-full lg:border-l-0 lg:border-t-2 ${
-          edge.declared ? "border-emerald-500/45" : "border-zinc-500/55 border-dashed"
-        }`}
-      />
-      {!edge.declared && (
-        <span className="absolute bg-[hsl(228_12%_9%)] px-1 text-[8px] font-bold text-zinc-500">
-          UNDECLARED
-        </span>
-      )}
-    </div>
-  );
-};
-
 export const AdminAnatomyPanel: React.FC = () => {
   const [projects, setProjects] = useState<ProjectSummary[]>([]);
   const [programId, setProgramId] = useState("");
@@ -268,6 +251,33 @@ export const AdminAnatomyPanel: React.FC = () => {
   );
   const qwen = data?.qwen;
   // 선택 노드에 **닿는** 경계 — 나가는 것만이 아니라 들어오는 것도 그 부위의 사고다.
+  /** 선 상태 = 그 두 부위를 잇는 경계들의 판정. 하나라도 문제면 선은 점선이다(나쁜 쪽이 이긴다). */
+  const lineStateFor = useCallback(
+    (from: AnatomyNodeId, to: AnatomyNodeId): MapLineState => {
+      const hit = (boundaries ?? []).filter(
+        (b) => (b.from === from && b.to === to) || (b.from === to && b.to === from),
+      );
+      if (boundaryError) return "조회실패";
+      if (hit.length === 0) return "미계측";   // 경계가 기장되지 않은 관계 — 정상이라 그리지 않는다
+      const lines = hit.map((b) => b.state?.line ?? "미계측");
+      for (const worst of ["조회실패", "점선", "미계측"] as const) {
+        if (lines.includes(worst)) return worst;
+      }
+      return "실선";
+    },
+    [boundaries, boundaryError],
+  );
+
+  /** 크기=비중. 지표가 있는 노드만 커진다 — 모르는 것을 크게 그리지 않는다. */
+  const metricFor = useCallback(
+    (id: AnatomyNodeId): number | null => {
+      const def = ANATOMY_NODES.find((n) => n.id === id);
+      if (!def?.metricKey) return null;
+      return data?.operations.metrics[def.metricKey]?.value ?? null;
+    },
+    [data],
+  );
+
   const nodeBoundaries = useMemo(
     () => (boundaries ?? []).filter((b) => b.from === selected.id || b.to === selected.id),
     [boundaries, selected],
@@ -348,51 +358,23 @@ export const AdminAnatomyPanel: React.FC = () => {
         ))}
       </div>
 
-      <section className="overflow-x-auto py-2" aria-label="CCUT 제작 흐름">
-        <div className="flex min-w-0 flex-col items-stretch lg:min-w-[1180px] lg:flex-row lg:items-center">
-          {ANATOMY_NODES.map((node, index) => {
-            const status = nodeStatus(node.id, data);
-            const metric = node.metricKey
-              ? data?.operations.metrics[node.metricKey]
-              : null;
-            return (
-              <React.Fragment key={node.id}>
-                <button
-                  type="button"
-                  onClick={() => setSelectedId(node.id)}
-                  className={`min-h-28 w-full flex-none border p-3 text-left transition-colors lg:w-32 ${
-                    STATUS_STYLE[status]
-                  } ${selectedId === node.id ? "ring-1 ring-cyan-300/70" : ""}`}
-                >
-                  <span className="flex items-center justify-between gap-2">
-                    <span className="text-sm font-bold">{node.label}</span>
-                    <span className="text-[9px] font-semibold">
-                      {ANATOMY_STATUS[status].label}
-                    </span>
-                  </span>
-                  {node.metricKey && (
-                    <span className="mt-3 block text-[11px] font-semibold text-foreground/80">
-                      {node.metricLabel}{" "}
-                      {metric?.value == null ? "UNKNOWN" : metric.value.toLocaleString()}
-                    </span>
-                  )}
-                  {node.metricKey && (
-                    <span className="mt-1 block break-words text-[8px] leading-3 text-muted-foreground/55">
-                      출처: {metric?.source ?? "UNKNOWN"}
-                    </span>
-                  )}
-                  {node.id === "story" && (
-                    <span className="mt-3 block text-[9px] leading-4 text-muted-foreground/70">
-                      kind: {String(qwen?.generation?.kind ?? "UNKNOWN")}
-                      <br />
-                      reason: {String(qwen?.generation?.reason ?? "UNKNOWN")}
-                    </span>
-                  )}
-                </button>
-                {index < ANATOMY_EDGES.length && <FlowConnector index={index} />}
-              </React.Fragment>
-            );
-          })}
+      {/* [MAP-R2] 일렬 배치를 판으로 교체했다 — 위치·곡률·화살촉이 정보를 나른다.
+          선의 상태는 경계 판정(LINE-STATE)에서 그대로 받아 쓴다. 여기서 재계산하지 않는다. */}
+      <section className="overflow-x-auto py-2" aria-label="CCUT 흐름 지도">
+        <div className="min-w-[860px]">
+          <AnatomyMap
+            selectedId={selectedId}
+            onSelect={setSelectedId}
+            lineStateFor={lineStateFor}
+            metricFor={metricFor}
+            statusLabelFor={(id) => ANATOMY_STATUS[nodeStatus(id, data)]?.label ?? "미계측"}
+          />
+        </div>
+        <div className="mt-1 flex flex-wrap gap-x-5 gap-y-1 text-[9px] text-muted-foreground/55">
+          <span>↑ 위쪽 = 사용자의 말 · 아래 띠 = 재료의 본선</span>
+          <span className="text-fuchsia-300/80">보라 = 되돌아감(재승인)</span>
+          <span className="text-sky-300/80">하늘 = 왕복</span>
+          <span>선 위에 올리면 근거가 보입니다</span>
         </div>
       </section>
 
