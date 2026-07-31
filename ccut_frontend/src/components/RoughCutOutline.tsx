@@ -1,4 +1,4 @@
-import React, { useMemo } from "react";
+import React, { useEffect, useMemo, useRef } from "react";
 import { Play } from "lucide-react";
 import { FRAGMENT_EXCLUDED_STYLE } from "@/lib/fragmentText";
 
@@ -11,6 +11,7 @@ export interface RoughCutDisplayWord {
 
 export interface RoughCutSpan {
   span_id: string;
+  fragment_id?: string;
   source_id: string;
   start_ms: number;
   end_ms: number;
@@ -53,6 +54,8 @@ export interface RoughCutData {
 interface RoughCutOutlineProps {
   data: RoughCutData;
   selectedSpanIds: string[];
+  activeFragmentId?: string | null;
+  focusOrigin?: "sequence" | "user";
   canPlay: (span: RoughCutSpan) => boolean;
   onAddSpan: (span: RoughCutSpan) => void;
   onPlaySpan: (span: RoughCutSpan) => void;
@@ -68,29 +71,44 @@ const formatTime = (ms: number) => {
 const RoughCutOutline: React.FC<RoughCutOutlineProps> = ({
   data,
   selectedSpanIds,
+  activeFragmentId,
+  focusOrigin = "user",
   canPlay,
   onAddSpan,
   onPlaySpan,
 }) => {
+  const rootRef = useRef<HTMLDivElement>(null);
   const selectedIds = useMemo(
     () => new Set(selectedSpanIds),
     [selectedSpanIds],
   );
 
+  useEffect(() => {
+    if (!activeFragmentId || focusOrigin !== "user") return;
+    const row = rootRef.current?.querySelector(
+      `[data-fragment-id="${activeFragmentId}"]`,
+    );
+    row?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  }, [activeFragmentId, focusOrigin]);
+
   return (
     <div
+      ref={rootRef}
       className="w-full border-y border-white/8 py-1"
       data-rough-cut-transcript-count={data.transcript.length}
     >
       {data.transcript.map((span) => {
         const selected = selectedIds.has(span.span_id);
+        const active = !!activeFragmentId && span.fragment_id === activeFragmentId;
         return (
           <div
             key={span.span_id}
             className={`group flex min-h-9 w-full items-start border-b border-white/[0.035] transition-colors last:border-b-0 hover:bg-white/[0.035] ${
-              selected ? "bg-white/[0.025]" : ""
+              active ? "bg-primary/10" : selected ? "bg-white/[0.025]" : ""
             }`}
             data-rough-cut-span={span.span_id}
+            data-fragment-id={span.fragment_id}
+            data-transcript-active={active ? "true" : "false"}
             data-story-selected={selected ? "true" : "false"}
           >
             <button

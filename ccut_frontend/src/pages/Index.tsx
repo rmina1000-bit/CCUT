@@ -3151,6 +3151,9 @@ const Index: React.FC = () => {
                 projectId={activeNavItem}
                 sourceEntries={sourceEntries}
                 selectedSpanIds={roughCutSelectedSpanIds}
+                activeFragmentId={selectedFragment ? String((selectedFragment as any).fragment_id ?? getUid(selectedFragment)) : highlightedPanoramaFrag}
+                focusOrigin={fragmentFocusOrigin}
+                fragmentForSpan={roughCutFragmentForSpan}
                 onAddSpan={handleRoughCutSpanAdd}
                 onData={setRoughCutData}
                 onPlay={setMiniTarget}

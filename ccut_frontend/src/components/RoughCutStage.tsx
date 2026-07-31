@@ -3,6 +3,7 @@ import { Loader2 } from "lucide-react";
 
 import type { MiniPlayTarget } from "@/components/FragmentMiniPlayer";
 import RoughCutOutline from "@/components/RoughCutOutline";
+import type { Fragment } from "@/data/fragmentData";
 import type {
   RoughCutData,
   RoughCutDisplayWord,
@@ -15,6 +16,9 @@ interface RoughCutStageProps {
   sourceEntries: SourceEntry[];
   onPlay: (target: MiniPlayTarget) => void;
   selectedSpanIds?: string[];
+  activeFragmentId?: string | null;
+  focusOrigin?: "sequence" | "user";
+  fragmentForSpan?: (span: RoughCutSpan) => Fragment | null;
   onAddSpan?: (span: RoughCutSpan) => void;
   onData?: (data: RoughCutData | null) => void;
 }
@@ -42,6 +46,9 @@ const RoughCutStage: React.FC<RoughCutStageProps> = ({
   sourceEntries,
   onPlay,
   selectedSpanIds,
+  activeFragmentId,
+  focusOrigin,
+  fragmentForSpan,
   onAddSpan,
   onData,
 }) => {
@@ -118,10 +125,11 @@ const RoughCutStage: React.FC<RoughCutStageProps> = ({
   }, [projectId]);
 
   const displayData = useMemo(() => {
-    if (!data || ledgerItems.length === 0) return data;
+    if (!data) return data;
     return {
       ...data,
       transcript: data.transcript.map((span) => {
+        const fragment = fragmentForSpan?.(span);
         const best = ledgerItems
           .filter((item) => item.source_id === span.source_id)
           .map((item) => {
@@ -139,11 +147,11 @@ const RoughCutStage: React.FC<RoughCutStageProps> = ({
           Number(word.e_ms) > span.start_ms && Number(word.s_ms) < span.end_ms
         ));
         return displayWords.length > 0
-          ? { ...span, display_words: displayWords }
-          : span;
+          ? { ...span, fragment_id: fragment?.fragment_id, display_words: displayWords }
+          : { ...span, fragment_id: fragment?.fragment_id };
       }),
     };
-  }, [data, ledgerItems]);
+  }, [data, fragmentForSpan, ledgerItems]);
 
   const sourceUrls = useMemo(
     () => new Map(
@@ -199,6 +207,8 @@ const RoughCutStage: React.FC<RoughCutStageProps> = ({
       <RoughCutOutline
         data={displayData}
         selectedSpanIds={selectedSpanIds ?? displayData.ordered_span_ids}
+        activeFragmentId={activeFragmentId}
+        focusOrigin={focusOrigin}
         canPlay={canPlay}
         onAddSpan={onAddSpan ?? (() => {})}
         onPlaySpan={playSpan}
