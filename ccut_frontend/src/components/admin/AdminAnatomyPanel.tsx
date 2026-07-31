@@ -76,6 +76,10 @@ interface BoundaryCard {
   fixed_by: string;
   user_decision_overwritten: boolean;
   static: { order: string; authority: string; source: string };
+  /** 선의 문법 (국장 확정): 실선=정상뿐 / 점선=문제 있음 / 미계측·조회실패는 둘 중 어느 것도 아니다. */
+  state?: { line: "실선" | "점선" | "미계측" | "조회실패"; thickness: null; why: string; caution?: string };
+  ledger_match?: { domain: string } | null;
+  ledger_granularity?: { unit: string; shared_with: string[]; note: string };
   extracted: Record<string, BoundaryProbe>;
   constants?: BoundaryProbe[];
   asymmetry?: BoundaryProbe[];
@@ -83,6 +87,16 @@ interface BoundaryCard {
 }
 
 const UNEXTRACTED = "미추출";
+
+/** 선의 문법 — 중간이 없다. 실선은 오직 문제가 없을 때만.
+ *  굵기(실패 많음 + 해결 많음 = 검증된 길)는 이번 차수 구현하지 않는다. 자리만 비워 둔다. */
+const LINE_STYLE: Record<string, { border: string; text: string; label: string }> = {
+  실선: { border: "border-emerald-400/70", text: "text-emerald-300", label: "정상" },
+  점선: { border: "border-red-500/80 border-dashed", text: "text-red-300", label: "문제 있음" },
+  미계측: { border: "border-zinc-500/60 border-dotted", text: "text-zinc-400", label: "미계측" },
+  조회실패: { border: "border-amber-500/70 border-dashed", text: "text-amber-300", label: "원장 조회 실패" },
+};
+const lineStyle = (line?: string) => LINE_STYLE[line ?? ""] ?? LINE_STYLE["미계측"];
 
 const probeText = (p: BoundaryProbe) =>
   p.value === UNEXTRACTED || p.value == null ? UNEXTRACTED : String(p.value);
@@ -393,6 +407,15 @@ export const AdminAnatomyPanel: React.FC = () => {
             사고는 노드 안이 아니라 노드 사이에서 난다
           </p>
         </div>
+        <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1">
+          {(["실선", "점선", "미계측", "조회실패"] as const).map((k) => (
+            <span key={k} className="flex items-center gap-1.5 text-[9px]">
+              <span className={`w-6 border-t-2 ${LINE_STYLE[k].border}`} aria-hidden />
+              <span className={`font-semibold ${LINE_STYLE[k].text}`}>{k}</span>
+              <span className="text-muted-foreground/45">{LINE_STYLE[k].label}</span>
+            </span>
+          ))}
+        </div>
 
         {boundaryError && (
           <p className="mt-3 border border-red-500/35 bg-red-500/10 px-3 py-2 text-xs text-red-300">
@@ -413,15 +436,18 @@ export const AdminAnatomyPanel: React.FC = () => {
             {nodeBoundaries.map((b) => {
               const open = openBoundaryId === b.id;
               const danger = b.user_decision_overwritten;
+              const ls = lineStyle(b.state?.line);
               return (
                 <div key={b.id} className="border border-border/20">
                   <button
                     type="button"
                     onClick={() => setOpenBoundaryId(open ? null : b.id)}
-                    className={`flex w-full flex-wrap items-center gap-x-3 gap-y-1 px-3 py-2 text-left transition-colors hover:bg-secondary/25 ${
-                      danger ? "border-l-4 border-l-red-500/70" : "border-l-4 border-l-emerald-500/50"
-                    }`}
+                    title={b.state?.why}
+                    className="flex w-full flex-wrap items-center gap-x-3 gap-y-1 px-3 py-2 text-left transition-colors hover:bg-secondary/25"
                   >
+                    {/* 선 자체가 상태다 — 실선이면 정상, 점선이면 문제. 중간은 없다. */}
+                    <span className={`w-10 shrink-0 border-t-2 ${ls.border}`} aria-hidden />
+                    <span className={`text-[9px] font-bold ${ls.text}`}>{b.state?.line ?? "미계측"}</span>
                     <span className="font-mono text-[10px] text-muted-foreground/55">
                       {b.from} → {b.to}
                     </span>
@@ -503,6 +529,20 @@ export const AdminAnatomyPanel: React.FC = () => {
                         <p className="text-[9px] font-bold uppercase text-muted-foreground/45">
                           원장 (failure_ledger)
                         </p>
+                        <p className={`mt-2 border px-2 py-1.5 text-[10px] ${ls.border} ${ls.text}`}>
+                          선 판정: <b>{b.state?.line ?? "미계측"}</b> — {b.state?.why ?? "UNKNOWN"}
+                        </p>
+                        {b.state?.caution && (
+                          <p className="mt-1 border border-amber-500/40 bg-amber-500/5 px-2 py-1.5 text-[10px] text-amber-200/85">
+                            주의: {b.state.caution}
+                          </p>
+                        )}
+                        {b.ledger_granularity && b.ledger_granularity.shared_with.length > 0 && (
+                          <p className="mt-1 text-[9px] text-muted-foreground/50">
+                            판정 해상도: {b.ledger_granularity.unit} — 같은 도메인 경계
+                            {" "}{b.ledger_granularity.shared_with.join(", ")} 와 함께 움직입니다
+                          </p>
+                        )}
                         <pre className="mt-2 max-h-72 overflow-auto border border-border/20 bg-black/25 p-2 text-[10px] leading-5 text-cyan-100/70">
                           {JSON.stringify(b.ledger, null, 2)}
                         </pre>

@@ -106,6 +106,8 @@ def probe_line(rel_path: str, pattern: str) -> Dict[str, Any]:
 BOUNDARIES: List[Dict[str, Any]] = [
     {
         "id": "approve_to_playback_contract",
+        # 원장 매칭 기장 — 이 경계의 실패가 적힐 도메인. 기록기가 아직 없으면 카드에 표시된다.
+        "ledger_match": {"domain": "story"},
         "from": "story", "to": "edit",
         "label": "승인 → 재생 계약",
         "found": "SEQ_INV 덮어쓰기 (2026-07-31)",
@@ -126,6 +128,8 @@ BOUNDARIES: List[Dict[str, Any]] = [
     },
     {
         "id": "proposal_edge_to_edl",
+        # 원장 매칭 기장 — 이 경계의 실패가 적힐 도메인. 기록기가 아직 없으면 카드에 표시된다.
+        "ledger_match": {"domain": "render"},
         "from": "story", "to": "render",
         "label": "제안 경계 → EDL",
         "found": "B안 word snap 미도달 (2026-07-31)",
@@ -145,6 +149,8 @@ BOUNDARIES: List[Dict[str, Any]] = [
     },
     {
         "id": "edl_empty_fallback",
+        # 원장 매칭 기장 — 이 경계의 실패가 적힐 도메인. 기록기가 아직 없으면 카드에 표시된다.
+        "ledger_match": {"domain": "export"},
         "from": "render", "to": "export",
         "label": "EDL 빈 응답 → 폴백",
         "found": "빈 EDL 부활 (2026-07-31)",
@@ -161,6 +167,8 @@ BOUNDARIES: List[Dict[str, Any]] = [
     },
     {
         "id": "ui_restore_to_edit_state",
+        # 원장 매칭 기장 — 이 경계의 실패가 적힐 도메인. 기록기가 아직 없으면 카드에 표시된다.
+        "ledger_match": {"domain": "edit"},
         "from": "edit", "to": "edit",
         "label": "대사 편집 UI → /edit-state 저장",
         "found": "전부 복원이 저장되지 않음 (2026-07-31)",
@@ -177,6 +185,8 @@ BOUNDARIES: List[Dict[str, Any]] = [
     },
     {
         "id": "edit_state_lookup_symmetry",
+        # 원장 매칭 기장 — 이 경계의 실패가 적힐 도메인. 기록기가 아직 없으면 카드에 표시된다.
+        "ledger_match": {"domain": "render"},
         "from": "edit", "to": "render",
         "label": "편집상태 조회 — 프론트 ↔ 백엔드",
         "found": "FID 재발급 시 편집 소실 (2026-07-31)",
@@ -198,6 +208,8 @@ BOUNDARIES: List[Dict[str, Any]] = [
     },
     {
         "id": "fade_preview_vs_export",
+        # 원장 매칭 기장 — 이 경계의 실패가 적힐 도메인. 기록기가 아직 없으면 카드에 표시된다.
+        "ledger_match": {"domain": "render"},
         "from": "render", "to": "export",
         "label": "오디오 페이드 — Preview ↔ Export",
         "found": "8ms / 30ms 불일치 (2026-07-31)",
@@ -232,7 +244,78 @@ def _run_probe(spec) -> Dict[str, Any]:
     return {"value": UNEXTRACTED, "why": f"알 수 없는 추출기: {kind}"}
 
 
-def _ledger_slice(boundary_id: str, domain_hint: str = "rough_cut") -> Dict[str, Any]:
+def _fixed_at(sha: str) -> Optional[str]:
+    """수리 커밋의 시각. 손으로 적지 않는다 — 커밋 자체가 진실원이다(절벽 ⑤).
+
+    git 을 읽지 못하면 None. 그러면 '고친 뒤의 실패인가'를 증명할 수 없으므로
+    아래 판정은 옛 실패까지 세게 된다 — 모른다고 말하는 쪽이 낫다.
+    """
+    if not sha or sha == "UNKNOWN":
+        return None
+    import subprocess
+    try:
+        out = subprocess.run(
+            ["git", "log", "-1", "--format=%cI", sha],
+            cwd=REPO_DIR, capture_output=True, text=True, timeout=10,
+        )
+        if out.returncode != 0:
+            return None
+        return (out.stdout or "").strip() or None
+    except Exception:
+        return None
+
+
+def _writer_exists(domain: str) -> bool:
+    """이 도메인에 **실패를 적는 코드가 실제로 있는가**. 없으면 원장이 빈 것은
+    '실패가 없었다'가 아니라 '아무도 적지 않았다'는 뜻이다 — 카드에 그대로 표시한다."""
+    hits = {"rough_cut": "record_rough_cut_failure"}
+    needle = hits.get(domain)
+    if not needle:
+        return False
+    src = _read(os.path.join(BACKEND_DIR, "main.py"))
+    return bool(src and needle in src)
+
+
+def _line_state(b: Dict[str, Any], ledger: Dict[str, Any]) -> Dict[str, Any]:
+    """선의 문법 (국장 확정): 실선=정상뿐, 점선=문제 있음. 중간 없음.
+
+    ★수동 기장(status=fixed) vs 원장 실데이터 — 어느 쪽이 이기는가:
+      **둘 다 아니다. 시각이 이긴다.**
+      실패 기록에는 created_at 이 있고 수리에는 커밋 시각이 있다.
+      - 수리 커밋보다 **이전**의 실패 = 이미 고쳐진 역사 -> 선을 점선으로 만들지 않는다.
+        (원장이 이기게 하면 고친 뒤에도 옛 기록 때문에 영원히 점선이다)
+      - 수리 커밋보다 **이후**의 실패 = 다시 깨졌다 -> 기장을 무시하고 점선.
+        (기장이 이기게 하면 다시 깨졌는데 fixed 라서 실선으로 보인다)
+      고침이 언제인지 증명할 수 없으면(git 미조회) 아무 실패나 최신으로 취급한다 —
+      모르면서 정상이라고 그리지 않는다.
+
+    굵기는 이번 차수 구현하지 않는다(해결 이력이 쌓이기 전에는 계산 근거가 없다).
+    자리만 남긴다: thickness=None.
+    """
+    if ledger.get("read") != "OK":
+        # 절벽 ③ — 조회 실패를 정상으로 바꾸지 않는다.
+        return {"line": "조회실패", "thickness": None,
+                "why": f"원장을 읽지 못했다: {ledger.get('error') or 'UNKNOWN'}"}
+    if not b.get("ledger_match"):
+        # 절벽 ② — 판정 근거가 없으면 실선도 점선도 아니다.
+        return {"line": "미계측", "thickness": None,
+                "why": "이 경계의 실패를 어느 원장 도메인에서 세는지 기장되지 않았다"}
+
+    fixed_at = ledger.get("fixed_at")
+    since = ledger.get("failures_since_fix")
+    total = ledger.get("failure_count")
+    if since is None:
+        return {"line": "미계측", "thickness": None, "why": "실패 집계를 얻지 못했다"}
+    if since > 0:
+        return {"line": "점선", "thickness": None,
+                "why": (f"수리({b.get('fixed_by')}) 이후 실패 {since}건"
+                        if fixed_at else f"실패 {since}건 (수리 시각 UNKNOWN — 전부 최신으로 취급)")}
+    return {"line": "실선", "thickness": None,
+            "why": ("실패 기록 없음" if not total or total == "UNKNOWN"
+                    else f"실패 {total}건은 모두 수리({b.get('fixed_by')}) 이전")}
+
+
+def _ledger_slice(domain_hint: str = "rough_cut", fixed_at: Optional[str] = None) -> Dict[str, Any]:
     """아래 절반 — failure_ledger 참조. 새 계산식을 만들지 않는다(COUNT/MIN/MAX 뿐).
 
     원장이 비어 있으면 UNKNOWN 이다. 0 으로 채우지 않는다 — '실패가 없었다'와
@@ -256,6 +339,9 @@ def _ledger_slice(boundary_id: str, domain_hint: str = "rough_cut") -> Dict[str,
                 "read": "OK", "domain": domain_hint,
                 "failure_count": "UNKNOWN", "first_occurrence": "UNKNOWN",
                 "latest": "UNKNOWN", "codes": "UNKNOWN", "phases": "UNKNOWN",
+                "failures_since_fix": 0,
+                "fixed_at": fixed_at,
+                "writer_exists": _writer_exists(domain_hint),
                 "note": "원장에 아직 행이 없다 — 실패가 없었다는 뜻이 아니다",
             }
         codes = {r["error_code"]: r["n"] for r in con.execute(
@@ -268,6 +354,18 @@ def _ledger_slice(boundary_id: str, domain_hint: str = "rough_cut") -> Dict[str,
             "read": "OK", "domain": domain_hint,
             "failure_count": n, "first_occurrence": row["first"], "latest": row["last"],
             "codes": codes, "phases": phases, "attempts": attempts,
+            # 시각이 판정한다 — 수리 커밋 이후의 실패만 '지금 깨져 있다'는 뜻이다.
+            # 수리 시각을 모르면(git 미조회) 전부 최신으로 세어 정상이라고 그리지 않는다.
+            "fixed_at": fixed_at,
+            "failures_since_fix": (
+                con.execute(f"SELECT COUNT(*) FROM {fl.TABLE} WHERE domain=? AND created_at > ?",
+                            (domain_hint, fixed_at)).fetchone()[0]
+                if fixed_at else n
+            ),
+            "writer_exists": _writer_exists(domain_hint),
+            "recent": [dict(r) for r in con.execute(
+                f"SELECT created_at, error_code, phase, attempt, program_id "
+                f"FROM {fl.TABLE} WHERE domain=? ORDER BY id DESC LIMIT 5", (domain_hint,))],
         }
     finally:
         con.close()
@@ -290,8 +388,33 @@ async def anatomy_boundaries():
                 "source": "수동 기장 (감사 결과)",
             },
             "extracted": {k: _run_probe(v) for k, v in (b.get("probes") or {}).items()},
-            "ledger": _ledger_slice(b["id"]),
         }
+        match = b.get("ledger_match")
+        fixed_at = _fixed_at(b.get("fixed_by") or "")
+        card["ledger"] = (
+            _ledger_slice(match["domain"], fixed_at) if match
+            else {"read": "OK", "domain": None,
+                  "note": "이 경계의 실패를 어느 도메인에서 세는지 기장되지 않았다"}
+        )
+        card["ledger_match"] = match
+        if match:
+            # 해상도 정직 표기: 원장 8필드에 boundary_id 가 없다. 지금 셀 수 있는 가장 가는 단위는
+            # domain 이고, 같은 도메인을 기장한 경계는 **함께** 점선이 된다(실측: render 3경계).
+            # 기록기를 다는 차수에 phase 에 경계 id 를 찍으면 그때 좁힐 수 있다.
+            same = [x["id"] for x in BOUNDARIES
+                    if (x.get("ledger_match") or {}).get("domain") == match["domain"]]
+            card["ledger_granularity"] = {
+                "unit": "domain",
+                "shared_with": [x for x in same if x != b["id"]],
+                "note": "원장에 boundary_id 가 없다 — 같은 도메인 경계는 함께 점선이 된다",
+            }
+        card["state"] = _line_state({**b, "ledger_match": match}, card["ledger"])
+        if match and card["ledger"].get("writer_exists") is False:
+            # 실선이라고 안심시키지 않는다 — 아무도 적지 않으면 원장은 영원히 비어 있다.
+            card["state"]["caution"] = (
+                f"'{match['domain']}' 도메인에 실패를 적는 코드가 아직 없다 — "
+                "빈 원장이 정상을 증명하지 않는다"
+            )
         if b.get("constants"):
             card["constants"] = [
                 {"label": c[0], **_run_probe(tuple(c[1:]))} for c in b["constants"]
