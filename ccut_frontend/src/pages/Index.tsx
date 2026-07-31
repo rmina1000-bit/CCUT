@@ -345,6 +345,7 @@ const Index: React.FC = () => {
   const [storyFragments, setStoryFragments] = useState<Fragment[]>([]);
   const [roughCutData, setRoughCutData] = useState<RoughCutData | null>(null);
   const [roughCutPlacement, setRoughCutPlacement] = useState<RoughCutPlacement | null>(null);
+  const roughCutMapReady = storyStage.key !== "scanned" && roughCutData !== null;
   // 이 프로젝트의 ui_state 재수화가 끝났는가 (저장이 복원을 앞질러 덮는 것을 막는 문턱)
   const [uiRestoredFor, setUiRestoredFor] = useState<string | null>(null);
 
@@ -3161,9 +3162,9 @@ const Index: React.FC = () => {
             ) : undefined}
             storyReplacement={modeGateOn ? (
               <FragmentMap
-                fragments={roughCutData ? roughCutFragmentPool : resolvedFragments}
-                storyFragmentIds={roughCutData ? storyFids : undefined}
-                storyOnly={!!roughCutData}
+                fragments={roughCutMapReady ? roughCutFragmentPool : []}
+                storyFragmentIds={roughCutMapReady ? storyFids : []}
+                storyOnly
                 onFragmentsChange={roughCutData ? handleRoughCutStoryReorder : handleFragmentsReorder}
                 selectedFragmentId={selectedFragment ? String((selectedFragment as any).fragment_id ?? getUid(selectedFragment)) : null}
                 activeFragmentId={selectedFragment ? String((selectedFragment as any).fragment_id ?? getUid(selectedFragment)) : highlightedPanoramaFrag}
@@ -3336,9 +3337,9 @@ const Index: React.FC = () => {
                   />
                 ) : (
                   <FragmentMap
-                    fragments={roughCutData ? roughCutFragmentPool : resolvedFragments}
-                    storyFragmentIds={roughCutData ? storyFids : undefined}
-                    storyOnly={!!roughCutData}
+                    fragments={modeGateOn ? (roughCutMapReady ? roughCutFragmentPool : []) : resolvedFragments}
+                    storyFragmentIds={modeGateOn ? (roughCutMapReady ? storyFids : []) : undefined}
+                    storyOnly={modeGateOn}
                     onFragmentsChange={roughCutData ? handleRoughCutStoryReorder : handleFragmentsReorder}
                     selectedFragmentId={selectedFragment ? String((selectedFragment as any).fragment_id ?? getUid(selectedFragment)) : null}
                     activeFragmentId={selectedFragment ? String((selectedFragment as any).fragment_id ?? getUid(selectedFragment)) : highlightedPanoramaFrag}
