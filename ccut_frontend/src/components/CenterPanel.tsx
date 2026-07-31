@@ -145,6 +145,8 @@ interface CenterPanelProps {
   sourceId?: string | null;
   sourceEntries?: SourceEntry[];
   fragments?: Fragment[];
+  /** [SEQ_INV-BASE] 승인된 스토리의 fid 순서 — Export(ledger EDL)와 같은 권위(ui_state.story.fids). */
+  storyFids?: string[];
   exportClips?: PhysicalClip[];
   modeGateEnabled?: boolean;
   storyPlan?: StoryPlanPreview | null;
@@ -399,6 +401,7 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
   sourceId,
   sourceEntries = [],
   fragments = [],
+  storyFids = [],
   exportClips = [],
   modeGateEnabled,
   storyPlan,
@@ -1175,6 +1178,10 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
     })) as Fragment[];
   }, []);
 
+  /** [SEQ_INV-BASE] 직전 buildSeqFrags가 어느 진실에서 재생 배열을 만들었는가.
+   *  렌더가 아니라 buildSeqFrags 호출 안에서만 쓰며, startSeq가 같은 tick에 바로 읽는다. */
+  const seqOriginRef = useRef<"story" | "proposal">("proposal");
+
   /** 계약 원본(승인 시퀀스)의 fid 순서. 런타임 실측: proposals[X].key_fragments 11건, A·B 동일. */
   const contractFidsOf = useCallback((proposalKey: "A" | "B"): string[] => {
     const p = proposals?.[proposalKey] as any;
@@ -1193,6 +1200,27 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
    *   집합·순서가 어긋나면 계약 원본으로 재구성하고, 해석 실패 조각은 건너뛰되 남긴다.
    */
   const enforceSeqContract = useCallback((proposalKey: "A" | "B", frags: Fragment[]): Fragment[] => {
+    // [SEQ_INV-BASE] 기준선은 **재생 배열을 만든 그 출처**여야 한다.
+    //   구판은 출처와 무관하게 프론트 메모리 proposals(key_fragments)를 계약으로 삼았다.
+    //   그런데 조각맵 경로(buildSeqFrags :1262)는 A·B가 같은 스토리 파생이고, 스토리의 권위는
+    //   ui_state.story.fids — Export(ledger EDL)가 쓰는 바로 그 진실이다. 제안 재생성은
+    //   승인 직후 await 없이 던져지므로(Index.tsx:246), 그 사이 재생하면 **낡은 제안**이
+    //   계약 노릇을 하며 사용자가 방금 정한 스토리를 덮어썼다(실측 Acrux: 4조각 -> 14조각 복원).
+    //   진실이 둘이면 한쪽은 반드시 거짓말을 한다 — 기준선을 출처에 맞춘다.
+    if (seqOriginRef.current === "story") {
+      const story = (storyFids ?? []).map(String).filter(Boolean);
+      const played = frags
+        .map((f: any) => String(f?.fragment_id ?? ""))
+        .filter((id, i, a) => id && (i === 0 || a[i - 1] !== id));
+      if (story.length && (story.length !== played.length || story.some((id, i) => id !== played[i]))) {
+        // 신고만 한다. 재구성하지 않는다 — 스토리 경로에서 재생은 조각맵의 순수 파생이고,
+        // 조각·순서는 사용자 결정이다(INV-0). 07-26 A/B 분열 보호는 아래 제안 경로에 그대로 남는다.
+        console.warn(`[SEQ_INV][STORY] ${proposalKey} 스토리와 재생이 다름 — 사용자 결정 우선, 재구성 안 함`, {
+          story_n: story.length, played_unique_n: played.length, played_slots: frags.length,
+        });
+      }
+      return frags;
+    }
     const contract = contractFidsOf(proposalKey);
     if (contract.length === 0) {
       console.warn(`[SEQ_INV][NO_CONTRACT] ${proposalKey} 계약 원본(key_fragments)이 없어 판정 불가 — 슬롯 ${frags.length} 그대로 재생`);
@@ -1240,7 +1268,7 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
     }
     console.log(`[SEQ_INV][RESTORED] ${proposalKey} 고유 ${new Set(rebuilt.map((f: any) => f.fragment_id)).size} / 슬롯 ${rebuilt.length}`);
     return rebuilt;
-  }, [contractFidsOf, fragments, allSourceFragments, expandTileToItems]);
+  }, [contractFidsOf, fragments, allSourceFragments, expandTileToItems, storyFids]);
 
   const buildSeqFrags = useCallback(
     (proposalKey: "A" | "B"): Fragment[] => {
@@ -1260,8 +1288,10 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
       //   ★저장본에 좌표를 굽지 않는다(진실 이중화 금지) — 재생 시점에 조각맵 상태에서 파생한다.
       const tiles = (fragments ?? []).filter((f) => !f.excluded);
       if (tiles.length > 0) {
+        seqOriginRef.current = "story";
         return tiles.flatMap(expandTileToItems);
       }
+      seqOriginRef.current = "proposal";
       // 빈 조각맵: 표시 중인 안은 옛 시퀀스 부활 금지(헌장 §5) — 빈 배열 그대로.
       if (proposalKey === (displayProposalId ?? committedProposalId)) {
         return [];

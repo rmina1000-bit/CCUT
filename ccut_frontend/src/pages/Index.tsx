@@ -3165,6 +3165,7 @@ const Index: React.FC = () => {
               handleReproposal(dir);
             }}
             fragments={resolvedFragments}
+            storyFids={storyFids}
             exportClips={physicalClips}
             storyPlan={storyPlan}
             onStoryPlanConfirm={setStoryPlan}
