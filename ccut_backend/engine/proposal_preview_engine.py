@@ -27,15 +27,28 @@ AUDIO_SPLICE_FADE_SEC = 0.008
 
 def _concat_filter_with_audio_splice_fade(durations: list[float]) -> str:
     count = len(durations)
+    # [LAB-53 D] 미리보기와 내보내기의 페이드 길이는 하나다.
+    #   구판은 여기에 8ms를 박아 두어, 게이트 ON(.env CCUT_TECHNIQUE_AUDIO_FADE=ON)일 때
+    #   내보내기만 30ms가 되고 미리보기는 8ms로 남았다 — 들은 소리와 나온 소리가 달랐다.
+    #   길이의 진실원은 render_engine._audio_fade_spec 하나(게이트 OFF면 8ms 그대로).
+    from engine.render_engine import _audio_fade_spec
+    fade_in_sec, fade_out_sec, gated = _audio_fade_spec()
+    print(
+        f"[PREVIEW][AUDIO_FADE] gate={'ON' if gated else 'OFF'} "
+        f"fade_in={fade_in_sec * 1000:.1f}ms fade_out={fade_out_sec * 1000:.1f}ms "
+        f"clips={count}"
+    )
     video_inputs = "".join(f"[{i}:v:0]" for i in range(count))
     parts = [f"{video_inputs}concat=n={count}:v=1:a=0[v]"]
     audio_inputs = []
     for i, duration in enumerate(durations):
-        fade_dur = min(AUDIO_SPLICE_FADE_SEC, max(0.0, duration) / 2.0)
-        fade_out_start = max(0.0, duration - fade_dur)
+        half = max(0.0, duration) / 2.0
+        fade_in = min(fade_in_sec, half)
+        fade_out = min(fade_out_sec, half)
+        fade_out_start = max(0.0, duration - fade_out)
         parts.append(
-            f"[{i}:a:0]afade=t=in:st=0:d={fade_dur:.6f},"
-            f"afade=t=out:st={fade_out_start:.6f}:d={fade_dur:.6f}[aud{i}]"
+            f"[{i}:a:0]afade=t=in:st=0:d={fade_in:.6f},"
+            f"afade=t=out:st={fade_out_start:.6f}:d={fade_out:.6f}[aud{i}]"
         )
         audio_inputs.append(f"[aud{i}]")
     parts.append(f"{''.join(audio_inputs)}concat=n={count}:v=0:a=1[a]")
