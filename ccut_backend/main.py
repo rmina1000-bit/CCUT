@@ -6010,18 +6010,36 @@ async def generate_rough_cut(
         recommendation_span_ids=recommendation_span_ids,
     )
     if not result.ok or result.draft is None:
-        raise HTTPException(
-            status_code=422,
-            detail={
-                "error": "rough_cut_generation_failed",
-                "status": result.status.value,
-                "message": result.error_message,
-                "issues": [
-                    issue.to_dict()
-                    for issue in result.failure_issues
-                ],
-            },
-        )
+        # [FAILURE-LEDGER] 실패를 기억한다. 여기가 적을 자리인 이유: story_builder 는 DB 를
+        #   모르는 순수 엔진(단위테스트 대상)이고, program_id·input_hash·attempts 가
+        #   모두 모이는 지점은 이 실패 분기다.
+        #   기록이 깨지면 **조용히 넘어가지 않는다** — 로그에 표식을 남기고 응답에도 싣는다.
+        #   다만 원장 고장이 원래 실패(422)를 500 으로 덮어써 진짜 이유를 가리게 두지도 않는다.
+        ledger_error = None
+        try:
+            import failure_ledger as _fl
+            ids = _fl.record_rough_cut_failure(
+                program_id,
+                result,
+                input_hash=input_hash,
+                source_ids=list(transcript.source_ids),
+            )
+            print(f"[FAILURE_LEDGER] rough_cut {program_id} — {len(ids)}행 기록 {ids}")
+        except Exception as exc:
+            ledger_error = f"{type(exc).__name__}: {exc}"
+            print(f"[FAILURE_LEDGER][BROKEN] 실패를 적지 못했다 — {ledger_error}")
+        detail = {
+            "error": "rough_cut_generation_failed",
+            "status": result.status.value,
+            "message": result.error_message,
+            "issues": [
+                issue.to_dict()
+                for issue in result.failure_issues
+            ],
+        }
+        if ledger_error:
+            detail["failure_ledger_error"] = ledger_error
+        raise HTTPException(status_code=422, detail=detail)
 
     evidence = result.generation_evidence or {}
     record = {
