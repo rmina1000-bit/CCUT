@@ -5,6 +5,7 @@ import type { MiniPlayTarget } from "@/components/FragmentMiniPlayer";
 import RoughCutOutline from "@/components/RoughCutOutline";
 import type {
   RoughCutData,
+  RoughCutDisplayWord,
   RoughCutSpan,
 } from "@/components/RoughCutOutline";
 import type { SourceEntry } from "@/types";
@@ -21,10 +22,20 @@ interface RoughCutStageProps {
 const readError = async (response: Response) => {
   const body = await response.json().catch(() => null);
   const detail = body?.detail;
+  if (detail?.error === "insufficient_text") {
+    return "이 영상은 전사가 부족해 가편집을 만들 수 없습니다.";
+  }
   if (typeof detail === "string") return detail;
-  if (detail?.message) return String(detail.message);
+  if (detail?.message) return `가편집을 만들지 못했습니다: ${String(detail.message)}`;
   return `HTTP ${response.status}`;
 };
+
+interface LedgerTranscriptItem {
+  source_id?: string;
+  anchor_start_ms?: number;
+  anchor_end_ms?: number;
+  words?: RoughCutDisplayWord[];
+}
 
 const RoughCutStage: React.FC<RoughCutStageProps> = ({
   projectId,
@@ -35,6 +46,7 @@ const RoughCutStage: React.FC<RoughCutStageProps> = ({
   onData,
 }) => {
   const [data, setData] = useState<RoughCutData | null>(null);
+  const [ledgerItems, setLedgerItems] = useState<LedgerTranscriptItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -75,6 +87,64 @@ const RoughCutStage: React.FC<RoughCutStageProps> = ({
     };
   }, [onData, projectId]);
 
+  useEffect(() => {
+    let active = true;
+    const loadLedger = async () => {
+      const response = await fetch(
+        `/api/ledger/${encodeURIComponent(projectId)}`,
+      );
+      if (!response.ok) return;
+      const body = await response.json().catch(() => null);
+      if (active) {
+        setLedgerItems(
+          Array.isArray(body?.items)
+            ? body.items.filter((item: LedgerTranscriptItem) => Array.isArray(item.words))
+            : [],
+        );
+      }
+    };
+    const handleTextEdit = (event: Event) => {
+      const detail = (event as CustomEvent<{ programId?: string }>).detail;
+      if (!detail?.programId || detail.programId === projectId) {
+        void loadLedger();
+      }
+    };
+    void loadLedger();
+    window.addEventListener("ccut:text-edit-state-changed", handleTextEdit);
+    return () => {
+      active = false;
+      window.removeEventListener("ccut:text-edit-state-changed", handleTextEdit);
+    };
+  }, [projectId]);
+
+  const displayData = useMemo(() => {
+    if (!data || ledgerItems.length === 0) return data;
+    return {
+      ...data,
+      transcript: data.transcript.map((span) => {
+        const best = ledgerItems
+          .filter((item) => item.source_id === span.source_id)
+          .map((item) => {
+            const start = Number(item.anchor_start_ms);
+            const end = Number(item.anchor_end_ms);
+            const overlap = Math.max(
+              0,
+              Math.min(span.end_ms, end) - Math.max(span.start_ms, start),
+            );
+            return { item, overlap };
+          })
+          .filter(({ overlap }) => overlap > 0)
+          .sort((left, right) => right.overlap - left.overlap)[0]?.item;
+        const displayWords = (best?.words ?? []).filter((word) => (
+          Number(word.e_ms) > span.start_ms && Number(word.s_ms) < span.end_ms
+        ));
+        return displayWords.length > 0
+          ? { ...span, display_words: displayWords }
+          : span;
+      }),
+    };
+  }, [data, ledgerItems]);
+
   const sourceUrls = useMemo(
     () => new Map(
       sourceEntries
@@ -108,13 +178,13 @@ const RoughCutStage: React.FC<RoughCutStageProps> = ({
     );
   }
 
-  if (!data || error) {
+  if (!displayData || error) {
     return (
       <div
         className="flex min-h-[220px] w-full max-w-[800px] items-center justify-center text-[13px] text-muted-foreground/60"
         data-rough-cut-error={error || "empty"}
       >
-        전사를 불러오지 못했습니다.
+        {error || "전사를 불러오지 못했습니다."}
       </div>
     );
   }
@@ -123,12 +193,12 @@ const RoughCutStage: React.FC<RoughCutStageProps> = ({
     <section
       className="w-full max-w-[800px] shrink-0 px-1 py-2"
       data-rough-cut-stage="ready"
-      data-selected-count={data.selected_count}
-      data-eligible-count={data.eligible_count}
+      data-selected-count={displayData.selected_count}
+      data-eligible-count={displayData.eligible_count}
     >
       <RoughCutOutline
-        data={data}
-        selectedSpanIds={selectedSpanIds ?? data.ordered_span_ids}
+        data={displayData}
+        selectedSpanIds={selectedSpanIds ?? displayData.ordered_span_ids}
         canPlay={canPlay}
         onAddSpan={onAddSpan ?? (() => {})}
         onPlaySpan={playSpan}

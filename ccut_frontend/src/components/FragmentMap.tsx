@@ -1,5 +1,5 @@
 ﻿import React, { useState, useCallback, useMemo, useRef } from "react";
-import { ChevronLeft, ChevronRight, X } from "lucide-react";
+import { ChevronDown, ChevronLeft, ChevronRight, ChevronUp } from "lucide-react";
 import { Fragment } from "@/data/fragmentData";
 import FragmentTile from "./FragmentTile";
 import { getUid } from "@/lib/fragmentIdentity";
@@ -452,7 +452,12 @@ const FragmentMap: React.FC<FragmentMapProps> = ({
       }),
     });
     const body = await res.json().catch(() => null);
-    if (body?.ok) onTextEditStateChanged?.();
+    if (body?.ok) {
+      onTextEditStateChanged?.();
+      window.dispatchEvent(new CustomEvent("ccut:text-edit-state-changed", {
+        detail: { programId },
+      }));
+    }
   };
 
   const onTextEditKey = (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -724,17 +729,6 @@ const FragmentMap: React.FC<FragmentMapProps> = ({
                 >
                   {storyOnly && (
                     <>
-                      <button
-                        type="button"
-                        title="스토리에서 빼기"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onExcludeFragment(f);
-                        }}
-                        className="absolute right-1 top-1 z-50 inline-flex h-6 w-6 items-center justify-center rounded bg-background/85 text-muted-foreground/55 shadow-sm transition-colors hover:text-foreground"
-                      >
-                        <X size={13} />
-                      </button>
                       <div className="absolute bottom-1 right-1 z-50 flex items-center rounded bg-background/85 shadow-sm">
                         <button
                           type="button"
@@ -749,7 +743,9 @@ const FragmentMap: React.FC<FragmentMapProps> = ({
                           }}
                           className="inline-flex h-6 w-6 items-center justify-center text-muted-foreground/60 transition-colors hover:text-foreground disabled:opacity-20"
                         >
-                          <ChevronLeft size={14} />
+                          {modeGateEnabled && fragmentFace === "text"
+                            ? <ChevronUp size={14} />
+                            : <ChevronLeft size={14} />}
                         </button>
                         <button
                           type="button"
@@ -764,7 +760,9 @@ const FragmentMap: React.FC<FragmentMapProps> = ({
                           }}
                           className="inline-flex h-6 w-6 items-center justify-center text-muted-foreground/60 transition-colors hover:text-foreground disabled:opacity-20"
                         >
-                          <ChevronRight size={14} />
+                          {modeGateEnabled && fragmentFace === "text"
+                            ? <ChevronDown size={14} />
+                            : <ChevronRight size={14} />}
                         </button>
                       </div>
                     </>
@@ -822,6 +820,12 @@ const FragmentMap: React.FC<FragmentMapProps> = ({
                         return (
                       <button
                         type="button"
+                        draggable={selected}
+                        onDragStart={(e) => {
+                          e.stopPropagation();
+                          handleDragStart(e, f);
+                        }}
+                        onDragEnd={handleDragEnd}
                         onClick={(e) => {
                           if (e.detail >= 2) { startTextEdit(f, sourceIndex); return; }
                           textScope === "selected" ? focusTranscriptFragment(f) : toggleTranscriptFragment(f, selected);

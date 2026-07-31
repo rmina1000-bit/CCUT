@@ -1,5 +1,13 @@
 import React, { useMemo } from "react";
 import { Play } from "lucide-react";
+import { FRAGMENT_EXCLUDED_STYLE } from "@/lib/fragmentText";
+
+export interface RoughCutDisplayWord {
+  w: string;
+  s_ms: number;
+  e_ms: number;
+  excluded?: boolean;
+}
 
 export interface RoughCutSpan {
   span_id: string;
@@ -8,6 +16,7 @@ export interface RoughCutSpan {
   end_ms: number;
   text: string;
   selected?: boolean;
+  display_words?: RoughCutDisplayWord[];
 }
 
 export interface RoughCutAct {
@@ -34,6 +43,10 @@ export interface RoughCutData {
     auto: number;
     candidate: number;
     unknown: number;
+  };
+  generation?: {
+    kind?: string;
+    reason?: string;
   };
 }
 
@@ -90,7 +103,18 @@ const RoughCutOutline: React.FC<RoughCutOutlineProps> = ({
               }`}
               title={selected ? "스토리에 들어간 문장" : "스토리에 추가"}
             >
-              <span className="min-w-0 break-words">{span.text}</span>
+              <span className="min-w-0 break-words">
+                {span.display_words?.length
+                  ? span.display_words.map((word, index) => (
+                    <span
+                      key={`${word.s_ms}-${word.e_ms}-${index}`}
+                      style={word.excluded ? FRAGMENT_EXCLUDED_STYLE : undefined}
+                    >
+                      {word.w}{" "}
+                    </span>
+                  ))
+                  : span.text}
+              </span>
               <span className="ml-auto shrink-0 pt-0.5 text-[11px] tabular-nums text-muted-foreground/35">
                 {formatTime(span.start_ms)}
               </span>
