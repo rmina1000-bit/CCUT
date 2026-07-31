@@ -5797,6 +5797,47 @@ def _rough_cut_generation_spans(spans, limit: int = 120):
     )
 
 
+def _rough_cut_recommendation_span_ids(spans) -> tuple[str, ...]:
+    """기존 '간단히' 추천을 같은 시간대의 텍스트 span으로 연결한다."""
+    recommended_ranges: dict[str, list[tuple[int, int]]] = {}
+    source_ids = tuple(dict.fromkeys(span.source_id for span in spans))
+    for source_id in source_ids:
+        fragments = bams.get_semantic_fragments(source_id)
+        if not fragments:
+            fragments = bams.get_fragments_by_source(source_id)
+        rows = [dict(fragment) for fragment in fragments if isinstance(fragment, dict)]
+        rows = _inject_evidence(rows, source_id)
+        rows = _inject_recommendation(rows)
+        ranges = []
+        for fragment in rows:
+            if fragment.get("recommend_tier") != "simple":
+                continue
+            start = fragment.get("start")
+            if start is None:
+                start = fragment.get("start_time")
+            end = fragment.get("end")
+            if end is None:
+                end = fragment.get("end_time")
+            try:
+                start_ms = round(float(start) * 1000)
+                end_ms = round(float(end) * 1000)
+            except (TypeError, ValueError):
+                continue
+            if end_ms > start_ms:
+                ranges.append((start_ms, end_ms))
+        recommended_ranges[source_id] = ranges
+
+    selected = []
+    for span in spans:
+        ranges = recommended_ranges.get(span.source_id) or ()
+        if any(
+            span.end_ms > start_ms and span.start_ms < end_ms
+            for start_ms, end_ms in ranges
+        ):
+            selected.append(span.span_id)
+    return tuple(selected)
+
+
 def _rough_cut_ui_object(raw_ui_state) -> dict:
     if not isinstance(raw_ui_state, str) or not raw_ui_state.strip():
         return {}
@@ -5849,6 +5890,9 @@ def _rough_cut_response(record: dict, transcript) -> dict:
             "candidate": 0,
             "unknown": 0,
             "items": [],
+        },
+        "generation": record.get("generation") or {
+            "kind": "qwen_two_pass",
         },
         "transcript": [
             {**span, "selected": span["span_id"] in selected_ids}
@@ -5946,10 +5990,24 @@ async def generate_rough_cut(
         QwenStoryAdapter(timeout_seconds=120),
     )
     generation_spans = _rough_cut_generation_spans(transcript.spans)
+    if len(generation_spans) < 5:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "error": "insufficient_text",
+                "status": "insufficient_text",
+                "message": "fewer_than_five_text_spans",
+                "eligible_count": len(transcript.spans),
+            },
+        )
+    recommendation_span_ids = _rough_cut_recommendation_span_ids(
+        generation_spans,
+    )
     result = await asyncio.to_thread(
         builder.build_two_pass,
         program_id,
         generation_spans,
+        recommendation_span_ids=recommendation_span_ids,
     )
     if not result.ok or result.draft is None:
         raise HTTPException(
@@ -5982,6 +6040,9 @@ async def generate_rough_cut(
             "candidate": 0,
             "unknown": 0,
             "items": [],
+        },
+        "generation": evidence.get("fallback") or {
+            "kind": "qwen_two_pass",
         },
         "created_at": _datetime.datetime.now(
             _datetime.timezone.utc,
