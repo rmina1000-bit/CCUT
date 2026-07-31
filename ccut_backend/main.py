@@ -1099,17 +1099,11 @@ def _background_whisper_impl(source_id: str, video_path: str, fragments: list):
             if "timing" in job:
                 job["timing"]["proposal_done"] = time.time()
         
-        # 완료 상태 기록
-        if source_id in _fragment_job_registry:
-            job = _fragment_job_registry[source_id]
-            job["status"] = "ANALYSIS_COMPLETE"
-            job["progress"] = 100
-            if "timing" in job:
-                job["timing"]["analysis_done"] = time.time()
-                summary = get_timing_summary(job["timing"])
-                print(f"[PIPELINE-TIMING] source={source_id} raw={summary['raw_sec']}s semantic={summary['semantic_sec']}s proposal={summary['proposal_sec']}s total={summary['total_sec']}s")
-            
-        # [A-2] subtitles 캐시 저장
+        # [ROUGH-CUT P1] ANALYSIS_COMPLETE보다 먼저 전사 저장 상태를 확정한다.
+        from rough_cut.readiness import assess_text_readiness
+        _text_readiness = assess_text_readiness(
+            source_id, None, persisted=False
+        )
         try:
             from archive.db_models import SubtitleTable
             from database import SessionLocal
@@ -1129,10 +1123,39 @@ def _background_whisper_impl(source_id: str, video_path: str, fragments: list):
                     _db.commit()
                     print(f"[SUBTITLES] {source_id} 저장 완료 "
                           f"segments={len(all_segments or [])}")
+                    _persisted_segments = _sub.segments
                 else:
-                    print(f"[SUBTITLES] {source_id} 이미 존재 — skip")
+                    _existing.language = provider or "unknown"
+                    _existing.segments = _json.dumps(all_segments or [])
+                    _existing.status = "COMPLETE"
+                    _db.commit()
+                    print(f"[SUBTITLES] {source_id} 갱신 완료 "
+                          f"segments={len(all_segments or [])}")
+                    _persisted_segments = _existing.segments
+                _text_readiness = assess_text_readiness(
+                    source_id,
+                    _persisted_segments,
+                    persisted=True,
+                )
         except Exception as _sub_e:
             print(f"[SUBTITLES] 저장 실패 (non-blocking): {_sub_e}")
+            _text_readiness = assess_text_readiness(
+                source_id,
+                None,
+                persisted=False,
+                error=f"subtitle_persist_failed:{_sub_e}",
+            )
+
+        # 완료 상태는 전사 저장 시도와 준비 상태 판정 뒤에만 노출한다.
+        if source_id in _fragment_job_registry:
+            job = _fragment_job_registry[source_id]
+            job["text_readiness"] = _text_readiness.to_dict()
+            job["status"] = "ANALYSIS_COMPLETE"
+            job["progress"] = 100
+            if "timing" in job:
+                job["timing"]["analysis_done"] = time.time()
+                summary = get_timing_summary(job["timing"])
+                print(f"[PIPELINE-TIMING] source={source_id} raw={summary['raw_sec']}s semantic={summary['semantic_sec']}s proposal={summary['proposal_sec']}s total={summary['total_sec']}s")
 
         # [A-3] quick_scan 실행 (non-blocking)
         try:
@@ -1525,6 +1548,10 @@ async def generate_fragments(
                 "error": None,
                 "timing": init_job_timing()
             }
+            from rough_cut.readiness import load_text_readiness
+            _fragment_job_registry[source_id]["text_readiness"] = (
+                load_text_readiness(source_id).to_dict()
+            )
             _fragment_job_registry[source_id]["timing"]["upload_start"] = upload_start
     else:
         existing_job = _fragment_job_registry.get(source_id)
@@ -1610,6 +1637,8 @@ async def get_fragment_analysis_status(source_id: str, background_tasks: Backgro
                 "error": None,
                 "timing": init_job_timing()
             }
+            from rough_cut.readiness import load_text_readiness
+            job["text_readiness"] = load_text_readiness(source_id).to_dict()
             _fragment_job_registry[source_id] = job
             print(f"[STATUS] Registry restored (COMPLETE) from DB for {source_id}")
         else:
@@ -1639,12 +1668,22 @@ async def get_fragment_analysis_status(source_id: str, background_tasks: Backgro
             else:
                 return {"status": "NOT_FOUND", "source_id": source_id}
 
+    text_readiness = job.get("text_readiness")
+    if not isinstance(text_readiness, dict):
+        from rough_cut.contracts import TextReadiness, TextReadinessState
+        text_readiness = TextReadiness(
+            source_id=source_id,
+            state=TextReadinessState.PENDING,
+            reason="analysis_in_progress",
+        ).to_dict()
+
     return {
         "status": job.get("status", "PENDING"),
         "progress": job.get("progress", 0),
         "stage": job.get("stage", "initial"),
         "source_id": source_id,
         "error": job.get("error"),
+        "text_readiness": text_readiness,
         "timing_summary": get_timing_summary(job.get("timing"))
     }
 
