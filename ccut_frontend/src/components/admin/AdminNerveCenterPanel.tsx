@@ -158,6 +158,9 @@ export const AdminNerveCenterPanel: React.FC = () => {
 
   return (
     <div className="space-y-5">
+      <p className="border-b border-cyan-500/20 pb-2 text-[11px] font-semibold text-cyan-200/80">
+        /admin/nerve ── 요약 축: 지금 전체가 건강한가
+      </p>
       <div className="flex items-start justify-between gap-4">
         <div>
           <h1 className="text-lg font-bold text-foreground/90">제작신경계</h1>

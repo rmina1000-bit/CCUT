@@ -590,6 +590,9 @@ export const AdminEditLabPanel: React.FC = () => {
 
   return (
     <div className="space-y-5">
+      <p className="border-b border-cyan-500/20 pb-2 text-[11px] font-semibold text-cyan-200/80">
+        /admin/edit-lab ── 능력 축: 무엇을 할 수 있고 무엇이 잠겨 있는가
+      </p>
       <div className="flex items-start justify-between gap-4">
         <div>
           <h1 className="text-lg font-bold text-foreground/90">편집연구실</h1>

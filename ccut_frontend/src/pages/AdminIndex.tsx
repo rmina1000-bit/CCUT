@@ -14,17 +14,19 @@ import { AdminAIOpsPanel } from "@/components/admin/AdminAIOpsPanel";
 import { AdminAuditPanel } from "@/components/admin/AdminAuditPanel";
 import { AdminEditLabPanel } from "@/components/admin/AdminEditLabPanel";
 import { AdminNerveCenterPanel } from "@/components/admin/AdminNerveCenterPanel";
+import { AdminAnatomyPanel } from "@/components/admin/AdminAnatomyPanel";
 
 // [War Room v1] /admin/* 진입점 — URL 경로가 탭의 단일 진실원.
 // /admin → 상황실. 나머지는 /admin/{tab}.
 // [NERVE-1] 제작신경계는 /admin/nerve. 기존 진입점(/admin=상황실)은 바꾸지 않는다.
 const TABS: AdminTab[] = [
-  "nerve", "situation", "users", "support", "revenue", "analytics",
+  "anatomy", "nerve", "situation", "users", "support", "revenue", "analytics",
   "design", "ai", "security", "legal", "audit",
   "edit-lab",
 ];
 
 const LABELS: Record<AdminTab, string> = {
+  anatomy: "생체 관제실",
   nerve: "제작신경계",
   situation: "상황실",
   users: "사용자 360",
@@ -57,6 +59,7 @@ const AdminIndex: React.FC = () => {
       onNavigate={onNavigate}
       aiContext={active === "edit-lab" ? "lab" : undefined}
     >
+      {active === "anatomy" && <AdminAnatomyPanel />}
       {active === "nerve" && <AdminNerveCenterPanel />}
       {active === "situation" && <AdminSituationPanel />}
       {active === "users" && <AdminUsersPanel />}

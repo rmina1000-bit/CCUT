@@ -2,15 +2,20 @@ import React from "react";
 import {
   Radar, Users, LifeBuoy, Wallet, BarChart3, Paintbrush,
   Sparkles, ShieldAlert, Scale, ScrollText, FlaskConical, ArrowLeft, Activity,
+  Workflow,
 } from "lucide-react";
+import { ANATOMY_MENU_ENABLED } from "./adminAnatomyConfig";
 
 // [War Room v1] 최상위 메뉴 — IA 확정본(CCUT_ADMIN_WAR_ROOM_IA_FINAL.md)이 단일 진실원.
 // [NERVE-1] 제작신경계 추가 — 상황실·편집연구실의 요약 진입점(두 탭은 그대로 유지).
 export type AdminTab =
-  | "nerve" | "situation" | "users" | "support" | "revenue" | "analytics"
+  | "anatomy" | "nerve" | "situation" | "users" | "support" | "revenue" | "analytics"
   | "design" | "ai" | "security" | "legal" | "audit" | "edit-lab";
 
 const MENU: { key: AdminTab; label: string; icon: React.ReactNode }[] = [
+  ...(ANATOMY_MENU_ENABLED
+    ? [{ key: "anatomy" as const, label: "생체 관제실", icon: <Workflow size={14} /> }]
+    : []),
   { key: "nerve", label: "제작신경계", icon: <Activity size={14} /> },
   { key: "situation", label: "상황실", icon: <Radar size={14} /> },
   { key: "users", label: "사용자 360", icon: <Users size={14} /> },
