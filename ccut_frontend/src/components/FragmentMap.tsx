@@ -431,7 +431,11 @@ const FragmentMap: React.FC<FragmentMapProps> = ({
     if (!cur || !item || !programId) return;
     const { ranges } = excludedRangesFromEditing(cur);
     // [SAVE-INTEGRITY] 조용한 드롭 폐지 — 진짜 no-op일 때만 생략(빈 배열 POST=RESTORE 오작동 방지).
-    if (ranges.length === 0 && cur.inactive.size === 0) return;
+    // [RESTORE-SAVE] '전부 복원'은 저장해야 하는 편집이다 — LedgerPage.commitEdit 과 같은 규칙.
+    //   서버에 제외가 남아 있으면 빈 배열을 명시적으로 보내 지운다(보낸 값이 이긴다 — INV-6).
+    //   서버에도 없으면 진짜 no-op 이라 생략한다.
+    const serverHasExcluded = ((item.excludedRanges ?? []).length) > 0;
+    if (ranges.length === 0 && cur.inactive.size === 0 && !serverHasExcluded) return;
     const res = await fetch("/api/edit-state", {
       method: "POST",
       headers: { "Content-Type": "application/json" },

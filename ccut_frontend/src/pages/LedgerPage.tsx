@@ -598,7 +598,14 @@ const LedgerPage: React.FC<LedgerPageProps> = ({
     const { ranges } = excludedRangesFromEditing(cur);
     // [SAVE-INTEGRITY] 조용한 드롭 폐지 — 파생은 더 이상 단어를 버리지 않는다.
     //   진짜 no-op(제외한 글자 자체가 없음)일 때만 저장 생략(빈 배열 POST=RESTORE 오작동 방지).
-    if (ranges.length === 0 && cur.inactive.size === 0) return;
+    // [RESTORE-SAVE] '전부 복원'은 no-op 이 아니라 저장해야 하는 편집이다.
+    //   구판은 ranges 가 0이면 무조건 생략해, 서버에 남은 기존 제외가 그대로 남았다 —
+    //   화면은 되돌아갔는데 결과물은 안 되돌아가는 소실. 서버가 이미 제외를 갖고 있으면
+    //   빈 배열을 명시적으로 보내 지운다(백엔드 계약: 보낸 값이 이긴다 — INV-6,
+    //   edit_contract/service.py:168·182. 같은 패턴을 '전부 복원' 버튼이 이미 쓴다 :860).
+    //   서버에도 제외가 없으면 그때는 진짜 no-op 이라 생략한다.
+    const serverHasExcluded = ((it.excluded_ranges ?? []).length) > 0;
+    if (ranges.length === 0 && cur.inactive.size === 0 && !serverHasExcluded) return;
     const restoreEditing = () => {
       setEditing((now) => now ?? cur);  // 사용자가 다른 문장 편집을 시작했으면 덮어쓰지 않는다
       setTimeout(() => hiddenRef.current?.focus({ preventScroll: true }), 0);
