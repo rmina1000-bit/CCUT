@@ -1,4 +1,5 @@
 ﻿import React, { useState, useCallback, useMemo, useRef } from "react";
+import { ChevronLeft, ChevronRight, X } from "lucide-react";
 import { Fragment } from "@/data/fragmentData";
 import FragmentTile from "./FragmentTile";
 import { getUid } from "@/lib/fragmentIdentity";
@@ -17,6 +18,8 @@ import {
 
 interface FragmentMapProps {
   fragments: Fragment[];
+  storyFragmentIds?: string[];
+  storyOnly?: boolean;
   onFragmentsChange: (frags: Fragment[]) => void;
   selectedFragmentId: string | null;
   activeFragmentId?: string | null;
@@ -73,7 +76,9 @@ interface FragmentMapProps {
 }
 
 const FragmentMap: React.FC<FragmentMapProps> = ({
-  fragments,
+  fragments: inputFragments,
+  storyFragmentIds,
+  storyOnly = false,
   onFragmentsChange,
   selectedFragmentId,
   activeFragmentId,
@@ -118,6 +123,17 @@ const FragmentMap: React.FC<FragmentMapProps> = ({
   const [textEditNotice, setTextEditNotice] = useState<string | null>(null);
   const hiddenTextInputRef = useRef<HTMLInputElement | null>(null);
   const rootRef = useRef<HTMLDivElement>(null);
+
+  // 가편집 배치는 전체 조각 풀 위에 순서 필터만 얹는다. 아래 visibleFragments는
+  // 기존 선택·제외 계약을 그대로 유지하며, 안 보이는 조각의 상태는 바꾸지 않는다.
+  const fragments = useMemo(() => {
+    if (!storyOnly || !storyFragmentIds) return inputFragments;
+    const byId = new Map(inputFragments.map((fragment) => [getUid(fragment), fragment]));
+    return storyFragmentIds
+      .map((fragmentId) => byId.get(fragmentId))
+      .filter((fragment): fragment is Fragment => !!fragment);
+  }, [inputFragments, storyFragmentIds, storyOnly]);
+
   React.useEffect(() => {
     const activeId = activeFragmentId || selectedFragmentId;
     if (!activeId) return;
@@ -170,6 +186,7 @@ const FragmentMap: React.FC<FragmentMapProps> = ({
   }, [previewTier]);
 
   const shownFragments = useMemo(() => {
+    if (storyOnly) return visibleFragments;
     if (previewTier === "all" && manualHide.size === 0) return visibleFragments;
     return visibleFragments.filter(({ fragment }) => {
       const uid = getUid(fragment);
@@ -177,7 +194,7 @@ const FragmentMap: React.FC<FragmentMapProps> = ({
       if (manualHide.has(uid)) return false;
       return inTier(fragment);
     });
-  }, [visibleFragments, previewTier, manualShow, manualHide, inTier]);
+  }, [visibleFragments, previewTier, manualShow, manualHide, inTier, storyOnly]);
 
   const previewCount = shownFragments.length;
 
@@ -533,10 +550,12 @@ const FragmentMap: React.FC<FragmentMapProps> = ({
             </span>
             {/* [PREVIEW-CUT STEP2] 먼저 보기 N / 전체 M — 상시 표시. 숨긴 조각은 제외가 아니다.
                 N은 어느 모드에서든 간단히에 들 조각 수(추천 규모)를 말한다. */}
-            <span className="text-[9px] text-primary/70">
-              먼저 보기 {recommendedCount} / 전체 {activeCount}
-            </span>
-            {manualHide.size > 0 && (
+            {!storyOnly && (
+              <span className="text-[9px] text-primary/70">
+                먼저 보기 {recommendedCount} / 전체 {activeCount}
+              </span>
+            )}
+            {!storyOnly && manualHide.size > 0 && (
               <button
                 type="button"
                 onClick={() => setManualHide(new Set())}
@@ -551,7 +570,7 @@ const FragmentMap: React.FC<FragmentMapProps> = ({
             )}
             {/* [PREVIEW-CUT STEP2] 3단 프리셋. 슬라이더 없음. 필터만 바꾸고 재요청하지 않는다.
                 누른다고 재생·포커스·스크롤이 따라 움직이지 않는다(상태만 바뀐다). */}
-            <div className="ml-1 flex items-center gap-0.5">
+            {!storyOnly && <div className="ml-1 flex items-center gap-0.5">
               {([["simple", "간단히"], ["rich", "넉넉히"], ["all", "전체"]] as const).map(([key, label]) => (
                 <button
                   key={key}
@@ -567,7 +586,7 @@ const FragmentMap: React.FC<FragmentMapProps> = ({
                   {label}
                 </button>
               ))}
-            </div>
+            </div>}
           </div>
           {modeGateEnabled && showFaceControls && (
             <div className="flex items-center gap-1">
@@ -703,6 +722,53 @@ const FragmentMap: React.FC<FragmentMapProps> = ({
                     filter: f.selection_state === "N" ? "saturate(0.3)" : "none",
                   }}
                 >
+                  {storyOnly && (
+                    <>
+                      <button
+                        type="button"
+                        title="스토리에서 빼기"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onExcludeFragment(f);
+                        }}
+                        className="absolute right-1 top-1 z-50 inline-flex h-6 w-6 items-center justify-center rounded bg-background/85 text-muted-foreground/55 shadow-sm transition-colors hover:text-foreground"
+                      >
+                        <X size={13} />
+                      </button>
+                      <div className="absolute bottom-1 right-1 z-50 flex items-center rounded bg-background/85 shadow-sm">
+                        <button
+                          type="button"
+                          title="앞으로 이동"
+                          disabled={realIndex === 0}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (realIndex === 0) return;
+                            const next = [...fragments];
+                            [next[realIndex - 1], next[realIndex]] = [next[realIndex], next[realIndex - 1]];
+                            onFragmentsChange(next);
+                          }}
+                          className="inline-flex h-6 w-6 items-center justify-center text-muted-foreground/60 transition-colors hover:text-foreground disabled:opacity-20"
+                        >
+                          <ChevronLeft size={14} />
+                        </button>
+                        <button
+                          type="button"
+                          title="뒤로 이동"
+                          disabled={realIndex === fragments.length - 1}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (realIndex === fragments.length - 1) return;
+                            const next = [...fragments];
+                            [next[realIndex], next[realIndex + 1]] = [next[realIndex + 1], next[realIndex]];
+                            onFragmentsChange(next);
+                          }}
+                          className="inline-flex h-6 w-6 items-center justify-center text-muted-foreground/60 transition-colors hover:text-foreground disabled:opacity-20"
+                        >
+                          <ChevronRight size={14} />
+                        </button>
+                      </div>
+                    </>
+                  )}
                   {dragOverIndex === realIndex && draggedId !== uid && (
                     <div className="absolute left-0 top-0 bottom-0 w-0.5 bg-primary rounded-full z-50 pointer-events-none" style={{ transform: "translateX(-2px)" }} />
                   )}

@@ -2268,6 +2268,99 @@ const Index: React.FC = () => {
     storyFidsWith,
   ]);
 
+  const orderRoughCutSpanIds = useCallback((fids: string[], spanIds: string[]) => {
+    if (!roughCutData) return spanIds;
+    const spanById = new Map(roughCutData.transcript.map((span) => [span.span_id, span]));
+    const rank = new Map(fids.map((fid, index) => [fid, index]));
+    return spanIds
+      .map((spanId, originalIndex) => {
+        const span = spanById.get(spanId);
+        const fragment = span ? roughCutFragmentForSpan(span) : null;
+        return {
+          spanId,
+          originalIndex,
+          rank: fragment ? (rank.get(getUid(fragment)) ?? Number.MAX_SAFE_INTEGER) : Number.MAX_SAFE_INTEGER,
+        };
+      })
+      .sort((a, b) => a.rank - b.rank || a.originalIndex - b.originalIndex)
+      .map((item) => item.spanId);
+  }, [roughCutData, roughCutFragmentForSpan]);
+
+  const handleRoughCutStoryReorder = useCallback((reorderedFragments: Fragment[]) => {
+    const nextFids = reorderedFragments.map((fragment) => getUid(fragment));
+    const nextSpanIds = orderRoughCutSpanIds(nextFids, roughCutSelectedSpanIds);
+    setRoughCutPlacement({
+      inputHash: roughCutPlacement?.inputHash ?? roughCutData?.input_hash ?? null,
+      selectedSpanIds: nextSpanIds,
+    });
+    applyStory(reorderedFragments, nextFids);
+  }, [
+    applyStory,
+    orderRoughCutSpanIds,
+    roughCutData?.input_hash,
+    roughCutPlacement?.inputHash,
+    roughCutSelectedSpanIds,
+  ]);
+
+  const handleRoughCutStoryRemove = useCallback((fragment: Fragment) => {
+    const uid = getUid(fragment);
+    const nextFids = storyFidsWithout(uid);
+    const spanById = new Map((roughCutData?.transcript ?? []).map((span) => [span.span_id, span]));
+    const nextSpanIds = roughCutSelectedSpanIds.filter((spanId) => {
+      const span = spanById.get(spanId);
+      const mapped = span ? roughCutFragmentForSpan(span) : null;
+      return !mapped || getUid(mapped) !== uid;
+    });
+    setRoughCutPlacement({
+      inputHash: roughCutPlacement?.inputHash ?? roughCutData?.input_hash ?? null,
+      selectedSpanIds: nextSpanIds,
+    });
+    applyStory(roughCutFragmentsForFids(nextFids), nextFids);
+  }, [
+    applyStory,
+    roughCutData,
+    roughCutFragmentForSpan,
+    roughCutFragmentsForFids,
+    roughCutPlacement?.inputHash,
+    roughCutSelectedSpanIds,
+    storyFidsWithout,
+  ]);
+
+  const handleRoughCutStoryInsert = useCallback((fragment: Fragment, insertAt?: number) => {
+    const uid = getUid(fragment);
+    const nextFids = storyFidsWith(uid, insertAt);
+    let nextSpanIds = roughCutSelectedSpanIds;
+    if (roughCutData) {
+      const representative = roughCutData.transcript.find((span) => {
+        const mapped = roughCutFragmentForSpan(span);
+        return mapped && getUid(mapped) === uid;
+      });
+      if (representative && !nextSpanIds.includes(representative.span_id)) {
+        nextSpanIds = [...nextSpanIds, representative.span_id];
+      }
+    }
+    nextSpanIds = orderRoughCutSpanIds(nextFids, nextSpanIds);
+    setReservedFragments((prev) => removeByUid(prev, fragment));
+    setDeletedFragments((prev) => removeByUid(prev, fragment));
+    setRoughCutPlacement({
+      inputHash: roughCutPlacement?.inputHash ?? roughCutData?.input_hash ?? null,
+      selectedSpanIds: nextSpanIds,
+    });
+    applyStory(roughCutFragmentsForFids(nextFids), nextFids);
+  }, [
+    applyStory,
+    orderRoughCutSpanIds,
+    removeByUid,
+    roughCutData,
+    roughCutFragmentForSpan,
+    roughCutFragmentsForFids,
+    roughCutPlacement?.inputHash,
+    roughCutSelectedSpanIds,
+    setDeletedFragments,
+    setReservedFragments,
+    storyFidsWith,
+  ]);
+
   // [STORY-TRACK-B] 조각 단위 공용 미니 플레이창 — 텍스트·이미지 어디서 클릭해도 이 창 하나.
   const handleReservedClick = useCallback(
     (f: Fragment) => {
@@ -2325,6 +2418,25 @@ const Index: React.FC = () => {
       handleMoveToHold(target);
     },
     [editFragments, handleMoveToHold]
+  );
+
+  const handleRoughCutDropToHold = useCallback(
+    (fragId: string, position?: { x: number; y: number }, frag?: Fragment) => {
+      const target = roughCutFragmentPool.find((fragment) => getUid(fragment) === fragId) ?? frag;
+      if (!target) return;
+      if (position) {
+        setHoldPositions((prev) => ({ ...prev, [fragId]: position }));
+      }
+      setReservedFragments((prev) => appendUniqueByUid(prev, { ...target, excluded: false }));
+      handleRoughCutStoryRemove(target);
+    },
+    [
+      appendUniqueByUid,
+      handleRoughCutStoryRemove,
+      roughCutFragmentPool,
+      setHoldPositions,
+      setReservedFragments,
+    ],
   );
 
   const handleDeleteById = useCallback(
@@ -2975,8 +3087,10 @@ const Index: React.FC = () => {
             ) : undefined}
             storyReplacement={modeGateOn ? (
               <FragmentMap
-                fragments={resolvedFragments}
-                onFragmentsChange={handleFragmentsReorder}
+                fragments={roughCutData ? roughCutFragmentPool : resolvedFragments}
+                storyFragmentIds={roughCutData ? storyFids : undefined}
+                storyOnly={!!roughCutData}
+                onFragmentsChange={roughCutData ? handleRoughCutStoryReorder : handleFragmentsReorder}
                 selectedFragmentId={selectedFragment ? String((selectedFragment as any).fragment_id ?? getUid(selectedFragment)) : null}
                 activeFragmentId={selectedFragment ? String((selectedFragment as any).fragment_id ?? getUid(selectedFragment)) : highlightedPanoramaFrag}
                 focusOrigin={fragmentFocusOrigin}
@@ -2985,11 +3099,11 @@ const Index: React.FC = () => {
                 onFragmentPlay={playImageFragmentInMini}
                 onEditFragment={handleSingleFragmentEdit}
                 onFragmentDoubleClick={handleEditFragmentDoubleClick}
-                onExcludeFragment={handleExcludeFromEdit}
-                onRestoreFragment={handleRestoreFromHold}
-                onSourceRestore={handleAddFromSource}
-                onMoveToHold={handleMoveToHold}
-                onTrashRestore={handleRestoreToEdit}
+                onExcludeFragment={roughCutData ? handleRoughCutStoryRemove : handleExcludeFromEdit}
+                onRestoreFragment={roughCutData ? handleRoughCutStoryInsert : handleRestoreFromHold}
+                onSourceRestore={roughCutData ? handleRoughCutStoryInsert : handleAddFromSource}
+                onMoveToHold={roughCutData ? handleRoughCutStoryRemove : handleMoveToHold}
+                onTrashRestore={roughCutData ? handleRoughCutStoryInsert : handleRestoreToEdit}
                 onBoundaryClick={handleOpenBoundaryEditor}
                 sourceVideoUrls={Object.fromEntries(
                   (sourceEntries ?? []).flatMap(e => [[e.source_id, e.video_url], [e.label, e.video_url]]).filter(([, v]) => v)
@@ -3148,8 +3262,10 @@ const Index: React.FC = () => {
                   />
                 ) : (
                   <FragmentMap
-                    fragments={resolvedFragments}
-                    onFragmentsChange={handleFragmentsReorder}
+                    fragments={roughCutData ? roughCutFragmentPool : resolvedFragments}
+                    storyFragmentIds={roughCutData ? storyFids : undefined}
+                    storyOnly={!!roughCutData}
+                    onFragmentsChange={roughCutData ? handleRoughCutStoryReorder : handleFragmentsReorder}
                     selectedFragmentId={selectedFragment ? String((selectedFragment as any).fragment_id ?? getUid(selectedFragment)) : null}
                     activeFragmentId={selectedFragment ? String((selectedFragment as any).fragment_id ?? getUid(selectedFragment)) : highlightedPanoramaFrag}
                     focusOrigin={fragmentFocusOrigin}
@@ -3158,11 +3274,11 @@ const Index: React.FC = () => {
                     onFragmentPlay={playImageFragmentInMini}
                     onEditFragment={handleSingleFragmentEdit}
                     onFragmentDoubleClick={handleEditFragmentDoubleClick}
-                    onExcludeFragment={handleExcludeFromEdit}
-                    onRestoreFragment={handleRestoreFromHold}
-                    onSourceRestore={handleAddFromSource}
-                    onMoveToHold={handleMoveToHold}
-                    onTrashRestore={handleRestoreToEdit}
+                    onExcludeFragment={roughCutData ? handleRoughCutStoryRemove : handleExcludeFromEdit}
+                    onRestoreFragment={roughCutData ? handleRoughCutStoryInsert : handleRestoreFromHold}
+                    onSourceRestore={roughCutData ? handleRoughCutStoryInsert : handleAddFromSource}
+                    onMoveToHold={roughCutData ? handleRoughCutStoryRemove : handleMoveToHold}
+                    onTrashRestore={roughCutData ? handleRoughCutStoryInsert : handleRestoreToEdit}
                     onBoundaryClick={handleOpenBoundaryEditor}
                     sourceVideoUrls={Object.fromEntries(
                       (sourceEntries ?? []).flatMap(e => [[e.source_id, e.video_url], [e.label, e.video_url]]).filter(([, v]) => v)
@@ -3210,7 +3326,7 @@ const Index: React.FC = () => {
                   holdPositions={holdPositions}
                   onHoldPositionsChange={setHoldPositions}
                   onHoldPositionsCommit={handleHoldPositionsCommit}
-                  onDropToHold={handleDropToHold}
+                  onDropToHold={roughCutData ? handleRoughCutDropToHold : handleDropToHold}
                   compactLabels={modeGateOn}
                 />
               </div>
