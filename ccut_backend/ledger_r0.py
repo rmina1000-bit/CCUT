@@ -401,7 +401,7 @@ async def get_render_edl(program_id: str):
     이 EDL이 곧 export_engine/render 파이프라인의 입력(physical clip 목록)과 같은 형태다.
     저장하지 않는 계산 결과(Render Span) — Preview/Export만 소비 (MASTER CONCEPT).
     """
-    from edit_contract.edit_state import compile_spans
+    from edit_contract.edit_state import compile_spans, rematch_anchor
 
     d = await get_ledger(program_id)
     if not d.get("ok"):
@@ -418,26 +418,57 @@ async def get_render_edl(program_id: str):
         #   제3의 경로를 만들지 않는다. 선택식까지 프론트와 글자 그대로 같다.
         state = {}
         by_parent = {}
+        all_rows = []
         try:
             for r in con.execute(
-                "SELECT timeline_item_id, parent_fragment_id, trim_start_ms, trim_end_ms, "
+                "SELECT timeline_item_id, parent_fragment_id, source_id, "
+                "anchor_start_ms, anchor_end_ms, trim_start_ms, trim_end_ms, "
                 "excluded_ranges_json, removed FROM fragment_edit_state WHERE program_id=?",
                 (program_id,)):
                 state[r["timeline_item_id"]] = r
                 by_parent.setdefault(r["parent_fragment_id"], []).append(r)
+                all_rows.append(r)
         except sqlite3.OperationalError:
             pass
 
         def _state_for(item):
-            """재생 경로와 동일한 선택식: parent_fragment_id 후보 → 선호 item id → 첫 행."""
+            """재생 경로와 동일한 선택식: parent_fragment_id 후보 → 선호 item id → 첫 행.
+            그래도 못 찾으면 anchor ±10ms 재매칭 — 프론트와 **같은 규칙**이다
+            (utils/fragmentTiles.ts:81 stateForRoot). 제3의 경로를 만들지 않는다.
+
+            왜 필요한가: 재조각화로 fid 가 재발급되면 parent_fragment_id·timeline_item_id
+            가 모두 어긋난다. 화면은 anchor 폴백으로 편집이 살아 보이는데 EDL 은 id 로만
+            찾아 원본 경계로 돌아갔다 — 편집이 결과물에서만 사라지는 소실.
+            edit_contract.edit_state.rematch_anchor 는 이미 있었고 제품 호출처가 0건이었다.
+            """
             cands = by_parent.get(item.get("fragment_id")) or []
-            if not cands:
-                return state.get(item["timeline_item_id"])
             want = item["timeline_item_id"]
-            for c in cands:
-                if c["timeline_item_id"] == want:
-                    return c
-            return cands[0]
+            if cands:
+                for c in cands:
+                    if c["timeline_item_id"] == want:
+                        return c
+                return cands[0]
+            direct = state.get(want)
+            if direct is not None:
+                return direct
+            # anchor ±10ms 폴백 — 소스가 같고 경계가 같은 행을 찾는다.
+            same_source = [
+                r for r in all_rows
+                if r["source_id"] == item.get("source_id")
+                and r["anchor_start_ms"] is not None and r["anchor_end_ms"] is not None
+            ]
+            if not same_source:
+                return None
+            idx = rematch_anchor(
+                (item["anchor_start_ms"], item["anchor_end_ms"]),
+                [(r["anchor_start_ms"], r["anchor_end_ms"]) for r in same_source],
+            )
+            if idx is None:
+                return None
+            hit = same_source[idx]
+            print(f"[EDL][ANCHOR-REMATCH] {want} <- {hit['timeline_item_id']} "
+                  f"(anchor {item['anchor_start_ms']}~{item['anchor_end_ms']}) — id 불일치를 좌표로 이었다")
+            return hit
 
         clips = []
         order = 0

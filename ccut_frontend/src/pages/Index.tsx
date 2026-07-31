@@ -2788,9 +2788,13 @@ const Index: React.FC = () => {
   }, [resolvedFragments, storyFragments.length, applyStoryComposition]);
 
   const [ledgerEdlClips, setLedgerEdlClips] = useState<PhysicalClip[]>([]);
+  // [EDL-NO-RESURRECT] EDL 취득 결과를 '성공/실패/미조회'로 구분한다.
+  //   구판은 실패도 빈 배열로 눕혀, 아래 폴백이 그것을 '조각 0개'로 읽고 원본을 되살렸다.
+  const [ledgerEdlStatus, setLedgerEdlStatus] = useState<"idle" | "ok" | "error">("idle");
   const refreshLedgerEdl = useCallback(async () => {
     if (!activeNavItem || !activeNavItem.startsWith("proj_")) {
       setLedgerEdlClips([]);
+      setLedgerEdlStatus("idle");
       return;
     }
     try {
@@ -2817,8 +2821,12 @@ const Index: React.FC = () => {
           })
           .filter((clip: PhysicalClip) => clip.source_id && clip.end_sec > clip.start_sec)
       );
-    } catch (_) {
+      setLedgerEdlStatus("ok");
+    } catch (e) {
+      // [EDL-NO-RESURRECT] 취득 실패를 '조각 0개'와 같이 다루지 않는다 — 아래 폴백 차단의 근거.
       setLedgerEdlClips([]);
+      setLedgerEdlStatus("error");
+      console.error(`[EDL] 취득 실패 — 내보내기용 조각을 만들지 않는다(부활 금지). program=${activeNavItem}`, e);
     }
   }, [activeNavItem]);
   refreshLedgerEdlRef.current = refreshLedgerEdl;
@@ -2826,8 +2834,24 @@ const Index: React.FC = () => {
   useEffect(() => { void refreshLedgerEdl(); }, [refreshLedgerEdl]);
 
   const physicalClips = useMemo(() => {
-    return ledgerEdlClips.length ? ledgerEdlClips : buildExportClipsFromResolvedFragments(resolvedFragments);
-  }, [ledgerEdlClips, resolvedFragments]);
+    if (ledgerEdlClips.length) return ledgerEdlClips;
+    // [EDL-NO-RESURRECT] EDL 이 0건이거나 취득에 실패했을 때 resolvedFragments 로 되살리지 않는다.
+    //   구판 폴백은 사용자가 전부 제거한 영상을 되살리고, 조각 내부 제외(EXCLUDE_RANGE)도
+    //   단일 외피로 복원해 편집이 통째로 사라진 결과물을 내보냈다.
+    //   폴백이 정당하게 필요한 소비처는 없다(확인):
+    //     · 재생 — CenterPanel:1271 backendEdlApplies 가 이미 clips>0 을 요구하고,
+    //       비면 제안 기반 경로로 내려간다(자체 폴백 보유).
+    //     · 내보내기 — CenterPanel:1935 가 확정본을 요구하므로 EDL 이 있어야 정상이고,
+    //       비면 "확정된 조각이 없습니다"로 멈춘다(침묵 아님).
+    //   즉 이 폴백은 부활 외에 하는 일이 없었다.
+    if (ledgerEdlStatus !== "idle") {
+      console.warn(
+        `[EDL] 내보낼 조각이 없습니다 — 원본으로 되살리지 않습니다 `
+        + `(status=${ledgerEdlStatus}, edl=0, 조각맵=${resolvedFragments.length}).`
+      );
+    }
+    return [] as PhysicalClip[];
+  }, [ledgerEdlClips, ledgerEdlStatus, resolvedFragments.length]);
 
   // [STEP 10-I.5.27-E7] Mark first preview ready
   useEffect(() => {
