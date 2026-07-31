@@ -60,16 +60,42 @@ interface Props {
   statusLabelFor: (id: AnatomyNodeId) => string;
   selectedId: AnatomyNodeId;
   onSelect: (id: AnatomyNodeId) => void;
+  /** 선이 주인공이다 — 노드처럼 클릭되고, 클릭하면 경계 카드가 열린다. */
+  selectedEdge: { from: AnatomyNodeId; to: AnatomyNodeId } | null;
+  onSelectEdge: (rel: AnatomyRelation) => void;
+  /** 이 선에 기장된 경계가 있는가 — 없으면 자물쇠(아직 계측 대상이 아님)를 단다. */
+  hasBoundary: (from: AnatomyNodeId, to: AnatomyNodeId) => boolean;
 }
 
 const NODE_LABEL: Record<string, string> = Object.fromEntries(
   [...ANATOMY_NODES, ...ANATOMY_CHAT_NODES].map((n) => [n.id, n.label]),
 );
 
+/** 노드는 사각이다 — 편집연구실과 같은 문법(제목+수치 두 줄, 테두리색=상태, 자물쇠).
+ *  배치만 다르다: 저쪽은 능력 축이라 5열로 서고, 여긴 흐름 축이라 돌아간다. */
+export const NODE_W = 104;
+export const NODE_H = 46;
+
 /** 크기 = 비중. 지표가 없는 노드는 커지지 않는다 — 모르는 것을 크게 그리지 않는다. */
-function radiusOf(metric: number | null): number {
-  if (metric == null) return 21;
-  return 21 + Math.min(13, Math.log10(Math.max(1, metric)) * 6);
+function widthOf(metric: number | null): number {
+  if (metric == null) return NODE_W;
+  return NODE_W + Math.min(34, Math.log10(Math.max(1, metric)) * 15);
+}
+
+/** 사각 테두리와 선분의 교점 — 선이 박스를 뚫지 않게 변에서 끊는다. */
+function edgePoint(
+  from: { x: number; y: number }, to: { x: number; y: number }, w: number, h: number, pad: number,
+) {
+  const dx = to.x - from.x;
+  const dy = to.y - from.y;
+  const hw = w / 2 + pad;
+  const hh = h / 2 + pad;
+  if (dx === 0 && dy === 0) return { x: from.x, y: from.y };
+  const t = Math.min(
+    Math.abs(dx) > 1e-6 ? hw / Math.abs(dx) : Infinity,
+    Math.abs(dy) > 1e-6 ? hh / Math.abs(dy) : Infinity,
+  );
+  return { x: from.x + dx * t, y: from.y + dy * t };
 }
 
 function pathFor(rel: AnatomyRelation, a: { x: number; y: number }, b: { x: number; y: number }) {
@@ -79,16 +105,14 @@ function pathFor(rel: AnatomyRelation, a: { x: number; y: number }, b: { x: numb
   return `M ${a.x} ${a.y} Q ${mx} ${my} ${b.x} ${b.y}`;
 }
 
-/** 노드 테두리에서 멈춘다 — 화살촉이 원 안으로 박히면 방향이 안 읽힌다. */
-function trim(a: { x: number; y: number }, b: { x: number; y: number }, ra: number, rb: number) {
-  const dx = b.x - a.x;
-  const dy = b.y - a.y;
-  const len = Math.hypot(dx, dy) || 1;
-  const ux = dx / len;
-  const uy = dy / len;
+/** 노드 변에서 멈춘다 — 화살촉이 박스 안으로 박히면 방향이 안 읽힌다(검증 ⑥). */
+function trimRect(
+  a: { x: number; y: number }, b: { x: number; y: number },
+  wa: number, wb: number,
+) {
   return {
-    a: { x: a.x + ux * (ra + 3), y: a.y + uy * (ra + 3) },
-    b: { x: b.x - ux * (rb + 9), y: b.y - uy * (rb + 9) },
+    a: edgePoint(a, b, wa, NODE_H, 2),
+    b: edgePoint(b, a, wb, NODE_H, 8),
   };
 }
 
@@ -98,6 +122,9 @@ export const AnatomyMap: React.FC<Props> = ({
   statusLabelFor,
   selectedId,
   onSelect,
+  selectedEdge,
+  onSelectEdge,
+  hasBoundary,
 }) => {
   const pos = useMemo(
     () => Object.fromEntries(ANATOMY_PLACEMENT.map((p) => [p.id, p])) as Record<
@@ -106,10 +133,10 @@ export const AnatomyMap: React.FC<Props> = ({
     >,
     [],
   );
-  const radii = useMemo(
+  const widths = useMemo(
     () =>
       Object.fromEntries(
-        ANATOMY_PLACEMENT.map((p) => [p.id, radiusOf(metricFor(p.id))]),
+        ANATOMY_PLACEMENT.map((p) => [p.id, widthOf(metricFor(p.id))]),
       ) as Record<AnatomyNodeId, number>,
     [metricFor],
   );
@@ -163,32 +190,54 @@ export const AnatomyMap: React.FC<Props> = ({
         const color = state === "실선" && tinted ? tinted : LINE_COLOR[state];
         const marker =
           state === "실선" && tinted ? `url(#ah-${rel.kind})` : `url(#ah-${state})`;
-        const t = trim(a, b, radii[rel.from], radii[rel.to]);
+        const t = trimRect(a, b, widths[rel.from], widths[rel.to]);
+        const d = pathFor(rel, t.a, t.b);
+        const picked =
+          !!selectedEdge && selectedEdge.from === rel.from && selectedEdge.to === rel.to;
         const touching = rel.from === selectedId || rel.to === selectedId;
         return (
-          <g key={`${rel.from}->${rel.to}`} opacity={touching ? 1 : 0.5}>
+          <g key={`${rel.from}->${rel.to}`} className="cursor-pointer"
+            onClick={() => onSelectEdge(rel)} role="button"
+            aria-label={`${NODE_LABEL[rel.from]}에서 ${NODE_LABEL[rel.to]}로 가는 경계 열기`}>
             <title>
-              {`${NODE_LABEL[rel.from]} ${rel.kind === "bidir" ? "⇄" : "→"} ${NODE_LABEL[rel.to]}  [${state}]\n근거: ${rel.evidence}`}
+              {`${NODE_LABEL[rel.from]} ${rel.kind === "bidir" ? "⇄" : "→"} ${NODE_LABEL[rel.to]}  [${state}]
+근거: ${rel.evidence}
+(클릭하면 경계 카드)`}
             </title>
+            {/* 가는 선은 누르기 어렵다 — 투명한 굵은 선을 겹쳐 히트박스로 쓴다. */}
+            <path d={d} fill="none" stroke="transparent" strokeWidth={16} />
             <path
-              d={pathFor(rel, t.a, t.b)}
+              d={d}
               fill="none"
               stroke={color}
-              strokeWidth={touching ? 2.4 : 1.6}
+              strokeWidth={picked ? 4.2 : touching ? 3 : 2.4}
+              strokeOpacity={picked ? 1 : touching ? 0.95 : 0.72}
               strokeDasharray={LINE_DASH[state]}
               markerEnd={marker}
               markerStart={rel.kind === "bidir" ? marker : undefined}
-              filter={touching ? "url(#glow)" : undefined}
+              filter={picked || touching ? "url(#glow)" : undefined}
             />
+            {!hasBoundary(rel.from, rel.to) && (
+              // 아직 경계가 기장되지 않은 선 — 잠김. 정상이라 그리지 않는다.
+              <text
+                x={(t.a.x + t.b.x) / 2}
+                y={(t.a.y + t.b.y) / 2 + (rel.bow ?? -14) / 2 - 3}
+                textAnchor="middle" fontSize="11" fill="rgba(161,161,170,0.85)"
+              >
+                🔒
+              </text>
+            )}
           </g>
         );
       })}
 
       {ANATOMY_PLACEMENT.map((p) => {
         const style = BAND_STYLE[p.band];
-        const r = radii[p.id];
+        const w = widths[p.id];
         const on = selectedId === p.id;
         const metric = metricFor(p.id);
+        const x = p.x - w / 2;
+        const y = p.y - NODE_H / 2;
         return (
           <g
             key={p.id}
@@ -198,26 +247,24 @@ export const AnatomyMap: React.FC<Props> = ({
             aria-label={`${NODE_LABEL[p.id]} 부위 선택`}
           >
             <title>{`${NODE_LABEL[p.id]} — ${statusLabelFor(p.id)}`}</title>
-            <circle
-              cx={p.x} cy={p.y} r={r}
+            <rect
+              x={x} y={y} width={w} height={NODE_H} rx={4}
               fill={style.fill}
               stroke={on ? "rgba(103,232,249,0.95)" : style.stroke}
-              strokeWidth={on ? 2.4 : 1.4}
+              strokeWidth={on ? 2 : 1.2}
               filter={on ? "url(#glow)" : undefined}
             />
-            <text x={p.x} y={p.y + 4} textAnchor="middle" fontSize="11"
-              fontWeight="700" fill={style.text}>
+            {/* 편집연구실과 같은 두 줄: 제목 + 수치(없으면 상태) */}
+            <text x={x + 10} y={y + 19} fontSize="11" fontWeight="700" fill={style.text}>
               {NODE_LABEL[p.id]}
             </text>
-            {metric != null && (
-              <text x={p.x} y={p.y + r + 13} textAnchor="middle" fontSize="9"
-                fill="rgba(255,255,255,0.45)">
-                {metric.toLocaleString()}
-              </text>
-            )}
+            <text x={x + 10} y={y + 34} fontSize="9" fill="rgba(255,255,255,0.45)">
+              {metric != null ? metric.toLocaleString() : statusLabelFor(p.id)}
+            </text>
           </g>
         );
       })}
+
     </svg>
   );
 };

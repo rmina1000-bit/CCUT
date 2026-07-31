@@ -195,6 +195,10 @@ export const AdminAnatomyPanel: React.FC = () => {
   const [boundaries, setBoundaries] = useState<BoundaryCard[] | null>(null);
   const [boundaryError, setBoundaryError] = useState<string | null>(null);
   const [openBoundaryId, setOpenBoundaryId] = useState<string | null>(null);
+  // [MAP-R3] 선이 일급이다 — 오늘 여섯 건이 전부 선에서 났는데 선은 호버 툴팁뿐이었다.
+  const [selectedEdge, setSelectedEdge] = useState<{
+    from: AnatomyNodeId; to: AnatomyNodeId; label: string; evidence: string;
+  } | null>(null);
 
   useEffect(() => {
     fetcher("/admin/anatomy/boundaries")
@@ -278,10 +282,19 @@ export const AdminAnatomyPanel: React.FC = () => {
     [data],
   );
 
-  const nodeBoundaries = useMemo(
-    () => (boundaries ?? []).filter((b) => b.from === selected.id || b.to === selected.id),
-    [boundaries, selected],
+  const boundariesBetween = useCallback(
+    (from: AnatomyNodeId, to: AnatomyNodeId) =>
+      (boundaries ?? []).filter(
+        (b) => (b.from === from && b.to === to) || (b.from === to && b.to === from),
+      ),
+    [boundaries],
   );
+
+  /** 선을 고르면 그 선의 경계만 남기고 펼친다 — 카드는 이미 있다. 새로 만들지 않고 잇는다. */
+  const nodeBoundaries = useMemo(() => {
+    if (selectedEdge) return boundariesBetween(selectedEdge.from, selectedEdge.to);
+    return (boundaries ?? []).filter((b) => b.from === selected.id || b.to === selected.id);
+  }, [boundaries, selected, selectedEdge, boundariesBetween]);
 
   return (
     <div className="space-y-6">
@@ -364,7 +377,21 @@ export const AdminAnatomyPanel: React.FC = () => {
         <div className="min-w-[860px]">
           <AnatomyMap
             selectedId={selectedId}
-            onSelect={setSelectedId}
+            onSelect={(id) => {
+              setSelectedId(id);
+              setSelectedEdge(null);   // 부위를 고르면 선 선택은 풀린다
+            }}
+            selectedEdge={selectedEdge}
+            onSelectEdge={(rel) => {
+              const hit = boundariesBetween(rel.from, rel.to);
+              setSelectedEdge({
+                from: rel.from, to: rel.to,
+                label: `${rel.kind === "bidir" ? "⇄" : "→"} ${rel.evidence.split(" ")[0]}`,
+                evidence: rel.evidence,
+              });
+              setOpenBoundaryId(hit[0]?.id ?? null);   // 한 건이면 바로 펼친다
+            }}
+            hasBoundary={(from, to) => boundariesBetween(from, to).length > 0}
             lineStateFor={lineStateFor}
             metricFor={metricFor}
             statusLabelFor={(id) => ANATOMY_STATUS[nodeStatus(id, data)]?.label ?? "미계측"}
@@ -383,7 +410,9 @@ export const AdminAnatomyPanel: React.FC = () => {
       <section className="border-t border-border/20 pt-5" aria-label="경계 확대 보기">
         <div className="flex flex-wrap items-baseline justify-between gap-2">
           <p className="text-[10px] font-bold uppercase text-muted-foreground/45">
-            경계 — {selected.label}에 닿는 화살표
+            {selectedEdge
+              ? `선 — ${selectedEdge.from} → ${selectedEdge.to}`
+              : `경계 — ${selected.label}에 닿는 화살표`}
           </p>
           <p className="text-[9px] text-muted-foreground/40">
             사고는 노드 안이 아니라 노드 사이에서 난다
@@ -410,7 +439,26 @@ export const AdminAnatomyPanel: React.FC = () => {
 
         {boundaries !== null && (
           <div className="mt-3 space-y-2">
-            {nodeBoundaries.length === 0 && (
+            {nodeBoundaries.length === 0 && selectedEdge && (
+              // 빈 카드를 내놓지 않는다 — 왜 미계측인지가 카드의 내용이다.
+              <div className="border border-zinc-500/50 border-dotted p-3">
+                <p className="text-xs font-bold text-zinc-300">🔒 미계측 — 아직 경계가 기장되지 않은 선</p>
+                <dl className="mt-2 grid grid-cols-[64px_1fr] gap-x-3 gap-y-1.5 text-[10px]">
+                  <dt className="text-muted-foreground/45">관계</dt>
+                  <dd className="font-mono text-foreground/70">
+                    {selectedEdge.from} → {selectedEdge.to}
+                  </dd>
+                  <dt className="text-muted-foreground/45">근거</dt>
+                  <dd className="text-foreground/70">{selectedEdge.evidence}</dd>
+                  <dt className="text-muted-foreground/45">왜 미계측</dt>
+                  <dd className="text-foreground/70">
+                    이 선을 지나는 값·기본값·순서·권위가 아직 감사되지 않았습니다.
+                    감사해서 기장하기 전에는 정상이라고 그리지 않습니다.
+                  </dd>
+                </dl>
+              </div>
+            )}
+            {nodeBoundaries.length === 0 && !selectedEdge && (
               <p className="text-xs text-muted-foreground/55">
                 이 부위에 기장된 경계가 없습니다 — 없는 것은 UNKNOWN, 채워 넣지 않습니다.
               </p>
