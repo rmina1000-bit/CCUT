@@ -4255,6 +4255,134 @@ async def lab_audit():
     return get_audit()
 
 
+@app.get("/admin/anatomy/project/{program_id}")
+async def admin_anatomy_project(
+    program_id: str,
+    db: Session = Depends(get_db),
+):
+    """기존 권위의 원시 증거만 모으는 생체 관제실 read model."""
+    import sqlite3
+
+    from admin import service as _adm
+    from edit_contract import service as _edit_service
+    from lab.audit import get_audit
+
+    pg = db.query(ProgramTable).filter_by(program_id=program_id).first()
+    if not pg:
+        raise HTTPException(status_code=404, detail="project_not_found")
+
+    situation = _adm.situation()
+    kpis = situation.get("kpis") or {}
+    audit = get_audit()
+
+    state_read = "OK"
+    state_error = None
+    try:
+        edit_states = _edit_service.list_edit_states(program_id)
+    except Exception as exc:
+        state_read = "UNKNOWN"
+        state_error = str(exc)
+        edit_states = []
+
+    receipt_read = "OK"
+    receipt_error = None
+    edit_receipts = []
+    con = None
+    try:
+        con = sqlite3.connect(_edit_service.DB_PATH, timeout=30)
+        con.row_factory = sqlite3.Row
+        rows = con.execute(
+            """SELECT event_id, event_kind, ref_id, source_id, fragment_id,
+                      program_id, detail, happened_at
+               FROM vault_events
+              WHERE program_id=? AND event_kind='edit_command'
+              ORDER BY event_id DESC""",
+            (program_id,),
+        ).fetchall()
+        edit_receipts = [dict(row) for row in rows]
+    except Exception as exc:
+        receipt_read = "UNKNOWN"
+        receipt_error = str(exc)
+    finally:
+        if con is not None:
+            con.close()
+
+    qwen_read = "OK"
+    qwen_error = None
+    rough_cut_record = None
+    generation = None
+    try:
+        ui_state = _rough_cut_ui_object(pg.ui_state)
+        raw_record = ui_state.get(_ROUGH_CUT_UI_KEY)
+        if isinstance(raw_record, dict):
+            rough_cut_record = raw_record
+            raw_generation = raw_record.get("generation")
+            if isinstance(raw_generation, dict):
+                generation = raw_generation
+    except Exception as exc:
+        qwen_read = "UNKNOWN"
+        qwen_error = str(exc)
+
+    return {
+        "status": "OK",
+        "gate": {
+            "enabled": os.getenv("CCUT_ADMIN_ANATOMY", "OFF").upper() == "ON",
+            "value": os.getenv("CCUT_ADMIN_ANATOMY", "OFF"),
+        },
+        "project": {
+            "program_id": pg.program_id,
+            "name": pg.name,
+        },
+        "operations": {
+            "source": "/admin/situation",
+            "generated_at": situation.get("generated_at"),
+            "metrics": {
+                "source_count": {
+                    "value": kpis.get("source_count"),
+                    "source": "_service_counts.source_count",
+                },
+                "semantic_fragment_count": {
+                    "value": kpis.get("semantic_fragment_count"),
+                    "source": "_service_counts.semantic_fragment_count",
+                },
+                "export_success_count": {
+                    "value": kpis.get("export_success_count"),
+                    "source": "_service_counts.export_success_count",
+                },
+            },
+            "alerts": situation.get("alerts") or [],
+        },
+        "capability": {
+            "source": "/lab/audit",
+            "audited_at": audit.get("audited_at"),
+            "edges": audit.get("edges"),
+        },
+        "dialogue_edit": {
+            "state_source": f"/edit-state/{program_id}",
+            "receipt_source": "vault_events(event_kind=edit_command)",
+            "state_read": state_read,
+            "receipt_read": receipt_read,
+            "states": edit_states,
+            "receipts": edit_receipts,
+            "error": state_error or receipt_error,
+        },
+        "qwen": {
+            "source": "programs.ui_state.roughCut.generation",
+            "read": qwen_read,
+            "generation": generation,
+            "rough_cut_created_at": (
+                rough_cut_record.get("created_at")
+                if isinstance(rough_cut_record, dict)
+                else None
+            ),
+            "first_occurrence": "UNKNOWN",
+            "latest_success": "UNKNOWN",
+            "retry_count": "UNKNOWN",
+            "error": qwen_error,
+        },
+    }
+
+
 @app.post("/lab/audit/run")
 async def lab_audit_run():
     from lab.audit import run_audit
