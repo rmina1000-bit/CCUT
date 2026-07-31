@@ -277,6 +277,30 @@ async def get_ledger(program_id: str):
 
         from engine import fragment_show as _fs  # 실파일 URL resolver 재사용 (L2)
 
+        # [LAB-53 C] 승인된 제안의 조각별 경계 (없으면 빈 표 — 폴백은 semantic 좌표 그대로)
+        proposal_coords = {}
+        seq_mode = (mode or "").upper()
+        if seq_mode:
+            try:
+                prow_seq = con.execute(
+                    "SELECT sequence FROM proposals WHERE program_id=? AND UPPER(mode)=?",
+                    (program_id, seq_mode)).fetchone()
+            except sqlite3.OperationalError:
+                prow_seq = None
+            if prow_seq is not None:
+                seq = prow_seq["sequence"]
+                if isinstance(seq, str):
+                    try:
+                        seq = json.loads(seq)
+                    except Exception:
+                        seq = []
+                for s in (seq or []):
+                    if not isinstance(s, dict):
+                        continue
+                    sfid, ss, se = s.get("fragment_id"), s.get("start"), s.get("end")
+                    if sfid and isinstance(ss, (int, float)) and isinstance(se, (int, float)):
+                        proposal_coords[str(sfid)] = (_to_ms(ss), _to_ms(se))
+
         items = []
         running_ms = 0
         occ_seen = {}
@@ -309,6 +333,20 @@ async def get_ledger(program_id: str):
                 continue
             sid = sf["source_id"]
             s_ms, e_ms = _to_ms(sf["start"]), _to_ms(sf["end"])
+            # [LAB-53 C] 승인된 제안(A/B)의 경계가 EDL까지 온다.
+            #   왜: 단어 경계 스냅(proposal_axis._snap_sequence_item)은 제안 sequence에만
+            #   기록되고, 여기서는 semantic_fragments 좌표를 읽어 스냅이 버려졌다
+            #   (실측 proj_c855226dc821 B안 11건, 예 30.83 -> 30.74로 되돌아감).
+            #   INV-6: 사용자 편집(fragment_edit_state)이 있는 사용본은 손대지 않는다.
+            #   (스냅 자체도 그런 조각은 건너뛰므로 여기서도 동일 규칙을 유지한다.)
+            if not state_seen.get(item_id):
+                pc = proposal_coords.get(fid)
+                if pc is not None:
+                    ps_ms, pe_ms = pc
+                    if pe_ms > ps_ms and (ps_ms != s_ms or pe_ms != e_ms):
+                        print(f"[EDL][PROPOSAL-EDGE] {fid} {s_ms}~{e_ms} -> {ps_ms}~{pe_ms} "
+                              f"(승인 {seq_mode}안 경계 적용)")
+                        s_ms, e_ms = ps_ms, pe_ms
             selected = fid in selected_set and not removed_items.get(item_id)
             if removed_items.get(item_id):
                 # [SCRIPT-2] 제외된 장면 — 대본 밖이지만 되돌릴 길은 항상 열어둔다
