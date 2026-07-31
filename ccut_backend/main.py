@@ -451,6 +451,10 @@ app.include_router(story_gate_router)
 from ledger_r0 import router as ledger_router
 app.include_router(ledger_router)
 
+# [BOUNDARY-MAP] 경계 지도 — 노드가 아니라 노드 사이. 읽기 전용(소스 정적 추출 + 원장 참조).
+from admin.boundary_map import router as boundary_map_router
+app.include_router(boundary_map_router)
+
 # User-triggered fragment-only forced alignment. No background work and no DB writes.
 from precision_alignment.api import router as precision_alignment_router
 app.include_router(precision_alignment_router)
