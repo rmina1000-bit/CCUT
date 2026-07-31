@@ -5886,6 +5886,13 @@ def _load_current_rough_cut(
     return transcript, input_hash, ui_state, record if current else None
 
 
+class RoughCutPromoteRequest(BaseModel):
+    source_ids: list[str] = []
+    input_hash: str
+    fids: list[str] = []
+    selected_span_ids: list[str] = []
+
+
 @app.get("/rough-cut/project/{program_id}")
 async def get_rough_cut(
     program_id: str,
@@ -5988,6 +5995,121 @@ async def generate_rough_cut(
     ))
     db.commit()
     return _rough_cut_response(record, transcript)
+
+
+@app.post("/rough-cut/project/{program_id}/promote")
+async def promote_rough_cut(
+    program_id: str,
+    req: RoughCutPromoteRequest,
+    db: Session = Depends(get_db),
+):
+    """사용자가 손댄 가편집만 검증해 story.fids로 승격한다."""
+    import datetime as _datetime
+
+    from archive.db_models import SemanticFragmentTable
+
+    pg = db.query(ProgramTable).filter_by(program_id=program_id).first()
+    if not pg:
+        raise HTTPException(status_code=404, detail="project_not_found")
+
+    try:
+        transcript, input_hash, ui_state, current = _load_current_rough_cut(
+            program_id,
+            pg,
+        )
+    except Exception as exc:
+        raise HTTPException(
+            status_code=409,
+            detail=f"rough_cut_transcript_unavailable:{exc}",
+        ) from exc
+
+    if current is None:
+        raise HTTPException(status_code=409, detail="rough_cut_stale")
+
+    expected_source_ids = list(transcript.source_ids)
+    if req.source_ids != expected_source_ids:
+        raise HTTPException(status_code=409, detail="rough_cut_owner_mismatch")
+    if req.input_hash != input_hash:
+        raise HTTPException(status_code=409, detail="rough_cut_input_changed")
+
+    fids = [str(fid).strip() for fid in req.fids]
+    if any(not fid for fid in fids):
+        raise HTTPException(status_code=422, detail="rough_cut_empty_fid")
+    if len(fids) != len(set(fids)):
+        raise HTTPException(status_code=422, detail="rough_cut_duplicate_fid")
+
+    known_fids = {
+        str(row.fragment_id)
+        for row in (
+            db.query(SemanticFragmentTable.fragment_id)
+            .filter(SemanticFragmentTable.source_id.in_(expected_source_ids))
+            .all()
+        )
+        if row.fragment_id
+    }
+    foreign_fids = [fid for fid in fids if fid not in known_fids]
+    if foreign_fids:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "error": "foreign_story_fids",
+                "fids": foreign_fids,
+            },
+        )
+
+    selected_span_ids = [str(span_id).strip() for span_id in req.selected_span_ids]
+    transcript_span_ids = {span.span_id for span in transcript.spans}
+    invalid_span_ids = [
+        span_id
+        for span_id in selected_span_ids
+        if not span_id or span_id not in transcript_span_ids
+    ]
+    if invalid_span_ids:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "error": "foreign_transcript_spans",
+                "span_ids": invalid_span_ids,
+            },
+        )
+    if len(selected_span_ids) != len(set(selected_span_ids)):
+        raise HTTPException(
+            status_code=422,
+            detail="rough_cut_duplicate_span_id",
+        )
+
+    story = ui_state.get("story")
+    story = story if isinstance(story, dict) else {}
+    story["fids"] = fids
+    ui_state["story"] = story
+    ui_state["roughCutPlacement"] = {
+        "inputHash": input_hash,
+        "selectedSpanIds": selected_span_ids,
+    }
+    pg.ui_state = _strip_dead_ui_keys(json.dumps(
+        ui_state,
+        ensure_ascii=False,
+        separators=(",", ":"),
+    ))
+    pg.last_updated_at = _datetime.datetime.now()
+    db.commit()
+
+    try:
+        from story_gate.service import compute_hash
+        sequence_hash = compute_hash(fids)
+    except Exception:
+        sequence_hash = None
+
+    return {
+        "status": "SAVED",
+        "program_id": program_id,
+        "source_ids": expected_source_ids,
+        "input_hash": input_hash,
+        "story": {"fids": fids},
+        "rough_cut_placement": ui_state["roughCutPlacement"],
+        "selected_count": len(fids),
+        "sequence_hash": sequence_hash,
+    }
 
 
 class TimelineAppendRequest(BaseModel):
