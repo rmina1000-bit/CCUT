@@ -7,6 +7,7 @@ import ReservedFragments from "@/components/ReservedFragments";
 import LedgerPage from "@/pages/LedgerPage";
 import FragmentMiniPlayer from "@/components/FragmentMiniPlayer";
 import RoughCutStage from "@/components/RoughCutStage";
+import type { RoughCutData, RoughCutSpan } from "@/components/RoughCutOutline";
 // [dev ESM 안전] 타입 전용 import는 반드시 `import type` — 혼합 import는 esbuild가 못 벗겨
 // 런타임에 존재하지 않는 named export(interface)를 요청해 모듈 에러가 난다(build는 통과).
 import type { MiniPlayTarget } from "@/components/FragmentMiniPlayer";
@@ -65,6 +66,11 @@ type PbeContractState = Pick<
   EditStateRow,
   "anchor_start_ms" | "anchor_end_ms" | "trim_start_ms" | "trim_end_ms" | "excluded_ranges" | "removed"
 >;
+
+type RoughCutPlacement = {
+  inputHash: string | null;
+  selectedSpanIds: string[];
+};
 
 const pbeContractKey = (programId: string | null | undefined, fid: string) => `${programId ?? "local"}:${fid}`;
 
@@ -336,6 +342,8 @@ const Index: React.FC = () => {
   // 제안(A/B)은 이 하나의 스토리를 '어떻게 편집할지'이므로, 스토리를 소유하지 않는다.
   const [storyFids, setStoryFids] = useState<string[]>([]);
   const [storyFragments, setStoryFragments] = useState<Fragment[]>([]);
+  const [roughCutData, setRoughCutData] = useState<RoughCutData | null>(null);
+  const [roughCutPlacement, setRoughCutPlacement] = useState<RoughCutPlacement | null>(null);
   // 이 프로젝트의 ui_state 재수화가 끝났는가 (저장이 복원을 앞질러 덮는 것을 막는 문턱)
   const [uiRestoredFor, setUiRestoredFor] = useState<string | null>(null);
 
@@ -556,10 +564,11 @@ const Index: React.FC = () => {
     selectedProposalId,
     activeSource,
     deletedFragments,
+    roughCutPlacement,
     // [TRUTH-SINGLE-01 2번] proposalsIds 사본 폐기 — DB proposals가 진실이다.
     //   읽는 곳 0건(전수 조사)이었고 실측에서 이미 낡아 있었다:
     //   ui_state {A: PROP_A_E737A9…} vs DB {A: PROP_A_79716E…}.
-  }), [storyFids, storyFragments, reservedFragments, holdPositions, committedProposalId, selectedProposalId, activeSource, deletedFragments]);
+  }), [storyFids, storyFragments, reservedFragments, holdPositions, committedProposalId, selectedProposalId, activeSource, deletedFragments, roughCutPlacement]);
 
   // [#30 merge-저장 — 원칙 "모르는 것을 지우지 않는다" (국장 승인 2026-07-17)]
   // 클라 소유 필드(아래 목록)는 스냅샷이 덮어쓰고, 그 외(서버 소유·미지 — 예: paperCutOrder)는
@@ -571,7 +580,7 @@ const Index: React.FC = () => {
   const OWNED_UI_FIELDS = useMemo(() => new Set([
     "story", "storyFragments",
     "reservedFragments", "holdPositions", "committedProposalId", "selectedProposalId",
-    "activeSource", "deletedFragments",
+    "activeSource", "deletedFragments", "roughCutPlacement",
   ]), []);
   const saveUiStateMerged = useCallback(async (programId: string, snapshot: Record<string, any>) => {
     let unknown: Record<string, any> = {};
@@ -675,13 +684,13 @@ const Index: React.FC = () => {
     }
     // 지문에 표시 방식(committed/selected)도 넣는다. 스토리를 가르지는 않지만 '사용자가 고른
     // 편집안'이라 새로고침 후에도 남아야 한다 — 스토리만 보면 A/B 확정이 저장되지 않는다(실측).
-    const sig = JSON.stringify([storyFids, committedProposalId, selectedProposalId]);
+    const sig = JSON.stringify([storyFids, committedProposalId, selectedProposalId, roughCutPlacement]);
     if (storySnapshotSigRef.current === sig) return;
     storySnapshotSigRef.current = sig;
     if (activeNavItem && activeNavItem.startsWith("proj_")) {
       saveUiStateMergedTracked(activeNavItem, buildUiSnapshot()).catch(() => {});
     }
-  }, [storyFids, committedProposalId, selectedProposalId, activeNavItem, uiRestoredFor, saveUiStateMergedTracked, buildUiSnapshot]);
+  }, [storyFids, committedProposalId, selectedProposalId, roughCutPlacement, activeNavItem, uiRestoredFor, saveUiStateMergedTracked, buildUiSnapshot]);
   // 프로젝트가 바뀌면 지문 기준을 새로 잡는다 (다음 프로젝트의 첫 스토리가 저장되도록)
   // [FOREIGN-STORY-GUARD 2] 원고 상태도 함께 내린다 — 잔류가 새 프로젝트의 원고로 저장되던 뿌리.
   //   resetAnalysisFlow(useAnalysisFlow.ts:48)는 13개 state를 지우지만 story 계열은 목록에 없어,
@@ -701,6 +710,8 @@ const Index: React.FC = () => {
     storyFidsRef.current = [];
     setStoryFids([]);
     setStoryFragments([]);
+    setRoughCutData(null);
+    setRoughCutPlacement(null);
     setHoldPositions({});
   }, [activeNavItem]);
 
@@ -1584,6 +1595,14 @@ const Index: React.FC = () => {
                 if (snap.activeSource) setActiveSource(snap.activeSource);
                 const df = asFrags(snap.deletedFragments);
                 if (df) setDeletedFragments(df);
+                if (snap.roughCutPlacement && Array.isArray(snap.roughCutPlacement.selectedSpanIds)) {
+                  setRoughCutPlacement({
+                    inputHash: typeof snap.roughCutPlacement.inputHash === "string"
+                      ? snap.roughCutPlacement.inputHash
+                      : null,
+                    selectedSpanIds: snap.roughCutPlacement.selectedSpanIds.map(String),
+                  });
+                }
                 // 스토리 복원 — 진실원 하나(story.fids + storyFragments).
                 // [STORY-WRITE-GUARD-01 2-2] 출처 표식: ui_state에서 온 스토리만 저장 자격이 있다.
                 //   서버 폴백(조각 시간순)·제안 파생으로 화면에 오른 목록은 'server'로 찍어
@@ -2139,6 +2158,115 @@ const Index: React.FC = () => {
     }
     setHighlightedPanoramaFrag(fragmentId);
   }, [editFragments, sourceEntries, setSelectedFragment, setActiveSource, setHighlightedPanoramaFrag, setFragmentFocusOrigin]);
+
+  const roughCutFragmentPool = useMemo(() => {
+    const byId = new Map<string, Fragment>();
+    for (const fragment of [
+      ...(editFragments ?? []),
+      ...(sourceEntries ?? []).flatMap((entry) => entry.fragments ?? []),
+    ]) {
+      const uid = getUid(fragment);
+      if (!byId.has(uid)) byId.set(uid, fragment);
+    }
+    return Array.from(byId.values());
+  }, [editFragments, sourceEntries]);
+
+  const roughCutFragmentForSpan = useCallback((span: RoughCutSpan): Fragment | null => {
+    const spanStart = span.start_ms / 1000;
+    const spanEnd = span.end_ms / 1000;
+    let best: { fragment: Fragment; overlap: number; distance: number } | null = null;
+
+    for (const fragment of roughCutFragmentPool) {
+      const raw = fragment as any;
+      if (String(raw.source_id ?? "") !== span.source_id) continue;
+      const start = Number(raw.start_time ?? raw.start ?? ((fragment.start_frame ?? 0) / 30));
+      const end = Number(raw.end_time ?? raw.end ?? ((fragment.end_frame ?? 0) / 30));
+      if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) continue;
+      const overlap = Math.max(0, Math.min(end, spanEnd) - Math.max(start, spanStart));
+      const distance = Math.abs(((start + end) / 2) - ((spanStart + spanEnd) / 2));
+      if (
+        !best
+        || overlap > best.overlap
+        || (overlap === best.overlap && distance < best.distance)
+      ) {
+        best = { fragment, overlap, distance };
+      }
+    }
+    return best && best.overlap > 0 ? best.fragment : null;
+  }, [roughCutFragmentPool]);
+
+  const roughCutFragmentsForFids = useCallback((fids: string[]) => {
+    const byId = new Map(roughCutFragmentPool.map((fragment) => [getUid(fragment), fragment]));
+    return fids
+      .map((fid) => byId.get(fid))
+      .filter((fragment): fragment is Fragment => !!fragment);
+  }, [roughCutFragmentPool]);
+
+  const roughCutSelectedSpanIds = useMemo(
+    () => roughCutPlacement?.selectedSpanIds ?? roughCutData?.ordered_span_ids ?? [],
+    [roughCutData?.ordered_span_ids, roughCutPlacement?.selectedSpanIds],
+  );
+
+  // 가편집은 기존 원고를 자동 확정하지 않는다. 배치 표식이 없는 프로젝트에서만
+  // 화면용 씨앗으로 올리고, 첫 사용자 조작 뒤 기존 story.fids 저장 경로로 승격한다.
+  useEffect(() => {
+    if (!activeNavItem?.startsWith("proj_")) return;
+    if (uiRestoredFor !== activeNavItem || !roughCutData || roughCutPlacement) return;
+    if (roughCutData.project_id !== activeNavItem || roughCutFragmentPool.length === 0) return;
+
+    const spansById = new Map(roughCutData.transcript.map((span) => [span.span_id, span]));
+    const fragments: Fragment[] = [];
+    const fids: string[] = [];
+    for (const spanId of roughCutData.ordered_span_ids) {
+      const span = spansById.get(spanId);
+      const fragment = span ? roughCutFragmentForSpan(span) : null;
+      if (!fragment) continue;
+      const uid = getUid(fragment);
+      if (fids.includes(uid)) continue;
+      fids.push(uid);
+      fragments.push(fragment);
+    }
+    if (fids.length === 0) return;
+
+    setRoughCutPlacement({
+      inputHash: roughCutData.input_hash ?? null,
+      selectedSpanIds: roughCutData.ordered_span_ids,
+    });
+    setStoryFragments(fragments);
+    setStoryFids(fids);
+    storyFidsRef.current = fids;
+    storyOriginRef.current = "server";
+    console.info(`[ROUGH-CUT-PLACEMENT] ${activeNavItem}: 전사 ${roughCutData.eligible_count}개 중 ${fids.length}조각을 화면 씨앗으로 배치 (저장 안 함)`);
+  }, [
+    activeNavItem,
+    roughCutData,
+    roughCutFragmentForSpan,
+    roughCutFragmentPool.length,
+    roughCutPlacement,
+    uiRestoredFor,
+  ]);
+
+  const handleRoughCutSpanAdd = useCallback((span: RoughCutSpan) => {
+    const fragment = roughCutFragmentForSpan(span);
+    if (!fragment) return;
+    const selectedSpanIds = roughCutSelectedSpanIds.includes(span.span_id)
+      ? roughCutSelectedSpanIds
+      : [...roughCutSelectedSpanIds, span.span_id];
+    const nextFids = storyFidsWith(getUid(fragment));
+    setRoughCutPlacement({
+      inputHash: roughCutPlacement?.inputHash ?? roughCutData?.input_hash ?? null,
+      selectedSpanIds,
+    });
+    applyStory(roughCutFragmentsForFids(nextFids), nextFids);
+  }, [
+    applyStory,
+    roughCutData?.input_hash,
+    roughCutFragmentForSpan,
+    roughCutFragmentsForFids,
+    roughCutPlacement?.inputHash,
+    roughCutSelectedSpanIds,
+    storyFidsWith,
+  ]);
 
   // [STORY-TRACK-B] 조각 단위 공용 미니 플레이창 — 텍스트·이미지 어디서 클릭해도 이 창 하나.
   const handleReservedClick = useCallback(
@@ -2835,7 +2963,16 @@ const Index: React.FC = () => {
             activeStoryFragmentId={selectedFragment ? String((selectedFragment as any).fragment_id ?? getUid(selectedFragment)) : highlightedPanoramaFrag}
             modeGateEnabled={modeGateOn}
             activeFragmentId={selectedFragment ? String((selectedFragment as any).fragment_id ?? getUid(selectedFragment)) : null}
-            roughCutStage={activeNavItem?.startsWith("proj_") ? <RoughCutStage projectId={activeNavItem} sourceEntries={sourceEntries} onPlay={setMiniTarget} /> : undefined}
+            roughCutStage={activeNavItem?.startsWith("proj_") ? (
+              <RoughCutStage
+                projectId={activeNavItem}
+                sourceEntries={sourceEntries}
+                selectedSpanIds={roughCutSelectedSpanIds}
+                onAddSpan={handleRoughCutSpanAdd}
+                onData={setRoughCutData}
+                onPlay={setMiniTarget}
+              />
+            ) : undefined}
             storyReplacement={modeGateOn ? (
               <FragmentMap
                 fragments={resolvedFragments}

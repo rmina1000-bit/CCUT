@@ -1,5 +1,5 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Loader2, Play } from "lucide-react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { Loader2 } from "lucide-react";
 
 import type { MiniPlayTarget } from "@/components/FragmentMiniPlayer";
 import RoughCutOutline from "@/components/RoughCutOutline";
@@ -13,6 +13,9 @@ interface RoughCutStageProps {
   projectId: string;
   sourceEntries: SourceEntry[];
   onPlay: (target: MiniPlayTarget) => void;
+  selectedSpanIds?: string[];
+  onAddSpan?: (span: RoughCutSpan) => void;
+  onData?: (data: RoughCutData | null) => void;
 }
 
 const readError = async (response: Response) => {
@@ -27,11 +30,13 @@ const RoughCutStage: React.FC<RoughCutStageProps> = ({
   projectId,
   sourceEntries,
   onPlay,
+  selectedSpanIds,
+  onAddSpan,
+  onData,
 }) => {
   const [data, setData] = useState<RoughCutData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const stageRef = useRef<HTMLElement>(null);
 
   useEffect(() => {
     let active = true;
@@ -51,7 +56,10 @@ const RoughCutStage: React.FC<RoughCutStageProps> = ({
         }
         if (!response.ok) throw new Error(await readError(response));
         const result = await response.json();
-        if (active) setData(result);
+        if (active) {
+          setData(result);
+          onData?.(result);
+        }
       } catch (reason) {
         if (active) {
           setError(reason instanceof Error ? reason.message : "rough_cut_failed");
@@ -63,8 +71,9 @@ const RoughCutStage: React.FC<RoughCutStageProps> = ({
     void load();
     return () => {
       active = false;
+      onData?.(null);
     };
-  }, [projectId]);
+  }, [onData, projectId]);
 
   const sourceUrls = useMemo(
     () => new Map(
@@ -91,46 +100,6 @@ const RoughCutStage: React.FC<RoughCutStageProps> = ({
     });
   }, [onPlay, sourceUrls]);
 
-  const selectedSpans = useMemo(() => {
-    if (!data) return [];
-    const byId = new Map(data.transcript.map((span) => [span.span_id, span]));
-    return data.ordered_span_ids
-      .map((spanId) => byId.get(spanId))
-      .filter((span): span is RoughCutSpan => !!span);
-  }, [data]);
-
-  const premiseText = useMemo(
-    () => (data?.premise || "")
-      .replace(/\*\*/g, "")
-      .replace(/^\s*[-*]\s+/gm, "")
-      .trim(),
-    [data?.premise],
-  );
-
-  const playableCut = useMemo(() => {
-    if (selectedSpans.length === 0) return null;
-    const sourceId = selectedSpans[0].source_id;
-    if (!selectedSpans.every((span) => span.source_id === sourceId)) return null;
-    const videoUrl = sourceUrls.get(sourceId);
-    if (!videoUrl) return null;
-    return {
-      videoUrl,
-      spans: selectedSpans.map(
-        (span) => [span.start_ms / 1000, span.end_ms / 1000] as [number, number],
-      ),
-      fragmentId: `rough-cut:${projectId}`,
-      label: "가편집",
-    };
-  }, [projectId, selectedSpans, sourceUrls]);
-
-  useEffect(() => {
-    if (!data) return;
-    const frame = window.requestAnimationFrame(() => {
-      stageRef.current?.scrollIntoView({ block: "start" });
-    });
-    return () => window.cancelAnimationFrame(frame);
-  }, [data]);
-
   if (loading) {
     return (
       <div className="flex min-h-[280px] w-full max-w-[800px] items-center justify-center">
@@ -145,47 +114,23 @@ const RoughCutStage: React.FC<RoughCutStageProps> = ({
         className="flex min-h-[220px] w-full max-w-[800px] items-center justify-center text-[13px] text-muted-foreground/60"
         data-rough-cut-error={error || "empty"}
       >
-        가편집안을 만들지 못했습니다.
+        전사를 불러오지 못했습니다.
       </div>
     );
   }
 
   return (
     <section
-      ref={stageRef}
-      className="max-h-[calc(100vh-160px)] w-full max-w-[800px] shrink-0 overflow-y-auto px-1 py-2"
+      className="w-full max-w-[800px] shrink-0 px-1 py-2"
       data-rough-cut-stage="ready"
       data-selected-count={data.selected_count}
       data-eligible-count={data.eligible_count}
     >
-      <header className="mb-3 flex items-center gap-3">
-        <button
-          type="button"
-          disabled={!playableCut}
-          onClick={() => playableCut && onPlay(playableCut)}
-          className="inline-flex h-9 items-center gap-2 rounded-md bg-foreground px-3 text-[13px] font-semibold text-background transition-opacity hover:opacity-90 disabled:cursor-default disabled:opacity-35"
-          title={playableCut ? "가편집 재생" : "한 영상의 가편집만 연속 재생할 수 있습니다"}
-        >
-          <Play size={14} fill="currentColor" />
-          <span>재생</span>
-        </button>
-        <span className="ml-auto text-[13px] tabular-nums text-muted-foreground/65">
-          사용 <strong className="font-semibold text-foreground/85">{data.selected_count}</strong>
-          {" / "}
-          전사 <strong className="font-semibold text-foreground/85">{data.eligible_count}</strong>
-        </span>
-      </header>
-
-      <p
-        className="mb-4 line-clamp-5 whitespace-pre-wrap px-1 text-[14px] leading-relaxed text-foreground/75"
-        title={premiseText}
-      >
-        {premiseText}
-      </p>
-
       <RoughCutOutline
         data={data}
+        selectedSpanIds={selectedSpanIds ?? data.ordered_span_ids}
         canPlay={canPlay}
+        onAddSpan={onAddSpan ?? (() => {})}
         onPlaySpan={playSpan}
       />
     </section>

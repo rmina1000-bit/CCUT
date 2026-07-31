@@ -1,5 +1,5 @@
-import React, { useMemo, useState } from "react";
-import { ChevronDown, ChevronRight, Play } from "lucide-react";
+import React, { useMemo } from "react";
+import { Play } from "lucide-react";
 
 export interface RoughCutSpan {
   span_id: string;
@@ -19,6 +19,7 @@ export interface RoughCutAct {
 
 export interface RoughCutData {
   project_id: string;
+  input_hash?: string | null;
   premise: string;
   acts: RoughCutAct[];
   ordered_span_ids: string[];
@@ -34,16 +35,11 @@ export interface RoughCutData {
 
 interface RoughCutOutlineProps {
   data: RoughCutData;
+  selectedSpanIds: string[];
   canPlay: (span: RoughCutSpan) => boolean;
+  onAddSpan: (span: RoughCutSpan) => void;
   onPlaySpan: (span: RoughCutSpan) => void;
 }
-
-const ACT_LABELS: Record<RoughCutAct["phase"], string> = {
-  gi: "기",
-  seung: "승",
-  jeon: "전",
-  gyeol: "결",
-};
 
 const formatTime = (ms: number) => {
   const totalSeconds = Math.max(0, Math.floor(ms / 1000));
@@ -54,92 +50,59 @@ const formatTime = (ms: number) => {
 
 const RoughCutOutline: React.FC<RoughCutOutlineProps> = ({
   data,
+  selectedSpanIds,
   canPlay,
+  onAddSpan,
   onPlaySpan,
 }) => {
-  const [transcriptOpen, setTranscriptOpen] = useState(false);
   const selectedIds = useMemo(
-    () => new Set(data.ordered_span_ids),
-    [data.ordered_span_ids],
+    () => new Set(selectedSpanIds),
+    [selectedSpanIds],
   );
 
   return (
-    <div className="w-full">
-      <div className="border-y border-white/10">
-        {data.acts.map((act) => (
-          <section
-            key={act.phase}
-            className="grid grid-cols-[34px_minmax(0,1fr)] border-b border-white/8 last:border-b-0"
+    <div
+      className="w-full border-y border-white/8 py-1"
+      data-rough-cut-transcript-count={data.transcript.length}
+    >
+      {data.transcript.map((span) => {
+        const selected = selectedIds.has(span.span_id);
+        return (
+          <div
+            key={span.span_id}
+            className={`group flex min-h-9 w-full items-start border-b border-white/[0.035] transition-colors last:border-b-0 hover:bg-white/[0.035] ${
+              selected ? "bg-white/[0.025]" : ""
+            }`}
+            data-rough-cut-span={span.span_id}
+            data-story-selected={selected ? "true" : "false"}
           >
-            <div className="flex items-start justify-center pt-3 text-[13px] font-bold text-primary">
-              {ACT_LABELS[act.phase]}
-            </div>
-            <div className="min-w-0 border-l border-white/8 py-2">
-              {act.spans.map((span) => (
-                <button
-                  key={span.span_id}
-                  type="button"
-                  disabled={!canPlay(span)}
-                  onClick={() => onPlaySpan(span)}
-                  className="group flex w-full min-w-0 items-start gap-2 px-3 py-2 text-left text-[14px] leading-relaxed text-foreground/85 transition-colors hover:bg-white/[0.04] disabled:cursor-default disabled:opacity-55"
-                  title={canPlay(span) ? "이 구간 재생" : "재생할 영상을 찾지 못했습니다"}
-                >
-                  <Play
-                    size={13}
-                    className="mt-1 shrink-0 text-muted-foreground/45 group-hover:text-primary"
-                    fill="currentColor"
-                  />
-                  <span className="min-w-0 break-words">{span.text}</span>
-                  <span className="ml-auto shrink-0 pt-0.5 text-[11px] tabular-nums text-muted-foreground/40">
-                    {formatTime(span.start_ms)}
-                  </span>
-                </button>
-              ))}
-            </div>
-          </section>
-        ))}
-      </div>
-
-      <button
-        type="button"
-        aria-expanded={transcriptOpen}
-        onClick={() => setTranscriptOpen((open) => !open)}
-        className="mt-2 flex h-9 w-full items-center gap-2 px-2 text-left text-[13px] font-semibold text-muted-foreground transition-colors hover:text-foreground"
-      >
-        {transcriptOpen ? <ChevronDown size={15} /> : <ChevronRight size={15} />}
-        <span>전체 전사</span>
-        <span className="ml-auto tabular-nums text-muted-foreground/50">
-          {data.eligible_count}
-        </span>
-      </button>
-
-      {transcriptOpen && (
-        <div className="max-h-[34vh] overflow-y-auto border-t border-white/8 py-1">
-          {data.transcript.map((span) => {
-            const selected = selectedIds.has(span.span_id);
-            return (
-              <button
-                key={span.span_id}
-                type="button"
-                disabled={!canPlay(span)}
-                onClick={() => onPlaySpan(span)}
-                className={`flex w-full items-start gap-2 px-2 py-1.5 text-left text-[12px] leading-relaxed transition-colors hover:bg-white/[0.04] disabled:cursor-default ${
-                  selected ? "text-foreground/80" : "text-muted-foreground/55"
-                }`}
-                title={canPlay(span) ? "이 구간 재생" : "재생할 영상을 찾지 못했습니다"}
-              >
-                <span className={`mt-2 h-1.5 w-1.5 shrink-0 rounded-full ${
-                  selected ? "bg-primary" : "bg-white/15"
-                }`} />
-                <span className="min-w-0 break-words">{span.text}</span>
-                <span className="ml-auto shrink-0 tabular-nums text-muted-foreground/35">
-                  {formatTime(span.start_ms)}
-                </span>
-              </button>
-            );
-          })}
-        </div>
-      )}
+            <button
+              type="button"
+              onClick={() => onAddSpan(span)}
+              className={`flex min-w-0 flex-1 items-start gap-3 px-2 py-2 text-left text-[13px] leading-relaxed transition-colors ${
+                selected
+                  ? "font-medium text-white"
+                  : "text-muted-foreground/55 hover:text-foreground/75"
+              }`}
+              title={selected ? "스토리에 들어간 문장" : "스토리에 추가"}
+            >
+              <span className="min-w-0 break-words">{span.text}</span>
+              <span className="ml-auto shrink-0 pt-0.5 text-[11px] tabular-nums text-muted-foreground/35">
+                {formatTime(span.start_ms)}
+              </span>
+            </button>
+            <button
+              type="button"
+              disabled={!canPlay(span)}
+              onClick={() => onPlaySpan(span)}
+              className="mr-1 mt-1.5 inline-flex h-7 w-7 shrink-0 items-center justify-center text-muted-foreground/35 transition-colors hover:text-primary disabled:cursor-default disabled:opacity-20"
+              title={canPlay(span) ? "이 구간 재생" : "재생할 영상을 찾지 못했습니다"}
+            >
+              <Play size={13} fill="currentColor" />
+            </button>
+          </div>
+        );
+      })}
     </div>
   );
 };
