@@ -147,8 +147,17 @@ const RoughCutStage: React.FC<RoughCutStageProps> = ({
           Number(word.e_ms) > span.start_ms && Number(word.s_ms) < span.end_ms
         ));
         return displayWords.length > 0
-          ? { ...span, fragment_id: fragment?.fragment_id, display_words: displayWords }
-          : { ...span, fragment_id: fragment?.fragment_id };
+          ? {
+            ...span,
+            fragment_id: fragment?.fragment_id,
+            display_id: fragment?.display_id,
+            display_words: displayWords,
+          }
+          : {
+            ...span,
+            fragment_id: fragment?.fragment_id,
+            display_id: fragment?.display_id,
+          };
       }),
     };
   }, [data, fragmentForSpan, ledgerItems]);

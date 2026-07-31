@@ -12,6 +12,7 @@ export interface RoughCutDisplayWord {
 export interface RoughCutSpan {
   span_id: string;
   fragment_id?: string;
+  display_id?: string;
   source_id: string;
   start_ms: number;
   end_ms: number;
@@ -82,6 +83,17 @@ const RoughCutOutline: React.FC<RoughCutOutlineProps> = ({
     () => new Set(selectedSpanIds),
     [selectedSpanIds],
   );
+  const selectedOrderByFragment = useMemo(() => {
+    const spanById = new Map(data.transcript.map((span) => [span.span_id, span]));
+    const orderByFragment = new Map<string, number>();
+    for (const spanId of selectedSpanIds) {
+      const fragmentId = spanById.get(spanId)?.fragment_id;
+      if (fragmentId && !orderByFragment.has(fragmentId)) {
+        orderByFragment.set(fragmentId, orderByFragment.size + 1);
+      }
+    }
+    return orderByFragment;
+  }, [data.transcript, selectedSpanIds]);
 
   useEffect(() => {
     if (!activeFragmentId || focusOrigin !== "user") return;
@@ -100,6 +112,9 @@ const RoughCutOutline: React.FC<RoughCutOutlineProps> = ({
       {data.transcript.map((span) => {
         const selected = selectedIds.has(span.span_id);
         const active = !!activeFragmentId && span.fragment_id === activeFragmentId;
+        const storyOrder = span.fragment_id
+          ? selectedOrderByFragment.get(span.fragment_id)
+          : undefined;
         return (
           <div
             key={span.span_id}
@@ -108,6 +123,8 @@ const RoughCutOutline: React.FC<RoughCutOutlineProps> = ({
             }`}
             data-rough-cut-span={span.span_id}
             data-fragment-id={span.fragment_id}
+            data-fragment-display-id={span.display_id}
+            data-story-order={storyOrder}
             data-transcript-active={active ? "true" : "false"}
             data-story-selected={selected ? "true" : "false"}
           >
@@ -121,6 +138,18 @@ const RoughCutOutline: React.FC<RoughCutOutlineProps> = ({
               }`}
               title={selected ? "스토리에 들어간 문장" : "스토리에 추가"}
             >
+              <span className="flex h-[18px] w-[18px] shrink-0 items-center justify-center">
+                {storyOrder && (
+                  <span className="flex h-[18px] w-[18px] items-center justify-center rounded-[5px] bg-primary font-mono text-[11px] font-medium leading-none text-primary-foreground">
+                    {storyOrder}
+                  </span>
+                )}
+              </span>
+              <span className={`w-7 shrink-0 pt-0.5 font-mono text-[12px] font-medium leading-none ${
+                storyOrder ? "text-primary" : "text-secondary-foreground/45"
+              }`}>
+                {span.display_id}
+              </span>
               <span className="min-w-0 break-words">
                 {span.display_words?.length
                   ? span.display_words.map((word, index) => (
