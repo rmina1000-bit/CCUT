@@ -128,6 +128,20 @@ class WhisperVulkanAdapter(BaseAdapter, ASRProvider):
         of = os.path.join(cli_dir, f"_live_asr_{os.getpid()}")
         args = [self.cli_path, "-m", self._active_model, "-f", wav,
                 "-t", str(self.threads), "-l", "auto", "-ojf", "-of", of]
+        # [ASR-MC0 2026-08-01] max-context 기본 -1(무제한 문맥 캐리)이 자기유지 루프를 만듦.
+        #   직전 출력이 다음 입력의 문맥이 되어, 한 번 반복이 시작되면 파일 끝까지 유지된다.
+        #   whisper.cpp 에는 condition_on_previous_text 플래그가 없고 대응물이 -mc 다.
+        # 실측(전체 파일 A/B, scratchpad 사본):
+        #   SRC_3111FA4F 루프 83.7% -> 8.9%, 반복률 1.00 구간 46 -> 0, 대사 2.5배 회수.
+        #   대조군 SRC_0094A13D 0% -> 0% (회귀 없음), 고유명사 표기 A/B 완전 동일,
+        #   소요 120s -> 101s (정상 소스에선 오히려 빠름).
+        # 대가: 정상 소스에서 마침표 -45% — TEXT-CORE 절 분할 영향은 미측정.
+        # 내장 방어(entropy 2.40 / logprob -1.00 / temperature fallback)는 켜져 있었고 통과했다 —
+        #   세그먼트 품질만 보고 "직전과 같은 말인가"를 보지 않아 이 결함에 도달하지 못한다.
+        # ★ -sns(비음성 토큰 억제)는 악화(새 루프 + 환각)로 실측 제외됨. 넣지 말 것.
+        # 게이트는 기본 ON — 미반영 상태가 전사 84% 소실이라 기본 OFF 면 결함이 유지된다.
+        if os.getenv("CCUT_ASR_MAX_CONTEXT_ZERO", "1") in ("1", "true", "True"):
+            args += ["-mc", "0"]
         proc = subprocess.run(args, cwd=cli_dir, capture_output=True,
                               text=True, encoding="utf-8", errors="replace", timeout=900)
         jpath = of + ".json"
