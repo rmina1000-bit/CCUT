@@ -362,7 +362,28 @@ def scan_project(project_id: str, max_frames: int = 400) -> dict:
     con.close()
     # [정면 대표] 이미 스캔된 군집(위 seen-skip 대상)도 소급 갱신.
     # 중복 병합(merge_duplicates)은 과병합 사고 이후 자동 실행하지 않는다 — dry-run 검증 후 수동.
-    refreshed = refresh_representatives()
+    #
+    # [SCAN-COST 2026-08-01] **이번 스캔이 얼굴을 하나도 못 찾았으면 소급 갱신도 건너뛴다.**
+    #   왜: refresh_representatives 는 pending 군집 61개에 걸린 키프레임 954장을 전부
+    #   다시 얼굴검출한다. 프로젝트와 무관한 전역 작업이라 3소스 프로젝트를 열어도 똑같이 돈다.
+    #   실측(2026-08-01): 단독 9.9s(warm) / 서버 콜드 ~17s. 그리고 refreshed=0 —
+    #   17초를 쓰고 아무것도 바꾸지 않는다.
+    #     persons/scan 단독 호출  Alcyone(3소스, 4프레임)  17.3s
+    #                             Adhara(40소스, 262프레임) 26.7s
+    #     -> 프레임 수와 무관한 ~17s 고정비 = 이 호출.
+    #   그동안 브라우저 연결 슬롯을 물고 있어 썸네일 96건이 61.9s 중 59.2s(96%)를 굶었다.
+    #   (썸네일 개별 요청은 1.4s 이하 — 느린 게 아니라 굶고 있었다.)
+    #
+    #   결과는 바뀌지 않는다: faces_found>0 이면 예전과 똑같이 돈다. 0 이면 이번 스캔이
+    #   persons/person_faces 를 건드리지 않았다는 뜻이고, 그때 소급 갱신이 새로 찾을 것은
+    #   구버전 frontal=0 백필뿐인데 그건 이미 끝나 있다(refreshed=0 실측).
+    #   백필이 다시 필요하면 refresh_representatives(force=True) 를 직접 부른다.
+    if faces_found > 0:
+        refreshed = refresh_representatives()
+    else:
+        refreshed = 0
+        print(f"[PERSON-PALETTE] scan {project_id}: 새 얼굴 0 — 대표 소급갱신 건너뜀 "
+              f"(SCAN-COST: 전역 재검출 954장 회피)", flush=True)
     print(f"[PERSON-PALETTE] scan {project_id}: frames={scanned} faces={faces_found} "
           f"new_clusters={new_clusters} rep_refreshed={refreshed}")
     return {"status": "OK", "scanned": scanned, "faces": faces_found,
