@@ -315,11 +315,11 @@ def _count_since(con, domain: str, fixed_at: str) -> int:
     fixed = _aware(fixed_at)
     if fixed is None:
         # 수리 시각을 못 읽으면 전부 최신으로 센다(_line_state 의 기존 원칙과 같다).
-        return con.execute(f"SELECT COUNT(*) FROM {fl_table()} WHERE domain=?",
+        return con.execute(f"SELECT COUNT(*) FROM {fl_table()} WHERE domain=? AND {_NOT_PROBE}",
                            (domain,)).fetchone()[0]
     n = 0
     for (created,) in con.execute(
-            f"SELECT created_at FROM {fl_table()} WHERE domain=?", (domain,)):
+            f"SELECT created_at FROM {fl_table()} WHERE domain=? AND {_NOT_PROBE}", (domain,)):
         c = _aware(created)
         if c is None or c > fixed:
             n += 1
@@ -381,6 +381,20 @@ def _line_state(b: Dict[str, Any], ledger: Dict[str, Any]) -> Dict[str, Any]:
                     else f"실패 {total}건은 모두 수리({b.get('fixed_by')}) 이전")}
 
 
+# [LEDGER-PROBE-EXCLUDE 2026-08-01] 집계에서 시험 흔적을 뺀다 — **행은 지우지 않는다.**
+#   원장은 append-only 다(잘못 적힌 것도 남기고 새 행으로 정정). 그런데 08-01 라우트
+#   개통 확인용으로 적은 __route_smoke__ 한 행이 approve_to_playback_contract 를
+#   "실패 2건"으로 만들었다 — 진짜는 1건이다. 지도가 거짓말하는 상태로 다른 판단을
+#   쌓으면 그 선을 보고 내리는 결정이 전부 틀어진다.
+#   그래서 행은 남기고 **집계에서만** 제외한다. 규칙은 error_code 가 '__' 로 시작하는 것.
+#
+#   ★ LIKE 를 쓰지 않는 이유(실측): SQLite LIKE 에서 '_' 는 임의의 한 글자 와일드카드다.
+#     "error_code LIKE '__%'" 는 두 글자 이상인 코드를 **전부** 잡는다 —
+#     실측: ping / repetition_loop / foreign_story_fids 까지 걸렸다.
+#     그대로 썼다면 진짜 실패가 통째로 집계에서 사라졌을 것이다. substr 로 정확히 본다.
+_NOT_PROBE = "substr(error_code, 1, 2) <> '__'"
+
+
 def _ledger_slice(domain_hint: str = "rough_cut", fixed_at: Optional[str] = None) -> Dict[str, Any]:
     """아래 절반 — failure_ledger 참조. 새 계산식을 만들지 않는다(COUNT/MIN/MAX 뿐).
 
@@ -396,7 +410,7 @@ def _ledger_slice(domain_hint: str = "rough_cut", fixed_at: Optional[str] = None
         try:
             row = con.execute(
                 f"SELECT COUNT(*) n, MIN(created_at) first, MAX(created_at) last "
-                f"FROM {fl.TABLE} WHERE domain=?", (domain_hint,)).fetchone()
+                f"FROM {fl.TABLE} WHERE domain=? AND {_NOT_PROBE}", (domain_hint,)).fetchone()
         except sqlite3.OperationalError as exc:
             return {"read": "UNKNOWN", "error": f"원장 없음: {exc}"}
         n = row["n"] or 0
@@ -411,11 +425,11 @@ def _ledger_slice(domain_hint: str = "rough_cut", fixed_at: Optional[str] = None
                 "note": "원장에 아직 행이 없다 — 실패가 없었다는 뜻이 아니다",
             }
         codes = {r["error_code"]: r["n"] for r in con.execute(
-            f"SELECT error_code, COUNT(*) n FROM {fl.TABLE} WHERE domain=? GROUP BY error_code", (domain_hint,))}
+            f"SELECT error_code, COUNT(*) n FROM {fl.TABLE} WHERE domain=? AND {_NOT_PROBE} GROUP BY error_code", (domain_hint,))}
         phases = {str(r["phase"]): r["n"] for r in con.execute(
-            f"SELECT phase, COUNT(*) n FROM {fl.TABLE} WHERE domain=? GROUP BY phase", (domain_hint,))}
+            f"SELECT phase, COUNT(*) n FROM {fl.TABLE} WHERE domain=? AND {_NOT_PROBE} GROUP BY phase", (domain_hint,))}
         attempts = {str(r["attempt"]): r["n"] for r in con.execute(
-            f"SELECT attempt, COUNT(*) n FROM {fl.TABLE} WHERE domain=? GROUP BY attempt", (domain_hint,))}
+            f"SELECT attempt, COUNT(*) n FROM {fl.TABLE} WHERE domain=? AND {_NOT_PROBE} GROUP BY attempt", (domain_hint,))}
         return {
             "read": "OK", "domain": domain_hint,
             "failure_count": n, "first_occurrence": row["first"], "latest": row["last"],
@@ -428,7 +442,7 @@ def _ledger_slice(domain_hint: str = "rough_cut", fixed_at: Optional[str] = None
             "writer_exists": _writer_exists(domain_hint),
             "recent": [dict(r) for r in con.execute(
                 f"SELECT created_at, error_code, phase, attempt, program_id "
-                f"FROM {fl.TABLE} WHERE domain=? ORDER BY id DESC LIMIT 5", (domain_hint,))],
+                f"FROM {fl.TABLE} WHERE domain=? AND {_NOT_PROBE} ORDER BY id DESC LIMIT 5", (domain_hint,))],
         }
     finally:
         con.close()
