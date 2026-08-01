@@ -810,6 +810,105 @@ def _seq_fids(sequence):
     return [str(s.get("fragment_id")) for s in (sequence or []) if isinstance(s, dict) and s.get("fragment_id")]
 
 
+def _alive_fragment_ids(fids):
+    """[SEQ-ANCHOR] 그중 **현행 semantic_fragments 에 실제로 있는** fid 집합."""
+    if not fids:
+        return set()
+    con = _connect()
+    try:
+        ph = ",".join("?" for _ in fids)
+        rows = con.execute(
+            f"SELECT fragment_id FROM semantic_fragments WHERE fragment_id IN ({ph})",
+            list(fids),
+        ).fetchall()
+        return {r["fragment_id"] for r in rows}
+    except sqlite3.OperationalError:
+        return set()
+    finally:
+        con.close()
+
+
+def _rematch_by_anchor(missing_fids, by_fid, approval_fids):
+    """[SEQ-ANCHOR 2026-08-01] fid 로 못 찾은 조각을 **좌표로 다시 잇는다.**
+
+    왜 필요한가(실측): 승인 원고·제안이 담은 fid 는 재조각화로 분절 경계가 바뀌면 죽는다.
+      story_approval 최신 승인 5행 36 fid 중 10건(27.8%) · proposals 42 중 13건(30.9%) 끊김.
+      fid 는 sha1(source_id|start_ds|end_ds)[:6] 결정론이라 경계가 바뀔 때만 달라진다.
+      그런데 읽기 경로는 :753 `WHERE sf.fragment_id IN (...)` 문자열 일치 하나뿐이었고,
+      못 찾은 fid 는 :853 에서 **조용히 시퀀스에서 빠졌다** — 사용자는 9조각을 승인했는데
+      A 는 3조각만 남는다. 예외도 경고도 없이 줄어든다.
+
+    좌표는 어디서 오는가: 이미 저장돼 있다. proposals.sequence[] 의 각 dict 가
+      source_id + start/end 를 함께 갖고 있고(archive/manager.py:667-680), 승인 시점의
+      제안 dict 가 by_fid 에 그대로 들어온다. 새로 만들 게 없다 — 읽지 않았을 뿐이다.
+
+    ★ 재매칭식을 복제하지 않는다. 편집 상태가 쓰는 계약 함수를 그대로 부른다
+      (edit_contract/edit_state.py:128 rematch_anchor). 같은 일을 하는 자리가 둘이면
+      언젠가 다르게 판정한다.
+    ★ 허용오차 3000ms 는 실측값이다(원고 재연결과 같은 값, Index.tsx 와 동일).
+      끊긴 원고 300건 드리프트: 중앙값 840ms · 90% 1840ms · 최대 2980ms.
+      모든 오차 구간에서 다중 후보 0건 — 양끝을 다 요구해 오매칭이 관측되지 않았다.
+    ★ 못 찾으면 UNKNOWN 이다. 가까운 걸 아무거나 붙이지 않는다.
+
+    반환: {옛 fid: 현 세대 조각 dict}
+    """
+    if not missing_fids:
+        return {}
+    from edit_contract.edit_state import rematch_anchor
+    from edit_contract.time_units import to_ms
+
+    # 옛 좌표: 승인/제안 dict 안에 이미 있는 값만 쓴다. 없으면 지어내지 않는다.
+    anchors = {}
+    for fid in missing_fids:
+        row = by_fid.get(fid) or {}
+        sid = str(row.get("source_id") or "")
+        s, e = row.get("start"), row.get("end")
+        if not sid or s is None or e is None:
+            continue
+        try:
+            anchors[fid] = (sid, to_ms(float(s)), to_ms(float(e)))
+        except Exception:
+            continue
+    if not anchors:
+        return {}
+
+    # 후보: 그 소스들의 현행 조각을 시간순으로 (rematch_anchor 계약이 정렬을 요구한다)
+    con = _connect()
+    try:
+        sids = sorted({a[0] for a in anchors.values()})
+        ph = ",".join("?" for _ in sids)
+        rows = con.execute(
+            f'SELECT fragment_id, source_id, start, "end" FROM semantic_fragments '
+            f'WHERE source_id IN ({ph}) ORDER BY source_id, start', list(sids),
+        ).fetchall()
+    except sqlite3.OperationalError:
+        return {}
+    finally:
+        con.close()
+
+    cand = {}
+    for r in rows:
+        cand.setdefault(r["source_id"], []).append(
+            (r["fragment_id"], to_ms(float(r["start"])), to_ms(float(r["end"]))))
+
+    found = {}
+    for fid, (sid, a_s, a_e) in anchors.items():
+        lst = cand.get(sid) or []
+        idx = rematch_anchor((a_s, a_e), [(c[1], c[2]) for c in lst], SEQ_REMATCH_TOL_MS)
+        if idx is None:
+            continue
+        found[fid] = lst[idx][0]
+    if not found:
+        return {}
+    resolved = _fragment_rows(list(found.values()))
+    return {old: resolved[new] for old, new in found.items() if new in resolved}
+
+
+# 원고 재연결과 같은 값(ccut_frontend/src/pages/Index.tsx STORY_REMATCH_TOL_MS).
+# 실측 근거는 _rematch_by_anchor 주석 참조. 임의 조정 금지.
+SEQ_REMATCH_TOL_MS = 3000
+
+
 def rebuild_from_approval(proposals, approval_fids, pool_fragments=None):
     """A/B의 sequence를 **승인 fids 순서 그대로** 재구성한다 (INV-1·INV-2 강제).
 
@@ -847,7 +946,49 @@ def rebuild_from_approval(proposals, approval_fids, pool_fragments=None):
         print(f"[PROPOSAL-AXIS] video_url 보충: 대상 {len(playable_gap)}건, 남은 결손 {len(still)}건"
               + (f" {still[:3]}" if still else ""))
 
+    # [SEQ-ANCHOR 2026-08-01] fid 가 현행 조각을 가리키지 못하면 **좌표로 다시 잇는다.**
+    #   ① fid 직접 매칭(위) → ② 좌표 재매칭(여기) → ③ 둘 다 실패면 UNKNOWN.
+    #
+    #   ★ 판정 기준이 'by_fid 에 dict 가 있는가'가 아니라 **'현행 semantic_fragments 에
+    #     그 조각이 실제로 있는가'**다. 구판(:853)은 dict 유무만 봤는데, by_fid 는 저장된
+    #     제안의 sequence 로도 채워지므로 **죽은 조각의 낡은 dict 가 그대로 통과**했다.
+    #     실측(살아있는 프로그램 현행 승인): SA#59 3건 · SA#32 5건이 이 경로로 통과 중이었다 —
+    #     화면에는 뜨는데 그 fid 의 조각은 semantic_fragments 에 없다.
+    #     'dict 가 있다'와 '조각이 있다'는 다르다. 뒤엣것을 기준으로 삼는다.
+    alive_fids = _alive_fragment_ids(approval_fids)
+    stale = [fid for fid in approval_fids if fid not in alive_fids]
+    rematched = {}
+    if stale:
+        rematched = _rematch_by_anchor(stale, by_fid, approval_fids)
+        by_fid.update(rematched)
+    still_missing = [fid for fid in approval_fids if fid not in by_fid]
+
     unresolved = [fid for fid in approval_fids if fid not in by_fid]
+
+    if rematched or unresolved:
+        print(f"[SEQ-ANCHOR] 승인 {len(approval_fids)}조각 — 현행 조각 직행 "
+              f"{len(approval_fids) - len(stale)} · 좌표 재연결 {len(rematched)} · "
+              f"못 찾음 {len(unresolved)}", flush=True)
+
+    # ③ 조용히 빼지 않는다. 구판은 못 찾은 fid 를 아래 시퀀스 구성에서 그냥 건너뛰어
+    #   사용자가 9조각을 승인하고 3조각만 받아도 아무 신호가 없었다(로그 한 줄뿐).
+    #   원장에 남겨 화면이 알 수 있게 한다. 신고 실패가 본선을 죽이지 않는다.
+    if unresolved:
+        try:
+            import failure_ledger as _fl_seq
+            _fl_seq.record(
+                "story", "approval_fids_unresolved",
+                phase="rebuild_from_approval",
+                detail={
+                    "approved": len(approval_fids),
+                    "fid_direct": len(approval_fids) - len(stale),
+                    "rematched_by_anchor": len(rematched),
+                    "unresolved": len(unresolved),
+                    "first3": list(unresolved[:3]),
+                },
+            )
+        except Exception as _e_seq:
+            print(f"[SEQ-ANCHOR][LEDGER-BROKEN] 신고 실패(본선 계속): {_e_seq}", flush=True)
 
     for p in (proposals or []):
         p["sequence"] = [dict(by_fid[fid]) for fid in approval_fids if fid in by_fid]
