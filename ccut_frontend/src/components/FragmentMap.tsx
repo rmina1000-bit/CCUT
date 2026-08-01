@@ -260,7 +260,10 @@ const FragmentMap: React.FC<FragmentMapProps> = ({
 
   const handleDrop = useCallback(
     (e: React.DragEvent, targetRealIndex: number) => {
-      console.log("[DEBUG] FragmentMap handleDrop types:", e.dataTransfer.types);
+      // [PERF-LOG 2026-08-01] 드롭 진단은 남기되 개발 빌드에서만.
+      //   삭제하지 않는 이유: 'holdData 빈 값' 이 아직 미규명이고, 그때 볼 값이 이것뿐이다.
+      //   드롭 시에만 발화하므로 전환 지연과는 무관하다(주범은 THUMB_AUDIT_ALL_JSON).
+      if (import.meta.env.DEV) console.log("[DEBUG] FragmentMap handleDrop types:", e.dataTransfer.types);
       e.preventDefault();
       e.stopPropagation();
       setDragOverIndex(null);
@@ -289,15 +292,18 @@ const FragmentMap: React.FC<FragmentMapProps> = ({
       }
 
       const holdData = e.dataTransfer.getData("application/ccut-fragment-hold");
-      console.log("[DEBUG] holdData:", holdData);
+      if (import.meta.env.DEV) console.log("[DEBUG] holdData:", holdData);
       if (holdData) {
         try {
           const frag = JSON.parse(holdData) as Fragment;
-          console.log("[DEBUG] parsed frag:", frag.fragment_id);
-          console.log("[DEBUG] onSourceRestore exists:", !!onSourceRestore);
+          if (import.meta.env.DEV) {
+            console.log("[DEBUG] parsed frag:", frag.fragment_id);
+            console.log("[DEBUG] onSourceRestore exists:", !!onSourceRestore);
+          }
           onSourceRestore?.(frag, targetRealIndex);
         } catch (err) {
-          console.error("[DEBUG] json parse error:", err);
+          // 실제 오류는 빌드와 무관하게 드러낸다 — 게이트로 가리지 않는다.
+          console.error("[FragmentMap] hold payload JSON 파싱 실패:", err);
         }
         return;
       }

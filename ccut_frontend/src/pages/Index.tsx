@@ -514,26 +514,12 @@ const Index: React.FC = () => {
     });
 
     if (mapped.length > 0) {
-      console.log(`[mapFragments] ${label} (${mapped.length} frags) first thumb:`, mapped[0].thumbnail?.thumbnail_url);
+      // [PERF-LOG 2026-08-01] THUMB_AUDIT_ALL_JSON 철거 — 소스마다 조각 전량을
+      //   JSON.stringify(pretty) 해서 콘솔에 쏟았다. 40소스 프로젝트면 수만 줄이고,
+      //   직렬화 비용은 devtools 를 닫아도 그대로 든다. 썸네일 감사는 끝났고
+      //   지금 필요한 것은 이 값이 아니다 — 죽은 로그라 게이트가 아니라 삭제.
+      // pushAnalysisLog 는 남긴다: 제품 화면(AnalysisLoadingView)이 읽는 값이다.
       pushAnalysisLog(`[mapFragments] ${label} (${mapped.length} frags)`);
-      console.log(
-        `[THUMB_AUDIT_ALL_JSON] ${label}\n` +
-        JSON.stringify(
-          mapped.map((f: any) => ({
-            fragment_id: f.fragment_id,
-            display_id: f.display_id,
-            source_video: f.source_video,
-            start_frame: f.start_frame,
-            end_frame: f.end_frame,
-            duration: f.duration,
-            thumb: f.thumbnail?.thumbnail_url,
-            thumb_direct: f.thumbnail_url,
-            intelligence_thumb: f.intelligence?.thumb_url,
-          })),
-          null,
-          2
-        )
-      );
     }
     return assignShortDisplayIds(recalcDisplayIds(mapped as any)) as any;
   }, [toFullUrl]);
