@@ -2325,10 +2325,38 @@ const Index: React.FC = () => {
   const handleRoughCutSpanAdd = useCallback((span: RoughCutSpan) => {
     const fragment = roughCutFragmentForSpan(span);
     if (!fragment) return;
+    const fid = getUid(fragment);
+
+    // [TOGGLE-RESTORE-2 2026-08-01] 전사도 재클릭으로 해제된다.
+    //   조각맵(handleEditFragmentClick)에는 토글이 있었는데(07-25 게이트에 막혔다가
+    //   18af4fb2 에서 복원) 전사에는 **애초에 없었다** — 도입 커밋 503e5d48
+    //   "중앙 전사를 스토리 선택면으로 전환"부터 add-only 설계였다(git log -S 확인).
+    //   그래서 배지가 붙으면 전사에서는 뺄 방법이 없었다. 조각맵과 같은 방식으로 맞춘다.
+    //   판정 기준은 화면과 같은 것을 쓴다: 그 조각이 story 에 들어가 있는가(fid).
+    //   RoughCutOutline 의 배지도 fid 기준(selectedOrderByFragment)이므로 눈과 코드가 일치한다.
+    if (storyFidsRef.current.includes(fid)) {
+      const nextFids = storyFidsWithout(fid);
+      // 그 조각에 딸린 span 들만 선택에서 뺀다 — 다른 조각의 선택은 건드리지 않는다.
+      const spanById = new Map((roughCutData?.transcript ?? []).map((s) => [s.span_id, s]));
+      const selectedSpanIds = roughCutSelectedSpanIds.filter((spanId) => {
+        const s = spanById.get(spanId);
+        if (!s) return true;                       // 모르는 span 은 남긴다(임의 삭제 금지)
+        const f = roughCutFragmentForSpan(s);
+        return !f || getUid(f) !== fid;
+      });
+      setRoughCutPlacement({
+        inputHash: roughCutPlacement?.inputHash ?? roughCutData?.input_hash ?? null,
+        selectedSpanIds,
+      });
+      applyStory(roughCutFragmentsForFids(nextFids), nextFids);
+      void persistRoughCutDecision(nextFids, selectedSpanIds);
+      return;
+    }
+
     const selectedSpanIds = roughCutSelectedSpanIds.includes(span.span_id)
       ? roughCutSelectedSpanIds
       : [...roughCutSelectedSpanIds, span.span_id];
-    const nextFids = storyFidsWith(getUid(fragment));
+    const nextFids = storyFidsWith(fid);
     setRoughCutPlacement({
       inputHash: roughCutPlacement?.inputHash ?? roughCutData?.input_hash ?? null,
       selectedSpanIds,
@@ -2344,6 +2372,8 @@ const Index: React.FC = () => {
     roughCutPlacement?.inputHash,
     roughCutSelectedSpanIds,
     storyFidsWith,
+    storyFidsWithout,
+    roughCutData?.transcript,
   ]);
 
   const orderRoughCutSpanIds = useCallback((fids: string[], spanIds: string[]) => {
