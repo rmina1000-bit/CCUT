@@ -1088,6 +1088,33 @@ def _background_whisper_impl(source_id: str, video_path: str, fragments: list):
         
         sem_gen = SemanticFragmentGenerator(bams)
         sem_gen.generate(source_id)
+        # [VAULT-HOOK 2026-08-01] 금고 승계를 이 경로에도 단다.
+        #   실측된 병소: fragment_vault 에 쓰는 코드는 전 저장소에 단 하나(ingest_source)이고,
+        #   그 호출은 POST /semantic-fragments 핸들러(:2609) 안에만 있었다. 그런데 조각을
+        #   새로 만드는 경로는 둘이다 — 여기(_background_whisper)와 그 핸들러.
+        #   /generate-fragments?force=true 는 여기만 타므로 **조각은 갈아엎고 금고는 안 건드렸다.**
+        #   로그 증거(2026-08-01): 12:40:40 SRC_0094A13D force 재분석 -> SF 110개 재생성,
+        #   [VAULT] 줄 0회. 13:19 프론트 업로드 흐름을 탄 SRC_3111FA4F 만 승계(+96 병합 39).
+        #   22:00 force 재분석 뒤에도 vault last_seen 은 13:30:23 에 멈춰 있었다.
+        #   메워줄 장치도 없다: backfill_all 호출자 0건, tools/vault_backfill.py 는 파일 부재.
+        #   금고는 복구의 최후 보루다 — 옛 좌표가 거기 있어야 끊긴 원고를 다시 잇는다.
+        #   ★ 새 적재 경로를 만들지 않았다. :2609 와 같은 함수를 같은 방식으로 부른다.
+        #   ★ 본선 무접촉: 실패해도 조각 생성은 그대로 간다(비차단). 다만 조용히 넘기지 않는다 —
+        #     :2611 은 문자열만 찍고 끝나 'database is locked' 같은 실패가 묻혔다. 여기서는
+        #     원장(failure_ledger)에도 적어 화면이 알 수 있게 한다.
+        try:
+            from engine import fragment_vault as _fv_bg
+            _rv = _fv_bg.ingest_source(source_id)
+            print(f"[VAULT] 재조각화 승계 {source_id}: +{_rv.get('inserted', 0)} 병합 {_rv.get('merged', 0)}", flush=True)
+        except Exception as _fv_bg_e:
+            print(f"[VAULT] 승계 실패 (비차단) {source_id}: {_fv_bg_e}", flush=True)
+            try:
+                import failure_ledger as _fl_v
+                _fl_v.record("archive", "vault_ingest_failed", source_id=source_id,
+                             phase="background_semantic",
+                             detail={"error": f"{type(_fv_bg_e).__name__}: {_fv_bg_e}"})
+            except Exception as _fl_e:
+                print(f"[VAULT][LEDGER-BROKEN] 실패를 적지도 못했다: {_fl_e}", flush=True)
         _auto_reindex_fire(source_id)  # [AUTO-REINDEX] SF 재생성 완료 → 인덱스 재구축 (env 가역, 비블로킹)
 
         if source_id in _fragment_job_registry:
