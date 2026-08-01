@@ -2996,6 +2996,19 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
             {editStageAllowed && stageContent}
           </>
         );
+        // [C1-DIAGNOSED 2026-08-01] ★ 이 한 줄이 RoughCutStage 를 두 번 마운트시킨다.
+        //   stageSlot 은 처음 null 이라 finalContent 를 **인라인**으로 그리고, 아래 ref 콜백
+        //   (:2211, activeProposalEntryId 일 때만 존재하는 슬롯)이 값을 채우면 같은 내용이
+        //   **포털**로 옮겨간다. React 에게는 부모가 바뀐 것이므로 언마운트 -> 재마운트다.
+        //   실측(프로젝트 전환 Freesia -> Adhara):
+        //     mount(t=70397) -> unmount(t=70425) -> mount(t=70425)  = 28ms 한 틱
+        //     그 결과 /rough-cut/project 가 2회 호출된다(27ms 간격).
+        //   앞서 의심한 인라인 콜백·StrictMode 는 실측으로 부정됐다 — 의존성은 안정적이었고
+        //   트리가 갈아엎힌 것이었다.
+        //   지금은 **고치지 않는다**(국장 판정): 낭비가 전환당 요청 1회(<500ms)로 작고,
+        //   슬롯을 항상 렌더하거나 무대 구조를 정리하는 수리는 레이아웃 변경이라
+        //   '제안 없는 프로젝트에서 전사가 사라지는' 위험이 있다(겨우 살린 것이다).
+        //   ★ 다음에 이 포털/인라인 구조를 손대는 사람은 그때 이 재마운트도 함께 없앨 것.
         return stageSlot ? createPortal(finalContent, stageSlot) : finalContent; })()}
 
         {/* [CHATSCROLL-FIX-01] 위에서 읽는 중에 새 내용이 오면 끌어내리지 않고 여기로 알린다.
