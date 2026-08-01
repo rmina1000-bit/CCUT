@@ -1733,7 +1733,12 @@ const Index: React.FC = () => {
   const handleEditFragmentClick = useCallback(
     (f: Fragment) => {
       setFragmentFocusOrigin("user");   // [PLAYSTABILITY-FIX-01 1번] 클릭은 시야로 따라간다
-      if (!modeGateOn && selectedFragment && getUid(selectedFragment) === getUid(f)) {
+      // [TOGGLE-RESTORE 2026-08-01] `!modeGateOn &&` 제거 — 07-25 d86ccf8f 이 붙였고,
+      //   게이트가 켜진 뒤로 재클릭 해제가 통째로 죽어 선택이 단방향이 됐다(퇴행).
+      //   그 커밋("UI 정리 + 보류맵 원본 복원 + 대사 에디터 재연결")은 이 조건을 왜 걸었는지
+      //   메시지·주석 어디에도 남기지 않았다 — 지키려던 것을 알 수 없어 **07-25 이전 동작을
+      //   그대로 되돌린다**. 새 토글을 만들지 않는다(두 벌 금지).
+      if (selectedFragment && getUid(selectedFragment) === getUid(f)) {
         setSelectedFragment(null);
         setHighlightedPanoramaFrag(null);
         setExpandedFragment(null);

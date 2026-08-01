@@ -136,7 +136,13 @@ const FragmentMap: React.FC<FragmentMapProps> = ({
 
   React.useEffect(() => {
     const activeId = activeFragmentId || selectedFragmentId;
-    if (!activeId) return;
+    // [TOGGLE-RESTORE 2026-08-01] 재클릭 해제(선택=null)가 되살아났으므로 하이라이트도 같이
+    //   내린다. 구판은 !activeId 에서 그냥 return 해 마지막 강조 줄이 남았다 —
+    //   해제했는데 여전히 켜져 보이면 사용자는 해제가 안 된 줄 안다.
+    if (!activeId) {
+      setActiveTextRowId(null);
+      return;
+    }
     setActiveTextRowId(activeId);          // 하이라이트는 출처와 무관하게 항상.
     // [PLAYSTABILITY-FIX-01 1번] 스크롤 따라가기는 **사용자 클릭일 때만**.
     //   시퀀스 재생 진행으로 이걸 호출하면 중앙 채팅이 통째로 밀린다 — 실측 S1.scrollTop 0 -> 2152.
