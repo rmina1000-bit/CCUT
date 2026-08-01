@@ -140,7 +140,7 @@ const LeftNav: React.FC<LeftNavProps> = ({
         <div className="absolute right-1 top-0 bottom-0 flex items-center" style={{ display: collapsed ? "none" : "flex" }}>
           <button
             onClick={onToggleCollapse}
-            className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-secondary/50 transition-colors text-foreground/40 hover:text-foreground/70"
+            className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-secondary/50 transition-colors text-foreground/62 hover:text-foreground/70"
             title="사이드바 닫기"
           >
             <PanelLeftClose size={14} strokeWidth={1.5} />
@@ -154,7 +154,7 @@ const LeftNav: React.FC<LeftNavProps> = ({
           <button
             onClick={onToggleCollapse}
             title="사이드바 열기"
-            className="w-full flex items-center justify-center px-3 py-2 rounded-lg text-foreground/40 hover:text-foreground/70 hover:bg-secondary/40 transition-colors"
+            className="w-full flex items-center justify-center px-3 py-2 rounded-lg text-foreground/62 hover:text-foreground/70 hover:bg-secondary/40 transition-colors"
             style={{ minHeight: 36 }}
           >
             <PanelLeftOpen size={15} strokeWidth={1.5} />
@@ -191,7 +191,7 @@ const LeftNav: React.FC<LeftNavProps> = ({
           <button
             onClick={onNewProject}
             title="새 프로젝트"
-            className="w-full flex items-center justify-center px-3 py-2 rounded-lg text-foreground/40 hover:text-foreground/70 hover:bg-secondary/40 transition-colors"
+            className="w-full flex items-center justify-center px-3 py-2 rounded-lg text-foreground/62 hover:text-foreground/70 hover:bg-secondary/40 transition-colors"
             style={{ minHeight: 36 }}
           >
             <Plus className="w-3.5 h-3.5" />
@@ -219,7 +219,7 @@ const LeftNav: React.FC<LeftNavProps> = ({
                     {allSelected && <span className="text-white text-[10px] leading-none">✓</span>}
                     {!allSelected && someSelected && <span className="text-white text-[10px] leading-none">−</span>}
                   </span>
-                  <span className="text-[12px] text-foreground/50">
+                  <span className="text-[12px] text-foreground/66">
                     {someSelected ? `${selectedIds.size}개 선택` : "전체 선택"}
                   </span>
                 </label>
@@ -236,7 +236,7 @@ const LeftNav: React.FC<LeftNavProps> = ({
                   <button
                     onClick={exitSelecting}
                     title="취소"
-                    className="text-[12px] text-foreground/40 hover:text-foreground/70 px-1 transition-colors"
+                    className="text-[12px] text-foreground/62 hover:text-foreground/70 px-1 transition-colors"
                   >
                     취소
                   </button>
@@ -245,7 +245,7 @@ const LeftNav: React.FC<LeftNavProps> = ({
             ) : (
               /* 일반 헤더 */
               <>
-                <span className="text-[12px] font-medium text-foreground/40 uppercase tracking-widest">
+                <span className="text-[12px] font-medium text-foreground/62 uppercase tracking-widest">
                   프로젝트
                 </span>
                 <div className="flex items-center gap-0.5">
@@ -253,7 +253,7 @@ const LeftNav: React.FC<LeftNavProps> = ({
                     <button
                       onClick={() => setIsSelecting(true)}
                       title="선택"
-                      className="w-5 h-5 flex items-center justify-center rounded hover:bg-secondary/50 transition-colors text-foreground/30 hover:text-foreground/60"
+                      className="w-5 h-5 flex items-center justify-center rounded hover:bg-secondary/50 transition-colors text-foreground/60 hover:text-foreground/60"
                     >
                       <CheckSquare size={12} strokeWidth={1.5} />
                     </button>
@@ -261,7 +261,7 @@ const LeftNav: React.FC<LeftNavProps> = ({
                   <button
                     onClick={onNewProject}
                     title="새 프로젝트"
-                    className="w-5 h-5 flex items-center justify-center rounded hover:bg-secondary/50 transition-colors text-foreground/40 hover:text-foreground/70"
+                    className="w-5 h-5 flex items-center justify-center rounded hover:bg-secondary/50 transition-colors text-foreground/62 hover:text-foreground/70"
                   >
                     <Plus className="w-3.5 h-3.5" />
                   </button>
@@ -338,7 +338,7 @@ const LeftNav: React.FC<LeftNavProps> = ({
                         </span>
                       ) : (
                         <div className="w-5 flex items-center justify-center flex-shrink-0">
-                          <Clapperboard size={14} className={isActive ? "text-primary" : "text-foreground/50"} strokeWidth={1.5} />
+                          <Clapperboard size={14} className={isActive ? "text-primary" : "text-foreground/66"} strokeWidth={1.5} />
                         </div>
                       )}
                       {!collapsed && (
@@ -353,14 +353,14 @@ const LeftNav: React.FC<LeftNavProps> = ({
                               }}
                               className="opacity-0 group-hover:opacity-100 p-0.5 rounded hover:bg-white/10 transition-opacity flex-shrink-0"
                             >
-                              <MoreVertical size={13} className="text-foreground/50" />
+                              <MoreVertical size={13} className="text-foreground/66" />
                             </button>
                           )}
                         </>
                       )}
                     </div>
                     {!collapsed && (
-                      <span className="text-[12px] text-foreground/40 ml-[28px] block mt-0.5">
+                      <span className="text-[12px] text-foreground/62 ml-[28px] block mt-0.5">
                         {proj.date} · {proj.count}개 영상
                       </span>
                     )}

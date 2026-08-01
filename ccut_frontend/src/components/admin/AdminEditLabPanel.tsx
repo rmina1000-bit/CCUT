@@ -321,7 +321,7 @@ const MaterialTable: React.FC<{ materials: MaterialAudit[] }> = ({ materials }) 
             <tr key={item.id} className="hover:bg-secondary/10">
               <td className="px-3 py-2 text-foreground/85">{item.label}</td>
               <td className="px-3 py-2 text-right font-mono">{counts.consumed}</td>
-              <td className={`px-3 py-2 text-right font-mono ${item.consumption.same_as_storage ? "text-muted-foreground/40" : "text-amber-300/70"}`}>
+              <td className={`px-3 py-2 text-right font-mono ${item.consumption.same_as_storage ? "text-muted-foreground/70" : "text-amber-300/70"}`}>
                 {counts.stored}
               </td>
               <td className="px-3 py-2 text-right font-mono">{item.distinct || "—"}</td>
@@ -568,7 +568,7 @@ export const AdminEditLabPanel: React.FC = () => {
 
   useEffect(() => { load(); }, []);
 
-  if (loading && !audit) return <p className="text-xs text-muted-foreground/50">측정 중...</p>;
+  if (loading && !audit) return <p className="text-xs text-muted-foreground/76">측정 중...</p>;
   if (error && !audit) return <p className="text-xs text-red-400">편집연구실 조회 실패: {error}</p>;
 
   const missingMaterials = audit?.materials.filter(item => item.non_null === 0).length ?? 0;
@@ -596,18 +596,18 @@ export const AdminEditLabPanel: React.FC = () => {
       <div className="flex items-start justify-between gap-4">
         <div>
           <h1 className="text-lg font-bold text-foreground/90">능력표</h1>
-          <p className="text-[11px] text-muted-foreground/50 mt-0.5">
+          <p className="text-[11px] text-muted-foreground/76 mt-0.5">
             {audit
               ? `재료 ${audit.materials.length - missingMaterials} 값 있음 / ${missingMaterials} 값 없음 · 하드룰 ${audit.rules.declared} 선언 / ${audit.rules.registered} 등록 / ${audit.rules.corrective} 보정 / ${audit.rules.veto} veto`
               : "측정 결과 없음"}
           </p>
           {audit && (
-            <p className="text-[11px] text-muted-foreground/50 mt-0.5">
+            <p className="text-[11px] text-muted-foreground/76 mt-0.5">
               기법 {audit.techniques.declared} 선언 → 모수 {audit.techniques.scope} · AI 가능 {audit.techniques.ai_allowed} / 조건부 {audit.techniques.ai_allowed_conditional} / 사용자 전용 {audit.techniques.user_only}
               {" · "}
               배선 {audit.techniques.wired} / 가동 {audit.techniques.active}
               {/* [LAB-52 ④] '미정 12' 리터럴 제거 — 죽은 수치였다. 실측 undecided 로 교체. */}
-              <span className="text-muted-foreground/40"> (모수 밖 — 인프라 {audit.techniques.not_a_technique} · 룰 이관 후보 {audit.techniques.rule_candidate} · 구 표기 “{audit.techniques.declared} 선언 / {audit.techniques.wired} 배선 · 미정 {audit.techniques.undecided}”)</span>
+              <span className="text-muted-foreground/70"> (모수 밖 — 인프라 {audit.techniques.not_a_technique} · 룰 이관 후보 {audit.techniques.rule_candidate} · 구 표기 “{audit.techniques.declared} 선언 / {audit.techniques.wired} 배선 · 미정 {audit.techniques.undecided}”)</span>
             </p>
           )}
           {audit && audit.techniques.gates_off.length > 0 && (
@@ -628,7 +628,7 @@ export const AdminEditLabPanel: React.FC = () => {
         </div>
         <div className="flex items-center gap-3">
           {audit && (
-            <span className="text-[10px] text-muted-foreground/40">
+            <span className="text-[10px] text-muted-foreground/70">
               마지막 측정 {new Date(audit.audited_at).toLocaleTimeString()} · {audit.duration_ms}ms
             </span>
           )}
@@ -649,7 +649,7 @@ export const AdminEditLabPanel: React.FC = () => {
         <>
           <section className="space-y-3">
             <div className="flex items-center justify-between gap-3">
-              <h2 className="text-xs font-black tracking-widest uppercase text-muted-foreground/55">능력지도</h2>
+              <h2 className="text-xs font-black tracking-widest uppercase text-muted-foreground/80">능력지도</h2>
               <div className="flex gap-3 text-[9px] font-mono text-muted-foreground/60">
                 {(Object.keys(STATUS_STYLE) as EdgeStatus[]).map(status => (
                   <span key={status} className="inline-flex items-center gap-1">
@@ -669,13 +669,13 @@ export const AdminEditLabPanel: React.FC = () => {
           </section>
 
           <section className="border border-border/15 bg-secondary/10 p-4 min-h-28">
-            <h2 className="text-xs font-black tracking-widest uppercase text-muted-foreground/55 mb-3">선택 상세</h2>
-            {!selection && <p className="text-[11px] text-muted-foreground/45">노드를 선택하면 근거가 표시됩니다.</p>}
+            <h2 className="text-xs font-black tracking-widest uppercase text-muted-foreground/80 mb-3">선택 상세</h2>
+            {!selection && <p className="text-[11px] text-muted-foreground/73">노드를 선택하면 근거가 표시됩니다.</p>}
             {selectedMaterial && (
               <div className="space-y-1 text-[11px]">
                 <p className="text-sm font-semibold">
                   {selectedMaterial.label} {materialCounts(selectedMaterial).consumed}
-                  <span className="ml-1 text-[10px] font-normal text-muted-foreground/55">조각 단위 · 실제 소비 기준</span>
+                  <span className="ml-1 text-[10px] font-normal text-muted-foreground/80">조각 단위 · 실제 소비 기준</span>
                 </p>
                 <p className={selectedMaterial.consumption.same_as_storage ? "text-muted-foreground/60" : "text-amber-300/75"}>
                   저장 기준 {materialCounts(selectedMaterial).stored} ({materialCounts(selectedMaterial).storedUnit})
@@ -766,7 +766,7 @@ export const AdminEditLabPanel: React.FC = () => {
               </div>
             )}
             {selection && !selectedMaterial && !selectedRule && !selectedTechnique && (
-              <p className="text-[11px] text-muted-foreground/55">
+              <p className="text-[11px] text-muted-foreground/80">
                 {selection.kind === "verify"
                   ? "결과 검증은 LAB-2 범위입니다. 현재 전부 미측정입니다."
                   : "감사기는 운영 DB와 명시된 코드 참조를 read-only로 측정합니다."}
@@ -785,8 +785,8 @@ export const AdminEditLabPanel: React.FC = () => {
 
           <section className="space-y-3 border-t border-border/15 pt-4">
             <div>
-              <h2 className="text-xs font-black tracking-widest uppercase text-muted-foreground/55">기법 배선 관문</h2>
-              <p className="mt-1 text-[10px] text-muted-foreground/45">
+              <h2 className="text-xs font-black tracking-widest uppercase text-muted-foreground/80">기법 배선 관문</h2>
+              <p className="mt-1 text-[10px] text-muted-foreground/73">
                 AI 배선 대상 = AI 가능 {audit.techniques.ai_allowed} + 조건부 {audit.techniques.ai_allowed_conditional} ·
                 미배선 중 즉시 가능 {audit.techniques.wireable_unwired} · {Object.entries(audit.techniques.blocker_counts).map(([key, value]) => `${key} ${value}`).join(" / ") || "차단 없음"}
                 {" · "}사용자 전용 {audit.techniques.user_only} / 인프라 {audit.techniques.not_a_technique} / 룰 이관 후보 {audit.techniques.rule_candidate}는 아래 별도 구획
@@ -829,8 +829,8 @@ export const AdminEditLabPanel: React.FC = () => {
             return (
               <section key={verdict} className="space-y-3 border-t border-border/15 pt-4">
                 <div>
-                  <h2 className="text-xs font-black tracking-widest uppercase text-muted-foreground/55">{title} {rows.length}건</h2>
-                  <p className="mt-1 text-[10px] text-muted-foreground/45">{note}</p>
+                  <h2 className="text-xs font-black tracking-widest uppercase text-muted-foreground/80">{title} {rows.length}건</h2>
+                  <p className="mt-1 text-[10px] text-muted-foreground/73">{note}</p>
                 </div>
                 <div className="overflow-x-auto border border-border/15">
                   <table className="w-full text-[11px]">
@@ -869,8 +869,8 @@ export const AdminEditLabPanel: React.FC = () => {
 
           <section className="space-y-3 border-t border-border/15 pt-4">
             <div>
-              <h2 className="text-xs font-black tracking-widest uppercase text-muted-foreground/55">센서 후보 장부</h2>
-              <p className="mt-1 text-[10px] text-muted-foreground/45">측정 사실과 분류·국장 판정을 분리해 보존합니다.</p>
+              <h2 className="text-xs font-black tracking-widest uppercase text-muted-foreground/80">센서 후보 장부</h2>
+              <p className="mt-1 text-[10px] text-muted-foreground/73">측정 사실과 분류·국장 판정을 분리해 보존합니다.</p>
             </div>
             <div className="overflow-x-auto border border-border/15">
               <table className="w-full text-[11px]">
@@ -927,7 +927,7 @@ export const AdminEditLabPanel: React.FC = () => {
                 </div>
                 <div className="space-y-2">
                   {selectedCandidate.측정이력.length === 0 && (
-                    <p className="text-[10px] text-muted-foreground/45">측정이력 없음</p>
+                    <p className="text-[10px] text-muted-foreground/73">측정이력 없음</p>
                   )}
                   {selectedCandidate.측정이력.map(item => (
                     <div key={`${selectedCandidate.candidate_id}-${item.회차}`} className="border-t border-border/10 pt-2 text-[10px]">
@@ -935,7 +935,7 @@ export const AdminEditLabPanel: React.FC = () => {
                       <p>조건: {item.조건}</p>
                       <p>정확도: {item.정확도지표}</p>
                       <p>조각당 {item.조각당ms}ms · 83소스 {item["83소스환산초"]}초 · UNKNOWN {item.UNKNOWN비율}</p>
-                      <p className="break-all text-muted-foreground/55">raw: {item.raw파일경로}</p>
+                      <p className="break-all text-muted-foreground/80">raw: {item.raw파일경로}</p>
                     </div>
                   ))}
                 </div>
@@ -945,8 +945,8 @@ export const AdminEditLabPanel: React.FC = () => {
 
           <section className="space-y-3 border-t border-border/15 pt-4">
             <div>
-              <h2 className="text-xs font-black tracking-widest uppercase text-muted-foreground/55">근거 실재 점검</h2>
-              <p className="mt-1 text-[10px] text-muted-foreground/45">
+              <h2 className="text-xs font-black tracking-widest uppercase text-muted-foreground/80">근거 실재 점검</h2>
+              <p className="mt-1 text-[10px] text-muted-foreground/73">
                 config가 지목한 코드 근거 {audit.evidence_audit.checked}건 ·
                 실재 {audit.evidence_audit.exists} ·
                 <span className={audit.evidence_audit.missing > 0 ? "text-red-400/80 font-semibold" : ""}> 없음 {audit.evidence_audit.missing}</span> ·
@@ -967,7 +967,7 @@ export const AdminEditLabPanel: React.FC = () => {
                 <tbody className="divide-y divide-border/10">
                   {audit.evidence_audit.items.map((item, index) => (
                     <tr key={`${item.field}-${index}`}>
-                      <td className={`px-3 py-2 font-mono ${item.status === "MISSING" ? "text-red-400/85" : item.status === "MOVED" ? "text-amber-300/80" : "text-muted-foreground/45"}`}>
+                      <td className={`px-3 py-2 font-mono ${item.status === "MISSING" ? "text-red-400/85" : item.status === "MOVED" ? "text-amber-300/80" : "text-muted-foreground/73"}`}>
                         {item.status}
                       </td>
                       <td className="px-3 py-2 font-mono text-[9px] text-muted-foreground/60 break-all">{item.source} · {item.field}</td>
@@ -978,7 +978,7 @@ export const AdminEditLabPanel: React.FC = () => {
                     </tr>
                   ))}
                   {audit.evidence_audit.items.length === 0 && (
-                    <tr><td colSpan={4} className="px-3 py-2 text-muted-foreground/45">전부 실재</td></tr>
+                    <tr><td colSpan={4} className="px-3 py-2 text-muted-foreground/73">전부 실재</td></tr>
                   )}
                 </tbody>
               </table>
@@ -987,8 +987,8 @@ export const AdminEditLabPanel: React.FC = () => {
 
           <section className="space-y-3 border-t border-border/15 pt-4">
             <div>
-              <h2 className="text-xs font-black tracking-widest uppercase text-muted-foreground/55">장부 기록</h2>
-              <p className="mt-1 text-[10px] text-muted-foreground/45">
+              <h2 className="text-xs font-black tracking-widest uppercase text-muted-foreground/80">장부 기록</h2>
+              <p className="mt-1 text-[10px] text-muted-foreground/73">
                 수리가 아니라 사실이다. 지우지 않고 쌓는다.
               </p>
             </div>
@@ -1005,30 +1005,30 @@ export const AdminEditLabPanel: React.FC = () => {
                   )}
                   <ul className="space-y-0.5">
                     {record.근거.map(item => (
-                      <li key={item} className="break-all font-mono text-[9px] text-muted-foreground/50">{item}</li>
+                      <li key={item} className="break-all font-mono text-[9px] text-muted-foreground/76">{item}</li>
                     ))}
                   </ul>
                 </div>
               ))}
               {(audit.ledger_records ?? []).length === 0 && (
-                <p className="bg-background/70 p-3 text-[10px] text-muted-foreground/45">기록 없음</p>
+                <p className="bg-background/70 p-3 text-[10px] text-muted-foreground/73">기록 없음</p>
               )}
             </div>
           </section>
 
           <section className="space-y-3 border-t border-border/15 pt-4">
             <div className="flex items-center gap-2">
-              <h2 className="text-xs font-black tracking-widest uppercase text-muted-foreground/55">독립 Evidence</h2>
+              <h2 className="text-xs font-black tracking-widest uppercase text-muted-foreground/80">독립 Evidence</h2>
               <span className="border border-amber-500/30 bg-amber-500/10 px-1.5 py-0.5 text-[9px] text-amber-200/80">
                 emotion_score · 재설계
               </span>
             </div>
-            <p className="text-[10px] text-muted-foreground/50">독립 증거를 합산하지 않습니다.</p>
+            <p className="text-[10px] text-muted-foreground/76">독립 증거를 합산하지 않습니다.</p>
             <div className="grid grid-cols-2 gap-px border border-border/15 bg-border/10 sm:grid-cols-5">
               {audit.emotion_evidence.items.map(item => (
                 <div key={item.id} className="bg-background/70 p-3">
                   <p className="break-all font-mono text-[10px] text-foreground/75">{item.id}</p>
-                  <p className={`mt-1 text-[10px] font-semibold ${item.status === "VALUE" ? "text-emerald-400" : "text-muted-foreground/40"}`}>
+                  <p className={`mt-1 text-[10px] font-semibold ${item.status === "VALUE" ? "text-emerald-400" : "text-muted-foreground/70"}`}>
                     {item.status}
                   </p>
                 </div>
@@ -1037,7 +1037,7 @@ export const AdminEditLabPanel: React.FC = () => {
           </section>
 
           <details className="border-t border-border/15 pt-4 group">
-            <summary className="cursor-pointer list-none flex items-center gap-2 text-xs font-black tracking-widest uppercase text-muted-foreground/55">
+            <summary className="cursor-pointer list-none flex items-center gap-2 text-xs font-black tracking-widest uppercase text-muted-foreground/80">
               <ChevronDown size={13} className="group-open:rotate-180 transition-transform" />
               감사 원표
             </summary>

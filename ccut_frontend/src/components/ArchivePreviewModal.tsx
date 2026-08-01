@@ -47,7 +47,7 @@ export const ArchivePreviewModal: React.FC<{
       <DialogContent className="max-w-xl p-0 gap-0 bg-[hsl(228,12%,11%)] border-border/20 overflow-hidden">
         <div className="px-4 py-3 border-b border-border/10">
           <DialogTitle className="text-sm font-bold text-foreground/90 truncate">{item?.display_name || item?.fragment_id || "미리보기"}</DialogTitle>
-          <p className="text-[11px] text-muted-foreground/50">
+          <p className="text-[11px] text-muted-foreground/76">
             {item?.source_title ? `${item.source_title} · ` : ""}{fmt(item?.start ?? null)}–{fmt(item?.end ?? null)} 구간
           </p>
         </div>
@@ -64,10 +64,10 @@ export const ArchivePreviewModal: React.FC<{
               className="w-full h-full"
             />
           ) : (
-            <div className="flex flex-col items-center gap-2 text-muted-foreground/50">
+            <div className="flex flex-col items-center gap-2 text-muted-foreground/76">
               <Film size={32} strokeWidth={1} />
               <p className="text-xs">원본 파일이 없어 재생할 수 없습니다.</p>
-              <p className="text-[10px] text-muted-foreground/40">원본이 삭제됐거나 업로드 경로에 없습니다.</p>
+              <p className="text-[10px] text-muted-foreground/70">원본이 삭제됐거나 업로드 경로에 없습니다.</p>
             </div>
           )}
         </div>

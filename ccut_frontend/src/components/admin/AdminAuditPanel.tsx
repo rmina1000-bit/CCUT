@@ -40,7 +40,7 @@ const WORK_STATUS_STYLE: Record<string, string> = {
   open: "bg-amber-500/15 text-amber-400",
   in_progress: "bg-primary/15 text-primary",
   blocked: "bg-red-500/15 text-red-400",
-  closed: "bg-secondary/20 text-muted-foreground/40",
+  closed: "bg-secondary/20 text-muted-foreground/70",
 };
 
 export const AdminAuditPanel: React.FC = () => {
@@ -116,7 +116,7 @@ export const AdminAuditPanel: React.FC = () => {
     <div className="space-y-5">
       <div>
         <h1 className="text-lg font-bold text-foreground/90">감사/작업기록</h1>
-        <p className="text-[11px] text-muted-foreground/50 mt-0.5">
+        <p className="text-[11px] text-muted-foreground/76 mt-0.5">
           append-only — 관리자 자신도 감사 대상 · 보안/법무는 각 관제 화면에서
         </p>
       </div>
@@ -136,12 +136,12 @@ export const AdminAuditPanel: React.FC = () => {
       {tab === "logs" && (
         <>
           {logs.length === 0 && !logsLoading ? (
-            <p className="text-[11px] text-muted-foreground/40">기록된 관리자 행동이 없습니다.</p>
+            <p className="text-[11px] text-muted-foreground/70">기록된 관리자 행동이 없습니다.</p>
           ) : (
             <div className="rounded-lg border border-border/15 overflow-hidden">
               <table className="w-full text-[11px]">
                 <thead>
-                  <tr className="bg-secondary/20 text-muted-foreground/50 text-left">
+                  <tr className="bg-secondary/20 text-muted-foreground/76 text-left">
                     <th className="px-3 py-2 font-semibold">#</th>
                     <th className="px-3 py-2 font-semibold">action</th>
                     <th className="px-3 py-2 font-semibold">target</th>
@@ -152,13 +152,13 @@ export const AdminAuditPanel: React.FC = () => {
                 <tbody className="divide-y divide-border/10">
                   {logs.map(l => (
                     <tr key={l.id} className="hover:bg-secondary/10">
-                      <td className="px-3 py-2 font-mono text-muted-foreground/40">{l.id}</td>
+                      <td className="px-3 py-2 font-mono text-muted-foreground/70">{l.id}</td>
                       <td className="px-3 py-2 font-mono text-primary/80">{l.action}</td>
                       <td className="px-3 py-2 text-foreground/60">
                         {l.target_type ? `${l.target_type}${l.target_id ? `:${l.target_id}` : ""}` : "—"}
                       </td>
                       <td className="px-3 py-2 text-foreground/80 max-w-[300px] truncate">{l.note ?? "—"}</td>
-                      <td className="px-3 py-2 text-muted-foreground/40 whitespace-nowrap">
+                      <td className="px-3 py-2 text-muted-foreground/70 whitespace-nowrap">
                         {new Date(l.created_at).toLocaleString()}
                       </td>
                     </tr>
@@ -207,7 +207,7 @@ export const AdminAuditPanel: React.FC = () => {
             </div>
           )}
           {items.length === 0 ? (
-            <p className="text-[11px] text-muted-foreground/40">작업 큐가 비어 있습니다.</p>
+            <p className="text-[11px] text-muted-foreground/70">작업 큐가 비어 있습니다.</p>
           ) : (
             <div className="rounded-lg border border-border/15 divide-y divide-border/10">
               {items.map(w => (
@@ -216,7 +216,7 @@ export const AdminAuditPanel: React.FC = () => {
                     {w.status}
                   </span>
                   <span className="font-black text-primary/80">{w.priority}</span>
-                  <span className="font-mono text-muted-foreground/50">{w.kind}</span>
+                  <span className="font-mono text-muted-foreground/76">{w.kind}</span>
                   <span className="text-foreground/85 truncate flex-1">{w.title}</span>
                   {w.status === "open" && (
                     <button onClick={() => transitionWork(w.id, "in_progress")}
@@ -236,7 +236,7 @@ export const AdminAuditPanel: React.FC = () => {
       {/* ── AI 실행 ── */}
       {tab === "ai" && (
         runs.length === 0 ? (
-          <p className="text-[11px] text-muted-foreground/40">기록된 AI 실행이 없습니다.</p>
+          <p className="text-[11px] text-muted-foreground/70">기록된 AI 실행이 없습니다.</p>
         ) : (
           <div className="rounded-lg border border-border/15 divide-y divide-border/10">
             {runs.map(r => (
@@ -244,8 +244,8 @@ export const AdminAuditPanel: React.FC = () => {
                 <span className={`font-black ${r.status === "ok" ? "text-emerald-400" : "text-red-400"}`}>{r.status}</span>
                 <span className="font-mono text-primary/70">{r.role}</span>
                 <span className="text-foreground/70 truncate flex-1">{r.input_summary}</span>
-                {r.duration_ms != null && <span className="text-muted-foreground/40">{r.duration_ms}ms</span>}
-                <span className="text-muted-foreground/40 flex-shrink-0">{new Date(r.created_at).toLocaleString()}</span>
+                {r.duration_ms != null && <span className="text-muted-foreground/70">{r.duration_ms}ms</span>}
+                <span className="text-muted-foreground/70 flex-shrink-0">{new Date(r.created_at).toLocaleString()}</span>
               </div>
             ))}
           </div>

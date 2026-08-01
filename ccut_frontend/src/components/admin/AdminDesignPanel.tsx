@@ -18,7 +18,7 @@ interface SurfaceConfig {
 const STATUS_STYLE: Record<string, string> = {
   draft: "bg-secondary/40 text-muted-foreground/70",
   approved: "bg-emerald-500/15 text-emerald-400",
-  retired: "bg-secondary/20 text-muted-foreground/40",
+  retired: "bg-secondary/20 text-muted-foreground/70",
 };
 
 export const AdminDesignPanel: React.FC = () => {
@@ -59,7 +59,7 @@ export const AdminDesignPanel: React.FC = () => {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-lg font-bold text-foreground/90">디자인 제어</h1>
-          <p className="text-[11px] text-muted-foreground/50 mt-0.5">
+          <p className="text-[11px] text-muted-foreground/76 mt-0.5">
             admin_surface_configs 설정 원장 · 자유 HTML 금지
           </p>
         </div>
@@ -100,7 +100,7 @@ export const AdminDesignPanel: React.FC = () => {
       )}
 
       {configs.length === 0 ? (
-        <p className="text-[11px] text-muted-foreground/40">설정 원장이 비어 있습니다.</p>
+        <p className="text-[11px] text-muted-foreground/70">설정 원장이 비어 있습니다.</p>
       ) : (
         <div className="rounded-lg border border-border/15 divide-y divide-border/10">
           {configs.map(c => (
@@ -108,7 +108,7 @@ export const AdminDesignPanel: React.FC = () => {
               <span className={`px-1.5 py-0.5 rounded text-[9px] font-black ${STATUS_STYLE[c.status] ?? STATUS_STYLE.draft}`}>
                 {c.status}
               </span>
-              <span className="font-mono text-muted-foreground/50">{c.scope}.{c.key}</span>
+              <span className="font-mono text-muted-foreground/76">{c.scope}.{c.key}</span>
               <span className="text-foreground/85 truncate flex-1">{c.value_json}</span>
               {c.status === "draft" && (
                 <button onClick={() => transition(c.id, "approved")}

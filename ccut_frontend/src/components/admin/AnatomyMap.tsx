@@ -33,7 +33,7 @@ export type MapLineState = "실선" | "점선" | "미계측" | "조회실패";
 const LINE_STYLE: Record<MapLineState, { stroke: string; dash?: string; strong: boolean }> = {
   실선: { stroke: "#34d399", strong: true },
   점선: { stroke: "#f97316", dash: "7 6", strong: true },
-  미계측: { stroke: "#64748b", dash: "2 7", strong: false },
+  미계측: { stroke: "#8a97a8", dash: "2 7", strong: false },   // [CONTRAST-1] 4.04 -> 6.47
   조회실패: { stroke: "#f59e0b", dash: "4 3", strong: false },
 };
 
@@ -46,7 +46,7 @@ const KIND_TINT: Partial<Record<AnatomyRelationKind, string>> = {
 /** 노드 채움·테두리는 편집연구실 Node(:395)와 **같은 식**이다 — 계열이 아니라 상태에서 나온다.
  *  계열로 칠했더니 파랑/초록/회색이 섞여 색감이 달라 보였다. 위치가 계열을 말하므로 색까지 쓸 필요가 없다. */
 const NODE_FILL = { LIVE: "#102820", LOCKED: "#171a20" } as const;
-const NODE_STROKE = { LIVE: "#34d399", LOCKED: "#64748b" } as const;
+const NODE_STROKE = { LIVE: "#34d399", LOCKED: "#8a97a8" } as const;   // [CONTRAST-1] LOCKED 4.04 -> 6.47 (LIVE 상태색은 무접촉)
 
 // 편집연구실 치수 (AdminEditLabPanel.tsx:243-249)
 const NODE_H_EM = 4.4;
@@ -234,7 +234,7 @@ export const AnatomyMap: React.FC<Props> = ({
             </text>
             <line
               x1={em(col.x)} y1={em(3.64)} x2={em(col.x + NODE_W_EM)} y2={em(3.64)}
-              stroke="#29313d"
+              stroke="#4a5568"
             />
           </g>
         ))}

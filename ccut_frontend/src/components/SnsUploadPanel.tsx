@@ -166,7 +166,7 @@ export const SnsUploadPanel: React.FC<{
           <h1 className="text-2xl font-bold bg-gradient-to-r from-blue-400 to-primary bg-clip-text text-transparent">
             SNS 업로드
           </h1>
-          <p className="text-[12px] text-muted-foreground/50 mt-1">
+          <p className="text-[12px] text-muted-foreground/76 mt-1">
             편집 완료된 영상을 채널로 발행하세요.
           </p>
         </div>
@@ -213,12 +213,12 @@ export const SnsUploadPanel: React.FC<{
       {/* 내보낸 영상 목록 */}
       <div className="flex-1 px-8 pb-8">
         {loading ? (
-          <div className="flex flex-col items-center justify-center h-64 gap-3 text-muted-foreground/40">
+          <div className="flex flex-col items-center justify-center h-64 gap-3 text-muted-foreground/70">
             <div className="w-5 h-5 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
             <span className="text-xs">불러오는 중...</span>
           </div>
         ) : exports.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-64 gap-3 text-muted-foreground/30">
+          <div className="flex flex-col items-center justify-center h-64 gap-3 text-muted-foreground/65">
             <Film size={36} strokeWidth={1} />
             <p className="text-sm font-medium">아직 내보낸 영상이 없습니다</p>
             <p className="text-xs">프로젝트에서 A안 또는 B안을 내보내면 여기에 나타납니다.</p>
@@ -265,7 +265,7 @@ export const SnsUploadPanel: React.FC<{
                         {ex.program_title || ex.program_id || "프로젝트"}
                       </button>
                     )}
-                    <div className="flex items-center gap-3 mt-1 text-[11px] text-muted-foreground/50">
+                    <div className="flex items-center gap-3 mt-1 text-[11px] text-muted-foreground/76">
                       {ex.duration != null && (
                         <span className="flex items-center gap-1">
                           <Clock size={10} />
@@ -396,7 +396,7 @@ export const SnsUploadPanel: React.FC<{
                         {uploading ? "업로드 중… (영상 크기에 따라 수십 초)" : "지금 업로드"}
                       </button>
                     </div>
-                    <p className="text-[10px] text-muted-foreground/50">처음엔 비공개로 올려서 확인한 뒤 YouTube 스튜디오에서 공개로 바꾸는 걸 권합니다.</p>
+                    <p className="text-[10px] text-muted-foreground/76">처음엔 비공개로 올려서 확인한 뒤 YouTube 스튜디오에서 공개로 바꾸는 걸 권합니다.</p>
                   </div>
                 )}
               </div>

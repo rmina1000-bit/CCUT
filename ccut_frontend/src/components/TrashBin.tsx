@@ -125,7 +125,7 @@ const TrashBin: React.FC<TrashBinProps> = ({
       >
         <Trash2
           size={32}
-          className={`transition-all duration-150 ${deletedFragments.length > 0 ? "text-destructive/80" : "text-muted-foreground/30"
+          className={`transition-all duration-150 ${deletedFragments.length > 0 ? "text-destructive/80" : "text-muted-foreground/65"
             }`}
           strokeWidth={1.2}
         />
@@ -161,10 +161,10 @@ const TrashBin: React.FC<TrashBinProps> = ({
               onMouseDown={handleTitleBarMouseDown}
             >
               <div className="flex items-center gap-1.5">
-                <Trash2 size={11} className="text-muted-foreground/40" strokeWidth={1.5} />
+                <Trash2 size={11} className="text-muted-foreground/70" strokeWidth={1.5} />
                 <span className="text-[10px] font-medium text-foreground/60">휴지통</span>
                 {deletedFragments.length > 0 && (
-                  <span className="text-[9px] text-muted-foreground/35">{deletedFragments.length}</span>
+                  <span className="text-[9px] text-muted-foreground/67">{deletedFragments.length}</span>
                 )}
               </div>
               <div className="flex items-center gap-1">
@@ -178,7 +178,7 @@ const TrashBin: React.FC<TrashBinProps> = ({
                     );
                     setIsOpen(false);
                   }}
-                  className="text-muted-foreground/30 hover:text-blue-400 transition-colors p-0.5"
+                  className="text-muted-foreground/65 hover:text-blue-400 transition-colors p-0.5"
                   title="새창으로 열기"
                 >
                   <ExternalLink size={11} />
@@ -189,7 +189,7 @@ const TrashBin: React.FC<TrashBinProps> = ({
                     setIsOpen(false);
                   }}
                   onMouseDown={(e) => e.stopPropagation()}
-                  className="text-muted-foreground/30 hover:text-foreground/60 transition-colors p-0.5"
+                  className="text-muted-foreground/65 hover:text-foreground/60 transition-colors p-0.5"
                 >
                   <X size={11} />
                 </button>
@@ -199,8 +199,8 @@ const TrashBin: React.FC<TrashBinProps> = ({
             <div className="overflow-y-auto" style={{ maxHeight: "calc(50vh - 60px)" }}>
               {deletedFragments.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-6 gap-1">
-                  <Trash2 size={16} className="text-muted-foreground/10" strokeWidth={1} />
-                  <p className="text-[9px] text-muted-foreground/30">비어 있음</p>
+                  <Trash2 size={16} className="text-muted-foreground/60" strokeWidth={1} />
+                  <p className="text-[9px] text-muted-foreground/65">비어 있음</p>
                 </div>
               ) : (
                 deletedFragments.map((f) => (
@@ -216,7 +216,7 @@ const TrashBin: React.FC<TrashBinProps> = ({
                   >
                     <GripVertical
                       size={8}
-                      className="text-muted-foreground/15 group-hover:text-muted-foreground/40 flex-shrink-0"
+                      className="text-muted-foreground/62 group-hover:text-muted-foreground/70 flex-shrink-0"
                     />
                     <div
                       className="flex-shrink-0 rounded-[2px] bg-secondary"
@@ -238,7 +238,7 @@ const TrashBin: React.FC<TrashBinProps> = ({
                         {/* [HOLDMOVE-FIX B2] 조각맵과 동일한 표시명(display_id: "D3"/"I1"). 파일명·SF_ 노출 금지. */}
                         {f.display_id || f.fragment_id}
                       </span>
-                      <span className="text-[8px] text-muted-foreground/35">
+                      <span className="text-[8px] text-muted-foreground/67">
                         {f.duration.toFixed(1)}s
                       </span>
                     </div>
@@ -251,7 +251,7 @@ const TrashBin: React.FC<TrashBinProps> = ({
               <div className="px-2.5 py-1.5 border-t border-border/10">
                 <button
                   onClick={onEmptyTrash}
-                  className="w-full flex items-center justify-center gap-1 text-[9px] text-muted-foreground/35 hover:text-muted-foreground/60 transition-colors py-1 rounded hover:bg-secondary/20"
+                  className="w-full flex items-center justify-center gap-1 text-[9px] text-muted-foreground/67 hover:text-muted-foreground/60 transition-colors py-1 rounded hover:bg-secondary/20"
                 >
                   <Trash2 size={8} strokeWidth={1.5} />
                   비우기

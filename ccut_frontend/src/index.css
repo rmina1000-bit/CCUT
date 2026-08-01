@@ -19,10 +19,22 @@
     --primary-foreground: 0 0% 100%;
 
     --secondary: 228 8% 17%;
-    --secondary-foreground: 220 8% 78%;
+    /* [CONTRAST-1] 실측: 이 토큰의 /60 이 화면에서 130곳(전사 줄 등) 쓰이는데 4.31:1 이었다.
+       L 78% -> 84% 로 올려 그 조합이 AA 를 넘게 한다(/60 = 5.12). foreground(88%)보다는 여전히 낮다. */
+    --secondary-foreground: 220 8% 84%;
 
     --muted: 228 6% 21%;
-    --muted-foreground: 220 6% 50%;
+    /* [CONTRAST-1 2026-08-01] 회색 텍스트 명도 상향 — 국장이 화면에 얼굴을 가까이 대야 읽혔다.
+       측정(WCAG 대비율, 배경 hsl(228 12% 10%) 기준):
+         이전 L=50%  text-muted-foreground/50(최다 108곳) = 2.01:1  ← AA 4.5 의 절반 이하
+                     /40(78곳) 1.72:1 · /45(37곳) 1.86:1 · 100% 도 4.30:1 로 AA 미달
+         이후 L=78%  /60 4.51 · /70 5.68 · /75 ~6.2 · 100% 10.38
+       ★ 토큰만으로는 못 고친다: 불투명도 45% 이하는 토큰을 순백(100%)으로 올려도
+         4.5:1 에 도달하지 못한다 — 알파가 상한을 만든다(역산 확인).
+         그래서 클래스의 알파도 함께 올렸다(266곳). 전역 토큰 우선 원칙의 예외이고,
+         근거는 위 역산이다.
+       --foreground(88%)와는 10 만큼 벌려 둔다 — 밝은 제목과 회색 부제의 구분이 정보다. */
+    --muted-foreground: 220 6% 78%;
 
     --accent: 228 8% 17%;
     --accent-foreground: 220 8% 78%;
@@ -30,7 +42,10 @@
     --destructive: 0 50% 55%;
     --destructive-foreground: 0 0% 95%;
 
-    --border: 228 6% 18%;
+    /* [CONTRAST-1] 선. 알파는 건드리지 않고 토큰만 올린다 — 구분선은 본문이 아니라
+       WCAG 4.5 대상이 아니고, 109곳의 알파를 바꾸면 화면이 상자투성이가 된다.
+       L 18% -> 32% (거의 두 배). 더 필요하면 다음 차수에 알파를 올린다. */
+    --border: 228 6% 32%;
     --input: 228 6% 22%;
     --ring: 211 55% 58%;
 
@@ -43,8 +58,8 @@
     --ccut-gold: 211 55% 58%;
     --ccut-gold-dim: 211 35% 40%;
     --ccut-text-primary: 220 10% 88%;
-    --ccut-text-secondary: 220 6% 50%;
-    --ccut-stroke: 228 5% 20%;
+    --ccut-text-secondary: 220 6% 78%;   /* [CONTRAST-1] muted-foreground 와 같은 값 유지 */
+    --ccut-stroke: 228 5% 32%;   /* [CONTRAST-1] border 와 같은 폭으로 상향 */
     --ccut-indigo: 220 35% 52%;
     --ccut-amber: 30 50% 55%;
     --ccut-intelligence-start: 220 35% 52%;

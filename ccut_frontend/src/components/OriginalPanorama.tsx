@@ -153,7 +153,7 @@ const OriginalPanorama: React.FC<OriginalPanoramaProps> = ({
                 <button
                   title="영상 추가"
                   onClick={onAddSource}
-                  className="px-1.5 py-0.5 rounded-[3px] text-[12px] font-bold text-muted-foreground/50 hover:text-primary hover:bg-primary/10 transition-all flex-shrink-0"
+                  className="px-1.5 py-0.5 rounded-[3px] text-[12px] font-bold text-muted-foreground/76 hover:text-primary hover:bg-primary/10 transition-all flex-shrink-0"
                 >+</button>
               )}
             </div>

@@ -150,7 +150,7 @@ export const AdminNerveCenterPanel: React.FC = () => {
       </div>
     );
   }
-  if (!data) return <p className="text-xs text-muted-foreground/50 animate-pulse">집계 중...</p>;
+  if (!data) return <p className="text-xs text-muted-foreground/76 animate-pulse">집계 중...</p>;
 
   const level = data.global_state.service_level;
   const cap = data.edit_capability ?? { status: "UNKNOWN" as const };
@@ -164,7 +164,7 @@ export const AdminNerveCenterPanel: React.FC = () => {
       <div className="flex items-start justify-between gap-4">
         <div>
           <h1 className="text-lg font-bold text-foreground/90">오늘</h1>
-          <p className="text-[11px] text-muted-foreground/50 mt-0.5">
+          <p className="text-[11px] text-muted-foreground/76 mt-0.5">
             운영 원장 + 편집 능력 실측을 한 화면에서 대조 · 조회 1회(/admin/situation)
           </p>
         </div>
@@ -192,11 +192,11 @@ export const AdminNerveCenterPanel: React.FC = () => {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
         {/* 좌측: 운영 KPI */}
         <section>
-          <h2 className="text-xs font-black tracking-widest uppercase text-muted-foreground/50 mb-2">운영 원장</h2>
+          <h2 className="text-xs font-black tracking-widest uppercase text-muted-foreground/76 mb-2">운영 원장</h2>
           <div className="grid grid-cols-2 gap-2.5">
             {Object.entries(data.kpis).map(([k, v]) => (
               <div key={k} className="rounded-lg border border-border/15 bg-card/20 p-3">
-                <p className="text-[10px] font-semibold text-muted-foreground/50 uppercase tracking-wide">
+                <p className="text-[10px] font-semibold text-muted-foreground/76 uppercase tracking-wide">
                   {KPI_LABELS[k] ?? k}
                 </p>
                 <p className="text-lg font-bold text-foreground/90 mt-0.5">
@@ -209,12 +209,12 @@ export const AdminNerveCenterPanel: React.FC = () => {
 
         {/* 우측: 편집 능력지도 요약 */}
         <section>
-          <h2 className="text-xs font-black tracking-widest uppercase text-muted-foreground/50 mb-2">편집 능력</h2>
+          <h2 className="text-xs font-black tracking-widest uppercase text-muted-foreground/76 mb-2">편집 능력</h2>
           {cap.status !== "OK" ? (
             <div className="rounded-lg border border-slate-400/30 bg-slate-500/10 p-4">
               <p className="text-sm font-bold text-slate-200">편집 능력 실측 조회 실패</p>
               <p className="text-[11px] text-muted-foreground/60 mt-1">{cap.error ?? "사유 미확인"}</p>
-              <p className="text-[11px] text-muted-foreground/50 mt-1">
+              <p className="text-[11px] text-muted-foreground/76 mt-1">
                 값이 없다는 뜻이 아니다 — 판정 불가다. 편집연구실에서 직접 확인하십시오.
               </p>
             </div>
@@ -222,7 +222,7 @@ export const AdminNerveCenterPanel: React.FC = () => {
             <div className="rounded-lg border border-border/15 divide-y divide-border/10">
               {rows.map(row => (
                 <div key={row.column} className="px-3 py-2.5 flex items-start gap-3">
-                  <span className="w-16 flex-shrink-0 text-[10px] font-semibold text-muted-foreground/50 pt-0.5">
+                  <span className="w-16 flex-shrink-0 text-[10px] font-semibold text-muted-foreground/76 pt-0.5">
                     {row.column}
                   </span>
                   <span className={`px-1.5 py-0.5 rounded border text-[9px] font-black flex-shrink-0 ${ROW_STATE_STYLE[row.state]}`}>
@@ -230,13 +230,13 @@ export const AdminNerveCenterPanel: React.FC = () => {
                   </span>
                   <div className="min-w-0 flex-1">
                     <p className="text-xs font-bold text-foreground/85">{row.headline}</p>
-                    <p className="text-[10px] text-muted-foreground/55 leading-snug mt-0.5">{row.detail}</p>
+                    <p className="text-[10px] text-muted-foreground/80 leading-snug mt-0.5">{row.detail}</p>
                   </div>
                 </div>
               ))}
             </div>
           )}
-          <p className="text-[10px] text-muted-foreground/40 mt-2">
+          <p className="text-[10px] text-muted-foreground/70 mt-2">
             수치 출처는 편집연구실 실측(/lab/audit) 그대로 — 이 화면에서 다시 계산하지 않는다.
           </p>
         </section>
@@ -244,9 +244,9 @@ export const AdminNerveCenterPanel: React.FC = () => {
 
       {/* 하단: 긴급 경보 */}
       <section>
-        <h2 className="text-xs font-black tracking-widest uppercase text-muted-foreground/50 mb-2">긴급 경보</h2>
+        <h2 className="text-xs font-black tracking-widest uppercase text-muted-foreground/76 mb-2">긴급 경보</h2>
         {data.alerts.length === 0 ? (
-          <p className="text-[11px] text-muted-foreground/40">현재 경보 없음</p>
+          <p className="text-[11px] text-muted-foreground/70">현재 경보 없음</p>
         ) : (
           <div className="space-y-2">
             {data.alerts.map((a, i) => (
@@ -265,9 +265,9 @@ export const AdminNerveCenterPanel: React.FC = () => {
 
       {/* 하단: 오늘의 작전 큐 */}
       <section>
-        <h2 className="text-xs font-black tracking-widest uppercase text-muted-foreground/50 mb-2">오늘의 작전 큐</h2>
+        <h2 className="text-xs font-black tracking-widest uppercase text-muted-foreground/76 mb-2">오늘의 작전 큐</h2>
         {data.action_queue.length === 0 ? (
-          <p className="text-[11px] text-muted-foreground/40">
+          <p className="text-[11px] text-muted-foreground/70">
             대기 작업 없음 — 작업은 감사/작업기록에서 등록합니다
           </p>
         ) : (
@@ -275,9 +275,9 @@ export const AdminNerveCenterPanel: React.FC = () => {
             {data.action_queue.map((w, i) => (
               <div key={i} className="px-3 py-2 flex items-center gap-3 text-[11px]">
                 <span className="font-black text-primary/80">{w.priority}</span>
-                <span className="font-mono text-muted-foreground/50">{w.kind}</span>
+                <span className="font-mono text-muted-foreground/76">{w.kind}</span>
                 <span className="text-foreground/80 truncate flex-1">{w.title}</span>
-                {w.target && <span className="text-muted-foreground/40">{w.target}</span>}
+                {w.target && <span className="text-muted-foreground/70">{w.target}</span>}
               </div>
             ))}
           </div>

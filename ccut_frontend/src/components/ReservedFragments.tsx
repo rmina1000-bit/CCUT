@@ -423,7 +423,7 @@ const ReservedFragments: React.FC<ReservedFragmentsProps> = ({
               보류맵
             </h3>
             {fragments.length > 0 && (
-              <span className="text-[9px] text-muted-foreground/40">{fragments.length}</span>
+              <span className="text-[9px] text-muted-foreground/70">{fragments.length}</span>
             )}
           </div>
         </div>
@@ -536,7 +536,7 @@ const ReservedFragments: React.FC<ReservedFragmentsProps> = ({
             >
               <div className="max-h-44 overflow-y-auto">
                 {deletedFragments.length === 0 ? (
-                  <div className="px-2 py-3 text-center text-[11px] text-muted-foreground/55">empty</div>
+                  <div className="px-2 py-3 text-center text-[11px] text-muted-foreground/80">empty</div>
                 ) : (
                   deletedFragments.map((f) => (
                     <div

@@ -60,14 +60,14 @@ export const AdminLeftNav: React.FC<{
       active === key
         ? "bg-primary/15 text-primary border-r-2 border-primary"
         : dim
-          ? "text-muted-foreground/35 hover:text-foreground/60 hover:bg-secondary/20"
+          ? "text-muted-foreground/67 hover:text-foreground/60 hover:bg-secondary/20"
           : "text-muted-foreground/60 hover:text-foreground/80 hover:bg-secondary/20"
     }`;
   return (
   <nav className="w-52 flex-shrink-0 border-r border-border/15 bg-[hsl(228_12%_9%)] flex flex-col">
     <div className="px-4 py-4 border-b border-border/15">
       <p className="text-sm font-black tracking-wide text-foreground/90">CCUT 관제실</p>
-      <p className="text-[10px] text-muted-foreground/50 mt-0.5">전쟁상황판 v1</p>
+      <p className="text-[10px] text-muted-foreground/76 mt-0.5">전쟁상황판 v1</p>
     </div>
     <div className="flex-1 py-2 overflow-y-auto">
       {ACTIVE_MENU.map(m => (
@@ -81,7 +81,7 @@ export const AdminLeftNav: React.FC<{
         type="button"
         onClick={() => setOpenLocked(v => !v)}
         data-admin-locked-toggle={openLocked ? "open" : "closed"}
-        className="mt-3 w-full flex items-center gap-2 px-4 py-2 text-[11px] font-medium text-muted-foreground/40 hover:text-muted-foreground/70 transition-colors border-t border-border/10 pt-3"
+        className="mt-3 w-full flex items-center gap-2 px-4 py-2 text-[11px] font-medium text-muted-foreground/70 hover:text-muted-foreground/70 transition-colors border-t border-border/10 pt-3"
       >
         {openLocked ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
         <Lock size={11} />
@@ -102,7 +102,7 @@ export const AdminLeftNav: React.FC<{
     </div>
     <a
       href="/"
-      className="flex items-center gap-2 px-4 py-3 text-[11px] text-muted-foreground/50 hover:text-foreground/80 border-t border-border/15 transition-colors"
+      className="flex items-center gap-2 px-4 py-3 text-[11px] text-muted-foreground/76 hover:text-foreground/80 border-t border-border/15 transition-colors"
     >
       <ArrowLeft size={12} />
       사용자 작업실로

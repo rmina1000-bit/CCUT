@@ -40,7 +40,7 @@ const TrashPortal: React.FC = () => {
                         {deletedFragments.length} 조각
                     </span>
                 </div>
-                <button onClick={handleEmpty} className="text-xs text-muted-foreground/40 hover:text-destructive flex items-center gap-1 transition-colors">
+                <button onClick={handleEmpty} className="text-xs text-muted-foreground/70 hover:text-destructive flex items-center gap-1 transition-colors">
                     <Trash2 size={12} /> 전체 비우기
                 </button>
             </div>

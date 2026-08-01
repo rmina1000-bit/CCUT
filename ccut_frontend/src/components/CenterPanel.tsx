@@ -2078,7 +2078,7 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
                 (프로젝트 전환·확정 왕복 중 소실 0). '지난 원고 0개'(이 블록 미출현)와 '복원 실패'
                 (세대는 있는데 대화 기록만 못 불러옴)를 아래 안내로 구분한다. */}
             {!storyPlan && proposalHistory.length > 0 && (
-              <div className="text-[11px] text-muted-foreground/50 px-1">
+              <div className="text-[11px] text-muted-foreground/76 px-1">
                 이전 대화 기록은 불러오지 못했어요. 지난 원고 세대는 아래에 그대로 남아 있습니다.
               </div>
             )}
@@ -2129,7 +2129,7 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
                                   alt="face"
                                   className="w-16 h-16 rounded-full object-cover border border-white/10"
                                 />
-                                <span className="text-[9px] text-muted-foreground/50">{p.appearances}개 장면 등장</span>
+                                <span className="text-[9px] text-muted-foreground/76">{p.appearances}개 장면 등장</span>
                                 <input
                                   value={personNameDraft[p.person_id] ?? ""}
                                   onChange={(e) => setPersonNameDraft((prev) => ({ ...prev, [p.person_id]: e.target.value }))}
@@ -2185,7 +2185,7 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
                             return (
                               <div key={fid} className="space-y-0.5">
                                 {ev.length === 0 ? (
-                                  <div className="italic text-muted-foreground/40">근거 없음</div>
+                                  <div className="italic text-muted-foreground/70">근거 없음</div>
                                 ) : ev.map((l: string, i: number) => {
                                   const label = l.startsWith("speech:") ? "대사" : l.startsWith("scene:") ? "장면" : l.startsWith("context:") ? "맥락" : "";
                                   const val = l.replace(/^(speech|scene|context):\s*/, "").slice(0, 80);
@@ -2202,7 +2202,7 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
                       {(item.msg as any).kind === "search_results" && Array.isArray((item.msg as any).results) && (item.msg as any).results.length > 0 && (
                         <SearchResultCards results={(item.msg as any).results} />
                       )}
-                      <span className="text-[12px] text-muted-foreground/40 px-1">{new Date(item.msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                      <span className="text-[12px] text-muted-foreground/70 px-1">{new Date(item.msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
                     </div>
                   </div>
                 </div>
@@ -2236,7 +2236,7 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
                             >
                               <span className="text-[10px] font-black tracking-widest uppercase text-muted-foreground/60">지난 원고</span>
                               <span className="text-[12px] text-foreground/80">{fragCount}조각</span>
-                              <ChevronDown size={13} className={`ml-auto flex-shrink-0 text-muted-foreground/50 transition-transform ${isOpen ? "rotate-180" : ""}`} />
+                              <ChevronDown size={13} className={`ml-auto flex-shrink-0 text-muted-foreground/76 transition-transform ${isOpen ? "rotate-180" : ""}`} />
                             </button>
                             {isOpen && (
                               <div className="px-4 pb-3.5 pt-0.5 flex flex-col gap-2 border-t border-border/5">
@@ -2256,7 +2256,7 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
                               </div>
                             )}
                           </div>
-                          <span className="text-[12px] text-muted-foreground/40 px-1">{when}</span>
+                          <span className="text-[12px] text-muted-foreground/70 px-1">{when}</span>
                         </div>
                       </div>
                     </div>
@@ -2583,7 +2583,7 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
               className={`text-[14px] font-black tracking-[0.5em] transition-all uppercase group relative py-2 ${committedProposalId === "A"
                 ? "text-primary"
                 : !proposals || !proposals.A
-                  ? "text-muted-foreground/10 cursor-not-allowed"
+                  ? "text-muted-foreground/60 cursor-not-allowed"
                   : "text-foreground/60 hover:text-primary"
                 }`}
             >
@@ -2858,7 +2858,7 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
               className={`text-[14px] font-black tracking-[0.5em] transition-all uppercase group relative py-2 ${committedProposalId === "B"
                 ? "text-ccut-indigo"
                 : !proposals || !proposals.B
-                  ? "text-muted-foreground/10 cursor-not-allowed"
+                  ? "text-muted-foreground/60 cursor-not-allowed"
                   : "text-foreground/60 hover:text-ccut-indigo"
                 }`}
             >
@@ -2889,7 +2889,7 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
                   >
                     제안 상세
                   </span>
-                  <span className="text-[10px] font-bold text-muted-foreground/40">
+                  <span className="text-[10px] font-bold text-muted-foreground/70">
                     {p.score}
                   </span>
                 </div>
@@ -2930,7 +2930,7 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
                 <div className="flex items-center gap-2 mb-1">
                   <BookOpen size={13} className="text-primary/70" />
                   <span className="text-[12px] font-bold tracking-wider uppercase text-muted-foreground/60">{storyReplacement ? "전사" : "이야기 (고른 장면)"}</span>
-                  <span className="ml-auto text-[12px] text-muted-foreground/40">우측 조각맵에서 고르고 빼세요</span>
+                  <span className="ml-auto text-[12px] text-muted-foreground/70">우측 조각맵에서 고르고 빼세요</span>
                 </div>
                 {storyReplacement ? (
                   storyReplacement
@@ -2972,13 +2972,13 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
                   );
                   })
                 ) : (
-                  <p className="py-6 text-center text-[13px] text-foreground/40">
+                  <p className="py-6 text-center text-[13px] text-foreground/62">
                     아직 고른 장면이 없어요. 우측 조각맵에서 원하는 전사를 눌러 담아주세요.
                   </p>
                 )}
               </div>
             ) : (
-              <p className="px-6 py-10 text-center text-[13px] text-foreground/45">
+              <p className="px-6 py-10 text-center text-[13px] text-foreground/64">
                 이야기를 엮고 있습니다…
               </p>
             )}

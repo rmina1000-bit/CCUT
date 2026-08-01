@@ -52,7 +52,7 @@ export const AdminSituationPanel: React.FC = () => {
   }, []);
 
   if (error) return <p className="text-xs text-red-400">상황실 조회 실패: {error}</p>;
-  if (!data) return <p className="text-xs text-muted-foreground/50 animate-pulse">상황 집계 중...</p>;
+  if (!data) return <p className="text-xs text-muted-foreground/76 animate-pulse">상황 집계 중...</p>;
 
   const level = data.global_state.service_level;
 
@@ -71,7 +71,7 @@ export const AdminSituationPanel: React.FC = () => {
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         {Object.entries(data.kpis).map(([k, v]) => (
           <div key={k} className="rounded-lg border border-border/15 bg-card/20 p-4">
-            <p className="text-[10px] font-semibold text-muted-foreground/50 uppercase tracking-wide">
+            <p className="text-[10px] font-semibold text-muted-foreground/76 uppercase tracking-wide">
               {KPI_LABELS[k] ?? k}
             </p>
             <p className="text-xl font-bold text-foreground/90 mt-1">
@@ -83,9 +83,9 @@ export const AdminSituationPanel: React.FC = () => {
 
       {/* 긴급 경보 */}
       <div>
-        <h2 className="text-xs font-black tracking-widest uppercase text-muted-foreground/50 mb-2">긴급 경보</h2>
+        <h2 className="text-xs font-black tracking-widest uppercase text-muted-foreground/76 mb-2">긴급 경보</h2>
         {data.alerts.length === 0 ? (
-          <p className="text-[11px] text-muted-foreground/40">현재 경보 없음</p>
+          <p className="text-[11px] text-muted-foreground/70">현재 경보 없음</p>
         ) : (
           <div className="space-y-2">
             {data.alerts.map((a, i) => (
@@ -104,9 +104,9 @@ export const AdminSituationPanel: React.FC = () => {
 
       {/* 오늘의 작전 큐 */}
       <div>
-        <h2 className="text-xs font-black tracking-widest uppercase text-muted-foreground/50 mb-2">오늘의 작전 큐</h2>
+        <h2 className="text-xs font-black tracking-widest uppercase text-muted-foreground/76 mb-2">오늘의 작전 큐</h2>
         {data.action_queue.length === 0 ? (
-          <p className="text-[11px] text-muted-foreground/40">
+          <p className="text-[11px] text-muted-foreground/70">
             대기 작업 없음 — 작업은 감사/작업기록에서 등록합니다
           </p>
         ) : (
@@ -114,9 +114,9 @@ export const AdminSituationPanel: React.FC = () => {
             {data.action_queue.map((w, i) => (
               <div key={i} className="px-3 py-2 flex items-center gap-3 text-[11px]">
                 <span className="font-black text-primary/80">{w.priority}</span>
-                <span className="font-mono text-muted-foreground/50">{w.kind}</span>
+                <span className="font-mono text-muted-foreground/76">{w.kind}</span>
                 <span className="text-foreground/80 truncate flex-1">{w.title}</span>
-                {w.target && <span className="text-muted-foreground/40">{w.target}</span>}
+                {w.target && <span className="text-muted-foreground/70">{w.target}</span>}
               </div>
             ))}
           </div>
@@ -125,16 +125,16 @@ export const AdminSituationPanel: React.FC = () => {
 
       {/* 최근 관리자 활동 */}
       <div>
-        <h2 className="text-xs font-black tracking-widest uppercase text-muted-foreground/50 mb-2">최근 관리자 활동</h2>
+        <h2 className="text-xs font-black tracking-widest uppercase text-muted-foreground/76 mb-2">최근 관리자 활동</h2>
         {data.recent_audit.length === 0 ? (
-          <p className="text-[11px] text-muted-foreground/40">기록 없음</p>
+          <p className="text-[11px] text-muted-foreground/70">기록 없음</p>
         ) : (
           <div className="rounded-lg border border-border/15 divide-y divide-border/10">
             {data.recent_audit.map(a => (
               <div key={a.id} className="px-3 py-2 flex items-center gap-3 text-[11px]">
                 <span className="font-mono text-primary/80">{a.action}</span>
                 <span className="text-foreground/70 truncate flex-1">{a.note ?? ""}</span>
-                <span className="text-muted-foreground/40 flex-shrink-0">
+                <span className="text-muted-foreground/70 flex-shrink-0">
                   {new Date(a.created_at).toLocaleString()}
                 </span>
               </div>

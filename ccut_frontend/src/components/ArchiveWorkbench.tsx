@@ -256,7 +256,7 @@ export const ArchiveWorkbench: React.FC = () => {
                   <div className="px-3 py-2 rounded-2xl rounded-tl-sm bg-secondary/30 text-foreground/80 text-[13px] inline-block">
                     {m.text ?? (RESULT_INTRO[m.resultType ?? ""] ?? "찾았어요")}
                     {m.results && m.resultType !== "unmatched" && m.results.length > 0 && (
-                      <span className="text-muted-foreground/50"> — 조각 {m.results.length}개</span>
+                      <span className="text-muted-foreground/76"> — 조각 {m.results.length}개</span>
                     )}
                   </div>
                   {m.results && m.results.length > 0 && (
@@ -272,7 +272,7 @@ export const ArchiveWorkbench: React.FC = () => {
                             </button>
                             <button onClick={() => addSourceToMap(r.source_id)} className="min-w-0 flex-1 text-left">
                               <p className="text-xs font-semibold text-foreground/85 truncate">{r.display_name || r.fragment_id}</p>
-                              <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground/50">
+                              <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground/76">
                                 {(r.start != null || r.end != null) && <span className="flex items-center gap-0.5"><Clock size={9} />{fmt(r.start)}–{fmt(r.end)}</span>}
                                 {onMap && <span className="text-primary/70">원본맵에 있음</span>}
                               </div>
@@ -296,7 +296,7 @@ export const ArchiveWorkbench: React.FC = () => {
               )}
             </div>
           ))}
-          {loading && <div className="flex justify-start"><div className="px-3 py-2 rounded-2xl rounded-tl-sm bg-secondary/30 text-muted-foreground/50 text-xs animate-pulse">찾는 중...</div></div>}
+          {loading && <div className="flex justify-start"><div className="px-3 py-2 rounded-2xl rounded-tl-sm bg-secondary/30 text-muted-foreground/76 text-xs animate-pulse">찾는 중...</div></div>}
         </div>
         <div className="px-4 py-3 border-t border-border/10 flex items-center gap-2 flex-shrink-0">
           <Input value={input} onChange={e => setInput(e.target.value)}
@@ -324,11 +324,11 @@ export const ArchiveWorkbench: React.FC = () => {
         <div className="rounded-xl border border-border/15 bg-card/20 px-4 py-2.5 flex-shrink-0 max-h-[130px] overflow-y-auto">
           <div className="flex items-center gap-2 mb-2">
             <Layers size={13} className="text-primary" />
-            <p className="text-[10px] font-black tracking-widest uppercase text-muted-foreground/50">원본맵</p>
-            <span className="text-[10px] text-muted-foreground/40">{slots.length ? `${slots.length}개 원본 · 배지를 눌러 전환` : "검색 결과의 원본을 담아보세요"}</span>
+            <p className="text-[10px] font-black tracking-widest uppercase text-muted-foreground/76">원본맵</p>
+            <span className="text-[10px] text-muted-foreground/70">{slots.length ? `${slots.length}개 원본 · 배지를 눌러 전환` : "검색 결과의 원본을 담아보세요"}</span>
           </div>
           {slots.length === 0 ? (
-            <p className="text-[11px] text-muted-foreground/40">왼쪽 채팅에서 찾은 조각·썸네일을 누르면 그 원본이 여기 A·B·C…로 쌓입니다.</p>
+            <p className="text-[11px] text-muted-foreground/70">왼쪽 채팅에서 찾은 조각·썸네일을 누르면 그 원본이 여기 A·B·C…로 쌓입니다.</p>
           ) : (
             <div className="flex flex-wrap gap-2">
               {slots.map(s => {
@@ -344,7 +344,7 @@ export const ArchiveWorkbench: React.FC = () => {
                       </span>
                       <span className="min-w-0 max-w-[160px] text-left">
                         <span className="block text-[11px] font-semibold text-foreground/85 truncate">{s.detail.title}</span>
-                        <span className="block text-[9px] text-muted-foreground/50">{s.detail.fragments?.length ?? 0}조각</span>
+                        <span className="block text-[9px] text-muted-foreground/76">{s.detail.fragments?.length ?? 0}조각</span>
                       </span>
                     </button>
                     <button onClick={() => addWholeSource(s)} title="이 원본 전체를 바구니에 담기"
@@ -352,7 +352,7 @@ export const ArchiveWorkbench: React.FC = () => {
                       <ShoppingBasket size={11} />
                     </button>
                     <button onClick={() => removeSource(s.detail.source_id)} title="원본맵에서 빼기"
-                      className="flex-shrink-0 w-6 h-6 rounded-md flex items-center justify-center text-muted-foreground/50 hover:bg-red-500/20 hover:text-red-400 transition-colors">
+                      className="flex-shrink-0 w-6 h-6 rounded-md flex items-center justify-center text-muted-foreground/76 hover:bg-red-500/20 hover:text-red-400 transition-colors">
                       <X size={11} />
                     </button>
                   </div>
@@ -365,10 +365,10 @@ export const ArchiveWorkbench: React.FC = () => {
         {/* 조각맵 — 가장 큰 영역 */}
         <div className="flex-1 rounded-xl border border-border/15 bg-card/20 overflow-y-auto p-3 min-h-0">
           {loadingSource ? (
-            <p className="text-[11px] text-muted-foreground/50 animate-pulse">원본 조각맵 불러오는 중...</p>
+            <p className="text-[11px] text-muted-foreground/76 animate-pulse">원본 조각맵 불러오는 중...</p>
           ) : activeSlot && activeSlot.detail.fragments?.length ? (
             <>
-              <p className="text-[10px] font-black tracking-widest uppercase text-muted-foreground/50 mb-2 sticky top-0 bg-card/60 backdrop-blur py-1">
+              <p className="text-[10px] font-black tracking-widest uppercase text-muted-foreground/76 mb-2 sticky top-0 bg-card/60 backdrop-blur py-1">
                 조각맵 · {activeSlot.label} {activeSlot.detail.title} — 파란 테두리=검색결과 · ▶=미리보기 · 클릭=바구니
               </p>
               <div className="flex flex-wrap items-start content-start gap-2">
@@ -381,7 +381,7 @@ export const ArchiveWorkbench: React.FC = () => {
                       className={`relative w-[176px] flex-shrink-0 rounded-lg overflow-hidden border-2 transition-all cursor-pointer ${picked ? "border-emerald-400/70" : matched ? "border-primary/70" : "border-border/15 hover:border-border/40"}`}
                       onClick={() => toggleBasket(item)} title={f.display_name || f.fragment_id}>
                       <div className="aspect-video bg-black/50">
-                        {f.thumbnail_url ? <img src={f.thumbnail_url} className="w-full h-full object-cover" draggable={false} /> : <div className="w-full h-full flex items-center justify-center"><Film size={14} className="text-muted-foreground/40" /></div>}
+                        {f.thumbnail_url ? <img src={f.thumbnail_url} className="w-full h-full object-cover" draggable={false} /> : <div className="w-full h-full flex items-center justify-center"><Film size={14} className="text-muted-foreground/70" /></div>}
                       </div>
                       <button onClick={(e) => { e.stopPropagation(); setPreview(toPreview(item)); }}
                         className="absolute top-1 left-1 w-6 h-6 rounded-full bg-black/60 hover:bg-blue-500/70 text-white/90 flex items-center justify-center transition-colors"
@@ -400,7 +400,7 @@ export const ArchiveWorkbench: React.FC = () => {
             </>
           ) : (
             <div className="h-full flex items-center justify-center">
-              <p className="text-[11px] text-muted-foreground/40 text-center whitespace-pre-line">
+              <p className="text-[11px] text-muted-foreground/70 text-center whitespace-pre-line">
                 {slots.length ? "원본맵에서 배지를 눌러 그 원본의 조각맵을 펼치세요." : "왼쪽에서 조각을 찾아 원본을 담으면\n여기에 조각맵이 크게 펼쳐집니다."}
               </p>
             </div>
@@ -413,7 +413,7 @@ export const ArchiveWorkbench: React.FC = () => {
             <div className="flex items-center gap-2">
               <ShoppingBasket size={14} className="text-primary" />
               <p className="text-xs font-bold text-foreground/90">바구니</p>
-              <span className="text-[11px] text-muted-foreground/50">{basketItems.length}개 · {basketTotal.toFixed(1)}초</span>
+              <span className="text-[11px] text-muted-foreground/76">{basketItems.length}개 · {basketTotal.toFixed(1)}초</span>
             </div>
             <div className="flex items-center gap-2">
               {!exporting && exportResult && exportResult.ok_count > 0 && (
@@ -457,7 +457,7 @@ export const ArchiveWorkbench: React.FC = () => {
 
           <div className="flex-1 overflow-y-auto px-3 py-2 min-h-0">
             {basketItems.length === 0 ? (
-              <p className="text-[11px] text-muted-foreground/40">담은 조각이 없습니다. 조각맵에서 조각을 담거나, 원본맵 배지의 바구니 아이콘으로 원본 전체를 담아보세요.</p>
+              <p className="text-[11px] text-muted-foreground/70">담은 조각이 없습니다. 조각맵에서 조각을 담거나, 원본맵 배지의 바구니 아이콘으로 원본 전체를 담아보세요.</p>
             ) : (
               <div className="flex flex-wrap gap-1.5">
                 {basketItems.map(b => (
@@ -470,7 +470,7 @@ export const ArchiveWorkbench: React.FC = () => {
                     </button>
                     <div className="min-w-0 max-w-[160px]">
                       <p className="text-[11px] font-semibold text-foreground/85 truncate">{b.display_name || b.fragment_id}</p>
-                      <p className="text-[9px] text-muted-foreground/50 truncate">{b.source_title} · {fmt(b.start)}–{fmt(b.end)}</p>
+                      <p className="text-[9px] text-muted-foreground/76 truncate">{b.source_title} · {fmt(b.start)}–{fmt(b.end)}</p>
                     </div>
                     <button onClick={() => toggleBasket(b)} title="바구니에서 빼기"
                       className="flex-shrink-0 w-6 h-6 rounded-md bg-secondary/50 hover:bg-red-500/20 text-muted-foreground/60 hover:text-red-400 flex items-center justify-center transition-colors">

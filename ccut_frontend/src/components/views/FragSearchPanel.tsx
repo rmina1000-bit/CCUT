@@ -32,7 +32,7 @@ export const FragSearchPanel: React.FC<FragSearchPanelProps> = ({ fragSearch, on
         </div>
         <button
           onClick={onClose}
-          className="text-[12px] text-muted-foreground/50 hover:text-foreground/80 transition-colors px-2 py-1"
+          className="text-[12px] text-muted-foreground/76 hover:text-foreground/80 transition-colors px-2 py-1"
         >
           닫기 ✕
         </button>
@@ -69,17 +69,17 @@ export const FragSearchPanel: React.FC<FragSearchPanelProps> = ({ fragSearch, on
                     <Sparkles size={9} /> 사용된 조각
                   </span>
                 )}
-                <span className="text-[10px] text-muted-foreground/50 ml-auto flex items-center gap-1">
+                <span className="text-[10px] text-muted-foreground/76 ml-auto flex items-center gap-1">
                   <Film size={10} /> #{(r.source_id || "").replace("SRC_", "").slice(0, 8)}
                 </span>
               </div>
               <p className="text-[12px] leading-relaxed text-foreground/75 line-clamp-3">
                 {r.visual_desc || r.transcript || "(설명 없음)"}
               </p>
-              <div className="flex items-center justify-between text-[10px] text-muted-foreground/50 mt-auto pt-1">
+              <div className="flex items-center justify-between text-[10px] text-muted-foreground/76 mt-auto pt-1">
                 <span>
                   {r.start?.toFixed(1)}s ~ {r.end?.toFixed(1)}s
-                  <span className="text-muted-foreground/30"> ({r.duration?.toFixed(1)}s)</span>
+                  <span className="text-muted-foreground/65"> ({r.duration?.toFixed(1)}s)</span>
                 </span>
                 <span className="flex items-center gap-2">
                   {r.keyword_hit && <span className="text-emerald-400/70">키워드</span>}

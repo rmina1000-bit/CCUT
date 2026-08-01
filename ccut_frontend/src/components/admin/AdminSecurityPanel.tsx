@@ -22,7 +22,7 @@ const SEV_STYLE: Record<string, string> = {
   P0: "bg-red-500/15 text-red-400 border-red-500/25",
   P1: "bg-amber-500/15 text-amber-400 border-amber-500/25",
   P2: "bg-secondary/40 text-muted-foreground/70 border-border/20",
-  P3: "bg-secondary/20 text-muted-foreground/50 border-border/15",
+  P3: "bg-secondary/20 text-muted-foreground/76 border-border/15",
 };
 
 export const AdminSecurityPanel: React.FC = () => {
@@ -64,7 +64,7 @@ export const AdminSecurityPanel: React.FC = () => {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-lg font-bold text-foreground/90">보안 관제</h1>
-          <p className="text-[11px] text-muted-foreground/50 mt-0.5">
+          <p className="text-[11px] text-muted-foreground/76 mt-0.5">
             admin_security_events 원장 · v1 자동 차단 금지
           </p>
         </div>
@@ -101,7 +101,7 @@ export const AdminSecurityPanel: React.FC = () => {
       )}
 
       {events.length === 0 ? (
-        <p className="text-[11px] text-muted-foreground/40">
+        <p className="text-[11px] text-muted-foreground/70">
           보안 이벤트 원장이 비어 있습니다 — 자동 감지 파이프라인은 후속 단계에서 연결됩니다.
         </p>
       ) : (
@@ -112,8 +112,8 @@ export const AdminSecurityPanel: React.FC = () => {
                 {ev.severity}
               </span>
               <span className="text-xs font-mono text-foreground/85 truncate flex-1">{ev.event_type}</span>
-              <span className="text-[10px] font-mono text-muted-foreground/40">{ev.status}</span>
-              <span className="text-[10px] text-muted-foreground/40">{new Date(ev.created_at).toLocaleString()}</span>
+              <span className="text-[10px] font-mono text-muted-foreground/70">{ev.status}</span>
+              <span className="text-[10px] text-muted-foreground/70">{new Date(ev.created_at).toLocaleString()}</span>
               {ev.status === "open" && (
                 <button onClick={() => setStatus(ev.id, "triaged")}
                   className="px-2 py-1 rounded-md bg-amber-500/15 text-amber-400 text-[10px] font-bold hover:bg-amber-500/25 transition-colors">

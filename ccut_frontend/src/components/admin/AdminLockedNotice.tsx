@@ -21,7 +21,7 @@ export const AdminLockedNotice: React.FC<{ tab: string }> = ({ tab }) => {
 
   return (
     <div className="flex items-start gap-2 rounded-lg border border-border/25 bg-secondary/15 px-3 py-2.5 text-[11.5px] leading-relaxed text-muted-foreground/70">
-      <Lock size={13} className="mt-0.5 flex-shrink-0 text-muted-foreground/45" />
+      <Lock size={13} className="mt-0.5 flex-shrink-0 text-muted-foreground/73" />
       <span>
         <b className="font-semibold text-foreground/70">아직 열리지 않았습니다.</b>{" "}
         {locked} 아래 화면은 그때를 위해 남겨둔 것입니다.

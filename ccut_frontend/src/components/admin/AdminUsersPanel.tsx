@@ -57,7 +57,7 @@ export const AdminUsersPanel: React.FC = () => {
       <AdminLockedNotice tab="users" />
       <div>
         <h1 className="text-lg font-bold text-foreground/90">사용자 운영</h1>
-        <p className="text-[11px] text-muted-foreground/50 mt-0.5">로컬 단일 사용자 환경</p>
+        <p className="text-[11px] text-muted-foreground/76 mt-0.5">로컬 단일 사용자 환경</p>
       </div>
 
       {users.map(u => (
@@ -68,7 +68,7 @@ export const AdminUsersPanel: React.FC = () => {
             </div>
             <div>
               <p className="text-sm font-bold text-foreground/90">{u.display_name ?? u.user_id}</p>
-              <p className="text-[11px] text-muted-foreground/50">
+              <p className="text-[11px] text-muted-foreground/76">
                 {u.user_id} · {u.role} · {u.plan}
               </p>
             </div>
@@ -80,7 +80,7 @@ export const AdminUsersPanel: React.FC = () => {
               if (v === undefined) return null;
               return (
                 <div key={k} className="rounded-md bg-secondary/20 px-3 py-2">
-                  <p className="text-[9px] font-semibold text-muted-foreground/50 uppercase">{label}</p>
+                  <p className="text-[9px] font-semibold text-muted-foreground/76 uppercase">{label}</p>
                   <p className="text-xs font-bold text-foreground/80 mt-0.5 truncate">
                     {v == null ? "—" : typeof v === "number" ? v.toLocaleString()
                       : String(v).length > 16 ? new Date(String(v)).toLocaleDateString() : String(v)}

@@ -93,19 +93,19 @@ export function UploadStagingView({ staged, onAddFiles, onRemove, onNoteChange, 
                   <Play size={11} className={`flex-shrink-0 ${playingIdx === i ? "fill-primary" : "opacity-50"}`} />
                   <span className="truncate">{s.file.name}</span>
                 </button>
-                <span className="text-[10px] text-muted-foreground/50 font-mono flex-shrink-0">
+                <span className="text-[10px] text-muted-foreground/76 font-mono flex-shrink-0">
                   {fmtDur(s.duration)}{s.orientation ? ` · ${s.orientation}` : ""}
                 </span>
                 <input
                   value={s.note}
                   onChange={(e) => onNoteChange(i, e.target.value)}
                   placeholder="무엇을 찍은 영상인가요? (예: 운동회 계주)"
-                  className="flex-1 min-w-0 bg-transparent border-b border-white/10 focus:border-primary/50 px-1 py-1 text-[12px] text-foreground placeholder:text-muted-foreground/30 outline-none transition-colors"
+                  className="flex-1 min-w-0 bg-transparent border-b border-white/10 focus:border-primary/50 px-1 py-1 text-[12px] text-foreground placeholder:text-muted-foreground/65 outline-none transition-colors"
                 />
                 <button
                   onClick={() => onRemove(i)}
                   title="이 영상 빼기"
-                  className="p-1 text-muted-foreground/40 hover:text-red-400 transition-colors flex-shrink-0"
+                  className="p-1 text-muted-foreground/70 hover:text-red-400 transition-colors flex-shrink-0"
                 >
                   <X size={13} />
                 </button>
@@ -136,7 +136,7 @@ export function UploadStagingView({ staged, onAddFiles, onRemove, onNoteChange, 
             <div className="space-y-1.5">
               <p className="text-[12px] text-foreground">
                 화면 방향이 섞여 있어요 — 완성본은 어느 방향으로 만들까요?
-                <span className="text-[10px] text-muted-foreground/50 ml-2">
+                <span className="text-[10px] text-muted-foreground/76 ml-2">
                   가로 {staged.filter((s) => s.orientation === "가로").length}개 · 세로 {staged.filter((s) => s.orientation === "세로").length}개
                 </span>
               </p>
@@ -154,7 +154,7 @@ export function UploadStagingView({ staged, onAddFiles, onRemove, onNoteChange, 
             <div className="space-y-1.5">
               <p className="text-[12px] text-foreground">
                 영상이 여러 개예요 — 완성본 소리는 어떻게 할까요?
-                <span className="text-[10px] text-muted-foreground/50 ml-2">녹음 크기가 서로 다르면 고르게 맞출 수 있어요</span>
+                <span className="text-[10px] text-muted-foreground/76 ml-2">녹음 크기가 서로 다르면 고르게 맞출 수 있어요</span>
               </p>
               <div className="flex gap-1.5">
                 {([["original", "원본 소리 그대로"], ["normalize", "영상 간 볼륨 고르게"]] as const).map(([v, l]) => (

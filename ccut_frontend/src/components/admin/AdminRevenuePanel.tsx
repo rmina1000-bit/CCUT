@@ -36,7 +36,7 @@ const STATUS_STYLE: Record<string, string> = {
   draft: "bg-secondary/40 text-muted-foreground/70",
   approved: "bg-amber-500/15 text-amber-400",
   published: "bg-emerald-500/15 text-emerald-400",
-  retired: "bg-secondary/20 text-muted-foreground/40",
+  retired: "bg-secondary/20 text-muted-foreground/70",
 };
 
 export const AdminRevenuePanel: React.FC = () => {
@@ -100,7 +100,7 @@ export const AdminRevenuePanel: React.FC = () => {
       />
       <div>
         <h1 className="text-lg font-bold text-foreground/90">수익/구독/포인트</h1>
-        <p className="text-[11px] text-muted-foreground/50 mt-0.5">
+        <p className="text-[11px] text-muted-foreground/76 mt-0.5">
           구독·포인트 원장 + 상품 카탈로그 (공개는 승인 전이 필수)
         </p>
       </div>
@@ -109,9 +109,9 @@ export const AdminRevenuePanel: React.FC = () => {
 
       {/* 구독 요약 */}
       <div>
-        <h2 className="text-xs font-black tracking-widest uppercase text-muted-foreground/50 mb-2">구독 요약</h2>
+        <h2 className="text-xs font-black tracking-widest uppercase text-muted-foreground/76 mb-2">구독 요약</h2>
         {!summary ? (
-          <p className="text-[11px] text-muted-foreground/50 animate-pulse">집계 중...</p>
+          <p className="text-[11px] text-muted-foreground/76 animate-pulse">집계 중...</p>
         ) : summary.status === "준비 중" ? (
           <div className="rounded-lg border border-amber-500/25 bg-amber-500/5 p-4">
             <p className="text-sm font-bold text-amber-300">구독 데이터 준비 중</p>
@@ -131,17 +131,17 @@ export const AdminRevenuePanel: React.FC = () => {
 
       {/* 포인트 */}
       <div>
-        <h2 className="text-xs font-black tracking-widest uppercase text-muted-foreground/50 mb-2">포인트 원장</h2>
+        <h2 className="text-xs font-black tracking-widest uppercase text-muted-foreground/76 mb-2">포인트 원장</h2>
         {!points ? (
-          <p className="text-[11px] text-muted-foreground/50 animate-pulse">집계 중...</p>
+          <p className="text-[11px] text-muted-foreground/76 animate-pulse">집계 중...</p>
         ) : points.status === "준비 중" ? (
-          <p className="text-[11px] text-muted-foreground/40">{points.message}</p>
+          <p className="text-[11px] text-muted-foreground/70">{points.message}</p>
         ) : (
           <div className="rounded-lg border border-border/15 divide-y divide-border/10">
             {(points.by_type ?? []).map(p => (
               <div key={p.event_type} className="px-4 py-2.5 flex items-center justify-between text-xs">
                 <span className="font-mono text-foreground/80">{p.event_type}</span>
-                <span className="text-muted-foreground/50">{p.count}건</span>
+                <span className="text-muted-foreground/76">{p.count}건</span>
                 <span className="font-bold text-foreground/90">{p.points.toLocaleString()}P</span>
               </div>
             ))}
@@ -152,7 +152,7 @@ export const AdminRevenuePanel: React.FC = () => {
       {/* 상품 카탈로그 */}
       <div>
         <div className="flex items-center justify-between mb-2">
-          <h2 className="text-xs font-black tracking-widest uppercase text-muted-foreground/50">상품 카탈로그</h2>
+          <h2 className="text-xs font-black tracking-widest uppercase text-muted-foreground/76">상품 카탈로그</h2>
           <button onClick={() => setShowForm(v => !v)}
             className="flex items-center gap-1 px-2.5 py-1 rounded-md bg-emerald-500/15 text-emerald-400 text-[11px] font-bold hover:bg-emerald-500/25 transition-colors">
             <Plus size={11} /> 상품 초안
@@ -186,7 +186,7 @@ export const AdminRevenuePanel: React.FC = () => {
         )}
 
         {products.length === 0 ? (
-          <p className="text-[11px] text-muted-foreground/40">상품 카탈로그가 비어 있습니다.</p>
+          <p className="text-[11px] text-muted-foreground/70">상품 카탈로그가 비어 있습니다.</p>
         ) : (
           <div className="rounded-lg border border-border/15 divide-y divide-border/10">
             {products.map(p => (
@@ -194,9 +194,9 @@ export const AdminRevenuePanel: React.FC = () => {
                 <span className={`px-1.5 py-0.5 rounded text-[9px] font-black ${STATUS_STYLE[p.status] ?? STATUS_STYLE.draft}`}>
                   {p.status}
                 </span>
-                <span className="font-mono text-muted-foreground/50">{p.product_id}</span>
+                <span className="font-mono text-muted-foreground/76">{p.product_id}</span>
                 <span className="text-foreground/85 truncate flex-1">{p.name}</span>
-                <span className="text-muted-foreground/50">{p.kind}</span>
+                <span className="text-muted-foreground/76">{p.kind}</span>
                 {p.price != null && <span className="font-bold text-foreground/80">{p.price.toLocaleString()}{p.currency ?? ""}</span>}
                 {p.status === "draft" && (
                   <button onClick={() => transition(p.product_id, "approved")}

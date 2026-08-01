@@ -567,7 +567,7 @@ const FragmentMap: React.FC<FragmentMapProps> = ({
             <h3 className="text-[12px] font-semibold text-foreground/80 uppercase tracking-widest">
               {title ?? "조각맵"}
             </h3>
-            <span className="text-[9px] text-muted-foreground/40">
+            <span className="text-[9px] text-muted-foreground/70">
               {activeCount}
               {excludedCount > 0 ? ` · ${excludedCount}` : ""}
             </span>
@@ -583,7 +583,7 @@ const FragmentMap: React.FC<FragmentMapProps> = ({
                 type="button"
                 onClick={() => setManualHide(new Set())}
                 title="내가 뺀 조각을 먼저 보기로 되돌립니다"
-                className="text-[9px] text-muted-foreground/50 underline hover:text-foreground/70"
+                className="text-[9px] text-muted-foreground/76 underline hover:text-foreground/70"
               >
                 내가 뺀 {manualHide.size}개 되돌리기
               </button>
@@ -603,7 +603,7 @@ const FragmentMap: React.FC<FragmentMapProps> = ({
                   className={`px-1.5 py-0.5 rounded text-[9px] font-semibold transition-colors ${
                     previewTier === key
                       ? "bg-primary/20 text-primary"
-                      : "text-muted-foreground/50 hover:text-foreground/70"
+                      : "text-muted-foreground/76 hover:text-foreground/70"
                   }`}
                 >
                   {label}

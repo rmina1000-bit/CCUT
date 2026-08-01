@@ -427,7 +427,7 @@ export const ArchivePanel: React.FC<{
         {isExpanded && (
           <div className="px-4 pb-4 pl-[68px] space-y-3">
             {isDetailLoading && !detail ? (
-              <div className="text-[11px] text-muted-foreground/50 animate-pulse">상세 불러오는 중...</div>
+              <div className="text-[11px] text-muted-foreground/76 animate-pulse">상세 불러오는 중...</div>
             ) : detail ? (
               <>
                 {detail.notes.length > 0 && (
@@ -435,7 +435,7 @@ export const ArchivePanel: React.FC<{
                 )}
                 {detail.usage.length > 0 && (
                   <div className="space-y-1.5">
-                    <p className="text-[10px] font-black tracking-widest uppercase text-muted-foreground/50">사용 프로젝트 {detail.usage.length}</p>
+                    <p className="text-[10px] font-black tracking-widest uppercase text-muted-foreground/76">사용 프로젝트 {detail.usage.length}</p>
                     {detail.usage.map(u => (
                       <button
                         key={u.program_id}
@@ -448,7 +448,7 @@ export const ArchivePanel: React.FC<{
                             {u.name || u.program_id}{u.label ? <span className="text-blue-400/60">-{u.label}</span> : null}
                           </span>
                         </div>
-                        <span className="text-[10px] text-muted-foreground/40 flex-shrink-0">
+                        <span className="text-[10px] text-muted-foreground/70 flex-shrink-0">
                           {u.used_at && new Date(u.used_at).toLocaleString()}
                         </span>
                       </button>
@@ -457,7 +457,7 @@ export const ArchivePanel: React.FC<{
                 )}
                 {detail.fragments.length > 0 && (
                   <div>
-                    <p className="text-[10px] font-black tracking-widest uppercase text-muted-foreground/50 mb-1.5">
+                    <p className="text-[10px] font-black tracking-widest uppercase text-muted-foreground/76 mb-1.5">
                       조각 파노라마 — 최종 수정 기준 · 클릭하면 크게 봅니다
                     </p>
                     <div className="flex gap-1.5 overflow-x-auto pb-2">
@@ -488,7 +488,7 @@ export const ArchivePanel: React.FC<{
                             {f.thumbnail_url ? (
                               <img src={f.thumbnail_url} className="w-full h-full object-cover" draggable={false} />
                             ) : (
-                              <div className="w-full h-full flex items-center justify-center text-[9px] text-muted-foreground/50">미리보기 없음</div>
+                              <div className="w-full h-full flex items-center justify-center text-[9px] text-muted-foreground/76">미리보기 없음</div>
                             )}
                           </div>
                           <div className="px-1.5 py-1 bg-black/40">
@@ -501,10 +501,10 @@ export const ArchivePanel: React.FC<{
                 )}
                 {detail.exports.length > 0 && (
                   <div className="space-y-1">
-                    <p className="text-[10px] font-black tracking-widest uppercase text-muted-foreground/50">내보낸 영상 {detail.exports.length}</p>
+                    <p className="text-[10px] font-black tracking-widest uppercase text-muted-foreground/76">내보낸 영상 {detail.exports.length}</p>
                     {detail.exports.map(ex => (
                       <div key={ex.id} className="text-[11px] text-foreground/70 px-2 py-1 rounded bg-secondary/15">
-                        {ex.display_name || ex.id} <span className="text-muted-foreground/40">· {ex.status}</span>
+                        {ex.display_name || ex.id} <span className="text-muted-foreground/70">· {ex.status}</span>
                       </div>
                     ))}
                   </div>
@@ -527,7 +527,7 @@ export const ArchivePanel: React.FC<{
       <div className="flex items-center justify-between flex-shrink-0">
         <p className="text-[13px] text-foreground/75">
           <span className="font-bold text-primary">CCUT 아카이브</span>
-          <span className="text-muted-foreground/50">
+          <span className="text-muted-foreground/76">
             {" · "}원본 {summary?.source_count ?? 0} · 프로젝트 {summary?.program_count ?? 0} · 최근 촬영 {summary?.latest_shot_date ?? "—"}
           </span>
         </p>
@@ -559,7 +559,7 @@ export const ArchivePanel: React.FC<{
         </div>
         {!isWb && (
         <div className="relative w-full md:w-72">
-          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground/40" />
+          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground/70" />
           <Input
             placeholder="검색"
             value={searchQuery}
@@ -586,7 +586,7 @@ export const ArchivePanel: React.FC<{
                 ))}
               </div>
               {sourcesLoading ? (
-                <div className="flex flex-col items-center justify-center h-64 text-muted-foreground/40 text-xs gap-2">
+                <div className="flex flex-col items-center justify-center h-64 text-muted-foreground/70 text-xs gap-2">
                   <div className="w-6 h-6 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
                   원본 목록 로드 중...
                 </div>
@@ -594,7 +594,7 @@ export const ArchivePanel: React.FC<{
                 <>
                   <div className="bg-card/20 rounded-xl border border-border/10 overflow-hidden divide-y divide-border/10">
                     {sourceCards.length > 0 ? sourceCards.map(renderSourceCard) : (
-                      <div className="p-8 text-center text-xs text-muted-foreground/40">검색 조건에 맞는 원본 영상이 없습니다.</div>
+                      <div className="p-8 text-center text-xs text-muted-foreground/70">검색 조건에 맞는 원본 영상이 없습니다.</div>
                     )}
                   </div>
                   {sourcesCursor && (
@@ -617,7 +617,7 @@ export const ArchivePanel: React.FC<{
           {activeSubTab === "timeline" && (
             <>
               {timelineLoading && timelineDays.length === 0 ? (
-                <div className="flex flex-col items-center justify-center h-64 text-muted-foreground/40 text-xs gap-2">
+                <div className="flex flex-col items-center justify-center h-64 text-muted-foreground/70 text-xs gap-2">
                   <div className="w-6 h-6 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
                   연대기 로드 중...
                 </div>
@@ -650,7 +650,7 @@ export const ArchivePanel: React.FC<{
                       {selectedDay === d.date_key && (
                         <div className="px-4 pb-4 pl-[68px]">
                           {dayLoading ? (
-                            <div className="text-[11px] text-muted-foreground/50 animate-pulse">불러오는 중...</div>
+                            <div className="text-[11px] text-muted-foreground/76 animate-pulse">불러오는 중...</div>
                           ) : dayDetail ? (
                             <div className="space-y-2">
                               {dayDetail.sources.map(s => renderSourceCard(s))}
@@ -660,7 +660,7 @@ export const ArchivePanel: React.FC<{
                       )}
                     </div>
                   )) : (
-                    <div className="p-8 text-center text-xs text-muted-foreground/40">연대기 데이터가 없습니다.</div>
+                    <div className="p-8 text-center text-xs text-muted-foreground/70">연대기 데이터가 없습니다.</div>
                   )}
                 </div>
               )}
@@ -685,12 +685,12 @@ export const ArchivePanel: React.FC<{
 
           {activeSubTab === "exports" && (
             exportsLoading ? (
-              <div className="flex flex-col items-center justify-center h-64 text-muted-foreground/40 text-xs gap-2">
+              <div className="flex flex-col items-center justify-center h-64 text-muted-foreground/70 text-xs gap-2">
                 <div className="w-6 h-6 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
                 내보낸 영상 로드 중...
               </div>
             ) : exports.length === 0 ? (
-              <div className="flex flex-col items-center justify-center h-64 gap-3 text-muted-foreground/30">
+              <div className="flex flex-col items-center justify-center h-64 gap-3 text-muted-foreground/65">
                 <Film size={36} strokeWidth={1} />
                 <p className="text-sm font-medium">아직 내보낸 영상이 없습니다</p>
               </div>
@@ -716,7 +716,7 @@ export const ArchivePanel: React.FC<{
                     <p className="text-[15px] font-bold text-foreground/90 truncate">
                       {ex.display_name || ex.program_title || "내보낸 영상"}
                     </p>
-                    <div className="flex items-center gap-3 mt-1 text-[11px] text-muted-foreground/50">
+                    <div className="flex items-center gap-3 mt-1 text-[11px] text-muted-foreground/76">
                       {ex.duration != null && <span className="flex items-center gap-1"><Clock size={10} />{formatSecs(ex.duration)}</span>}
                       {ex.file_size != null && <span>{(ex.file_size / 1024 / 1024).toFixed(1)} MB</span>}
                       {ex.created_at && <span className="flex items-center gap-1"><Calendar size={10} />{new Date(ex.created_at).toLocaleString()}</span>}

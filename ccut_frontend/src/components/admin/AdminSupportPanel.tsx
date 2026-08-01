@@ -23,7 +23,7 @@ interface SupportCase {
 const SEV_STYLE: Record<string, string> = {
   high: "bg-red-500/15 text-red-400 border-red-500/25",
   normal: "bg-secondary/40 text-muted-foreground/70 border-border/20",
-  low: "bg-secondary/20 text-muted-foreground/50 border-border/15",
+  low: "bg-secondary/20 text-muted-foreground/76 border-border/15",
 };
 
 export const AdminSupportPanel: React.FC = () => {
@@ -70,7 +70,7 @@ export const AdminSupportPanel: React.FC = () => {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-lg font-bold text-foreground/90">지원/문의</h1>
-          <p className="text-[11px] text-muted-foreground/50 mt-0.5">
+          <p className="text-[11px] text-muted-foreground/76 mt-0.5">
             admin_support_cases 원장 · 분류는 로컬 AI만
           </p>
         </div>
@@ -114,7 +114,7 @@ export const AdminSupportPanel: React.FC = () => {
       )}
 
       {cases.length === 0 ? (
-        <p className="text-[11px] text-muted-foreground/40">
+        <p className="text-[11px] text-muted-foreground/70">
           접수 원장이 비어 있습니다 — 사용자 문의 유입 경로는 후속 단계에서 연결됩니다.
         </p>
       ) : (
@@ -126,7 +126,7 @@ export const AdminSupportPanel: React.FC = () => {
                 <span className={`px-1.5 py-0.5 rounded text-[9px] font-black border ${SEV_STYLE[c.severity] ?? SEV_STYLE.normal}`}>
                   {c.severity}
                 </span>
-                <span className="text-[10px] font-mono text-muted-foreground/40">{c.status}</span>
+                <span className="text-[10px] font-mono text-muted-foreground/70">{c.status}</span>
                 <span className="text-xs text-foreground/85 truncate flex-1">{c.title}</span>
                 {c.category && <span className="text-[10px] font-mono text-primary/70">{c.category}</span>}
                 {expanded === c.id ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
@@ -135,7 +135,7 @@ export const AdminSupportPanel: React.FC = () => {
                 <div className="px-4 pb-3 space-y-2 text-[11px]">
                   <p className="text-foreground/70 whitespace-pre-wrap">{c.body || "(본문 없음)"}</p>
                   {c.ai_summary && (
-                    <p className="text-primary/80">AI 요약: {c.ai_summary} {c.ai_tags && <span className="text-muted-foreground/50">{c.ai_tags}</span>}</p>
+                    <p className="text-primary/80">AI 요약: {c.ai_summary} {c.ai_tags && <span className="text-muted-foreground/76">{c.ai_tags}</span>}</p>
                   )}
                   <button onClick={() => classify(c.id)} disabled={busy === c.id}
                     className="flex items-center gap-1 px-2.5 py-1.5 rounded-md bg-primary/15 hover:bg-primary/25 text-[11px] font-semibold text-primary transition-colors disabled:opacity-50">

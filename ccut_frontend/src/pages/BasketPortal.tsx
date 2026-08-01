@@ -47,27 +47,27 @@ const BasketPortal: React.FC = () => {
           <span className="text-xs bg-primary/10 text-primary/80 px-2 py-0.5 rounded-full">
             {items.length}개 · {total.toFixed(1)}초
           </span>
-          {!connected && <span className="text-[11px] text-muted-foreground/40">메인 창과 연결 대기…</span>}
+          {!connected && <span className="text-[11px] text-muted-foreground/70">메인 창과 연결 대기…</span>}
         </div>
         <button disabled title="다음 단계에서 제공됩니다 — 바구니 조각을 프로젝트로 이동"
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-secondary/40 text-muted-foreground/40 text-xs font-bold opacity-60 cursor-not-allowed">
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-secondary/40 text-muted-foreground/70 text-xs font-bold opacity-60 cursor-not-allowed">
           <FolderInput size={13} /> 프로젝트로 이동 (다음)
         </button>
       </div>
 
       <div className="flex-1 overflow-y-auto p-6">
         {items.length === 0 ? (
-          <div className="h-full flex flex-col items-center justify-center gap-3 text-muted-foreground/30">
+          <div className="h-full flex flex-col items-center justify-center gap-3 text-muted-foreground/65">
             <ShoppingBasket size={40} strokeWidth={1} />
             <p className="text-sm">담긴 조각이 없습니다.</p>
-            <p className="text-[11px] text-muted-foreground/40">메인 작업대에서 조각을 담으면 여기 실시간으로 나타납니다.</p>
+            <p className="text-[11px] text-muted-foreground/70">메인 작업대에서 조각을 담으면 여기 실시간으로 나타납니다.</p>
           </div>
         ) : (
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
             {items.map(b => (
               <div key={b.fragment_id} className="rounded-lg border border-border/15 bg-card/20 overflow-hidden group">
                 <div className="aspect-video bg-black/50 relative">
-                  {b.thumbnail_url ? <img src={b.thumbnail_url} className="w-full h-full object-cover" draggable={false} /> : <div className="w-full h-full flex items-center justify-center"><Film size={18} className="text-muted-foreground/40" /></div>}
+                  {b.thumbnail_url ? <img src={b.thumbnail_url} className="w-full h-full object-cover" draggable={false} /> : <div className="w-full h-full flex items-center justify-center"><Film size={18} className="text-muted-foreground/70" /></div>}
                   <button onClick={() => remove(b.fragment_id)} title="바구니에서 빼기"
                     className="absolute top-1.5 right-1.5 w-6 h-6 rounded-md bg-black/60 hover:bg-red-500/70 text-white/90 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
                     <X size={13} />
@@ -75,7 +75,7 @@ const BasketPortal: React.FC = () => {
                 </div>
                 <div className="px-2.5 py-2">
                   <p className="text-[11px] font-semibold text-foreground/85 truncate">{b.display_name || b.fragment_id}</p>
-                  <p className="text-[10px] text-muted-foreground/50 truncate">{b.source_title} · {fmt(b.start)}–{fmt(b.end)}</p>
+                  <p className="text-[10px] text-muted-foreground/76 truncate">{b.source_title} · {fmt(b.start)}–{fmt(b.end)}</p>
                 </div>
               </div>
             ))}

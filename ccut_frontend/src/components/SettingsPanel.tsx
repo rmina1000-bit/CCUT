@@ -198,7 +198,7 @@ export const SettingsPanel: React.FC = () => {
               </button>
             </div>
             {cleanNote && <p className="text-[12px] text-emerald-400 mt-2">{cleanNote}</p>}
-            <p className="text-[11px] text-muted-foreground/50 mt-1.5">
+            <p className="text-[11px] text-muted-foreground/76 mt-1.5">
               두 캐시 모두 필요할 때 자동으로 다시 생성됩니다. 원본 영상·프로젝트는 건드리지 않습니다.
             </p>
           </div>
@@ -226,7 +226,7 @@ export const SettingsPanel: React.FC = () => {
                 return (
                   <div key={k} className="flex items-center justify-between px-4 py-2.5">
                     <span className="text-[13px] text-foreground/70">{label}</span>
-                    <span className={`text-[12px] font-bold ${on ? (good ? "text-emerald-400" : "text-amber-400") : (good ? "text-muted-foreground/50" : "text-muted-foreground/50")}`}>
+                    <span className={`text-[12px] font-bold ${on ? (good ? "text-emerald-400" : "text-amber-400") : (good ? "text-muted-foreground/76" : "text-muted-foreground/76")}`}>
                       {on ? "켜짐" : "꺼짐"}
                     </span>
                   </div>

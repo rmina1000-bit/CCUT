@@ -110,7 +110,7 @@ export const AccountPanel: React.FC = () => {
             </div>
           ))}
           {!stats && !loading && (
-            <p className="col-span-2 text-[12px] text-muted-foreground/50">통계를 불러오지 못했습니다 — 백엔드 상태를 확인하세요.</p>
+            <p className="col-span-2 text-[12px] text-muted-foreground/76">통계를 불러오지 못했습니다 — 백엔드 상태를 확인하세요.</p>
           )}
         </div>
 
@@ -123,7 +123,7 @@ export const AccountPanel: React.FC = () => {
           ) : yt?.configured ? (
             <span className="text-[13px] text-muted-foreground/70">YouTube — 설정됨, 미연결 (SNS 업로드 탭에서 연결)</span>
           ) : (
-            <span className="text-[13px] text-muted-foreground/50">YouTube — 미설정 (SNS 업로드 탭에 준비 안내)</span>
+            <span className="text-[13px] text-muted-foreground/76">YouTube — 미설정 (SNS 업로드 탭에 준비 안내)</span>
           )}
         </div>
       </div>

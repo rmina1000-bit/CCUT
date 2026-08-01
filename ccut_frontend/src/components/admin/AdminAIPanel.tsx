@@ -105,7 +105,7 @@ export const AdminAIPanel: React.FC<{
       <button
         onClick={() => setOpen(true)}
         title="AI 보조 패널 열기"
-        className="w-9 flex-shrink-0 border-l border-border/15 bg-[hsl(228_12%_9%)] flex items-start justify-center pt-4 text-muted-foreground/50 hover:text-primary transition-colors"
+        className="w-9 flex-shrink-0 border-l border-border/15 bg-[hsl(228_12%_9%)] flex items-start justify-center pt-4 text-muted-foreground/76 hover:text-primary transition-colors"
       >
         <PanelRightOpen size={15} />
       </button>
@@ -120,27 +120,27 @@ export const AdminAIPanel: React.FC<{
           <p className="text-xs font-bold text-foreground/90">AI 보조</p>
         </div>
         <button onClick={() => setOpen(false)} title="접기"
-          className="text-muted-foreground/40 hover:text-foreground/80 transition-colors">
+          className="text-muted-foreground/70 hover:text-foreground/80 transition-colors">
           <PanelRightClose size={14} />
         </button>
       </div>
 
       <div className="px-4 py-3 border-b border-border/10">
-        <p className="text-[10px] font-semibold text-muted-foreground/50 uppercase">현재 화면</p>
+        <p className="text-[10px] font-semibold text-muted-foreground/76 uppercase">현재 화면</p>
         <p className="text-xs font-bold text-foreground/80 mt-0.5">{screen}</p>
       </div>
 
       <div className="px-4 py-3 border-b border-border/10">
-        <p className="text-[10px] font-semibold text-muted-foreground/50 uppercase mb-1.5">권장 다음 행동</p>
+        <p className="text-[10px] font-semibold text-muted-foreground/76 uppercase mb-1.5">권장 다음 행동</p>
         {/* [LAB-52 ②] 조회 실패·측정 전은 '이상 없음'이 아니다. 셋을 각각 다르게 표기한다. */}
         {contextSource === "lab" && labError ? (
           <p className="text-[11px] text-red-400/80">편집연구실 감사 조회 실패 — {labError}</p>
         ) : contextSource !== "lab" && situationError ? (
           <p className="text-[11px] text-red-400/80">상황실 데이터 연결 실패 — {situationError}</p>
         ) : contextSource === "lab" && !labAudit ? (
-          <p className="text-[11px] text-muted-foreground/40">감사 결과 확인 중...</p>
+          <p className="text-[11px] text-muted-foreground/70">감사 결과 확인 중...</p>
         ) : recommended.length === 0 ? (
-          <p className="text-[11px] text-muted-foreground/40">현재 경보·대기 작업 없음</p>
+          <p className="text-[11px] text-muted-foreground/70">현재 경보·대기 작업 없음</p>
         ) : (
           <ul className="space-y-1">
             {recommended.map((r, i) => (
@@ -167,7 +167,7 @@ export const AdminAIPanel: React.FC<{
       <div className="flex-1 overflow-y-auto px-4 pb-4 space-y-2">
         {history.map((h, i) => (
           <div key={i} className="rounded-md border border-border/10 bg-card/20 p-2.5">
-            <p className="text-[10px] text-muted-foreground/50 truncate">Q. {h.query}</p>
+            <p className="text-[10px] text-muted-foreground/76 truncate">Q. {h.query}</p>
             {h.error ? (
               <p className="text-[11px] text-red-400 mt-1">{h.error}{h.detail ? ` — ${h.detail}` : ""}</p>
             ) : (

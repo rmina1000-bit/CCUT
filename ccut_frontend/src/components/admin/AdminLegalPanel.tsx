@@ -21,7 +21,7 @@ const STATUS_STYLE: Record<string, string> = {
   draft: "bg-secondary/40 text-muted-foreground/70",
   reviewing: "bg-amber-500/15 text-amber-400",
   approved: "bg-emerald-500/15 text-emerald-400",
-  closed: "bg-secondary/20 text-muted-foreground/40",
+  closed: "bg-secondary/20 text-muted-foreground/70",
 };
 
 export const AdminLegalPanel: React.FC = () => {
@@ -62,7 +62,7 @@ export const AdminLegalPanel: React.FC = () => {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-lg font-bold text-foreground/90">법무/수사공조</h1>
-          <p className="text-[11px] text-muted-foreground/50 mt-0.5">
+          <p className="text-[11px] text-muted-foreground/76 mt-0.5">
             admin_legal_requests 요청 원장
           </p>
         </div>
@@ -104,7 +104,7 @@ export const AdminLegalPanel: React.FC = () => {
       )}
 
       {requests.length === 0 ? (
-        <p className="text-[11px] text-muted-foreground/40">등록된 법무/수사공조 요청이 없습니다.</p>
+        <p className="text-[11px] text-muted-foreground/70">등록된 법무/수사공조 요청이 없습니다.</p>
       ) : (
         <div className="rounded-lg border border-border/15 divide-y divide-border/10">
           {requests.map(r => (
@@ -113,9 +113,9 @@ export const AdminLegalPanel: React.FC = () => {
                 {r.status}
               </span>
               <span className="text-foreground/85 truncate flex-1">{r.requester}</span>
-              {r.legal_basis && <span className="font-mono text-muted-foreground/50">{r.legal_basis}</span>}
-              {r.target_user_id && <span className="text-muted-foreground/50">대상: {r.target_user_id}</span>}
-              {r.requested_range && <span className="text-muted-foreground/40">{r.requested_range}</span>}
+              {r.legal_basis && <span className="font-mono text-muted-foreground/76">{r.legal_basis}</span>}
+              {r.target_user_id && <span className="text-muted-foreground/76">대상: {r.target_user_id}</span>}
+              {r.requested_range && <span className="text-muted-foreground/70">{r.requested_range}</span>}
               {r.status === "draft" && (
                 <button onClick={() => transition(r.id, "reviewing")}
                   className="px-2 py-1 rounded-md bg-amber-500/15 text-amber-400 text-[10px] font-bold hover:bg-amber-500/25 transition-colors">검토</button>

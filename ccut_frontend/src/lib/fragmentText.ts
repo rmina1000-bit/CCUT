@@ -23,9 +23,14 @@ export const FRAGMENT_TEXT_FONT =
   `-apple-system,"Segoe UI","Malgun Gothic","Apple SD Gothic Neo",system-ui,sans-serif`;
 
 export const FRAGMENT_TEXT_ACTIVE_COLOR = "rgba(231,232,236,1)";
-export const FRAGMENT_TEXT_INACTIVE_COLOR = "rgba(231,232,236,0.34)";
+// [CONTRAST-1 2026-08-01] 비활성 조각 텍스트. 0.34 -> 0.55 (카드 배경 기준 2.76:1 -> 5.00:1).
+// 뜻은 그대로 남는다 — 활성은 13.42:1 이라 여전히 두 배 넘게 밝다. 흐림은 정보이되,
+// 읽으려고 화면에 얼굴을 대야 하는 흐림은 정보가 아니라 장벽이다.
+export const FRAGMENT_TEXT_INACTIVE_COLOR = "rgba(231,232,236,0.55)";
 // [#21-c R8 2026-07-20] 제외(범위·단어) 표시색 — 우측 전사가 하드코딩하던 회색. 계약으로 흡수.
-export const FRAGMENT_TEXT_EXCLUDED_COLOR = "hsl(220,5%,45%)";
+// [CONTRAST-1 2026-08-01] 제외 단어색. 45% -> 55% (3.35:1 -> 4.77:1, AA 통과).
+// 활성 13.42:1 과의 간격은 그대로라 '잘려 나간 말'이라는 표시는 유지된다.
+export const FRAGMENT_TEXT_EXCLUDED_COLOR = "hsl(220,5%,55%)";
 
 export function fragmentTextColor(active: boolean): string {
   return active ? FRAGMENT_TEXT_ACTIVE_COLOR : FRAGMENT_TEXT_INACTIVE_COLOR;

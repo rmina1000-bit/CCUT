@@ -32,7 +32,7 @@ export const AdminAnalyticsPanel: React.FC = () => {
       <AdminLockedNotice tab="analytics" />
       <div>
         <h1 className="text-lg font-bold text-foreground/90">행동 분석</h1>
-        <p className="text-[11px] text-muted-foreground/50 mt-0.5">{note}</p>
+        <p className="text-[11px] text-muted-foreground/76 mt-0.5">{note}</p>
       </div>
 
       <div className="rounded-lg border border-border/15 bg-card/20 p-4">
@@ -51,12 +51,12 @@ export const AdminAnalyticsPanel: React.FC = () => {
                     </>
                   )}
                 </div>
-                <span className="text-[8px] text-muted-foreground/40 rotate-0">{d.date.slice(5)}</span>
+                <span className="text-[8px] text-muted-foreground/70 rotate-0">{d.date.slice(5)}</span>
               </div>
             );
           })}
         </div>
-        <div className="flex items-center gap-4 mt-3 text-[10px] text-muted-foreground/50">
+        <div className="flex items-center gap-4 mt-3 text-[10px] text-muted-foreground/76">
           <span className="flex items-center gap-1"><span className="w-2 h-2 bg-blue-400/60 rounded-sm" /> 원본 업로드</span>
           <span className="flex items-center gap-1"><span className="w-2 h-2 bg-primary/60 rounded-sm" /> 편집 제안</span>
           <span className="flex items-center gap-1"><span className="w-2 h-2 bg-emerald-500/60 rounded-sm" /> 내보내기</span>
@@ -66,7 +66,7 @@ export const AdminAnalyticsPanel: React.FC = () => {
       <div className="rounded-lg border border-border/15 overflow-hidden">
         <table className="w-full text-[11px]">
           <thead>
-            <tr className="bg-secondary/20 text-muted-foreground/50 text-left">
+            <tr className="bg-secondary/20 text-muted-foreground/76 text-left">
               <th className="px-3 py-2 font-semibold">날짜</th>
               <th className="px-3 py-2 font-semibold text-right">원본</th>
               <th className="px-3 py-2 font-semibold text-right">제안</th>
@@ -86,7 +86,7 @@ export const AdminAnalyticsPanel: React.FC = () => {
         </table>
       </div>
 
-      <p className="text-[11px] text-muted-foreground/40">
+      <p className="text-[11px] text-muted-foreground/70">
         세그먼트(지역/연령/그룹) 분석은 해당 원장 미도입 — 대규모화 단계에서 연결됩니다.
       </p>
     </div>

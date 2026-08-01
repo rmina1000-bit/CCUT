@@ -160,7 +160,7 @@ export const AdminAIOpsPanel: React.FC = () => {
     <div className="space-y-5">
       <div>
         <h1 className="text-lg font-bold text-foreground/90">AI 운영실</h1>
-        <p className="text-[11px] text-muted-foreground/50 mt-0.5">
+        <p className="text-[11px] text-muted-foreground/76 mt-0.5">
           한 번에 모델 1개 · 역할 1개 — 전 실행 admin_ai_runs 기록
         </p>
       </div>
@@ -217,7 +217,7 @@ export const AdminAIOpsPanel: React.FC = () => {
                       발급 페이지 열기
                     </a>
                   ) : (
-                    <span className="text-[10px] text-muted-foreground/50">발급 페이지 미확인</span>
+                    <span className="text-[10px] text-muted-foreground/76">발급 페이지 미확인</span>
                   )}
                   {isEditing && (
                     <button
@@ -247,7 +247,7 @@ export const AdminAIOpsPanel: React.FC = () => {
                     <Unplug size={13} />
                   </button>
                 </div>
-                <div className="pl-32 flex items-center gap-3 text-[10px] text-muted-foreground/50">
+                <div className="pl-32 flex items-center gap-3 text-[10px] text-muted-foreground/76">
                   <span>
                     {provider.connection === "error"
                       ? "키는 저장됐지만 관리자 AI를 사용할 수 없습니다."
@@ -275,20 +275,20 @@ export const AdminAIOpsPanel: React.FC = () => {
       </section>
 
       <div className="border border-border/15 p-4">
-          <p className="text-[10px] font-semibold text-muted-foreground/50 uppercase">관리자 AI</p>
+          <p className="text-[10px] font-semibold text-muted-foreground/76 uppercase">관리자 AI</p>
           {status ? (
             <>
               <p className={`text-sm font-bold mt-1 ${status.configured ? "text-emerald-400" : "text-muted-foreground/60"}`}>
                 {status.status}
               </p>
-              <p className="text-[10px] text-muted-foreground/50 mt-0.5 font-mono">
+              <p className="text-[10px] text-muted-foreground/76 mt-0.5 font-mono">
                 {status.provider ?? "—"} · {status.model ?? "—"}
               </p>
-              <p className="text-[10px] text-muted-foreground/40 mt-1">
+              <p className="text-[10px] text-muted-foreground/70 mt-1">
                 실행 {status.runs_total}회 · 실패 {status.runs_failed}회
               </p>
             </>
-          ) : <p className="text-[11px] text-muted-foreground/50 animate-pulse mt-1">확인 중...</p>}
+          ) : <p className="text-[11px] text-muted-foreground/76 animate-pulse mt-1">확인 중...</p>}
       </div>
 
       {/* 역할별 질의 */}
@@ -320,7 +320,7 @@ export const AdminAIOpsPanel: React.FC = () => {
             <p className="text-xs text-red-400 mt-1">{r.error}{r.detail ? ` — ${r.detail}` : ""}</p>
           ) : (
             <p className="text-sm text-foreground/90 leading-relaxed mt-1">
-              {r.result} <span className="text-[10px] text-muted-foreground/40">({r.duration_ms}ms)</span>
+              {r.result} <span className="text-[10px] text-muted-foreground/70">({r.duration_ms}ms)</span>
             </p>
           )}
         </div>
@@ -328,9 +328,9 @@ export const AdminAIOpsPanel: React.FC = () => {
 
       {/* 실행 로그 */}
       <div>
-        <h2 className="text-xs font-black tracking-widest uppercase text-muted-foreground/50 mb-2">실행 로그</h2>
+        <h2 className="text-xs font-black tracking-widest uppercase text-muted-foreground/76 mb-2">실행 로그</h2>
         {runs.length === 0 ? (
-          <p className="text-[11px] text-muted-foreground/40">아직 기록된 AI 실행이 없습니다.</p>
+          <p className="text-[11px] text-muted-foreground/70">아직 기록된 AI 실행이 없습니다.</p>
         ) : (
           <div className="rounded-lg border border-border/15 divide-y divide-border/10">
             {runs.map(r => (
@@ -338,8 +338,8 @@ export const AdminAIOpsPanel: React.FC = () => {
                 <span className={`font-black ${r.status === "ok" ? "text-emerald-400" : "text-red-400"}`}>{r.status}</span>
                 <span className="font-mono text-primary/70">{r.role}</span>
                 <span className="text-foreground/70 truncate flex-1">{r.input_summary}</span>
-                {r.duration_ms != null && <span className="text-muted-foreground/40">{r.duration_ms}ms</span>}
-                <span className="text-muted-foreground/40 flex-shrink-0">{new Date(r.created_at).toLocaleTimeString()}</span>
+                {r.duration_ms != null && <span className="text-muted-foreground/70">{r.duration_ms}ms</span>}
+                <span className="text-muted-foreground/70 flex-shrink-0">{new Date(r.created_at).toLocaleTimeString()}</span>
               </div>
             ))}
           </div>

@@ -172,7 +172,7 @@ const RoughCutOutline: React.FC<RoughCutOutlineProps> = ({
               className={`flex min-w-0 flex-1 items-start gap-3 px-2 py-2 text-left text-[13px] leading-relaxed transition-colors ${
                 selected
                   ? "font-medium text-white"
-                  : "text-muted-foreground/55 hover:text-foreground/75"
+                  : "text-muted-foreground/80 hover:text-foreground/75"
               }`}
               title={selected ? "스토리에 들어간 문장" : "스토리에 추가"}
             >
@@ -184,7 +184,7 @@ const RoughCutOutline: React.FC<RoughCutOutlineProps> = ({
                 )}
               </span>
               <span className={`w-7 shrink-0 pt-0.5 font-mono text-[12px] font-medium leading-none ${
-                storyOrder ? "text-primary" : "text-secondary-foreground/45"
+                storyOrder ? "text-primary" : "text-secondary-foreground/73"
               }`}>
                 {row.display_id}
               </span>
@@ -200,7 +200,7 @@ const RoughCutOutline: React.FC<RoughCutOutlineProps> = ({
                   ))
                   : text}
               </span>
-              <span className="ml-auto shrink-0 pt-0.5 text-[11px] tabular-nums text-muted-foreground/35">
+              <span className="ml-auto shrink-0 pt-0.5 text-[11px] tabular-nums text-muted-foreground/67">
                 {formatTime(row.start_ms)}
               </span>
             </button>
@@ -208,7 +208,7 @@ const RoughCutOutline: React.FC<RoughCutOutlineProps> = ({
               type="button"
               disabled={!canPlay(span)}
               onClick={() => onPlaySpan(span)}
-              className="mr-1 mt-1.5 inline-flex h-7 w-7 shrink-0 items-center justify-center text-muted-foreground/35 transition-colors hover:text-primary disabled:cursor-default disabled:opacity-20"
+              className="mr-1 mt-1.5 inline-flex h-7 w-7 shrink-0 items-center justify-center text-muted-foreground/67 transition-colors hover:text-primary disabled:cursor-default disabled:opacity-20"
               title={canPlay(span) ? "이 구간 재생" : "재생할 영상을 찾지 못했습니다"}
             >
               <Play size={13} fill="currentColor" />

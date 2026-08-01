@@ -112,7 +112,7 @@ const BoundaryRow: React.FC<{ name: string; probe: BoundaryProbe }> = ({ name, p
   <div className={`border px-2 py-1.5 ${probeClass(probe)}`}>
     <div className="flex items-baseline justify-between gap-2">
       <span className="text-[10px] font-bold text-foreground/70">{name}</span>
-      <span className="shrink-0 font-mono text-[8px] text-muted-foreground/50">
+      <span className="shrink-0 font-mono text-[8px] text-muted-foreground/76">
         {probe.where ?? "UNKNOWN"}
       </span>
     </div>
@@ -352,7 +352,7 @@ export const AdminAnatomyPanel: React.FC = () => {
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="text-lg font-bold text-foreground/90">흐름도</h1>
-          <p className="mt-0.5 text-[11px] text-muted-foreground/55">
+          <p className="mt-0.5 text-[11px] text-muted-foreground/80">
             실제 원장과 API가 증명한 흐름만 표시
           </p>
         </div>
@@ -397,7 +397,7 @@ export const AdminAnatomyPanel: React.FC = () => {
         </p>
       )}
       {!programId && !error && (
-        <p className="text-xs text-muted-foreground/55">관측할 프로젝트가 없습니다.</p>
+        <p className="text-xs text-muted-foreground/80">관측할 프로젝트가 없습니다.</p>
       )}
 
       <div className="flex flex-wrap gap-x-4 gap-y-2 border-y border-border/15 py-3">
@@ -411,7 +411,7 @@ export const AdminAnatomyPanel: React.FC = () => {
             <span className="font-semibold text-foreground/70">
               {ANATOMY_STATUS[status].label}
             </span>
-            <span className="text-muted-foreground/45">
+            <span className="text-muted-foreground/73">
               {ANATOMY_STATUS[status].meaning}
             </span>
           </div>
@@ -463,7 +463,7 @@ export const AdminAnatomyPanel: React.FC = () => {
             metricFor={metricFor}
             statusLabelFor={(id) => ANATOMY_STATUS[nodeStatus(id, data)]?.label ?? "미계측"}
           />
-          <div className="mt-2 flex flex-wrap gap-x-5 gap-y-1 text-[9px] text-muted-foreground/55">
+          <div className="mt-2 flex flex-wrap gap-x-5 gap-y-1 text-[9px] text-muted-foreground/80">
             <span>왼쪽 = 사용자의 말 · 가운데 = 재료의 본선 · 오른쪽 = 곁가지</span>
             <span className="text-fuchsia-300/80">보라 = 되돌아감(재승인)</span>
             <span className="text-sky-300/80">하늘 = 왕복</span>
@@ -476,7 +476,7 @@ export const AdminAnatomyPanel: React.FC = () => {
           // 선을 골랐으면 **선의** 설명과 증거다. 문제는 늘 선에서 나므로 여기가 본체다.
           <>
             <div>
-              <p className="text-[10px] font-bold uppercase text-muted-foreground/45">
+              <p className="text-[10px] font-bold uppercase text-muted-foreground/73">
                 일반 설명 — 선
               </p>
               <div className="mt-3 flex flex-wrap items-center gap-2">
@@ -491,21 +491,21 @@ export const AdminAnatomyPanel: React.FC = () => {
                 {edgeReport.why}
               </p>
               <dl className="mt-5 grid grid-cols-[92px_1fr] gap-x-3 gap-y-2 text-[11px]">
-                <dt className="text-muted-foreground/45">관계</dt>
+                <dt className="text-muted-foreground/73">관계</dt>
                 <dd className="text-foreground/70">{edgeReport.kind}</dd>
-                <dt className="text-muted-foreground/45">근거</dt>
+                <dt className="text-muted-foreground/73">근거</dt>
                 <dd className="break-words font-mono text-[10px] text-foreground/65">
                   {selectedEdge.evidence}
                 </dd>
-                <dt className="text-muted-foreground/45">★순서</dt>
+                <dt className="text-muted-foreground/73">★순서</dt>
                 <dd className="text-foreground/70">{edgeReport.order}</dd>
-                <dt className="text-muted-foreground/45">★권위</dt>
+                <dt className="text-muted-foreground/73">★권위</dt>
                 <dd className="text-foreground/70">{edgeReport.authority}</dd>
-                <dt className="text-muted-foreground/45">최초 발생</dt>
+                <dt className="text-muted-foreground/73">최초 발생</dt>
                 <dd className="font-mono text-foreground/65">{edgeReport.first}</dd>
-                <dt className="text-muted-foreground/45">최근</dt>
+                <dt className="text-muted-foreground/73">최근</dt>
                 <dd className="font-mono text-foreground/65">{edgeReport.latest}</dd>
-                <dt className="text-muted-foreground/45">실패</dt>
+                <dt className="text-muted-foreground/73">실패</dt>
                 <dd className="font-mono text-foreground/65">{edgeReport.failures}</dd>
               </dl>
               {edgeReport.caution && (
@@ -515,7 +515,7 @@ export const AdminAnatomyPanel: React.FC = () => {
               )}
             </div>
             <div className="min-w-0">
-              <p className="text-[10px] font-bold uppercase text-muted-foreground/45">
+              <p className="text-[10px] font-bold uppercase text-muted-foreground/73">
                 기술 증거 — 선
               </p>
               <pre className="mt-3 max-h-96 overflow-auto border border-border/20 bg-black/20 p-3 text-[10px] leading-5 text-cyan-100/70">
@@ -526,7 +526,7 @@ export const AdminAnatomyPanel: React.FC = () => {
         ) : (
         <>
         <div>
-          <p className="text-[10px] font-bold uppercase text-muted-foreground/45">
+          <p className="text-[10px] font-bold uppercase text-muted-foreground/73">
             일반 설명
           </p>
           <div className="mt-3 flex items-center gap-2">
@@ -539,17 +539,17 @@ export const AdminAnatomyPanel: React.FC = () => {
             {selected.description}
           </p>
           <dl className="mt-5 grid grid-cols-[92px_1fr] gap-x-3 gap-y-2 text-[11px]">
-            <dt className="text-muted-foreground/45">관련 부위</dt>
+            <dt className="text-muted-foreground/73">관련 부위</dt>
             <dd className="text-foreground/70">{related.join(" · ") || "UNKNOWN"}</dd>
-            <dt className="text-muted-foreground/45">최초 발생</dt>
+            <dt className="text-muted-foreground/73">최초 발생</dt>
             <dd className="font-mono text-foreground/65">
               {selected.id === "story" ? qwen?.first_occurrence ?? "UNKNOWN" : "UNKNOWN"}
             </dd>
-            <dt className="text-muted-foreground/45">최근 성공</dt>
+            <dt className="text-muted-foreground/73">최근 성공</dt>
             <dd className="font-mono text-foreground/65">
               {selected.id === "story" ? qwen?.latest_success ?? "UNKNOWN" : "UNKNOWN"}
             </dd>
-            <dt className="text-muted-foreground/45">재시도</dt>
+            <dt className="text-muted-foreground/73">재시도</dt>
             <dd className="font-mono text-foreground/65">
               {selected.id === "story" ? qwen?.retry_count ?? "UNKNOWN" : "UNKNOWN"}
             </dd>
@@ -557,7 +557,7 @@ export const AdminAnatomyPanel: React.FC = () => {
         </div>
 
         <div className="min-w-0">
-          <p className="text-[10px] font-bold uppercase text-muted-foreground/45">
+          <p className="text-[10px] font-bold uppercase text-muted-foreground/73">
             기술 증거
           </p>
           <pre className="mt-3 max-h-80 overflow-auto border border-border/20 bg-black/20 p-3 text-[10px] leading-5 text-cyan-100/70">
@@ -573,12 +573,12 @@ export const AdminAnatomyPanel: React.FC = () => {
           노드보다 화살표가 주인공이므로 여기가 화면의 중심이다. */}
       <section className="border-t border-border/20 pt-5" aria-label="경계 확대 보기">
         <div className="flex flex-wrap items-baseline justify-between gap-2">
-          <p className="text-[10px] font-bold uppercase text-muted-foreground/45">
+          <p className="text-[10px] font-bold uppercase text-muted-foreground/73">
             {selectedEdge
               ? `선 — ${selectedEdge.from} → ${selectedEdge.to}`
               : `경계 — ${selected.label}에 닿는 화살표`}
           </p>
-          <p className="text-[9px] text-muted-foreground/40">
+          <p className="text-[9px] text-muted-foreground/70">
             사고는 노드 안이 아니라 노드 사이에서 난다
           </p>
         </div>
@@ -587,7 +587,7 @@ export const AdminAnatomyPanel: React.FC = () => {
             <span key={k} className="flex items-center gap-1.5 text-[9px]">
               <span className={`w-6 border-t-2 ${LINE_STYLE[k].border}`} aria-hidden />
               <span className={`font-semibold ${LINE_STYLE[k].text}`}>{k}</span>
-              <span className="text-muted-foreground/45">{LINE_STYLE[k].label}</span>
+              <span className="text-muted-foreground/73">{LINE_STYLE[k].label}</span>
             </span>
           ))}
         </div>
@@ -598,7 +598,7 @@ export const AdminAnatomyPanel: React.FC = () => {
           </p>
         )}
         {!boundaryError && boundaries === null && (
-          <p className="mt-3 text-xs text-muted-foreground/55">경계 지도 UNKNOWN — 아직 읽지 못함</p>
+          <p className="mt-3 text-xs text-muted-foreground/80">경계 지도 UNKNOWN — 아직 읽지 못함</p>
         )}
 
         {boundaries !== null && (
@@ -608,13 +608,13 @@ export const AdminAnatomyPanel: React.FC = () => {
               <div className="border border-zinc-500/50 border-dotted p-3">
                 <p className="text-xs font-bold text-zinc-300">🔒 미계측 — 아직 경계가 기장되지 않은 선</p>
                 <dl className="mt-2 grid grid-cols-[64px_1fr] gap-x-3 gap-y-1.5 text-[10px]">
-                  <dt className="text-muted-foreground/45">관계</dt>
+                  <dt className="text-muted-foreground/73">관계</dt>
                   <dd className="font-mono text-foreground/70">
                     {selectedEdge.from} → {selectedEdge.to}
                   </dd>
-                  <dt className="text-muted-foreground/45">근거</dt>
+                  <dt className="text-muted-foreground/73">근거</dt>
                   <dd className="text-foreground/70">{selectedEdge.evidence}</dd>
-                  <dt className="text-muted-foreground/45">왜 미계측</dt>
+                  <dt className="text-muted-foreground/73">왜 미계측</dt>
                   <dd className="text-foreground/70">
                     이 선을 지나는 값·기본값·순서·권위가 아직 감사되지 않았습니다.
                     감사해서 기장하기 전에는 정상이라고 그리지 않습니다.
@@ -623,7 +623,7 @@ export const AdminAnatomyPanel: React.FC = () => {
               </div>
             )}
             {nodeBoundaries.length === 0 && !selectedEdge && (
-              <p className="text-xs text-muted-foreground/55">
+              <p className="text-xs text-muted-foreground/80">
                 이 부위에 기장된 경계가 없습니다 — 없는 것은 UNKNOWN, 채워 넣지 않습니다.
               </p>
             )}
@@ -642,7 +642,7 @@ export const AdminAnatomyPanel: React.FC = () => {
                     {/* 선 자체가 상태다 — 실선이면 정상, 점선이면 문제. 중간은 없다. */}
                     <span className={`w-10 shrink-0 border-t-2 ${ls.border}`} aria-hidden />
                     <span className={`text-[9px] font-bold ${ls.text}`}>{b.state?.line ?? "미계측"}</span>
-                    <span className="font-mono text-[10px] text-muted-foreground/55">
+                    <span className="font-mono text-[10px] text-muted-foreground/80">
                       {b.from} → {b.to}
                     </span>
                     <span className="text-xs font-bold text-foreground/85">{b.label}</span>
@@ -654,7 +654,7 @@ export const AdminAnatomyPanel: React.FC = () => {
                     {danger && (
                       <span className="text-[9px] font-bold text-red-300">사용자 결정 덮음</span>
                     )}
-                    <span className="ml-auto font-mono text-[9px] text-muted-foreground/45">
+                    <span className="ml-auto font-mono text-[9px] text-muted-foreground/73">
                       {b.status === "fixed" ? `수리 ${b.fixed_by}` : b.status}
                     </span>
                   </button>
@@ -662,7 +662,7 @@ export const AdminAnatomyPanel: React.FC = () => {
                   {open && (
                     <div className="grid gap-4 border-t border-border/15 bg-black/15 p-3 lg:grid-cols-2">
                       <div className="space-y-2">
-                        <p className="text-[9px] font-bold uppercase text-muted-foreground/45">
+                        <p className="text-[9px] font-bold uppercase text-muted-foreground/73">
                           정적 (코드에서) — 발견: {b.found}
                         </p>
                         <div className="border border-amber-500/30 px-2 py-1.5">
@@ -673,7 +673,7 @@ export const AdminAnatomyPanel: React.FC = () => {
                           <span className="text-[10px] font-bold text-amber-200/80">★권위</span>
                           <p className="mt-1 text-[10px] leading-4 text-foreground/70">{b.static.authority}</p>
                         </div>
-                        <p className="text-[8px] text-muted-foreground/40">
+                        <p className="text-[8px] text-muted-foreground/70">
                           출처: {b.static.source} — 자동 추출 불가 항목
                         </p>
                         {Object.entries(b.extracted).map(([name, probe]) => (
@@ -689,7 +689,7 @@ export const AdminAnatomyPanel: React.FC = () => {
                                 <div key={i} className="flex items-baseline justify-between gap-2 text-[10px]">
                                   <span className="text-foreground/70">{c.label}</span>
                                   <span className="font-mono text-cyan-100/80">{probeText(c)}</span>
-                                  <span className="shrink-0 font-mono text-[8px] text-muted-foreground/45">
+                                  <span className="shrink-0 font-mono text-[8px] text-muted-foreground/73">
                                     {c.where}
                                   </span>
                                 </div>
@@ -707,7 +707,7 @@ export const AdminAnatomyPanel: React.FC = () => {
                                 <div key={i}>
                                   <div className="flex items-baseline justify-between gap-2">
                                     <span className="text-[10px] font-bold text-foreground/70">{a.side}</span>
-                                    <span className="font-mono text-[8px] text-muted-foreground/45">{a.where}</span>
+                                    <span className="font-mono text-[8px] text-muted-foreground/73">{a.where}</span>
                                   </div>
                                   <pre className="overflow-x-auto whitespace-pre-wrap break-words font-mono text-[10px] leading-4 text-fuchsia-100/70">
                                     {probeText(a)}
@@ -720,7 +720,7 @@ export const AdminAnatomyPanel: React.FC = () => {
                       </div>
 
                       <div className="min-w-0">
-                        <p className="text-[9px] font-bold uppercase text-muted-foreground/45">
+                        <p className="text-[9px] font-bold uppercase text-muted-foreground/73">
                           원장 (failure_ledger)
                         </p>
                         <p className={`mt-2 border px-2 py-1.5 text-[10px] ${ls.border} ${ls.text}`}>
@@ -732,7 +732,7 @@ export const AdminAnatomyPanel: React.FC = () => {
                           </p>
                         )}
                         {b.ledger_granularity && b.ledger_granularity.shared_with.length > 0 && (
-                          <p className="mt-1 text-[9px] text-muted-foreground/50">
+                          <p className="mt-1 text-[9px] text-muted-foreground/76">
                             판정 해상도: {b.ledger_granularity.unit} — 같은 도메인 경계
                             {" "}{b.ledger_granularity.shared_with.join(", ")} 와 함께 움직입니다
                           </p>
@@ -740,7 +740,7 @@ export const AdminAnatomyPanel: React.FC = () => {
                         <pre className="mt-2 max-h-72 overflow-auto border border-border/20 bg-black/25 p-2 text-[10px] leading-5 text-cyan-100/70">
                           {JSON.stringify(b.ledger, null, 2)}
                         </pre>
-                        <p className="mt-1 text-[8px] text-muted-foreground/40">
+                        <p className="mt-1 text-[8px] text-muted-foreground/70">
                           원장이 비면 UNKNOWN — 실패가 없었다는 뜻이 아닙니다. 첫 행이 들어오면 채워집니다.
                         </p>
                       </div>

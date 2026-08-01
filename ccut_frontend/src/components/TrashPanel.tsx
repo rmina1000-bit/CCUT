@@ -129,14 +129,14 @@ export const TrashPanel: React.FC<TrashPanelProps> = ({ onChanged, reloadDep }) 
       </div>
       {/* 본문 */}
       {loading ? (
-        <div className="flex-1 flex items-center justify-center text-muted-foreground/50 text-[13px]">
+        <div className="flex-1 flex items-center justify-center text-muted-foreground/76 text-[13px]">
           불러오는 중...
         </div>
       ) : isEmpty ? (
         <div className="flex-1 flex flex-col items-center justify-center text-center py-20">
-          <Trash size={64} className="text-muted-foreground/25 mb-4" strokeWidth={1.2} />
-          <p className="text-[14px] text-muted-foreground/50">휴지통이 비어 있습니다.</p>
-          <p className="text-[12px] text-muted-foreground/30 mt-1">삭제한 프로젝트가 여기에 보관됩니다.</p>
+          <Trash size={64} className="text-muted-foreground/63 mb-4" strokeWidth={1.2} />
+          <p className="text-[14px] text-muted-foreground/76">휴지통이 비어 있습니다.</p>
+          <p className="text-[12px] text-muted-foreground/65 mt-1">삭제한 프로젝트가 여기에 보관됩니다.</p>
         </div>
       ) : (
         <div className="space-y-2">
@@ -153,7 +153,7 @@ export const TrashPanel: React.FC<TrashPanelProps> = ({ onChanged, reloadDep }) 
                   <div className="text-[14px] font-semibold text-foreground/90 truncate">
                     {it.name || it.program_id}
                   </div>
-                  <div className="text-[11px] text-muted-foreground/50 mt-0.5">
+                  <div className="text-[11px] text-muted-foreground/76 mt-0.5">
                     삭제일 {fmtDate(it.deleted_at)} · 영구삭제까지 {Math.max(0, it.days_left ?? 0)}일
                   </div>
                 </div>
