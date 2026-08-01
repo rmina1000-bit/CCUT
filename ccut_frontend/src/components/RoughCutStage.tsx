@@ -252,16 +252,29 @@ const RoughCutStage: React.FC<RoughCutStageProps> = ({
         onClick={toggleFold}
         aria-expanded={!folded}
         data-transcript-fold={folded ? "folded" : "open"}
-        className="flex w-full items-center gap-1.5 px-2 py-1 text-left text-[11px] font-medium tracking-[0.02em] text-muted-foreground/45 transition-colors hover:text-muted-foreground/75"
-        title={folded ? "전사 펴기" : "전사 접기"}
+        className="flex w-full items-center gap-2 px-2 py-1.5 text-left text-[13px] font-medium tracking-[0.02em] text-foreground/70 transition-colors hover:text-foreground"
+        title={folded ? "전사 펼치기" : "전사 줄이기"}
       >
         전사
         <ChevronDown
-          size={12}
+          size={15}
           className={`transition-transform duration-150 ${folded ? "-rotate-90" : ""}`}
         />
       </button>
-      {!folded && (
+      {/* [TRANSCRIPT-FOLD 2026-08-01 개정] 접어도 **완전히 감추지 않는다.**
+          구판은 접으면 0행이라 그 자리가 통째로 비어 화면이 허전했다. 접힘의 뜻은
+          '없애기'가 아니라 '자리를 덜 쓰기'다 — 대여섯 줄만 남기고, 그 안에서
+          스크롤로 나머지를 계속 볼 수 있게 둔다(데이터는 어차피 다 실려 있다).
+          높이는 행 최소높이(min-h-9=2.25rem)의 약 5.5배. 조각 한 줄이 길어 두 줄로
+          접히는 경우가 있어 '정확히 6행'으로 고정하지 않는다 — 픽셀로 세는 것이
+          행으로 세는 것보다 정직하다(행 높이는 내용에 따라 변한다).
+          높이 산정(실측 2026-08-01, Freesia 124행): 행 높이 38~207px, 중앙값 101px.
+          한 조각을 한 줄로 합친 뒤로 행이 두꺼워져서, 처음 잡은 12.4rem 은 3행밖에
+          못 보여줬다. 중앙값 x5 = 505px 에 맞춰 32rem(512px)로 올린다. */}
+      <div
+        data-transcript-body={folded ? "compact" : "full"}
+        className={folded ? "max-h-[32rem] overflow-y-auto" : undefined}
+      >
         <RoughCutOutline
           data={displayData}
           selectedSpanIds={selectedSpanIds ?? displayData.ordered_span_ids}
@@ -271,7 +284,7 @@ const RoughCutStage: React.FC<RoughCutStageProps> = ({
           onAddSpan={onAddSpan ?? (() => {})}
           onPlaySpan={playSpan}
         />
-      )}
+      </div>
     </section>
   );
 };
