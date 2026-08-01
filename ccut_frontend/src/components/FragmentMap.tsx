@@ -3,6 +3,7 @@ import { Fragment } from "@/data/fragmentData";
 import FragmentTile from "./FragmentTile";
 import { getUid } from "@/lib/fragmentIdentity";
 import { FRAGMENT_EXCLUDED_STYLE } from "@/lib/fragmentText";
+import { DEBUG_LOG } from "@/utils/debugFlags";
 import { TextCaret, editingFromWords, excludedRangesFromEditing, moveTextCaret, WordTok, TextEditing } from "@/lib/ledgerTextEditor";
 import {
   SyntheticCollapsedSeam,
@@ -268,7 +269,9 @@ const FragmentMap: React.FC<FragmentMapProps> = ({
       // [PERF-LOG 2026-08-01] 드롭 진단은 남기되 개발 빌드에서만.
       //   삭제하지 않는 이유: 'holdData 빈 값' 이 아직 미규명이고, 그때 볼 값이 이것뿐이다.
       //   드롭 시에만 발화하므로 전환 지연과는 무관하다(주범은 THUMB_AUDIT_ALL_JSON).
-      if (import.meta.env.DEV) console.log("[DEBUG] FragmentMap handleDrop types:", e.dataTransfer.types);
+//   [C2 2026-08-01] 게이트를 저장소 표준 DEBUG_LOG 로 통일했다 — import.meta.env.DEV 와
+//   두 종류가 되면 나중에 한쪽만 끄고 껐다고 믿는 사고가 난다.
+      if (DEBUG_LOG) console.log("[DEBUG] FragmentMap handleDrop types:", e.dataTransfer.types);
       e.preventDefault();
       e.stopPropagation();
       setDragOverIndex(null);
@@ -297,11 +300,11 @@ const FragmentMap: React.FC<FragmentMapProps> = ({
       }
 
       const holdData = e.dataTransfer.getData("application/ccut-fragment-hold");
-      if (import.meta.env.DEV) console.log("[DEBUG] holdData:", holdData);
+      if (DEBUG_LOG) console.log("[DEBUG] holdData:", holdData);
       if (holdData) {
         try {
           const frag = JSON.parse(holdData) as Fragment;
-          if (import.meta.env.DEV) {
+          if (DEBUG_LOG) {
             console.log("[DEBUG] parsed frag:", frag.fragment_id);
             console.log("[DEBUG] onSourceRestore exists:", !!onSourceRestore);
           }
