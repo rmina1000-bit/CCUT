@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { Loader2 } from "lucide-react";
+import { ChevronDown, Loader2 } from "lucide-react";
 
 import type { MiniPlayTarget } from "@/components/FragmentMiniPlayer";
 import RoughCutOutline from "@/components/RoughCutOutline";
@@ -56,6 +56,32 @@ const RoughCutStage: React.FC<RoughCutStageProps> = ({
   const [ledgerItems, setLedgerItems] = useState<LedgerTranscriptItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  // [TRANSCRIPT-FOLD 2026-08-01] 전사 제목 + 접기.
+  //   접힘은 **프로젝트별로** 기억한다. 이유: 같은 프로젝트를 매일 여는데 열 때마다
+  //   다시 접어야 하면 그건 기억이 아니라 잡일이다. 그렇다고 전역으로 두면 A 에서 접은 것이
+  //   B 를 접어버린다 — 오늘 하루 배운 것이 "프로젝트 상태는 프로젝트 것"이다.
+  //   전사를 접어도 데이터는 그대로 불러온다(조각맵·재생이 같은 data 를 쓴다).
+  //   접기는 표시만 바꾼다 — 안 보이는 것과 없는 것을 섞지 않는다.
+  const FOLD_KEY = "ccut_transcript_folded";
+  const readFolded = (): Record<string, boolean> => {
+    try { return JSON.parse(localStorage.getItem(FOLD_KEY) || "{}"); } catch { return {}; }
+  };
+  const [folded, setFolded] = useState<boolean>(() => !!readFolded()[projectId]);
+  useEffect(() => { setFolded(!!readFolded()[projectId]); }, [projectId]);
+  const toggleFold = useCallback(() => {
+    setFolded((prev) => {
+      const next = !prev;
+      try {
+        const all = readFolded();
+        if (next) all[projectId] = true; else delete all[projectId];
+        localStorage.setItem(FOLD_KEY, JSON.stringify(all));
+      } catch {
+        // 저장이 막혀도(사생활 모드 등) 화면 동작은 그대로 — 기억만 못 한다.
+      }
+      return next;
+    });
+  }, [projectId]);
 
   useEffect(() => {
     let active = true;
@@ -221,15 +247,31 @@ const RoughCutStage: React.FC<RoughCutStageProps> = ({
       data-selected-count={displayData.selected_count}
       data-eligible-count={displayData.eligible_count}
     >
-      <RoughCutOutline
-        data={displayData}
-        selectedSpanIds={selectedSpanIds ?? displayData.ordered_span_ids}
-        activeFragmentId={activeFragmentId}
-        focusOrigin={focusOrigin}
-        canPlay={canPlay}
-        onAddSpan={onAddSpan ?? (() => {})}
-        onPlaySpan={playSpan}
-      />
+      <button
+        type="button"
+        onClick={toggleFold}
+        aria-expanded={!folded}
+        data-transcript-fold={folded ? "folded" : "open"}
+        className="flex w-full items-center gap-1.5 px-2 py-1 text-left text-[11px] font-medium tracking-[0.02em] text-muted-foreground/45 transition-colors hover:text-muted-foreground/75"
+        title={folded ? "전사 펴기" : "전사 접기"}
+      >
+        전사
+        <ChevronDown
+          size={12}
+          className={`transition-transform duration-150 ${folded ? "-rotate-90" : ""}`}
+        />
+      </button>
+      {!folded && (
+        <RoughCutOutline
+          data={displayData}
+          selectedSpanIds={selectedSpanIds ?? displayData.ordered_span_ids}
+          activeFragmentId={activeFragmentId}
+          focusOrigin={focusOrigin}
+          canPlay={canPlay}
+          onAddSpan={onAddSpan ?? (() => {})}
+          onPlaySpan={playSpan}
+        />
+      )}
     </section>
   );
 };
