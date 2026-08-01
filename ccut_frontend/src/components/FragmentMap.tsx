@@ -1,5 +1,4 @@
 ﻿import React, { useState, useCallback, useMemo, useRef } from "react";
-import { ChevronDown, ChevronLeft, ChevronRight, ChevronUp } from "lucide-react";
 import { Fragment } from "@/data/fragmentData";
 import FragmentTile from "./FragmentTile";
 import { getUid } from "@/lib/fragmentIdentity";
@@ -743,46 +742,12 @@ const FragmentMap: React.FC<FragmentMapProps> = ({
                     filter: f.selection_state === "N" ? "saturate(0.3)" : "none",
                   }}
                 >
-                  {storyOnly && (
-                    <>
-                      <div className="absolute bottom-1 right-1 z-50 flex items-center rounded bg-background/85 shadow-sm">
-                        <button
-                          type="button"
-                          title="앞으로 이동"
-                          disabled={realIndex === 0}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            if (realIndex === 0) return;
-                            const next = [...fragments];
-                            [next[realIndex - 1], next[realIndex]] = [next[realIndex], next[realIndex - 1]];
-                            onFragmentsChange(next);
-                          }}
-                          className="inline-flex h-6 w-6 items-center justify-center text-muted-foreground/60 transition-colors hover:text-foreground disabled:opacity-20"
-                        >
-                          {modeGateEnabled && fragmentFace === "text"
-                            ? <ChevronUp size={14} />
-                            : <ChevronLeft size={14} />}
-                        </button>
-                        <button
-                          type="button"
-                          title="뒤로 이동"
-                          disabled={realIndex === fragments.length - 1}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            if (realIndex === fragments.length - 1) return;
-                            const next = [...fragments];
-                            [next[realIndex], next[realIndex + 1]] = [next[realIndex + 1], next[realIndex]];
-                            onFragmentsChange(next);
-                          }}
-                          className="inline-flex h-6 w-6 items-center justify-center text-muted-foreground/60 transition-colors hover:text-foreground disabled:opacity-20"
-                        >
-                          {modeGateEnabled && fragmentFace === "text"
-                            ? <ChevronDown size={14} />
-                            : <ChevronRight size={14} />}
-                        </button>
-                      </div>
-                    </>
-                  )}
+                  {/* [MOVE-BUTTONS-OUT 2026-08-01] 순서 이동 버튼(텍스트 ∧∨ / 이미지 ‹›) 철거.
+                      순서 이동은 마우스 드래그 하나로 남긴다 — 같은 일을 하는 경로가 둘이면
+                      어느 쪽이 진짜인지가 흐려지고, 조각마다 버튼 두 개가 공간을 먹는다.
+                      드래그 로직은 손대지 않았다(handleDrop 의 재배열 분기 그대로).
+                      제거 전 실측(라이브): 7행 전부 draggable=true, 드래그로 순서 이동 확인,
+                      프로젝트 재진입 후에도 순서 유지(저장됨). 그래서 지워도 길이 남는다. */}
                   {dragOverIndex === realIndex && draggedId !== uid && (
                     <div className="absolute left-0 top-0 bottom-0 w-0.5 bg-primary rounded-full z-50 pointer-events-none" style={{ transform: "translateX(-2px)" }} />
                   )}
