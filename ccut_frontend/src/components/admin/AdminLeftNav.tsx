@@ -1,10 +1,11 @@
-import React from "react";
+import React, { useState } from "react";
 import {
   Radar, Users, LifeBuoy, Wallet, BarChart3, Paintbrush,
   Sparkles, ShieldAlert, Scale, ScrollText, FlaskConical, ArrowLeft, Activity,
-  Workflow,
+  Workflow, Lock, ChevronDown, ChevronRight,
 } from "lucide-react";
 import { ANATOMY_MENU_ENABLED } from "./adminAnatomyConfig";
+import { isLocked } from "./adminLocks";
 
 // [War Room v1] 최상위 메뉴 — IA 확정본(CCUT_ADMIN_WAR_ROOM_IA_FINAL.md)이 단일 진실원.
 // [NERVE-1] 제작신경계 추가 — 상황실·편집연구실의 요약 진입점(두 탭은 그대로 유지).
@@ -41,25 +42,58 @@ const MENU: { key: AdminTab; label: string; icon: React.ReactNode }[] = [
   { key: "edit-lab", label: "능력표", icon: <FlaskConical size={14} /> },
 ];
 
+// [LOCK-1 2026-08-01] 활성/잠김을 갈라 놓는다. 조건이 안 온 페이지가 매일 보는 목록에
+//   섞여 있으면 열 곳을 고르는 데 매번 값을 치른다. 삭제가 아니라 순서를 낮추는 것이고,
+//   접힌 채로도 클릭하면 그대로 열린다(절벽 ④).
+const ACTIVE_MENU = MENU.filter(m => !isLocked(m.key));
+const LOCKED_MENU = MENU.filter(m => isLocked(m.key));
+
 export const AdminLeftNav: React.FC<{
   active: AdminTab;
   onNavigate: (tab: AdminTab) => void;
-}> = ({ active, onNavigate }) => (
+}> = ({ active, onNavigate }) => {
+  // 잠긴 그룹 안의 페이지를 보고 있으면 펼친 채로 둔다 — 지금 있는 자리가 목록에서
+  // 사라져 보이면 어디에 있는지 알 수 없다.
+  const [openLocked, setOpenLocked] = useState(() => isLocked(active));
+  const itemClass = (key: AdminTab, dim = false) =>
+    `w-full flex items-center gap-2.5 px-4 py-2 text-xs font-medium transition-colors text-left ${
+      active === key
+        ? "bg-primary/15 text-primary border-r-2 border-primary"
+        : dim
+          ? "text-muted-foreground/35 hover:text-foreground/60 hover:bg-secondary/20"
+          : "text-muted-foreground/60 hover:text-foreground/80 hover:bg-secondary/20"
+    }`;
+  return (
   <nav className="w-52 flex-shrink-0 border-r border-border/15 bg-[hsl(228_12%_9%)] flex flex-col">
     <div className="px-4 py-4 border-b border-border/15">
       <p className="text-sm font-black tracking-wide text-foreground/90">CCUT 관제실</p>
       <p className="text-[10px] text-muted-foreground/50 mt-0.5">전쟁상황판 v1</p>
     </div>
     <div className="flex-1 py-2 overflow-y-auto">
-      {MENU.map(m => (
+      {ACTIVE_MENU.map(m => (
+        <button key={m.key} onClick={() => onNavigate(m.key)} className={itemClass(m.key)}>
+          {m.icon}
+          {m.label}
+        </button>
+      ))}
+
+      <button
+        type="button"
+        onClick={() => setOpenLocked(v => !v)}
+        data-admin-locked-toggle={openLocked ? "open" : "closed"}
+        className="mt-3 w-full flex items-center gap-2 px-4 py-2 text-[11px] font-medium text-muted-foreground/40 hover:text-muted-foreground/70 transition-colors border-t border-border/10 pt-3"
+      >
+        {openLocked ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
+        <Lock size={11} />
+        아직 열리지 않음
+        <span className="ml-auto tabular-nums">{LOCKED_MENU.length}</span>
+      </button>
+      {openLocked && LOCKED_MENU.map(m => (
         <button
           key={m.key}
           onClick={() => onNavigate(m.key)}
-          className={`w-full flex items-center gap-2.5 px-4 py-2 text-xs font-medium transition-colors text-left ${
-            active === m.key
-              ? "bg-primary/15 text-primary border-r-2 border-primary"
-              : "text-muted-foreground/60 hover:text-foreground/80 hover:bg-secondary/20"
-          }`}
+          data-admin-locked-item={m.key}
+          className={itemClass(m.key, true)}
         >
           {m.icon}
           {m.label}
@@ -74,4 +108,5 @@ export const AdminLeftNav: React.FC<{
       사용자 작업실로
     </a>
   </nav>
-);
+  );
+};

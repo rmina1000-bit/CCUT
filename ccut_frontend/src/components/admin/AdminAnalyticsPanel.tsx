@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import { AdminLockedNotice } from "./AdminLockedNotice";
 import { fetcher } from "@/services/api";
 
 // [War Room v1] 행동 분석 — 실 원장 created_at 일별 집계만.
@@ -28,6 +29,7 @@ export const AdminAnalyticsPanel: React.FC = () => {
 
   return (
     <div className="space-y-5">
+      <AdminLockedNotice tab="analytics" />
       <div>
         <h1 className="text-lg font-bold text-foreground/90">행동 분석</h1>
         <p className="text-[11px] text-muted-foreground/50 mt-0.5">{note}</p>

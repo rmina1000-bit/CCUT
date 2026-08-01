@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import { AdminLockedNotice } from "./AdminLockedNotice";
 import { fetcher } from "@/services/api";
 
 // [Admin v0] 사용자 운영 — 로컬 단일 사용자 환경: 운영자 1인 + 실사용 통계.
@@ -53,6 +54,7 @@ export const AdminUsersPanel: React.FC = () => {
 
   return (
     <div className="space-y-6">
+      <AdminLockedNotice tab="users" />
       <div>
         <h1 className="text-lg font-bold text-foreground/90">사용자 운영</h1>
         <p className="text-[11px] text-muted-foreground/50 mt-0.5">로컬 단일 사용자 환경</p>

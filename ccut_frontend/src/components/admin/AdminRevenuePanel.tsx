@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import { AdminLockedNotice } from "./AdminLockedNotice";
 import { Plus } from "lucide-react";
 import { fetcher } from "@/services/api";
 import { AppDialog } from "@/components/AppDialog";
@@ -84,6 +85,7 @@ export const AdminRevenuePanel: React.FC = () => {
 
   return (
     <div className="space-y-6">
+      <AdminLockedNotice tab="revenue" />
       <AppDialog
         open={!!publishConfirm}
         message={publishConfirm ? `상품 "${publishConfirm.id}"을(를) 공개(published)합니다. 진행할까요?` : ""}

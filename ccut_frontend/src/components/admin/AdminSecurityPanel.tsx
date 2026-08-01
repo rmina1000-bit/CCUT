@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import { AdminLockedNotice } from "./AdminLockedNotice";
 import { Plus, ShieldOff } from "lucide-react";
 import { fetcher } from "@/services/api";
 
@@ -59,6 +60,7 @@ export const AdminSecurityPanel: React.FC = () => {
 
   return (
     <div className="space-y-5">
+      <AdminLockedNotice tab="security" />
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-lg font-bold text-foreground/90">보안 관제</h1>
