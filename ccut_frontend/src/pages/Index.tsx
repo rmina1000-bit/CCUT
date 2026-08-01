@@ -1522,7 +1522,6 @@ const Index: React.FC = () => {
               // 행 단위 사건 로그를 시간순으로 되살린다 (v1 chat_state blob은 서버가
               // 첫 조회 때 행으로 자동 이관). 복원분 id는 synced에 등록해 재전송 방지.
               syncedTimelineIdsRef.current = new Set();
-              restoredTimelineRef.current = null;
               try {
                 const tl = await videoService.getTimeline(activeNavItem, 300);
                 if (tl?.entries?.length && isMounted) {
@@ -1536,13 +1535,32 @@ const Index: React.FC = () => {
                     else if (en.kind === "generation" && en.payload) gens.push(en.payload);
                   }
                   if (msgs.length) {
-                    restoredTimelineRef.current = msgs; // 스켈레톤이 승계
                     // [TIMELINE-RACE] 스켈레톤이 이미 지나간 뒤 복원이 도착하면(HTTP가
                     // setProposals보다 느린 보통의 경우) ref는 영영 소비되지 않는다 —
                     // storyPlan이 있으면 직접 병합(id 중복 제외, 과거이므로 앞에).
                     setStoryPlan((prev: any) => {
-                      if (!prev) return prev;
-                      restoredTimelineRef.current = null;
+                      // [CHAT-RESTORE-NULLSAFE 2026-08-01] 구판은 여기서 `if (!prev) return prev`
+                      //   로 복원분을 통째로 버렸다. 대비책이라던 restoredTimelineRef 는
+                      //   **write-only** 였다 — 선언 1곳·대입 1곳·비움 2곳, 읽는 곳 0곳.
+                      //   "스켈레톤이 승계"라는 주석만 있고 승계하는 스켈레톤이 코드에 없다.
+                      //   그래서 storyPlan 이 없는 순간 서버 타임라인이 조용히 사라졌고,
+                      //   07-31 시도1의 "재방문 시 채팅 영영 빔"이 정확히 이 줄이었다.
+                      //   (방어는 있는데 도달 불가 — 오늘 rematch_anchor·whisper 임계값과 같은 계열)
+                      //   이제 prev 가 없으면 골격을 만들어 복원분을 담는다. 골격 모양은
+                      //   STAGE-VOICE(:3043)와 동일 — consultation_status 를 confirmed 로
+                      //   올리지 않으므로 방향 선택 UI(:2278)가 임의로 열리지 않는다.
+                      if (!prev) {
+                        return {
+                          story_plan_id: `STP_${Date.now()}`,
+                          source_count: restoredEntries.length,
+                          consultation_status: "draft_ready",
+                          confirmation_status: "pending",
+                          direction_options: [],
+                          detected_theme: "",
+                          selected_direction: undefined,
+                          messages: msgs,
+                        };
+                      }
                       const have = new Set((prev.messages ?? []).map((m: any) => String(m.id)));
                       const texts = new Set((prev.messages ?? []).map((m: any) => m.text));
                       // 재열기 시 fresh 개략(같은 id)이 매번 맨 아래로 재인사하지 않게 —
@@ -1644,7 +1662,9 @@ const Index: React.FC = () => {
   // 재전송·멀티탭에 안전하고, 과거 행은 불변이라 역사 파괴가 구조적으로 불가능.
   // 해석중(isInterpreting) 임시 메시지는 최종 문구로 교체된 뒤에 기록.
   // 제안 세대는 4초 숙성 후 저장 — 프리뷰 URL 주입까지 끝난 완성 스냅샷을 남긴다.
-  const restoredTimelineRef = useRef<any[] | null>(null);
+  // [CHAT-RESTORE-NULLSAFE 2026-08-01] restoredTimelineRef 철거 — write-only 였다.
+  //   대입 1곳뿐이고 읽는 곳이 0곳이라 '스켈레톤이 승계'는 일어난 적이 없다.
+  //   복원은 이제 setStoryPlan 안에서 골격을 직접 만들어 담는다(:1543).
   const syncedTimelineIdsRef = useRef<Set<string>>(new Set());
   const genSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
