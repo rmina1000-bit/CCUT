@@ -901,6 +901,13 @@ def _background_whisper_impl(source_id: str, video_path: str, fragments: list):
         provider_error = whisper_res.get("provider_error")
         rejected_fragments = whisper_res.get("rejected_fragments", {})
 
+        # [ASR-REPORT 2026-08-01] 반복 루프를 원장에 신고만 한다 — 고치지도 막지도 않는다.
+        #   여기가 삽입 지점인 이유: main.py 의 ASR 진입 4곳이 전부 한 자리(:894)로 모이고,
+        #   source_id 가 스코프에 있는 첫 지점이다. 어댑터 안에 넣으면 GPU/CPU 두 벌이 된다.
+        #   report_safe = 신고가 실패해도 본선은 완주, 다만 실패는 로그로 드러난다.
+        from ai import asr_repetition_report as _arr
+        _arr.report_safe(source_id, whisper_res, fragments)
+
         # [단계2] 경계 스냅 보정 — 발화 휴지 정렬 (기본 dry-run)
         _all_words = whisper_res.get("words", []) or []
         if _all_words:

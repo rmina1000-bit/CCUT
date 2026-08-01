@@ -105,6 +105,27 @@ def probe_line(rel_path: str, pattern: str) -> Dict[str, Any]:
 
 BOUNDARIES: List[Dict[str, Any]] = [
     {
+        # [ASR-REPORT 2026-08-01] 1차 범위(편집 P3~P5) 밖의 첫 기장.
+        #   화면에서 이 경계가 "관계: 기장 없음 · 미계측"으로 떴다 — 전사의 84.2%가
+        #   소실돼 있었는데 지도가 그 사실을 나를 길이 아예 없었다는 뜻이다.
+        "id": "asr_output_to_transcript",
+        "ledger_match": {"domain": "asr"},
+        "from": "analysis", "to": "transcript",
+        "label": "ASR 출력 → 전사",
+        "found": "반복 루프로 전사 84.2% 소실 · SRC_3111FA4F (2026-08-01)",
+        "kind": "자기유지 루프 (문맥 캐리)",
+        "status": "fixed",
+        "fixed_by": "93c4863e",
+        # ★order·authority 는 감사하지 않았다 — 채우지 않는다(UNKNOWN 이 정직하다).
+        #   오늘 감사한 것은 '왜 루프가 났는가'이지 '이 경계의 순서·권위'가 아니다.
+        "user_decision_overwritten": False,
+        "probes": {
+            "수리(문맥 캐리 차단)": ("line", "ccut_backend/ai/adapters/whisper_vulkan_adapter.py", r"CCUT_ASR_MAX_CONTEXT_ZERO"),
+            "신고 지점": ("line", "ccut_backend/main.py", r"_arr\.report_safe\(source_id"),
+            "판정기(재사용)": ("line", "ccut_backend/rough_cut/transcript_reader.py", r"def detect_repetition_hallucination\("),
+        },
+    },
+    {
         "id": "approve_to_playback_contract",
         # 원장 매칭 기장 — 이 경계의 실패가 적힐 도메인. 기록기가 아직 없으면 카드에 표시된다.
         "ledger_match": {"domain": "story"},
@@ -268,7 +289,7 @@ def _fixed_at(sha: str) -> Optional[str]:
 def _writer_exists(domain: str) -> bool:
     """이 도메인에 **실패를 적는 코드가 실제로 있는가**. 없으면 원장이 빈 것은
     '실패가 없었다'가 아니라 '아무도 적지 않았다'는 뜻이다 — 카드에 그대로 표시한다."""
-    hits = {"rough_cut": "record_rough_cut_failure"}
+    hits = {"rough_cut": "record_rough_cut_failure", "asr": "asr_repetition_report"}
     needle = hits.get(domain)
     if not needle:
         return False
