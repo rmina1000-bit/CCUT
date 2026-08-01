@@ -66,15 +66,31 @@ const LeftNav: React.FC<LeftNavProps> = ({
     setIsSelecting(false);
   };
 
+  // [MENU-CLOSE 2026-08-01] 프로젝트 메뉴(이름 변경/삭제)가 화면을 바꿔도 남아 있던 문제.
+  //   진범: menuRef 가 **프로젝트 목록 전체**(:261 의 컨테이너)를 가리켰다. 그래서
+  //   목록 안 어디를 눌러도 contains(target)=true 라 '바깥 클릭'이 성립하지 않았다 —
+  //   다른 프로젝트로 전환하는 그 클릭조차 바깥이 아니었다.
+  //   판정 범위를 메뉴 자신(+여는 버튼)으로 좁힌다: data-project-menu 안이면 유지, 밖이면 닫는다.
+  //   ESC 도 닫는다(열어둔 채 키보드로 빠져나가는 경로).
   useEffect(() => {
     const handleClick = (e: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
-        setMenuOpenId(null);
-      }
+      const el = e.target as HTMLElement | null;
+      if (el?.closest?.("[data-project-menu]")) return;
+      setMenuOpenId(null);
+    };
+    const handleKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setMenuOpenId(null);
     };
     document.addEventListener("mousedown", handleClick);
-    return () => document.removeEventListener("mousedown", handleClick);
+    document.addEventListener("keydown", handleKey);
+    return () => {
+      document.removeEventListener("mousedown", handleClick);
+      document.removeEventListener("keydown", handleKey);
+    };
   }, []);
+
+  // 화면 전환(선택 프로젝트 변경)으로도 닫는다 — 클릭이 아닌 경로(라우팅·단축키)까지 덮는다.
+  useEffect(() => { setMenuOpenId(null); }, [activeItem]);
 
   const allSelected = projects.length > 0 && projects.every((p) => selectedIds.has(p.id));
   const someSelected = selectedIds.size > 0;
@@ -330,6 +346,7 @@ const LeftNav: React.FC<LeftNavProps> = ({
                           <span className="text-[12px] font-normal truncate flex-1">{proj.name}</span>
                           {!isSelecting && (
                             <button
+                              data-project-menu="toggle"
                               onClick={(e) => {
                                 e.stopPropagation();
                                 setMenuOpenId(menuOpenId === proj.id ? null : proj.id);
@@ -351,7 +368,10 @@ const LeftNav: React.FC<LeftNavProps> = ({
                 )}
 
                 {menuOpenId === proj.id && !collapsed && !isSelecting && (
-                  <div className="absolute right-0 top-8 z-[200] w-36 bg-[hsl(228,12%,12%)] border border-border/30 rounded-lg shadow-xl overflow-hidden">
+                  <div
+                    data-project-menu="panel"
+                    className="absolute right-0 top-8 z-[200] w-36 bg-[hsl(228,12%,12%)] border border-border/30 rounded-lg shadow-xl overflow-hidden"
+                  >
                     <button
                       onClick={() => {
                         setRenameValue(proj.name);
