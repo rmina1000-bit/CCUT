@@ -286,6 +286,51 @@ def _fixed_at(sha: str) -> Optional[str]:
         return None
 
 
+def _count_since(con, domain: str, fixed_at: str) -> int:
+    """[TZ-FIX 2026-08-01] 수리 시각 이후의 실패 건수. **문자열이 아니라 시각으로 센다.**
+
+    왜 고쳤는가(실측): 원장은 UTC 로 적고(failure_ledger._now), 수리 시각은 git 의
+    로컬 오프셋(%cI)으로 온다. SQL `created_at > ?` 는 문자열 비교라 오프셋이 다르면
+    뒤집힌다 —
+        created_at 2026-08-01T02:51:44+00:00  (방금 난 실패)
+        fixed_at   2026-08-01T11:48:00+09:00  (같은 순간의 9시간 전 수리)
+        문자열 "02..." > "11..." -> False     실제 시각 비교 -> True
+    결과: 방금 난 실패가 '수리 이전의 역사'로 분류돼 **깨진 선이 실선으로 남았다.**
+    rough_cut 원장이 0행이라 드러난 적이 없었고, asr 첫 신고가 이걸 잡아냈다.
+
+    계약(UTC 기록)은 옳다 — 비교하는 쪽만 고친다.
+    오프셋 없는 값은 **최신으로 취급**한다: 모르면서 정상이라고 그리지 않는다(기존 원칙).
+    """
+    import datetime as _dt
+
+    def _aware(s):
+        try:
+            d = _dt.datetime.fromisoformat(str(s))
+        except (TypeError, ValueError):
+            return None                  # 못 읽으면 최신 취급
+        if d.tzinfo is None:
+            return None                  # 오프셋 없음 — 최신 취급
+        return d.astimezone(_dt.timezone.utc)
+
+    fixed = _aware(fixed_at)
+    if fixed is None:
+        # 수리 시각을 못 읽으면 전부 최신으로 센다(_line_state 의 기존 원칙과 같다).
+        return con.execute(f"SELECT COUNT(*) FROM {fl_table()} WHERE domain=?",
+                           (domain,)).fetchone()[0]
+    n = 0
+    for (created,) in con.execute(
+            f"SELECT created_at FROM {fl_table()} WHERE domain=?", (domain,)):
+        c = _aware(created)
+        if c is None or c > fixed:
+            n += 1
+    return n
+
+
+def fl_table() -> str:
+    import failure_ledger as fl
+    return fl.TABLE
+
+
 def _writer_exists(domain: str) -> bool:
     """이 도메인에 **실패를 적는 코드가 실제로 있는가**. 없으면 원장이 빈 것은
     '실패가 없었다'가 아니라 '아무도 적지 않았다'는 뜻이다 — 카드에 그대로 표시한다."""
@@ -378,11 +423,8 @@ def _ledger_slice(domain_hint: str = "rough_cut", fixed_at: Optional[str] = None
             # 시각이 판정한다 — 수리 커밋 이후의 실패만 '지금 깨져 있다'는 뜻이다.
             # 수리 시각을 모르면(git 미조회) 전부 최신으로 세어 정상이라고 그리지 않는다.
             "fixed_at": fixed_at,
-            "failures_since_fix": (
-                con.execute(f"SELECT COUNT(*) FROM {fl.TABLE} WHERE domain=? AND created_at > ?",
-                            (domain_hint, fixed_at)).fetchone()[0]
-                if fixed_at else n
-            ),
+            # [TZ-FIX 2026-08-01] 문자열 비교 금지 — _count_since 가 시각으로 센다.
+            "failures_since_fix": (_count_since(con, domain_hint, fixed_at) if fixed_at else n),
             "writer_exists": _writer_exists(domain_hint),
             "recent": [dict(r) for r in con.execute(
                 f"SELECT created_at, error_code, phase, attempt, program_id "
