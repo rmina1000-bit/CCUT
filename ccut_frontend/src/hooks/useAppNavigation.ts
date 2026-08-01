@@ -7,6 +7,10 @@ interface UseAppNavigationParams {
   setCommittedProposalId: (v: any) => void;
   setProposals: (v: any) => void;
   setDirectionSnapshot: (v: any) => void;
+  // [PROJECT-SWITCH-RESET 2026-08-01] 채팅 원고도 프로젝트 수명이다.
+  //   useProposalState 는 이미 "storyPlan과 동일 수명"이라 적고 proposalHistory 만
+  //   비우고 있었다 — 정작 storyPlan 은 아무도 비우지 않았다.
+  setStoryPlan: (v: any) => void;
   resetAnalysisFlow: () => void;
   setActiveNavItem: (v: string) => void;
   setNavCollapsed: (updater: (prev: boolean) => boolean) => void;
@@ -25,6 +29,7 @@ export function useAppNavigation({
   setCommittedProposalId,
   setProposals,
   setDirectionSnapshot,
+  setStoryPlan,
   resetAnalysisFlow,
   setActiveNavItem,
   setNavCollapsed,
@@ -40,6 +45,9 @@ export function useAppNavigation({
     setCommittedProposalId(null);
     setProposals(null);
     setDirectionSnapshot(null);
+    // [PROJECT-SWITCH-RESET 2026-08-01] 채팅 원고. 지우고 나면 그 프로젝트로 돌아왔을 때
+    //   서버 타임라인이 되살린다 — 그 길은 1d4e84ba 에서 복구했다(그전엔 끊겨 있었다).
+    setStoryPlan(null);
     resetAnalysisFlow();
   }, []);
 
@@ -54,6 +62,18 @@ export function useAppNavigation({
     // [B-5d] 전환 직전: 현재 프로젝트 UI 스냅샷 저장 (백그라운드, non-blocking)
     if (activeNavItem && activeNavItem.startsWith("proj_") && appState === "complete") {
       saveUiState(activeNavItem, buildUiSnapshot()).catch(() => {}); // [#30] merge-저장
+    }
+    // [PROJECT-SWITCH-RESET 2026-08-01] 프로젝트 → 프로젝트 전환에는 초기화가 **아예 없었다.**
+    //   onHome·onNewProject·onDeleteProject 는 셋 다 resetAnalysisState() 를 부르는데
+    //   정작 가장 잦은 경로인 이 클릭만 빠져 있었다. 그래서 A 의 채팅·story.fids·보류가
+    //   B 위에 그대로 남고, 하이드레이션이 B 데이터를 덮은 뒤에도 B 에 없는 것은 A 것이
+    //   살아남았다. STORY-WRITE-GUARD 의 "외래 원고 / fids 8.9배 급증" REJECT 가 그것이다.
+    //   (가드는 끄지 않는다 — 지금 제 일을 하고 있고, 이 수리로 발동할 일이 없어져야 맞다.)
+    //   새 초기화 로직을 만들지 않고 기존 3곳과 같은 함수를 쓴다.
+    //   순서: 초기화 → setActiveNavItem → 하이드레이션 effect([activeNavItem]).
+    //   buildUiSnapshot() 는 위에서 이미 동기로 값을 떠갔으므로 A 의 저장 payload 는 무사하다.
+    if (newId !== activeNavItem) {
+      resetAnalysisState();
     }
     // [FIX-LIST-ORDER] 프로젝트를 '여는(클릭) 것'은 조회이므로 목록 순서를 바꾸지 않는다.
     // (Claude 채팅 사이드바 방식: 열람으로는 순서 불변, 실제 활동에서만 최상단으로)

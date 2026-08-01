@@ -720,6 +720,7 @@ const Index: React.FC = () => {
     onNewProject: onNavNewProject,
   } = useAppNavigation({
     setSelectedProposalId, setCommittedProposalId, setProposals, setDirectionSnapshot,
+    setStoryPlan,
     resetAnalysisFlow, setActiveNavItem, setNavCollapsed, setProjects,
     activeNavItem, appState, buildUiSnapshot,
     saveUiState: saveUiStateMergedTracked, // [#30] merge-저장 주입
