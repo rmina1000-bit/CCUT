@@ -58,7 +58,7 @@ import {
 } from "@/utils/editContractClient";
 // [R2] 조각맵 분할 표시 = 상태의 순수 파생 — Apply 경로와 재수화 경로가 같은 함수를 쓴다
 import { rebuildFragmentTiles } from "@/utils/fragmentTiles";
-import { toMs } from "@/utils/editContract";
+import { rematchAnchor, toMs } from "@/utils/editContract";
 import { buildExportClipsFromResolvedFragments, type PhysicalClip } from "@/utils/exportClipBuilder";
 import { DEBUG_LOG } from "@/utils/debugFlags";
 import { closeMirrorPendingForProject, recordMirrorEvent } from "@/utils/mirrorEventLog";
@@ -567,8 +567,40 @@ const Index: React.FC = () => {
   // [STORY-LAYER-01 A-1] 스냅샷도 program 단위 하나. 스토리(story.fids)와 그 구성본
   // (storyFragments), 보류·휴지통·좌표가 제안축 없이 저장된다. 백엔드 진실원과 같은 키다
   // (story_gate/service.py `read_story_fids`, ledger_r0.py `story.fids`/`storyFragments`).
+  // [STORY-ANCHOR 2026-08-01] 원고를 좌표로도 앵커한다.
+  //   확정된 사실: 편집 상태(fragment_edit_state)는 source_id + anchor_ms 로 앵커돼 있어
+  //   재조각화(분절 경계 변경)에 면역이다 — 23/23 재연결 가능. 반면 원고는 fid 문자열만
+  //   저장해 경계가 흔들리면 끊긴다 — 실측 754건 중 507건이 이미 현행 조각에 없다.
+  //   fid 는 재발급되지 않는다(sha1(source_id|start_ds|end_ds)[:6], 결정론).
+  //   바뀌는 것은 **분절 경계**이고 그래서 해시 입력이 달라진다. 좌표를 함께 저장하면
+  //   경계가 흔들려도 다시 이을 수 있다.
+  //   재조각화는 특별한 사건이 아니다 — 소스 88개 중 64개(72.7%)가 이미 여러 세대를 겪었고
+  //   최대 12세대까지 갔다.
+  //   ★ 병기 방식을 택한 이유: fids 배열을 객체 배열로 바꾸면 이 값을 읽는 기존 코드
+  //   (ledger_r0._ordered_stringout_fids · 가드 · 서버 _strip_dead_ui_keys)가 전부 깨진다.
+  //   fids 는 문자열 배열 그대로 두고 fidAnchors 를 옆에 둔다. 좌표가 없으면 예전과 똑같이 동작한다.
+  //   ref 로 잇는 이유: 조각 풀(roughCutFragmentPool)은 이 아래에서 선언된다. deps 로 참조하면
+  //   TDZ 로 렌더가 죽는다 — 위치를 옮기는 대신 ref 하나로 읽는다(값은 아래 effect 가 채운다).
+  const roughCutFragmentPoolRef = useRef<Fragment[]>([]);
+  // [STORY-ANCHOR] 복원된 원고의 좌표(하이드레이션이 채우고 치유 effect 가 읽는다).
+  const storyFidAnchorsRef = useRef<Record<string, { source_id: string; anchor_start_ms: number; anchor_end_ms: number }> | null>(null);
+  const fidAnchorsOf = useCallback((fids: string[]) => {
+    const byId = new Map(roughCutFragmentPoolRef.current.map((f) => [getUid(f), f]));
+    const out: Record<string, { source_id: string; anchor_start_ms: number; anchor_end_ms: number }> = {};
+    for (const fid of fids) {
+      const f: any = byId.get(fid);
+      if (!f) continue;                       // 지금 못 찾는 조각의 좌표를 지어내지 않는다
+      const sid = String(f.source_id ?? "");
+      const s = Number(f.start_time ?? f.start ?? (f.start_frame ?? 0) / 30);
+      const e = Number(f.end_time ?? f.end ?? (f.end_frame ?? 0) / 30);
+      if (!sid || !Number.isFinite(s) || !Number.isFinite(e) || e <= s) continue;
+      out[fid] = { source_id: sid, anchor_start_ms: toMs(s), anchor_end_ms: toMs(e) };
+    }
+    return out;
+  }, []);
+
   const buildUiSnapshot = useCallback(() => ({
-    story: { fids: storyFids },
+    story: { fids: storyFids, fidAnchors: fidAnchorsOf(storyFids) },
     storyFragments,
     reservedFragments,
     holdPositions,
@@ -657,14 +689,33 @@ const Index: React.FC = () => {
         for (const alias of collectFragmentAliases(fragment as any)) known.add(alias);
       }
       if (!nextFids.some((id: string) => known.has(id))) {
-        console.error(
-          `[STORY-WRITE-GUARD][REJECT] 외래 원고 — 저장 거부. `
-          + `program=${programId} fids=${nextFids.length} 이 프로젝트 조각=${editFragments.length} `
-          + `교집합=0 origin=${storyOriginRef.current} first3=[${nextFids.slice(0, 3).join(", ")}]`,
+        // [GUARD-NAMING 2026-08-01] '외래'와 '세대 불일치'를 가른다.
+        //   실측: REJECT 159 fids 중 자기 소스가 146(91.8%)이었다 — 대부분 남의 원고가 아니라
+        //   자기 소스인데 분절 경계가 달라져 fid 가 어긋난 것이다. 한 이름으로 뭉쳐 두면
+        //   원장이 사실과 다르게 말한다(오늘 하루 반복해서 잡은 그 모양).
+        //   판정 기준은 fid 에 박힌 소스 토큰 — 이 프로젝트가 가진 소스인가.
+        //   ★ 거부 여부는 바꾸지 않는다. 둘 다 그대로 거부한다(가드 판정 무접촉).
+        //     이름과 error_code 만 사실에 맞춘다.
+        const projectSources = new Set(
+          editFragments.map((f: any) => String(f.source_id ?? "")).filter(Boolean),
         );
-        reportGuardReject("foreign_story_fids", {
+        const srcOf = (id: string) => {
+          const m = /(SRC_[0-9A-Za-z]+)/.exec(id);
+          return m ? m[1] : "";
+        };
+        const ownSource = nextFids.filter((id: string) => projectSources.has(srcOf(id))).length;
+        const generationMismatch = ownSource === nextFids.length && projectSources.size > 0;
+        const code = generationMismatch ? "story_fids_generation_mismatch" : "foreign_story_fids";
+        console.error(
+          `[STORY-WRITE-GUARD][REJECT] ${generationMismatch ? "세대 불일치(자기 소스인데 경계가 달라짐)" : "외래 원고(남의 소스)"} — 저장 거부. `
+          + `program=${programId} fids=${nextFids.length} 이 프로젝트 조각=${editFragments.length} `
+          + `교집합=0 자기소스 ${ownSource}/${nextFids.length} origin=${storyOriginRef.current} `
+          + `first3=[${nextFids.slice(0, 3).join(", ")}]`,
+        );
+        reportGuardReject(code, {
           program_id: programId,
           fids: nextFids.length,
+          own_source_fids: ownSource,
           project_fragments: editFragments.length,
           intersection: 0,
           origin: storyOriginRef.current,
@@ -1665,6 +1716,9 @@ const Index: React.FC = () => {
                   setStoryFids(snapFids);
                   if (snapFrags) setStoryFragments(snapFrags);
                   storyOriginRef.current = "ui_state";
+                  // [STORY-ANCHOR] 좌표를 들고 온다. 조각 풀이 아직 안 실렸을 수 있으므로
+                  //   여기서 잇지 않고 ref 에 담아 두고, 풀이 준비된 뒤 아래 치유 effect 가 잇는다.
+                  storyFidAnchorsRef.current = (snap.story?.fidAnchors ?? null) as any;
                 }
               }
             } catch (_) {}
@@ -2230,6 +2284,9 @@ const Index: React.FC = () => {
     return Array.from(byId.values());
   }, [editFragments, sourceEntries]);
 
+  // [STORY-ANCHOR] 위쪽 fidAnchorsOf 가 읽는 ref — 풀이 바뀔 때마다 채운다.
+  useEffect(() => { roughCutFragmentPoolRef.current = roughCutFragmentPool; }, [roughCutFragmentPool]);
+
   const roughCutFragmentForSpan = useCallback((span: RoughCutSpan): Fragment | null => {
     const spanStart = span.start_ms / 1000;
     const spanEnd = span.end_ms / 1000;
@@ -2254,12 +2311,92 @@ const Index: React.FC = () => {
     return best && best.overlap > 0 ? best.fragment : null;
   }, [roughCutFragmentPool]);
 
-  const roughCutFragmentsForFids = useCallback((fids: string[]) => {
+  // [STORY-ANCHOR 2026-08-01] 원고 fid → 조각. fid 로 못 찾으면 **좌표로 다시 잇는다.**
+  //   순서: ① fid 직접 매칭(기존 동작 그대로) ② 실패 시 좌표 재매칭 ③ 둘 다 실패면 버린다.
+  //   ③이 중요하다 — 가까운 걸 아무거나 붙이지 않는다. 못 찾은 것은 못 찾은 것이다.
+  //   재매칭은 새로 만들지 않고 계약의 rematchAnchor 를 부른다(editContract.ts:175,
+  //   백엔드 edit_contract/edit_state.py:128 의 TS 미러 — 편집 상태가 쓰는 바로 그 함수).
+  //   허용오차 STORY_REMATCH_TOL_MS 는 실측으로 정했다(감이 아니다):
+  //     끊긴 원고 507건 중 vault 에 좌표가 남은 300건의 드리프트
+  //       최소 0 · 중앙값 840ms · 90% 1840ms · 최대 2980ms
+  //     tol 별 재연결/다중후보  500ms 28.3%/0 · 1000ms 62.0%/0 · 2000ms 97.7%/0 · 3000ms 100%/0
+  //     ★ 모든 오차에서 **다중 후보 0건** — 양끝을 다 요구하므로 오매칭 위험이 관측되지 않았다.
+  //     3000ms 로 잡으면 실측 전량이 복구되고, 그보다 크게 벌릴 이유는 없다.
+  const STORY_REMATCH_TOL_MS = 3000;
+  const roughCutFragmentsForFids = useCallback((fids: string[], anchors?: Record<string, any>) => {
     const byId = new Map(roughCutFragmentPool.map((fragment) => [getUid(fragment), fragment]));
-    return fids
-      .map((fid) => byId.get(fid))
-      .filter((fragment): fragment is Fragment => !!fragment);
+    // 좌표 재매칭용 후보: 소스별로 시간순 정렬 (rematchAnchor 계약이 정렬을 요구한다)
+    const bySource = new Map<string, Array<{ fragment: Fragment; range: [number, number] }>>();
+    const coordsOf = (f: any): [number, number] | null => {
+      const s = Number(f.start_time ?? f.start ?? (f.start_frame ?? 0) / 30);
+      const e = Number(f.end_time ?? f.end ?? (f.end_frame ?? 0) / 30);
+      if (!Number.isFinite(s) || !Number.isFinite(e) || e <= s) return null;
+      return [toMs(s), toMs(e)];
+    };
+    if (anchors) {
+      for (const fragment of roughCutFragmentPool) {
+        const raw: any = fragment;
+        const sid = String(raw.source_id ?? "");
+        const range = coordsOf(raw);
+        if (!sid || !range) continue;
+        if (!bySource.has(sid)) bySource.set(sid, []);
+        bySource.get(sid)!.push({ fragment, range });
+      }
+      for (const list of bySource.values()) list.sort((a, b) => a.range[0] - b.range[0]);
+    }
+    const out: Fragment[] = [];
+    let rematched = 0;
+    let lost = 0;
+    for (const fid of fids) {
+      const direct = byId.get(fid);
+      if (direct) { out.push(direct); continue; }
+      const anchor = anchors?.[fid];
+      const list = anchor ? bySource.get(String(anchor.source_id)) : undefined;
+      if (anchor && list?.length) {
+        const idx = rematchAnchor(
+          [Number(anchor.anchor_start_ms), Number(anchor.anchor_end_ms)],
+          list.map((x) => x.range),
+          STORY_REMATCH_TOL_MS,
+        );
+        if (idx !== null && idx >= 0) { out.push(list[idx].fragment); rematched++; continue; }
+      }
+      lost++;   // UNKNOWN — 억지로 붙이지 않는다
+    }
+    if (rematched || lost) {
+      console.info(`[STORY-ANCHOR] 원고 ${fids.length}개 — fid 직행 ${fids.length - rematched - lost} `
+        + `· 좌표 재연결 ${rematched} · 못 찾음 ${lost}(UNKNOWN, 억지 매핑 없음)`);
+    }
+    return out;
   }, [roughCutFragmentPool]);
+
+  // [STORY-ANCHOR 2026-08-01] 치유: 복원된 원고에 현행 조각에 없는 fid 가 있으면
+  //   저장해 둔 좌표로 **현 세대 fid 로 갈아 끼운다.** 프로젝트당 한 번만.
+  //   여기서 고치는 이유: storyFids 를 읽는 곳이 조각맵·전사·가드·저장까지 여러 곳인데,
+  //   각자 재연결하면 같은 일을 하는 자리가 여럿이 된다. 진실원 하나를 고친다.
+  //   좌표가 없거나(옛 저장분) 좌표로도 못 찾으면 **그대로 둔다** — 억지로 붙이지 않는다.
+  //   화면에서 사라지는 것은 예전과 같고, 다만 왜 사라졌는지 로그로 말한다.
+  const storyHealedForRef = useRef<string | null>(null);
+  useEffect(() => {
+    const anchors = storyFidAnchorsRef.current;
+    if (!activeNavItem?.startsWith("proj_")) return;
+    if (storyHealedForRef.current === activeNavItem) return;
+    if (!anchors || storyFids.length === 0 || roughCutFragmentPool.length === 0) return;
+    const live = new Set(roughCutFragmentPool.map((f) => getUid(f)));
+    const missing = storyFids.filter((f) => !live.has(f));
+    if (missing.length === 0) { storyHealedForRef.current = activeNavItem; return; }
+    const healed = roughCutFragmentsForFids(storyFids, anchors);
+    const nextFids = healed.map((f) => getUid(f));
+    storyHealedForRef.current = activeNavItem;
+    if (nextFids.length === 0) {
+      console.warn(`[STORY-ANCHOR] ${activeNavItem}: 끊긴 원고 ${missing.length}개를 좌표로도 잇지 못했다 — 원고를 비우지 않는다`);
+      return;
+    }
+    if (JSON.stringify(nextFids) === JSON.stringify(storyFids)) return;
+    console.info(`[STORY-ANCHOR] ${activeNavItem}: 원고 치유 ${storyFids.length} -> ${nextFids.length} `
+      + `(끊겼던 ${missing.length}개 중 ${nextFids.length - (storyFids.length - missing.length)}개 좌표로 복구)`);
+    setStoryFids(nextFids);
+    storyFidsRef.current = nextFids;
+  }, [activeNavItem, storyFids, roughCutFragmentPool, roughCutFragmentsForFids]);
 
   const roughCutSelectedSpanIds = useMemo(
     () => roughCutPlacement?.selectedSpanIds ?? roughCutData?.ordered_span_ids ?? [],
