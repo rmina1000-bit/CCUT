@@ -142,7 +142,7 @@ export const AdminNerveCenterPanel: React.FC = () => {
   if (error) {
     return (
       <div className="space-y-3">
-        <p className="text-xs text-red-400">제작신경계 조회 실패 — {error}</p>
+        <p className="text-xs text-red-400">오늘 조회 실패 — {error}</p>
         <button onClick={load}
           className="px-3 h-8 rounded-md bg-secondary/40 hover:bg-secondary/70 text-xs font-semibold text-foreground/70 transition-colors">
           다시 조회
@@ -159,11 +159,11 @@ export const AdminNerveCenterPanel: React.FC = () => {
   return (
     <div className="space-y-5">
       <p className="border-b border-cyan-500/20 pb-2 text-[11px] font-semibold text-cyan-200/80">
-        /admin/nerve ── 요약 축: 지금 전체가 건강한가
+        /admin/nerve ── 오늘: 지금 전체가 괜찮은가
       </p>
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h1 className="text-lg font-bold text-foreground/90">제작신경계</h1>
+          <h1 className="text-lg font-bold text-foreground/90">오늘</h1>
           <p className="text-[11px] text-muted-foreground/50 mt-0.5">
             운영 원장 + 편집 능력 실측을 한 화면에서 대조 · 조회 1회(/admin/situation)
           </p>

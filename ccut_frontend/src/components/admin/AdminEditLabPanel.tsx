@@ -591,11 +591,11 @@ export const AdminEditLabPanel: React.FC = () => {
   return (
     <div className="space-y-5">
       <p className="border-b border-cyan-500/20 pb-2 text-[11px] font-semibold text-cyan-200/80">
-        /admin/edit-lab ── 능력 축: 무엇을 할 수 있고 무엇이 잠겨 있는가
+        /admin/edit-lab ── 능력: 무엇을 할 수 있고 무엇이 잠겨 있는가
       </p>
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h1 className="text-lg font-bold text-foreground/90">편집연구실</h1>
+          <h1 className="text-lg font-bold text-foreground/90">능력표</h1>
           <p className="text-[11px] text-muted-foreground/50 mt-0.5">
             {audit
               ? `재료 ${audit.materials.length - missingMaterials} 값 있음 / ${missingMaterials} 값 없음 · 하드룰 ${audit.rules.declared} 선언 / ${audit.rules.registered} 등록 / ${audit.rules.corrective} 보정 / ${audit.rules.veto} veto`

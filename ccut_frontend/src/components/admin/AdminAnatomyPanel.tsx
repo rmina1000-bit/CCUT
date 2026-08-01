@@ -346,12 +346,12 @@ export const AdminAnatomyPanel: React.FC = () => {
   return (
     <div className="space-y-6">
       <p className="border-b border-cyan-500/20 pb-2 text-[11px] font-semibold text-cyan-200/80">
-        /admin/anatomy ── 흐름 축: 데이터가 어디를 지나 어디서 멈추는가
+        /admin/anatomy ── 흐름: 데이터가 어디를 지나 어디서 멈추는가
       </p>
 
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="text-lg font-bold text-foreground/90">생체 관제실</h1>
+          <h1 className="text-lg font-bold text-foreground/90">흐름도</h1>
           <p className="mt-0.5 text-[11px] text-muted-foreground/55">
             실제 원장과 API가 증명한 흐름만 표시
           </p>
