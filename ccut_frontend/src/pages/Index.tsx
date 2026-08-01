@@ -349,6 +349,28 @@ const Index: React.FC = () => {
   // 이 프로젝트의 ui_state 재수화가 끝났는가 (저장이 복원을 앞질러 덮는 것을 막는 문턱)
   const [uiRestoredFor, setUiRestoredFor] = useState<string | null>(null);
 
+  // [GUARD-LEDGER 2026-08-01] 가드가 막은 사실을 원장에 신고한다. **판정은 건드리지 않는다.**
+  //   가드는 이미 정확히 검출하는데 결과가 콘솔에만 남았다 — 콘솔은 devtools 를 연 사람에게만
+  //   존재한다. 오늘 전사 84% 소실이 스물두 시간 숨어 있던 것과 같은 구조다.
+  //   본선 무접촉: 실패해도 조용히 넘어가되(catch) 그 사실은 콘솔에 남긴다.
+  //   서버도 200 + {ok:false} 로 답한다(500 이 가드 흐름 안에서 터지지 않게).
+  const reportGuardReject = useCallback((errorCode: string, detail: Record<string, unknown>) => {
+    void fetch("/api/failure-ledger", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        domain: "story",
+        error_code: errorCode,
+        program_id: (detail.program_id as string) ?? null,
+        phase: "ui_state_save",
+        detail,
+      }),
+    })
+      .then((r) => r.json())
+      .then((d) => { if (!d?.ok) console.warn("[GUARD-LEDGER] 신고 실패:", d?.error); })
+      .catch((e) => console.warn("[GUARD-LEDGER] 신고 실패:", e));
+  }, []);
+
   // ── [STORY-WRITE-GUARD-01] 스토리 쓰기 가드 ──────────────────────────────
   // 실측된 병소(재현 완료): 핸들러들이 `applyStory(editFragments 파생)`을 불러
   //   스토리(선택 9개)가 **조각 웅덩이 전체(330)** 로 치환됐다. 보류 이동 1회로 9 → 329.
@@ -612,6 +634,14 @@ const Index: React.FC = () => {
         + `ratio=${(nextFids.length / serverFidCount).toFixed(1)}x origin=${storyOriginRef.current} `
         + `first3=[${nextFids.slice(0, 3).join(", ")}]`,
       );
+      reportGuardReject("story_fids_surge", {
+        program_id: programId,
+        before: serverFidCount,
+        after: nextFids.length,
+        ratio: Number((nextFids.length / serverFidCount).toFixed(2)),
+        origin: storyOriginRef.current,
+        first3: nextFids.slice(0, 3),
+      });
       return { status: "REJECTED_STORY_SPIKE" } as any;
     }
     // [FOREIGN-STORY-GUARD] 남의 원고 저장 차단 — 급증 안전망과 같은 자리, 조건만 하나 더.
@@ -632,11 +662,19 @@ const Index: React.FC = () => {
           + `program=${programId} fids=${nextFids.length} 이 프로젝트 조각=${editFragments.length} `
           + `교집합=0 origin=${storyOriginRef.current} first3=[${nextFids.slice(0, 3).join(", ")}]`,
         );
+        reportGuardReject("foreign_story_fids", {
+          program_id: programId,
+          fids: nextFids.length,
+          project_fragments: editFragments.length,
+          intersection: 0,
+          origin: storyOriginRef.current,
+          first3: nextFids.slice(0, 3),
+        });
         return { status: "REJECTED_FOREIGN_STORY" } as any;
       }
     }
     return videoService.saveProjectState(programId, { ui_state: JSON.stringify({ ...unknown, ...snapshot }) });
-  }, [OWNED_UI_FIELDS, setStoryPlan, editFragments]);
+  }, [OWNED_UI_FIELDS, setStoryPlan, editFragments, reportGuardReject]);
 
   const saveUiStateMergedTracked = useCallback((programId: string, snapshot: Record<string, any>) => {
     const p = saveUiStateMerged(programId, snapshot);

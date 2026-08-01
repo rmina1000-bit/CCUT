@@ -1708,6 +1708,57 @@ async def get_fragments_by_source(source_id: str):
         "fragments": _inject_display_names(fragments, source_id)
     }
 
+# ── [LEDGER-WRITE 2026-08-01] 프론트에서 원장에 신고하는 유일한 경로 ──────────────
+#   왜 필요한가: STORY-WRITE-GUARD 는 프론트(Index.tsx)에 있고, 이미 "외래 원고"·
+#   "fids 급증"을 정확히 검출하는데 결과가 콘솔에만 남았다. 콘솔은 국장이 devtools 를
+#   열고 있을 때만 존재한다 — 오늘 전사 84% 소실이 스물두 시간 숨어 있던 것과 같은 구조다.
+#
+#   화이트리스트로 막지 않는다: failure_ledger 의 원칙 그대로(KNOWN_ERROR_CODES 주석)
+#   "분류를 모른다고 사실을 버리면 원장이 아니다". domain·error_code 를 받은 대로 적는다.
+#   append-only 라 UPDATE/DELETE 경로는 만들지 않는다.
+class FailureLedgerRequest(BaseModel):
+    domain: str
+    error_code: str
+    program_id: Optional[str] = None
+    source_id: Optional[str] = None
+    input_hash: Optional[str] = None
+    phase: Optional[str] = None
+    attempt: Optional[int] = None
+    detail: Optional[dict] = None
+
+
+@app.post("/failure-ledger")
+async def failure_ledger_record(req: FailureLedgerRequest):
+    """실패 1건을 원장에 적는다. 신고 실패가 호출부(본선)를 막지 않게 응답으로만 알린다.
+
+    반환: {ok: true, id} 또는 {ok: false, error} — 어느 쪽이든 HTTP 200.
+      500 을 던지면 프론트의 catch 가 가드 흐름 안에서 터진다. 신고는 곁가지이고,
+      곁가지가 본선을 죽이면 안 된다(ai/asr_repetition_report 의 report_safe 와 같은 규율).
+      다만 조용히 삼키지도 않는다 — ok=false 와 사유를 그대로 돌려준다.
+    """
+    if not req.domain or not req.error_code:
+        return {"ok": False, "error": "domain/error_code 필수"}
+    try:
+        import failure_ledger as _fl
+        row_id = _fl.record(
+            req.domain,
+            req.error_code,
+            program_id=req.program_id,
+            source_id=req.source_id,
+            input_hash=req.input_hash,
+            phase=req.phase,
+            attempt=req.attempt,
+            detail=req.detail,
+        )
+        print(f"[LEDGER-WRITE] {req.domain}/{req.error_code} "
+              f"program={req.program_id} -> #{row_id}", flush=True)
+        return {"ok": True, "id": row_id}
+    except Exception as exc:
+        err = f"{type(exc).__name__}: {exc}"
+        print(f"[LEDGER-WRITE][BROKEN] 신고를 적지 못했다 — {err}", flush=True)
+        return {"ok": False, "error": err}
+
+
 class ChatSearchRequest(BaseModel):
     message: str
     top_k: Optional[int] = 12
