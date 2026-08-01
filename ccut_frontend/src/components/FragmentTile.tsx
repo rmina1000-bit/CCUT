@@ -183,6 +183,16 @@ const FragmentTile: React.FC<FragmentTileProps> = ({
           draggable={false}
           src={resolvedUrl}
           alt={fragment.fragment_id}
+          // [THUMB-LAZY 2026-08-01] 화면 밖 썸네일까지 전부 받고 있었다.
+          //   실측(Adhara 40소스): img 95개 중 화면 안 25개 — 74%가 낭비.
+          //   같은 오리진 동시연결 6개라 95건 + 영상 13건이 서로 줄을 서고,
+          //   그 대기가 썸네일 총 43.2s 중 39.4s(91%)다. 개별 요청은 0.9s 이하로 빠르다.
+          //   느린 게 아니라 굶는 것이므로, 줄 자체를 줄인다.
+          //   ★ 이 변경의 효과는 **아직 검증되지 않았다.** 표시되지 않은 브라우저 창에서는
+          //     Chrome 이 lazy 이미지를 아예 로드하지 않아, 내 환경에서 재면 4,600배 같은
+          //     착시 수치가 나온다(07-31 실측 후 되돌린 그 자리). 국장 화면 측정 대기.
+          loading="lazy"
+          decoding="async"
           className="absolute inset-0 w-full h-full object-cover opacity-80 group-hover:opacity-100 transition-opacity duration-200 z-[1]"
           onLoad={(e) => {
             const img = e.currentTarget;
