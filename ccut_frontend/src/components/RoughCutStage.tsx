@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { ChevronDown, Loader2 } from "lucide-react";
 
 import type { MiniPlayTarget } from "@/components/FragmentMiniPlayer";
@@ -188,6 +188,35 @@ const RoughCutStage: React.FC<RoughCutStageProps> = ({
     };
   }, [data, fragmentForSpan, ledgerItems]);
 
+  // [TRANSCRIPT-FOLD 2026-08-01 재개정] 높이를 픽셀로 추측하지 않는다.
+  //   실패 이력: 12.4rem -> 3줄, 32rem -> 국장 화면에선 "그냥 계속 전사".
+  //   원인은 행 높이가 환경마다 다르기 때문이다 — 같은 조각이 내 창에선 4줄로 접히고
+  //   국장 창에선 1줄이다(중앙 패널 실폭이 다르다). 행 높이를 상수로 박는 순간 틀린다.
+  //   그래서 **6번째 행이 실제로 시작하는 위치**를 재서 거기서 자른다. 폭·글꼴·줄바꿈이
+  //   달라져도 언제나 6줄이 남는다. 못 재면(행 6개 미만 등) 자르지 않는다.
+  const bodyRef = useRef<HTMLDivElement>(null);
+  const [compactHeight, setCompactHeight] = useState<number | null>(null);
+  const VISIBLE_ROWS = 6;
+  useLayoutEffect(() => {
+    if (!folded) { setCompactHeight(null); return; }
+    const el = bodyRef.current;
+    if (!el) return;
+    const measure = () => {
+      const rows = el.querySelectorAll<HTMLElement>("[data-rough-cut-span]");
+      if (rows.length <= VISIBLE_ROWS) { setCompactHeight(null); return; }
+      const top = el.getBoundingClientRect().top;
+      const cut = rows[VISIBLE_ROWS].getBoundingClientRect().top;
+      const h = Math.round(cut - top + el.scrollTop);
+      if (h > 0) setCompactHeight(h);
+    };
+    measure();
+    // 폭이 바뀌면 줄바꿈이 바뀌고 6줄의 높이도 달라진다 — 다시 잰다.
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [folded, displayData]);
+
+
   const sourceUrls = useMemo(
     () => new Map(
       sourceEntries
@@ -272,8 +301,11 @@ const RoughCutStage: React.FC<RoughCutStageProps> = ({
           한 조각을 한 줄로 합친 뒤로 행이 두꺼워져서, 처음 잡은 12.4rem 은 3행밖에
           못 보여줬다. 중앙값 x5 = 505px 에 맞춰 32rem(512px)로 올린다. */}
       <div
+        ref={bodyRef}
         data-transcript-body={folded ? "compact" : "full"}
-        className={folded ? "max-h-[32rem] overflow-y-auto" : undefined}
+        data-transcript-compact-h={compactHeight ?? undefined}
+        className={folded ? "overflow-y-auto" : undefined}
+        style={folded && compactHeight ? { maxHeight: compactHeight } : undefined}
       >
         <RoughCutOutline
           data={displayData}
