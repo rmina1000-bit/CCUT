@@ -51,6 +51,42 @@ SCRIPT/EVIDENCE/PRODUCT 등급 섞기 금지.
 - expected를 양쪽에 박는 자기비교 금지. 한쪽은 DOM raw 실측.
 ```
 
+## 4-1. 브라우저 DOM 실측 절차 (EYE-01 2026-08-02 확정)
+
+실행자가 화면을 스스로 재는 방법. **이 절차 밖으로 나가면 여섯 차수를 헛되이 쓴다.**
+
+```
+찾기   document.querySelectorAll('[role="button"]') + textContent 매칭
+클릭   element.click()          (좌표 클릭보다 확실)
+측정   getBoundingClientRect / scrollTop / scrollHeight / querySelectorAll
+```
+
+**★ innerText 절대 금지.**
+`document.visibilityState === "hidden"` 인 창(브라우저 pane 미표시 등)에서는
+`innerText` 가 **항상 빈 문자열**을 반환한다. 레이아웃 의존 API 이기 때문이다.
+`textContent` · `getBoundingClientRect` · `click()` 은 같은 조건에서 정상 동작한다.
+
+**★ 접근성 트리의 "button" 을 실제 `<button>` 태그로 믿지 마라.**
+`read_page` 류가 `button "Freesia"` 로 보여주는 것이 DOM 에서는
+`<div role="button">` 일 수 있다. 태그를 직접 확인하고 셀렉터를 정한다.
+
+### 이 절차가 나온 경위 (되풀이 방지용 기록)
+2026-08-02, 실행자가 여섯 차수 연속 "브라우저 pane 미표시로 실측 불가"라고 보고했다.
+증상은 `버튼 17x17` · `textContent 공백` · `프로젝트 클릭 무반응` 이었다.
+국장 지시서도 "pane 미표시 → 레이아웃 계산 정지"를 유력 가설로 적었다.
+
+실측으로 **둘 다 틀렸다**:
+- `bodyRect 1280x720`, 프로젝트 항목 `rect 215x58` — 레이아웃은 한 번도 멈추지 않았다
+- 17x17 짜리는 사이드바 **아이콘 버튼**이었다. 엉뚱한 것을 재고 있었다
+- 프로젝트 항목은 `<div role="button">` 이라 `querySelectorAll('button')` 에 안 잡혔다
+
+**환경 제약이 아니라 실행자의 셀렉터 오류였다.**
+"도구 탓"이 여섯 번 반복되면 도구가 아니라 자기 사용법을 의심한다.
+
+### 이 절차로도 못 재는 것
+"보기 좋은가" 는 여전히 국장 몫이다. DOM 수치는 구조·순서·개수·좌표를 증명할 뿐
+미감을 증명하지 않는다. PRODUCT PASS 기준은 그대로다.
+
 ## 5. 방이전 시
 이 문서 + `CCUT_VERIFICATION_STATUS_TABLE.md` + `AGENT_EVIDENCE_RULES.md`를 방이전 전달문에 **반드시 포함**. 새 방 Claude는 즉시 `AGENT_EVIDENCE_RULES.md`의 Claude 자기강제 규칙을 적용한다.
 
