@@ -14,7 +14,19 @@ import sqlite3
 BACKEND_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 DB_PATH = os.path.join(BACKEND_DIR, "ccut_app.db")
 
-_KINDS = ("message", "generation")
+# [TIMELINE-REF 2026-08-02] transcript_ref 추가 — 전사가 대화 흐름의 '언제'였는지.
+#   왜 필요했나: 전사 노드는 스트림에서 ts=0 하드코딩이라 늘 맨 위에 몰렸다
+#   (CenterPanel.tsx:2953). 실측(Freesia): 전사 앞 msg 0개 / 뒤 183개인데 그 아래
+#   첫 구분선이 "7월 31일"이다 — 8/1 에 만들어진 원고가 7/31 대화 위에 있었다.
+#   ★roughCut.created_at 은 '산출물이 만들어진 시각'이지 '대화에 등장한 시각'이 아니다
+#     (main.py:6325 POST 핸들러가 record 를 새로 만들 때 now(utc) 를 찍고,
+#      재생성하면 통째로 갱신된다). 그래서 그 값을 순서로 쓰지 않는다.
+#   ★진실을 두 벌 만들지 않는다 — 원문은 복제하지 않는다. 참조(ref_id)만 남긴다.
+#   ★client_id 는 결정론(tref_<input_hash>). Date.now() 를 넣으면 STAGE-DUP 과
+#     같은 함정에 빠져 열 때마다 한 행씩 쌓인다.
+#   ※ 이 튜플은 파이썬 상수다. project_timeline 에 kind CHECK 제약이 없으므로
+#     여기 한 줄 추가는 스키마 변경이 아니다(DDL 0 · 마이그레이션 0).
+_KINDS = ("message", "generation", "transcript_ref")
 
 
 def _connect():

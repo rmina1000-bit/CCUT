@@ -178,6 +178,9 @@ interface CenterPanelProps {
   timelineHasMore?: boolean;
   timelineLoadingMore?: boolean;
   onLoadOlderTimeline?: () => void;
+  /** [TIMELINE-REF 2026-08-02] 전사가 대화에 등장한 시각(원장 transcript_ref).
+   *  null 이면 기록이 없다는 뜻 — 그때는 종전대로 맨 위(ts=0). */
+  transcriptRefTs?: number | null;
 }
 
 function parseDirectionFromText(text: string): Direction | null {
@@ -432,6 +435,7 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
   timelineHasMore = false,
   timelineLoadingMore = false,
   onLoadOlderTimeline,
+  transcriptRefTs = null,
 }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const videoRefA = useRef<HTMLVideoElement>(null);
@@ -3005,13 +3009,20 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
                 //   국장 확정: 전부 흘러간다. 붙박이는 없다.
                 //   ★ 없는 쪽은 아이템을 만들지 않는다 — 빈 말풍선을 띄우지 않는다.
                 //   ts 는 지어내지 않는다:
-                //     전사   = 0. 분석이 대화보다 먼저 끝났으니 맨 위가 시간순으로 맞다.
-                //              (전사 생성 시각을 들고 있는 값이 프론트에 없다 — 국장 보고 완료)
+                //     전사   = 원장의 transcript_ref 시각. 없으면 0(종전대로 맨 위).
+                // [TIMELINE-REF 2026-08-02 정정] 위 줄은 원래 "전사 생성 시각을 들고 있는
+                //   값이 프론트에 없다"였다. ★틀린 주석이었다 — 값은 두 개나 있었다.
+                //   (1) roughCut.created_at 은 DB 에 있고 응답에도 실린다(main.py:6162).
+                //       다만 그것은 '산출물이 만들어진 시각'이라 재생성하면 갱신된다
+                //       (main.py:6325) — 대화 흐름의 자리로 쓸 수 없다.
+                //   (2) 그래서 '대화에 등장한 시각'을 원장에 참조 사건으로 따로 남기고
+                //       (transcript_ref · client_id=tref_<input_hash> 결정론) 그 값을 쓴다.
+                //   실측이 시킨 일이다: ts=0 이면 8/1 에 만든 원고가 7/31 대화 위에 놓였다.
                 //     편집안 = 가장 최근 편집안이 만들어진 시각(proposalHistory 승계).
                 //              아직 없으면 0 이고, 그때는 배열 순서상 전사 다음에 온다
                 //              (Array#sort 는 안정 정렬).
                 ...(stageBlock.transcript
-                  ? [{ kind: "transcript" as const, ts: 0 }] : []),
+                  ? [{ kind: "transcript" as const, ts: transcriptRefTs ?? 0 }] : []),
                 ...(stageBlock.proposal
                   ? [{ kind: "proposal" as const,
                        ts: proposalHistory.length

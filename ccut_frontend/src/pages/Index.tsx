@@ -357,6 +357,9 @@ const Index: React.FC = () => {
   const [timelineHasMore, setTimelineHasMore] = useState(false);
   const [timelineOldestEntry, setTimelineOldestEntry] = useState<number | null>(null);
   const [timelineLoadingMore, setTimelineLoadingMore] = useState(false);
+  // [TIMELINE-REF 2026-08-02] 전사가 대화 흐름에 등장한 시각 (원장의 transcript_ref 행).
+  //   null 이면 아직 기록이 없다는 뜻이고, 그때는 종전대로 맨 위에 둔다(위치 변경 없음).
+  const [transcriptRefTs, setTranscriptRefTs] = useState<number | null>(null);
   // 이 프로젝트의 ui_state 재수화가 끝났는가 (저장이 복원을 앞질러 덮는 것을 막는 문턱)
   const [uiRestoredFor, setUiRestoredFor] = useState<string | null>(null);
 
@@ -1628,12 +1631,18 @@ const Index: React.FC = () => {
                 if (tl?.entries?.length && isMounted) {
                   const msgs: any[] = [];
                   const gens: any[] = [];
+                  let refTs: number | null = null;
                   for (const en of tl.entries) {
                     syncedTimelineIdsRef.current.add(en.client_id);
                     // [C 증발 방어] 재수화 메시지는 항상 확정 상태 — 혹 isInterpreting=true가
                     // 실린 payload가 있어도(중단 세션 잔재) 스피너로 숨지 않게 강제 해제.
                     if (en.kind === "message" && en.payload) msgs.push({ ...en.payload, isInterpreting: false });
                     else if (en.kind === "generation" && en.payload) gens.push(en.payload);
+                    // [TIMELINE-REF 2026-08-02] 전사가 대화의 '언제'였는지 — 참조 사건 하나.
+                    //   가장 이른 것을 쓴다. 재생성으로 행이 늘어도 최초 등장 자리는 안 밀린다.
+                    else if (en.kind === "transcript_ref") {
+                      refTs = refTs === null ? en.ts : Math.min(refTs, en.ts);
+                    }
                   }
                   if (msgs.length) {
                     // [TIMELINE-RACE] 스켈레톤이 이미 지나간 뒤 복원이 도착하면(HTTP가
@@ -1689,6 +1698,7 @@ const Index: React.FC = () => {
                   //   구판은 이 값을 DEBUG_LOG 안에서만 읽었다 — 서버가 "더 있다"고 말하는데
                   //   듣는 코드가 0이었고, 그래서 Merope 614행 중 314행이 도달 불가였다.
                   //   커서는 이번 페이지의 ★최소 entry_id (서버가 entry_id 오름차순으로 준다).
+                  setTranscriptRefTs(refTs);
                   setTimelineHasMore(!!tl.has_more);
                   setTimelineOldestEntry(
                     tl.entries.reduce((mn: number, en: any) =>
@@ -1842,6 +1852,40 @@ const Index: React.FC = () => {
     }
   }, [activeNavItem, timelineOldestEntry, timelineLoadingMore,
       proposalHistory, hydrateProposalHistory, setStoryPlan]);
+
+  // [TIMELINE-REF 2026-08-02] 전사가 대화에 등장한 사건을 원장에 한 번만 남긴다.
+  //   ★원문은 복제하지 않는다 — payload 는 참조뿐이다(ref_kind·ref_id·payload_version).
+  //     전사 본문의 진실은 계속 ui_state.roughCut 하나다(무접촉).
+  //   ★client_id 는 결정론: tref_<input_hash>. Date.now() 를 쓰면 프로젝트를 열 때마다
+  //     한 행씩 쌓인다 — STAGE-DUP 이 정확히 그 함정이었다(ai_stage_*_${Date.now()}).
+  //     input_hash 는 전사 내용의 지문이라, 같은 전사면 몇 번을 열어도 같은 client_id 이고
+  //     uq_timeline_client 가 두 번째부터 조용히 막는다(added=0).
+  //   ★복원이 끝난 뒤에만 쓴다(uiRestoredFor) — 이미 있는 기록을 못 보고 새로 쓰면
+  //     최초 등장 시각이 오늘로 덮인다.
+  useEffect(() => {
+    if (!activeNavItem || !activeNavItem.startsWith("proj_")) return;
+    if (uiRestoredFor !== activeNavItem) return;      // 복원 전에는 판단하지 않는다
+    if (transcriptRefTs !== null) return;             // 이미 원장에 있다
+    const inputHash = roughCutData?.input_hash;
+    if (!inputHash) return;                           // 전사(원고)가 아직 없다
+    const cid = `tref_${inputHash}`;
+    if (syncedTimelineIdsRef.current.has(cid)) return;
+    syncedTimelineIdsRef.current.add(cid);
+    const ts = Date.now();
+    videoService.appendTimeline(activeNavItem, [{
+      kind: "transcript_ref", client_id: cid, ts,
+      payload: { ref_kind: "rough_cut", ref_id: inputHash, payload_version: 1 },
+    }])
+      .then((r) => {
+        // added=0 이면 이미 있던 사건이다 — 그때는 복원이 준 시각을 그대로 쓴다.
+        if (r?.added) setTranscriptRefTs(ts);
+        DEBUG_LOG && console.log(`[TIMELINE-REF] transcript_ref ${cid} (added=${r?.added})`);
+      })
+      .catch((err) => {
+        syncedTimelineIdsRef.current.delete(cid);
+        DEBUG_LOG && console.warn("[TIMELINE-REF] append 실패 — 다음 변경 시 재시도", err);
+      });
+  }, [activeNavItem, uiRestoredFor, transcriptRefTs, roughCutData?.input_hash]);
   useEffect(() => {
     if (!activeNavItem || !activeNavItem.startsWith("proj_")) return;
     if (isSwitchingProject) return;
@@ -3535,6 +3579,7 @@ const Index: React.FC = () => {
             timelineHasMore={timelineHasMore}
             timelineLoadingMore={timelineLoadingMore}
             onLoadOlderTimeline={loadOlderTimeline}
+            transcriptRefTs={transcriptRefTs}
           />
         )}
       </div>
