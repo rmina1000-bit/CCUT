@@ -436,18 +436,83 @@ _QWEN_TOOL_SYSTEM = (
 )
 
 
-def _qwen_tool_show(user_text):
+def _qwen_answer_cards(reply, source_ids=None):
+    """[CHAT-ROOT 3-B-1] 큐원이 답에 적은 조각 id 로 카드를 만든다.
+
+    왜 필요했나: qwen_tools 분기가 reply 만 돌려주고 results 를 비워 둬서
+      답은 맞는데 화면에 카드가 안 떴다(기존 경로는 :645 에서 채운다).
+    ★ 형식은 fragment_show._card 그대로 쓴다 — 새 필드·새 형식을 만들지 않는다.
+    ★ 답에 없는 조각을 억지로 채우지 않는다. 못 찾으면 빈 배열이다.
+    """
+    fids = []
+    # _re 는 이 모듈에서 함수 안 지역 import 라 모듈 레벨엔 없다 — _re_mod 를 쓴다.
+    for m in _re_mod.finditer(r"\b(?:SF|VF)\w*_SRC_[0-9A-Za-z_]+", reply or ""):
+        f = m.group(0).rstrip(".,)）")
+        if f not in fids:
+            fids.append(f)
+    if not fids:
+        return []
+    _qwen_answer_cards.last_fid_count = len(fids)
+    try:
+        import sqlite3 as _sq
+        from engine.fragment_show import _card, DB_PATH, THUMBS_DIR  # noqa: F401
+        con = _sq.connect("file:" + DB_PATH.replace("\\", "/") + "?mode=ro", uri=True)
+    except Exception as e:
+        print(f"[QWEN-TOOLS][CARD] 카드 생성 실패(답변은 유지): {e}", flush=True)
+        return []
+    try:
+        src_meta = {r[0]: (r[1], r[2]) for r in con.execute(
+            "SELECT source_id, title, file_path FROM sources")}
+        ph = ",".join("?" for _ in fids)
+        rows = []
+        # 조각은 두 저장처에 흩어져 있다 — semantic_fragments(분절)와
+        # evidence_board(원본 증거 구간). 큐원이 어느 쪽 id 를 답하든 카드가 되게 한다.
+        for tbl in ("semantic_fragments", "evidence_board"):
+            try:
+                for r in con.execute(
+                        f'SELECT fragment_id, source_id, start, "end" FROM {tbl} '
+                        f'WHERE fragment_id IN ({ph})', fids):
+                    if not any(x[0] == r[0] for x in rows):
+                        rows.append(tuple(r))
+            except Exception:
+                continue
+        proj = set(source_ids or [])
+        if proj:
+            rows = [r for r in rows if r[1] in proj]
+        cards = [_card(con, r[0], r[1], r[2], r[3], src_meta) for r in rows]
+    except Exception as e:
+        print(f"[QWEN-TOOLS][CARD] 조회 실패(답변은 유지): {e}", flush=True)
+        cards = []
+    finally:
+        con.close()
+    print(f"[QWEN-TOOLS][CARD] 답변에서 fid {len(fids)}건 -> 카드 {len(cards)}건", flush=True)
+    return cards
+
+
+def _qwen_tool_show(user_text, source_ids=None):
     """조회 의도를 큐원이 DB 를 직접 보고 답하게 한다. 실패하면 None (기존 경로 폴백).
 
     ★ 조용히 실패하지 않는다 — 이 방 원칙: 안 닿는 방어는 영원히 조용하다.
       게이트가 켜졌는데 도구를 한 번도 안 불렀으면 그 사실을 로그로 말한다.
+    ★ [CHAT-ROOT 3-B-2] 지금 프로젝트 안에서 찾는다. 조회할 수 있는 테이블에는
+      제한을 걸지 않는다 — 프로젝트 조건은 재갈이 아니라 사용자 기대다.
     """
     if not _qwen_tools_enabled():
         return None
+    system_text = _QWEN_TOOL_SYSTEM
+    if source_ids:
+        system_text += (
+            "\n[지금 프로젝트의 소스]\n" + ", ".join(str(s) for s in source_ids) + "\n"
+            "조각을 찾을 때는 반드시 이 source_id 들로 범위를 좁혀라 "
+            "(예: AND source_id IN (...)). 다른 프로젝트 조각은 답에 넣지 않는다. "
+            "이 범위 안에 없으면 없다고 말한다.\n")
+    else:
+        print("[QWEN-TOOLS][NO-SCOPE] source_ids 가 비어 전역 조회가 된다 "
+              "(프로젝트 미선택 상태로 추정)", flush=True)
     try:
         from admin import ai_tools
         r = hub._ollama_chat_tools(
-            [{"role": "system", "content": _QWEN_TOOL_SYSTEM},
+            [{"role": "system", "content": system_text},
              {"role": "user", "content": user_text}],
             ai_tools.ollama_tool_defs(["db_query"]), ai_tools.run,
             timeout=120, temperature=0, max_rounds=6)
@@ -468,7 +533,21 @@ def _qwen_tool_show(user_text):
         return None
     print(f"[QWEN-TOOLS] tool_calls={r['tool_calls']} rounds={r['rounds']} "
           f"limit={r['hit_round_limit']}", flush=True)
-    return {"reply": text.strip(), "trace": r}
+    _qwen_answer_cards.last_fid_count = 0
+    cards = _qwen_answer_cards(text, source_ids)
+    # [CHAT-ROOT 3-B-2 실측 2026-08-02] 프롬프트만으로는 범위가 안 지켜진다.
+    #   Merope(딸기 소스 없음)에서 3/3 모두 다른 프로젝트의 VF1_SRC_009AE91F 를 답했다 —
+    #   7B 는 system 의 "이 source_id 로 좁혀라"를 따르지 않는다(관제실 Claude 와 갈리는 지점).
+    #   그래서 말이 아니라 좌표로 막는다: 답에 조각을 적었는데 그중 이 프로젝트 것이
+    #   하나도 없으면, 그 답은 범위 밖이므로 채택하지 않는다.
+    #   ★ 조회 테이블에는 여전히 제한이 없다. 막는 것은 '남의 프로젝트 조각을 답하는 것'뿐이다.
+    if source_ids and getattr(_qwen_answer_cards, "last_fid_count", 0) > 0 and not cards:
+        print(f"[QWEN-TOOLS][OUT-OF-SCOPE] 답이 범위 밖 조각을 가리켰다 "
+              f"(fid {_qwen_answer_cards.last_fid_count}건, 프로젝트 내 0건) -> 없음으로 답한다",
+              flush=True)
+        return {"reply": "지금 프로젝트 안에는 그런 조각이 없어요.",
+                "trace": r, "results": []}
+    return {"reply": text.strip(), "trace": r, "results": cards}
 
 
 def _estimate_chat_tokens(text):
@@ -690,10 +769,13 @@ def route_edit_intent(source_ids=None, input_text="", recent_messages=None,
         #   기본 OFF 이므로 이 분기는 평상시 통째로 건너뛴다(회귀 없음).
         #   실패·무응답이면 None 이라 아래 기존 임베딩 경로가 그대로 산다.
         if _show_subject:
-            _qt = _qwen_tool_show(t)
+            _qt = _qwen_tool_show(t, source_ids)
             if _qt is not None:
-                return _resp("show_fragments", _qt["reply"], confidence=0.9,
-                             via="qwen_tools")
+                _r = _resp("show_fragments", _qt["reply"], confidence=0.9,
+                           via="qwen_tools")
+                # [3-B-1] 기존 조회 경로(:645)와 같은 형태로 카드를 싣는다.
+                _r["results"] = _qt.get("results") or []
+                return _r
         if found is not None:
             n = len(found.get("results") or [])
             who = found.get("person")
