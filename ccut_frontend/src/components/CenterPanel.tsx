@@ -3014,13 +3014,17 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
         {/* [CHATSCROLL-FIX-01] 위에서 읽는 중에 새 내용이 오면 끌어내리지 않고 여기로 알린다.
             sticky라 기존 레이아웃을 건드리지 않는다 (높이 점유 없음). */}
         {chatHasNew && (
-          <div className="sticky bottom-2 z-30 self-center pointer-events-none">
+          <div className="sticky bottom-5 z-30 self-center pointer-events-none">
+            {/* [C-2 2026-08-02] 동작은 옳았다 — 메시지는 정상 적재되는데 배지가 눈에 안 띄어
+                국장이 '제안이 사라졌다'고 읽었다(실측 [CHATSCROLL][HOLD] user_scrolled_up).
+                ★ 스크롤 로직은 손대지 않는다. 자동 추종으로 되돌리면 원래 결함으로 돌아간다.
+                바꾼 것은 색·크기·위치뿐이다. */}
             <button
               type="button"
               onClick={scrollChatToBottom}
-              className="pointer-events-auto rounded-full border border-white/15 bg-black/70 px-3 py-1 text-[12px] text-white/85 shadow-lg backdrop-blur hover:bg-black/85"
+              className="pointer-events-auto flex items-center gap-1.5 rounded-full border border-primary/50 bg-primary px-4 py-2 text-[13px] font-bold text-primary-foreground shadow-[0_4px_20px_-2px_hsl(var(--primary)/0.75)] ring-2 ring-primary/25 animate-pulse hover:animate-none hover:brightness-110"
             >
-              새 내용 ↓
+              새 내용 도착 ↓
             </button>
           </div>
         )}
