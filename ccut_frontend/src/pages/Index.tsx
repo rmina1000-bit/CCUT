@@ -3371,6 +3371,26 @@ const Index: React.FC = () => {
   const stageVoiceRef = useRef<string | null>(null);
   useEffect(() => {
     if (!storyGate.enabled) return;
+    // [STAGE-LOADING 2026-08-02] 아직 모르는 것을 '분석 중'이라고 말하지 않는다.
+    //   storyStageBadge 의 default 분기가 key="scanned"("분석 중")다(storyMode.ts:78).
+    //   그 자리는 진짜 단계가 아니라 story_state 를 ★아직 못 받은 순간이 흘러든 곳이다.
+    //   그래서 프로젝트를 열 때마다 scanned -> awaiting 두 줄이 원장에 쌓였다
+    //   (실측 175 -> 177 -> 179, 열기 1회당 +2. Freesia 안내 121행 중 재출현 116).
+    //   ★화면에서 숨기는 게 아니라 생성 자체를 막는다 — 이 effect 가 원장 유일 입구다
+    //     (storyPlan.messages 로 들어가면 Index.tsx:1841 이 그대로 append 한다).
+    //   ★로딩이 끝나면 이 effect 는 실제 확정 단계로 다시 돌아 한 번 말한다.
+    //     stageVoiceRef 는 말을 실제로 냈을 때만 갱신하므로 건너뛴 것이 기록을 오염시키지 않는다.
+    //   ★loading 하나로는 안 막힌다(1회차 실측: 189 -> 191, 여전히 +2).
+    //     loading = active && (...) 인데 active = (appState === "complete") 라서,
+    //     프로젝트를 막 열어 appState 가 아직 complete 가 아닌 창에서는
+    //     loading 이 false 이면서 story 는 null 이다(useStoryGate.ts:106~110 이
+    //     그 분기에서 story=null · storyReady=true 로 두고 나간다). 그 창이 '분석 중'의 문이었다.
+    //   ★그래서 '조회 중'이 아니라 ★'아직 모른다'로 막는다.
+    //     게이트가 켜져 있는데 원고를 못 받았으면 단계를 말할 자격이 없다.
+    //     진짜 분석 중인 프로젝트는 서버가 story_state="scanned" 를 실어 주므로
+    //     (실측: /story/{id} 는 늘 ok:true + story_state 를 준다) 그 경우는 그대로 말한다.
+    if (storyGate.loading) return;
+    if (storyGate.enabled && !storyGate.story) return;
     if (!activeNavItem?.startsWith("proj_")) return;
     if (!hasProjectMedia) return;
     const sig = `${activeNavItem}:${storyStage.key}`;
@@ -3396,7 +3416,7 @@ const Index: React.FC = () => {
       }),
       messages: [...((prev?.messages) ?? []), stageMsg],
     }));
-  }, [storyGate.enabled, activeNavItem, hasProjectMedia,
+  }, [storyGate.enabled, storyGate.loading, storyGate.story, activeNavItem, hasProjectMedia,
       storyStage.key, storyStage.label, storyStage.hint,
       sourceEntries.length, setStoryPlan]);
 
