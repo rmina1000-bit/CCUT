@@ -350,6 +350,33 @@ def _transcript_hits(tokens, sids, limit=60):
     return found
 
 
+# [COUNT-TRUTH 2026-08-03] 근거 주입·상태 즉답을 한 쌍으로 묶는다.
+#   같은 두 줄이 네 곳(chat 분기 · speed bypass · 대화신호 그물 · 질문 그물)에 필요해서
+#   ★한 곳에 두고 부른다 — 네 곳이 서로 다르게 굴면 그것이 다음 '네 수 갈림'이 된다.
+def _evidence_facts(t, source_ids=None):
+    try:
+        return _fragment_evidence(t, source_ids)[2] or ""
+    except Exception as e:
+        print(f"[COUNT-TRUTH][WARN] 근거 주입 실패 ({e})")
+        return ""
+
+
+def _zero_or_uncertain_reply(t, source_ids=None):
+    """조각을 묻는 말이고 없음/애매함이면 ★서버가 낼 고정 문구. 아니면 None."""
+    try:
+        if not _is_fragment_question(t):
+            return None
+        state, _total, _blk = _fragment_evidence(t, source_ids)
+        if state == "ZERO":
+            return "그런 조각은 이 프로젝트에서 못 찾았어요."
+        if state == "UNCERTAIN":
+            return ("확실하지 않습니다. 비슷해 보이는 조각은 있는데 찾으시는 것과 "
+                    "맞는지 자신이 없어요. 어떤 장면인지 한 가지만 더 알려주시겠어요?")
+    except Exception as e:
+        print(f"[COUNT-TRUTH][WARN] 상태 판정 실패 ({e})")
+    return None
+
+
 def _fragment_evidence(input_text, source_ids=None):
     """(state, total, block) — state 는 HAVE / ZERO / UNCERTAIN / SKIP.
     ★판정은 여기서 끝난다. 모델에게 '세어라'·'없으면 없다고 해라'를 시키지 않는다.
@@ -377,20 +404,29 @@ def _fragment_evidence(input_text, source_ids=None):
             have = {str(r.get("fragment_id")) for r in hits}
             hits = hits + [v for k, v in kw.items() if k not in have]
             top = max(top, 1.0)          # 낱말 일치는 확실하다 -> UNCERTAIN 으로 새지 않는다
-        # ★_P00N 형제 병합 — 점수 높은 쪽을 대표로 두고 시간 구간만 합친다.
-        #   전사·장면은 대표의 것을 쓴다(형제는 같은 장면의 앞뒤라 거의 같다).
-        merged = {}
-        for r in hits:                     # hits 는 점수 내림차순
-            g = _sf_group(r.get("fragment_id"))
-            if g in merged:
-                m = merged[g]
-                m["start"] = min(float(m.get("start") or 0), float(r.get("start") or 0))
-                m["end"] = max(float(m.get("end") or 0), float(r.get("end") or 0))
-                m["_parts"] = m.get("_parts", 1) + 1
-            else:
-                m = dict(r); m["fragment_id"] = g; m["_parts"] = 1
-                merged[g] = m
-        rows = list(merged.values())
+        # [COUNT-TRUTH 2026-08-03] ★_P00N 병합을 걷어낸다 — 단위가 틀렸다.
+        #   국장 답: "원본맵에서 조각단위를 일일이 셌다" -> 그 단위가 유일한 정답 기준이다.
+        #   원본맵이 무엇을 그리는지 코드로 확정했다:
+        #     OriginalPanorama.tsx:167  {fragments.map((f,i) => ...)}   타일 1개 = 배열 원소 1개
+        #     <- Index.tsx:3666  sourceEntries[...].fragments
+        #     <- GET /proposals/project/{id}/sources  (videoService.ts:291)
+        #     <- main.py:2878  bams.get_semantic_fragments(sid)
+        #     <- archive/manager.py:565  filter_by(source_id).order_by(start).all()
+        #   ★병합 코드도 필터도 0. 즉 원본맵 타일 = semantic_fragments ★행 하나.
+        #   실측 재현: SRC_3111FA4F 의 물속 구간 131.0~354.0s 가 연속 한 덩어리이고
+        #   그 안의 semantic_fragments 행이 정확히 ★17개 — 국장이 세신 수와 일치한다.
+        #   (같은 집합을 _P00N 병합하면 5그룹이라 17 이 재현되지 않는다)
+        #   ★그래서 병합하지 않는다. 어제 내가 넣은 병합이 원본맵과 단위를 어긋나게 했다.
+        #     Merope "바닷가" 5 가 병합값과 맞았던 것은 ★조각맵(다른 화면) 관찰이었다 —
+        #     두 화면을 같은 기준으로 착각한 것이 내 잘못이다.
+        seen_fid = set()
+        rows = []
+        for r in hits:
+            fid = str(r.get("fragment_id"))
+            if fid in seen_fid:
+                continue
+            seen_fid.add(fid)
+            rows.append(r)
     except Exception as e:
         print(f"[CHAT-EYES][WARN] 조각 조회 실패 ({e})")
         return ("UNCERTAIN", 0,
@@ -418,6 +454,26 @@ def _fragment_evidence(input_text, source_ids=None):
     #   맞는 것이 없으면 '없습니다'" 로 썼다. 근거 6건을 주고도 답이 "없습니다." 였다.
     #   7B 는 부정 프레이밍을 먼저 집는다. 그래서 (1) 문턱으로 걸러 목록 자체를 믿을 수
     #   있게 만들고 (2) 지시를 '세어서 답하라'로 돌린다. '없다'는 마지막 예외로 내린다.
+    # [COUNT-TRUTH 2026-08-03] ★개수를 단정하지 않는다 — 셀 수 없다는 것이 실측 결과다.
+    #   국장이 원본맵에서 눈으로 센 17개(SRC_3111FA4F 131.0~354.0s 연속 구간)를
+    #   정답으로 놓고 점수 분포를 쟀다:
+    #       17 구간 안  0.320 ~ 0.642
+    #       구간 밖 최고 0.625            ← ★두 분포가 완전히 겹친다
+    #       컷 0.48 -> 정답 11/17 · 오검출 24    컷 0.54 -> 정답 6/17 · 오검출 9
+    #   어떤 문턱으로도 17 이 나오지 않는다. 문턱을 옮기면 놓치거나 섞이거나 둘 중 하나다.
+    #   ★이유: visual_desc 는 "wetsuit, goggles, diving suit" 를 물가에서도 똑같이 적는다.
+    #     물속인지 물가인지는 그 텍스트에 신호가 없다 — 국장은 ★썸네일을 보고 가른 것이다.
+    #   그래서 개수 질문에는 수를 말하지 않고 ★못 센다고 말하고 화면 계수를 청한다.
+    #   (CCUT 원칙: 불가능하다는 말로 대화를 끝내지 않는다 — 다음 할 일을 제안한다)
+    if _re_mod.search(r"몇\s*(개|것|장면|조각)|개수|얼마나", str(input_text or "")):
+        return ("COUNT_UNSURE", total,
+                f"[조각 근거] 상태=개수 확신 못함. 비슷한 조각 {total}개를 찾았지만 "
+                "이 수가 정확하다고 말하면 안 된다 — 장면 설명만으로는 물속과 물가를, "
+                "실내와 실외를 가르지 못한다(실측 확인).\n"
+                "★이렇게 답하라: 정확한 개수는 자신이 없다고 먼저 밝히고, "
+                f"비슷해 보이는 것이 {total}개쯤 있다고 말한 뒤, "
+                "화면(원본맵)에서 직접 세어 알려주시면 그 수를 그대로 쓰겠다고 청하라.\n"
+                "★숫자를 단정하지 마라. 목록에 없는 조각을 지어내지 마라.\n")
     # ★개수는 이미 서버가 셌다(total). 큐원은 세지 않고 그 수를 말하기만 한다.
     #   목록은 근거로 보여줄 뿐이고, 상한에 잘려도 개수는 잘리지 않는다
     #   (구판은 상한 8 에 잘린 목록을 세게 해서 "8개"라 답할 수 있었다).
@@ -1231,7 +1287,15 @@ def route_edit_intent(source_ids=None, input_text="", recent_messages=None,
                 and not _CONTEXT_COMMAND_RE.search(t):
             r = _resp("answer_only", "", confidence=0.85, via="qwen",
                       matched={"kind": "free_chat"})
-            r["_stream_chat"] = {"facts": ""}
+            # [COUNT-TRUTH 2026-08-03] ★빈 facts 로 내보내지 않는다.
+            #   이 자리는 _llm_understand 를 안 거치고 바로 스트림으로 가므로
+            #   CHAT-EYES 근거 주입이 닿지 않았다. 근거 없이 답하면 지어낸다
+            #   (국장 화면 "바닷속 잠수 11개" 의 출처 후보 — 서버가 준 수가 아니다).
+            r["_stream_chat"] = {"facts": _evidence_facts(t, source_ids)}
+            _z = _zero_or_uncertain_reply(t, source_ids)
+            if _z:
+                r.pop("_stream_chat", None); r["reply"] = _z
+                r["matched"] = {"kind": "frag_state", "gate": "chat_signal"}
             return r
         if allow_llm:
             und = _llm_understand(t, recent_messages, source_ids, person_vocab,
@@ -1393,7 +1457,12 @@ def route_edit_intent(source_ids=None, input_text="", recent_messages=None,
             if defer_chat:
                 r = _resp("answer_only", "", confidence=0.8, via="qwen",
                           matched={"kind": "smalltalk"})
-                r["_stream_chat"] = {"facts": ""}
+                # [COUNT-TRUTH 2026-08-03] 질문 그물도 같다 — 빈 facts 금지.
+                r["_stream_chat"] = {"facts": _evidence_facts(t, source_ids)}
+                _z = _zero_or_uncertain_reply(t, source_ids)
+                if _z:
+                    r.pop("_stream_chat", None); r["reply"] = _z
+                    r["matched"] = {"kind": "frag_state", "gate": "question_net"}
                 return r
             _talk = _llm_smalltalk(t, recent_messages)
             if _talk:
