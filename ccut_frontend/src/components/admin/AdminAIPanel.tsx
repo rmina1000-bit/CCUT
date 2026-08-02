@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { Sparkles, Send, PanelRightClose, PanelRightOpen } from "lucide-react";
 import { fetcher } from "@/services/api";
+import { DRAG_HANDLE_W } from "@/pages/Index";
 
 // [ADMIN-AI-LIVE 2026-08-02 C-1] 패널 폭 — 화면을 옮겨도 이 세션 동안은 유지된다.
 //   저장소를 새로 만들지 않는다(지시서 금지). 모듈 메모리라 앱을 새로 열면 기본값이다.
@@ -192,7 +193,8 @@ export const AdminAIPanel: React.FC<{
       <div
         onMouseDown={onDragStart}
         title="드래그하여 폭 조절"
-        className="absolute left-0 top-0 h-full w-1.5 -ml-0.5 cursor-col-resize z-20 hover:bg-primary/40 active:bg-primary/60 transition-colors"
+        style={{ width: DRAG_HANDLE_W, marginLeft: -DRAG_HANDLE_W / 2 }}
+        className="absolute left-0 top-0 h-full cursor-col-resize z-20 hover:bg-primary/40 active:bg-primary/60 transition-colors"
       />
       <div className="px-4 py-3 border-b border-border/15 flex items-center justify-between">
         <div className="flex items-center gap-1.5">

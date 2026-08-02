@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from "react";
 import { Input } from "@/components/ui/input";
 import { fetcher } from "@/services/api";
+import { DRAG_HANDLE_W } from "@/pages/Index";
 import { Send, Film, Clock, Plus, Check, X, ShoppingBasket, Search as SearchIcon, Layers, Play, FolderOpen, ChevronDown, ChevronUp } from "lucide-react";
 import { ArchivePreviewModal, PreviewItem } from "@/components/ArchivePreviewModal";
 import {
@@ -312,7 +313,7 @@ export const ArchiveWorkbench: React.FC = () => {
       {/* [LAYOUT] 아카이브 채팅/작업대 경계 리사이즈 핸들 */}
       <div
         className={`flex-shrink-0 flex items-center justify-center cursor-col-resize group transition-colors ${isChatDragging ? "bg-primary/15" : "hover:bg-primary/8"}`}
-        style={{ width: 6 }}
+        style={{ width: DRAG_HANDLE_W }}
         onMouseDown={(e) => { e.preventDefault(); setIsChatDragging(true); }}
       >
         <div className={`w-[2px] h-10 rounded-full transition-all duration-150 ${isChatDragging ? "bg-primary/60 h-16" : "bg-border/40 group-hover:bg-primary/40 group-hover:h-14"}`} />
