@@ -3391,10 +3391,30 @@ const Index: React.FC = () => {
     //     (실측: /story/{id} 는 늘 ok:true + story_state 를 준다) 그 경우는 그대로 말한다.
     if (storyGate.loading) return;
     if (storyGate.enabled && !storyGate.story) return;
+    // [STAGE-LOADING 2차 2026-08-02] 열기만 해도 1행이 쌓이던 나머지 절반.
+    //   1차(로딩 오독)로 +2 가 +1 이 됐지만 계약은 0이다. 남은 1행의 정체는
+    //   "지난번에 이미 한 말을 다시 하는 것"이다 — stageVoiceRef 는 useRef 라
+    //   새로고침마다 null 로 태어나고, 원장에는 같은 단계 안내가 이미 있다.
+    //   실측: Freesia 안내 121행 = 서로 다른 key 5개 + 재출현 116.
+    //   ★ref 를 원장에서 이어받는다. 마지막 안내가 지금과 같은 단계면 다시 말하지 않는다.
+    //     단계가 진짜로 바뀌면 그때는 한 번 말한다(계약 D-1=0 · 실제 전환은 유지).
+    //   ★복원 전에는 판단하지 않는다 — 원장을 못 본 채 '없다'고 읽으면 오늘 날짜로 덮인다.
+    if (uiRestoredFor !== activeNavItem) return;
     if (!activeNavItem?.startsWith("proj_")) return;
     if (!hasProjectMedia) return;
     const sig = `${activeNavItem}:${storyStage.key}`;
     if (stageVoiceRef.current === sig) return;
+    if (stageVoiceRef.current === null) {
+      // 이 프로젝트에서 마지막으로 한 단계 안내를 원장(복원분)에서 읽는다.
+      //   id 규약 `ai_stage_<key>_<ts>` — key 자체에 밑줄이 있다(edit_consult).
+      const msgs = (storyPlan as any)?.messages ?? [];
+      let lastKey: string | null = null;
+      for (let i = msgs.length - 1; i >= 0; i--) {
+        const m = /^ai_stage_(.+)_\d{10,}$/.exec(String(msgs[i]?.id ?? ""));
+        if (m) { lastKey = m[1]; break; }
+      }
+      if (lastKey === storyStage.key) { stageVoiceRef.current = sig; return; }
+    }
     stageVoiceRef.current = sig;
     const stageMsg = {
       id: `ai_stage_${storyStage.key}_${Date.now()}`,
@@ -3417,6 +3437,7 @@ const Index: React.FC = () => {
       messages: [...((prev?.messages) ?? []), stageMsg],
     }));
   }, [storyGate.enabled, storyGate.loading, storyGate.story, activeNavItem, hasProjectMedia,
+      uiRestoredFor, (storyPlan as any)?.messages?.length,
       storyStage.key, storyStage.label, storyStage.hint,
       sourceEntries.length, setStoryPlan]);
 
