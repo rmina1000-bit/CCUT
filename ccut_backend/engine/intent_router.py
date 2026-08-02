@@ -217,13 +217,38 @@ def _mirror_summary_fact(project_id):
 #     집었다. visual_desc 가 영어("beach, sand, ocean")라 한국어 LIKE 로는 0건인데
 #     다국어 임베딩이 건넌다 — 그래서 키워드가 아니라 이 검색을 쓴다.
 _EVID_MAX = 8            # 프롬프트에 싣는 조각 최대 건수
-_EVID_POOL = 120         # 검색 후보 상한(프로젝트 필터 전)
-# ★문턱은 실측으로 잡았다(Merope, 2026-08-02).
-#   "바닷가"      정답 6조각의 점수 0.49 ~ 0.61
-#   "파인애플"    이 프로젝트에 없음 — 최고 0.40 (전부 엉뚱한 bench 조각)
-#   두 분포가 0.45 에서 갈린다. 아래는 싣지 않는다 -> 없는 것은 0건 표지로 나간다.
-#   ★표본이 한 프로젝트라 절대값이 아니다. 어긋나면 이 숫자부터 다시 잰다.
-_EVID_CUT = 0.45
+_EVID_POOL = 3000        # 검색 후보 상한 — 사실상 전수(현재 fragment_index 936).
+                         # 프로젝트 필터를 뒤에 걸므로 여기서 자르면 개수가 왜곡된다.
+# [FRAG-TRUTH 2026-08-02] 문턱을 세 방에서 다시 쟀다 (Merope · Freesia · Adhara × 질문 5종).
+#   ★있는 것 top   바닷속잠수 0.589 / 0.642 / 0.589   바닷가 0.598 / 0.526 / 0.598
+#   ★없는 것 top   식당       0.322 / 0.340 / 0.333   파인애플 0.170 / 0.252 / 0.231
+#   두 무리가 0.34 ↔ 0.53 으로 크게 벌어진다. 그 사이 어디에도 표본이 없다.
+#   그래서 ★한 숫자로 있다/없다를 가르지 않고 대역을 둔다:
+#     top >= _EVID_SURE      있다        (그 아래 _EVID_CUT 까지를 목록으로)
+#     top <  _EVID_ZERO      없다
+#     그 사이               ★확실하지 않다 — 억지로 고르지 않는다
+#   ★계수 문턱 0.48 근거 — 표본에 곡선을 맞춘 게 아니라 ★알려진 정답을 자르지 않는 하한이다.
+#     Merope "바닷가"의 정답 5조각(`_P00N` 병합 후)은 장면 설명에 beach 가 명시돼 있고
+#     점수가 0.49 ~ 0.61 이다. 컷을 0.50 으로 두면 그중 SF_89D736(0.49,
+#     "beach, sand, water, girl")이 잘려 4개가 되고, 국장이 조각맵에서 센 5개와 어긋난다.
+#     0.48 은 그 정답을 살리는 가장 높은 자리다.
+#     ★그래도 검색의 오탐·누락은 남는다 — 그래서 아래 UNCERTAIN 대역을 함께 둔다.
+_EVID_CUT = 0.48         # 목록·계수에 넣는 최소 점수
+_EVID_ZERO = 0.45        # 최고점이 이 아래면 '없다'
+_EVID_SURE = 0.53        # 최고점이 이 위면 '있다'
+
+
+# [FRAG-TRUTH 2026-08-02] CCUT 규약: `_P00N` 형제는 한 조각이다.
+#   규칙 출처 — proposal_engine.py:694 ProposalEngine._semantic_group_key
+#     """SF_CD37EA_SRC_616AEFBA_P001 -> SF_CD37EA_SRC_616AEFBA
+#        마지막 _P001, _P002 같은 part suffix를 제거해 같은 semantic group으로 묶는다."""
+#   그 메서드는 무거운 엔진 클래스에 붙어 있어 여기서 import 하지 않고 ★같은 정규식을 쓴다.
+#   (semantic_engine.py:1075 "_P00N 형제는 같은 base 를 유지한다" 와 같은 규약)
+#   ★왜 여기서 병합하나: 안 하면 큐원이 세는 수와 국장이 조각맵에서 세는 수가 갈린다.
+#     실측(Merope "바닷가"): DB 행 6 · 병합 5 · ★국장이 화면에서 센 수 5.
+#     개수를 모델에게 세게 하지 않는다 — ★서버가 병합해서 목록 자체를 정답으로 만든다.
+def _sf_group(fid):
+    return _re_mod.sub(r"_P\d+$", "", str(fid or ""))
 
 
 def _evid_snip(s, n=60):
@@ -235,44 +260,96 @@ def _evid_snip(s, n=60):
     return t[:n]
 
 
-def _fragment_evidence_block(input_text, source_ids=None):
-    """질문과 가까운 조각 몇 개를 fid + 발췌로. 실패·0건도 표지로 남긴다."""
+# [FRAG-TRUTH 2026-08-02] 조각을 묻는 말인가 — 잡담과 가른다.
+#   ★왜 필요: 상태=없음을 그대로 "없습니다"로 답하면 "오늘 하루 어땠어?" 에도 없다고 한다.
+#     조각 소재(조각·장면·영상…)를 묻고 존재/개수를 묻는 말일 때만 서버가 단정한다.
+_FRAG_NOUN = r"조각|장면|영상|클립|컷|사진|화면|소스|원본"
+_FRAG_ASK = r"있|없|몇|개수|얼마나|알려|찾|보여|나오"
+
+
+def _is_fragment_question(t):
+    t = str(t or "")
+    return bool(_re_mod.search(_FRAG_NOUN, t) and _re_mod.search(_FRAG_ASK, t))
+
+
+def _fragment_evidence(input_text, source_ids=None):
+    """(state, total, block) — state 는 HAVE / ZERO / UNCERTAIN / SKIP.
+    ★판정은 여기서 끝난다. 모델에게 '세어라'·'없으면 없다고 해라'를 시키지 않는다.
+    앞 차수(9db84b86)에서 그 방식으로 두 번 실패했다 — 한쪽을 고치면 반대쪽이 죽었다."""
     q = str(input_text or "").strip()
     if not q:
-        return ""
+        return ("SKIP", 0, "")
     sids = {str(s) for s in (source_ids or []) if s}
     if not sids:
-        return ""
+        return ("SKIP", 0, "")
     try:
         from engine import fragment_search as _fs
+        # ★후보를 넉넉히 받아 ★프로젝트로 먼저 좁힌 뒤 문턱으로 자른다.
+        #   구판은 전역 top 120 을 받아 프로젝트 필터를 나중에 걸었다 — 그러면 개수가
+        #   '다른 프로젝트가 상위를 얼마나 차지했나'에 좌우된다(실측: 같은 질문·같은 방에서
+        #   pool 120 이면 5건, pool 400 이면 13건). 개수를 답할 거면 그 우연을 없애야 한다.
         res = _fs.search(q, top_k=_EVID_POOL)
-        rows = [r for r in (res.get("results") or [])
-                if str(r.get("source_id")) in sids and float(r.get("score") or 0) >= _EVID_CUT]
+        mine = [r for r in (res.get("results") or []) if str(r.get("source_id")) in sids]
+        top = max((float(r.get("score") or 0) for r in mine), default=0.0)
+        hits = [r for r in mine if float(r.get("score") or 0) >= _EVID_CUT]
+        # ★_P00N 형제 병합 — 점수 높은 쪽을 대표로 두고 시간 구간만 합친다.
+        #   전사·장면은 대표의 것을 쓴다(형제는 같은 장면의 앞뒤라 거의 같다).
+        merged = {}
+        for r in hits:                     # hits 는 점수 내림차순
+            g = _sf_group(r.get("fragment_id"))
+            if g in merged:
+                m = merged[g]
+                m["start"] = min(float(m.get("start") or 0), float(r.get("start") or 0))
+                m["end"] = max(float(m.get("end") or 0), float(r.get("end") or 0))
+                m["_parts"] = m.get("_parts", 1) + 1
+            else:
+                m = dict(r); m["fragment_id"] = g; m["_parts"] = 1
+                merged[g] = m
+        rows = list(merged.values())
     except Exception as e:
         print(f"[CHAT-EYES][WARN] 조각 조회 실패 ({e})")
-        return ("[조각 근거] 조회에 실패했다. 조각 내용을 아는 척하지 말고 "
+        return ("UNCERTAIN", 0,
+                "[조각 근거] 조회에 실패했다. 조각 내용을 아는 척하지 말고 "
                 "지금은 확인할 수 없다고 말하라.\n")
-    if not rows:
-        return ("[조각 근거] 이 질문과 가까운 조각을 이 프로젝트에서 찾지 못했다(0건). "
-                "없으면 없다고 말하라 — 조각 id 나 내용을 지어내지 마라.\n")
-    rows = rows[:_EVID_MAX]
+    # ★판정을 모델에게 맡기지 않는다 — 서버가 세고 서버가 상태를 정한다.
+    #   앞 차수(9db84b86)는 "세어서 답하라"/"없으면 없다고 하라"를 지시문으로 시켰고,
+    #   한쪽을 고치면 반대쪽이 죽었다("없습니다" 오답 -> 지시 수정 -> '없다'가 사라짐).
+    #   문턱 하나로 양방향을 잡으려 한 것이 잘못이었다. 이제 세 상태로 나눈다.
+    total = len(rows)
+    if total == 0 or top < _EVID_ZERO:
+        return ("ZERO", 0,
+                "[조각 근거] 상태=없음. 이 프로젝트에서 질문에 맞는 조각을 찾지 못했다(0개). "
+                "\"없습니다\"라고 답하라. 조각 id 나 내용을 지어내지 마라.\n")
+    if top < _EVID_SURE:
+        return ("UNCERTAIN", total,
+                f"[조각 근거] 상태=확실하지 않음(최고 근접도 {top:.2f}). "
+                f"비슷해 보이는 조각이 {total}개 있으나 질문과 맞는지 확신할 수 없다. "
+                "\"확실하지 않습니다\"라고 말하고, 무엇을 찾는지 한 가지만 되물어라. "
+                "★있다/없다로 단정하지 마라. 개수도 단정하지 마라.\n")
+    rows = sorted(rows, key=lambda r: -float(r.get("score") or 0))
+    shown = rows[:_EVID_MAX]
+    more = total - len(shown)
     # ★1회차 실패 기록: 처음엔 "가까운 순서일 뿐 조건에 맞는다는 뜻이 아니다 …
     #   맞는 것이 없으면 '없습니다'" 로 썼다. 근거 6건을 주고도 답이 "없습니다." 였다.
     #   7B 는 부정 프레이밍을 먼저 집는다. 그래서 (1) 문턱으로 걸러 목록 자체를 믿을 수
     #   있게 만들고 (2) 지시를 '세어서 답하라'로 돌린다. '없다'는 마지막 예외로 내린다.
-    out = [f"[조각 근거] 이 프로젝트에서 질문과 가까운 조각 {len(rows)}개를 찾았다(가까운 순). "
-           "아래 장면·말을 근거로 답하라. 개수를 물으면 질문 조건에 맞는 것을 세어 "
-           "숫자로 답하라. 목록에 없는 조각 id·내용은 지어내지 마라. "
+    # ★개수는 이미 서버가 셌다(total). 큐원은 세지 않고 그 수를 말하기만 한다.
+    #   목록은 근거로 보여줄 뿐이고, 상한에 잘려도 개수는 잘리지 않는다
+    #   (구판은 상한 8 에 잘린 목록을 세게 해서 "8개"라 답할 수 있었다).
+    out = [f"[조각 근거] 상태=있음. 개수={total}개. "
+           f"개수를 물으면 반드시 {total}개라고 답하라 — 아래 목록을 다시 세지 마라. "
+           + (f"아래는 그중 가까운 {len(shown)}개만 보인 것이다. " if more > 0 else "")
+           + "목록에 없는 조각 id·내용은 지어내지 마라. "
+           "조각 id 는 SF_ 로 시작하는 것만 쓴다. "
            "이전 질문에 나온 낱말은 이 답에 섞지 마라. "
-           "장면 설명은 영어일 수 있다(beach=바닷가, ocean=바다) — 뜻으로 읽어라. "
-           "조건에 맞는 것이 정말 하나도 없을 때만 없다고 답하라."]
-    for r in rows:
+           "장면 설명은 영어일 수 있다(beach=바닷가, ocean=바다, underwater=바닷속) — 뜻으로 읽어라."]
+    for r in shown:
         out.append("  - {fid} {s:.0f}~{e:.0f}s (근접 {sc:.2f}) | 장면: {vd} | 말: {tr}".format(
             fid=r.get("fragment_id"), s=float(r.get("start") or 0), e=float(r.get("end") or 0),
             sc=float(r.get("score") or 0),
             vd=_evid_snip(r.get("visual_desc")) or "-",
             tr=_evid_snip(r.get("transcript")) or "-"))
-    return "\n".join(out) + "\n"
+    return ("HAVE", total, "\n".join(out) + "\n")
 
 
 def _llm_understand(input_text, recent_messages=None, source_ids=None,
@@ -378,6 +455,18 @@ def _llm_understand(input_text, recent_messages=None, source_ids=None,
         return None
     kind = str(out.get("kind") or "").strip()
     reply = _sanitize_talk(str(out.get("reply") or "").strip())
+    # [FRAG-TRUTH 2026-08-02] 묻는 것과 시키는 것을 ★서버 규칙으로 가른다.
+    #   실측: "그 바닷가 조각들 id 를 알려줘" 가 run_proposal 로 갔다 —
+    #   조각 13개를 다시 고르고 미리보기 렌더까지 약 1분을 태웠다. 물었을 뿐인데.
+    #   원인: 분류가 '바닷가'라는 기준어를 보고 edit 로 읽는다. 조회 사다리(:832)의
+    #   트리거에는 "몇 개"·"알려줘"가 아예 없어서 그 앞에서 걸러지지도 않는다.
+    #   ★모델 분류를 다시 가르치지 않는다(그 방식으로 두 번 실패했다). 뒤에서 덮는다:
+    #     조각을 묻는 말인데 편집 동사가 하나도 없으면 편집이 아니다.
+    #   ★애매하면 조회 쪽으로 — 편집은 되돌리기가 비싸다(렌더 1~3분).
+    if kind == "edit" and _is_fragment_question(input_text) and not _re_mod.search(
+            r"편집|골라|만들어|빼|줄여|늘려|남겨|자르|이어|바꿔|다시 골|재제안|추천해", input_text):
+        print(f"[FRAG-TRUTH] 조회를 편집으로 읽었다 -> chat 으로 되돌림: {input_text[:40]}")
+        kind = "chat"
     if kind == "edit":
         instr = str(out.get("instruction") or "").strip() or input_text
         # [지시문 오염 가드 2026-07-06] LLM이 instruction 칸에 되묻기 문장을 넣는 사고
@@ -434,7 +523,29 @@ def _llm_understand(input_text, recent_messages=None, source_ids=None,
         #   조각 '내용'이 0건이다. 못 보는데 물으면 지어낸다.
         #   ★분류 프롬프트(facts)와 되묻기 템플릿은 건드리지 않는다. 대화용 facts_chat 에만
         #     붙이고, kind=="chat" 으로 판정된 뒤에만 조회한다(다른 경로 비용 0 · 회귀 0).
-        facts_chat = facts_chat + _fragment_evidence_block(input_text, source_ids)
+        _state, _total, _evid = _fragment_evidence(input_text, source_ids)
+        facts_chat = facts_chat + _evid
+        # [FRAG-TRUTH 2026-08-02] ★판정을 코드로 내린다 — 모델에게 맡기지 않는다.
+        #   실측 2회 실패: 근거 블록에 "상태=없음 … '없습니다'라고 답하라"를 실었는데
+        #   7B 가 "있습니다. 식당에서 식사하는 장면은 2개의 영상에 포함되어 있습니다.
+        #   한 편은 내부 조명이 뛰어난 실내 촬영…" 이라고 통째로 지어냈다
+        #   (백엔드 로그 path=stream reply_len=90 — 블록은 분명히 붙어 있었다).
+        #   지시문으로 두 번 실패했으므로 ★없다/애매하다는 서버가 직접 말한다.
+        #   있다일 때만 모델에게 넘긴다(그때는 근거가 있으니 지어낼 이유가 없다).
+        #   ★조각을 묻는 말일 때만 단정한다 — 잡담("오늘 하루 어땠어?")까지
+        #     "없습니다"로 답하지 않게.
+        if _is_fragment_question(input_text):
+            if _state == "ZERO":
+                return _resp("answer_only",
+                             "그런 조각은 이 프로젝트에서 못 찾았어요.",
+                             confidence=0.9, via="deterministic",
+                             matched={"kind": "frag_zero"})
+            if _state == "UNCERTAIN":
+                return _resp("answer_only",
+                             "확실하지 않습니다. 비슷해 보이는 조각은 있는데 "
+                             "찾으시는 것과 맞는지 자신이 없어요. 어떤 장면인지 한 가지만 더 알려주시겠어요?",
+                             confidence=0.9, via="deterministic",
+                             matched={"kind": "frag_uncertain"})
         # [F2 스트리밍] defer_chat=True면 대화 생성을 하지 않고 표식만 반환 —
         # 스트림 엔드포인트가 stream_smalltalk로 토큰 단위 생성한다. 분류는 이미 완료.
         if defer_chat:
@@ -511,11 +622,25 @@ def _qwen_tools_enabled():
     return os.getenv("CCUT_QWEN_TOOLS", "0") in ("1", "true", "True", "on", "ON")
 
 
+# [FRAG-TRUTH 2026-08-02] 큐원이 보는 조각과 사용자가 보는 조각을 같은 것으로 만든다.
+#   실측(2026-08-02): 이 프로젝트의 조각 id 는 두 계열이다.
+#     VF_*  fragments(377) · evidence_board(377)      — 30초 고정 분할(거친 1차)
+#                                                        예: VF1 0~30s · VF2 29.5~61.4s
+#     SF_*  semantic_fragments(936) · fragment_index(936)
+#           · fragment_vault(1149) · fragment_visual_marks(1765)  — 의미 단위 분할
+#                                                        예: 0~13 · 13~29.5 · 29.5~38 …
+#   화면(조각맵)은 /fragments/{source_id} -> bams.get_semantic_fragments 라 ★SF 를 쓴다.
+#   그런데 이 도구 안내의 첫 줄이 evidence_board(=VF)였다. 그래서 큐원이
+#   "조각 ID VF1_SRC_009AE91F 의 전사는…"이라 답했고, 국장이 화면에서 그 id 를 찾을 수 없었다.
+#   ★안내를 SF 계열로 바꾼다. 지시문을 설득하는 게 아니라 ★틀린 테이블을 바로잡는 것이다.
 _QWEN_TOOL_SYSTEM = (
     "너는 CCUT — 영상 편집을 돕는 동료다. 사용자가 조각을 찾아달라고 하면 "
     "db_query 도구로 DB를 직접 조회해서 답한다. 추측하지 말고 조회해라.\n"
+    "★조각 id 는 반드시 SF_ 로 시작하는 것만 쓴다. VF_ 로 시작하는 id 는 사용자 화면에 "
+    "없는 옛 주소이므로 답에 절대 쓰지 않는다(evidence_board 는 그 옛 주소라 쓰지 않는다).\n"
     "주요 테이블(이 밖의 테이블도 조회할 수 있다):\n"
-    "- evidence_board(fragment_id, source_id, text) : text 가 조각의 전사(대사)다\n"
+    "- fragment_index(fragment_id, source_id, transcript, visual_desc) : "
+    "transcript 가 조각의 전사(대사), visual_desc 가 장면 설명(영어일 수 있다)\n"
     "- semantic_fragments(fragment_id, source_id, start, \"end\") : 조각의 시간 좌표\n"
     "- fragment_vault(fragment_id, transcript) : 조각 금고\n"
     "- programs(program_id, title) / sources(source_id, filename)\n"
@@ -861,7 +986,19 @@ def route_edit_intent(source_ids=None, input_text="", recent_messages=None,
         if _show_subject:
             _qt = _qwen_tool_show(t, source_ids)
             if _qt is not None:
-                _r = _resp("show_fragments", _qt["reply"], confidence=0.9,
+                # [FRAG-TRUTH 2026-08-03] ★이 경로에 위생 필터가 없었다.
+                #   실측: "그 조각들만 보여 줄 수 있어? 조각맵에 모아줘" 에
+                #   "根据提供的信息，这段视频的内容主要涉及一些人在海边进行捕鱼活动…" 가
+                #   그대로 사용자 화면으로 나갔다(Freesia·Adhara 두 방). 중국어 누출은
+                #   _sanitize_talk 이 이미 막고 있는 사고인데 이 분기만 그 문을 안 지났다.
+                #   ★막히면 조각 카드는 그대로 두고 문구만 CCUT 말로 강등한다 —
+                #     찾은 결과를 버리지 않는다.
+                _say = _sanitize_talk(_qt.get("reply"))
+                if not _say:
+                    _n = len(_qt.get("results") or [])
+                    _say = (f"조각 {_n}개를 찾았어요." if _n
+                            else "조건에 맞는 조각을 못 찾았어요.")
+                _r = _resp("show_fragments", _say, confidence=0.9,
                            via="qwen_tools")
                 # [3-B-1] 기존 조회 경로(:645)와 같은 형태로 카드를 싣는다.
                 _r["results"] = _qt.get("results") or []
@@ -1110,6 +1247,17 @@ def route_edit_intent(source_ids=None, input_text="", recent_messages=None,
 
     # ── 2. 장면/개수/제외 어휘 (기존 결정론 그대로 신뢰) ──
     det = hub._deterministic_intent(t)
+    # [FRAG-TRUTH 2026-08-03] ★어휘가 있다고 편집은 아니다 — 묻는 말이면 묻는 말이다.
+    #   실측: "그 바닷가 조각들 id 를 알려줘" 가 여기서 theme='바닷가' 로 잡혀
+    #   run_proposal 로 갔다. 조각 13개를 다시 고르고 미리보기 렌더까지 약 1분.
+    #   물었을 뿐인데 편집이 돈다 — 되돌리기가 비싼 쪽으로 잘못 기운다.
+    #   ★조각을 묻는 말인데 편집 동사가 하나도 없으면 이 분기를 타지 않는다.
+    #     그러면 아래 사다리를 지나 큐원 이해(_llm_understand)로 가고,
+    #     거기서 조각 근거를 받아 답한다. 편집 발화("골라줘·빼줘·편집해줘")는 그대로 여기서 산다.
+    if (det.get("theme_found") or det.get("count")) and _is_fragment_question(t) \
+            and not _re.search(r"편집|골라|만들어|빼|줄여|늘려|남겨|자르|이어|바꿔|다시 골|재제안|추천해", t):
+        print(f"[FRAG-TRUTH] det 어휘가 잡혔지만 묻는 말이다 -> 편집 아님: {t[:40]}")
+        det = {}
     if det.get("theme_found") or det.get("count"):
         theme = det.get("keep") or det.get("exclude")
         if det.get("exclude"):
