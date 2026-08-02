@@ -3404,7 +3404,17 @@ const Index: React.FC = () => {
     if (!hasProjectMedia) return;
     const sig = `${activeNavItem}:${storyStage.key}`;
     if (stageVoiceRef.current === sig) return;
-    if (stageVoiceRef.current === null) {
+    // [STAGE-ONE 보강 2026-08-02] 원장 승계를 ★방마다★ 한다.
+    //   55b72c4d 는 `=== null` 일 때만 원장을 봤다. ref 는 페이지가 살아 있는 동안
+    //   유지되므로, 새로고침 없이 방을 옮기면 ref 가 이미 non-null 이라 승계를 건너뛰고
+    //   그 방에서 한 줄을 새로 썼다. 실측: Merope(새로고침 열기) 3회 DELTA 0 인데,
+    //   같은 세션에서 Acrux -> Alcyone 로 옮기자 각 1행씩 생겼다
+    //   (#5987 ai_stage_final · #5988 ai_stage_edit_consult — 둘 다 원장의 마지막 key 와
+    //    같은 단계였다. 즉 "이미 한 말"을 방을 옮겼다는 이유로 다시 했다).
+    //   판정을 "처음인가"가 아니라 ★"이 방에서 말한 적 있는가"로 바꾼다.
+    const spokenHere = stageVoiceRef.current !== null
+      && stageVoiceRef.current.startsWith(`${activeNavItem}:`);
+    if (!spokenHere) {
       // 이 프로젝트에서 마지막으로 한 단계 안내를 원장(복원분)에서 읽는다.
       //   id 규약 `ai_stage_<key>_<ts>` — key 자체에 밑줄이 있다(edit_consult).
       const msgs = (storyPlan as any)?.messages ?? [];

@@ -2995,10 +2995,32 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
               {[
                 // timestamp 없는 메시지는 ts=0으로 맨 위로 튀지 않게 — 직전 메시지
                 // 시각을 승계해 입력 순서(아래로 쌓임)를 지킨다.
-                ...(() => { let last = 0; return (storyPlan?.messages || []).map((msg: any) => {
-                  last = typeof msg.timestamp === "number" && msg.timestamp > 0 ? msg.timestamp : last + 1;
-                  return { kind: "msg" as const, ts: last, msg };
-                }); })(),
+                // [STAGE-ONE 2026-08-02] "지금은 …입니다" 는 화면에 한 줄만 남는다.
+                //   A-0 실측: Merope 를 열어도 새 행은 0이었다(ai_stage 32 -> 32).
+                //   화면에 32줄이 보인 것은 그동안 쌓인 옛 행이 새로고침마다 다시
+                //   렌더되던 것이다 — 쓰기는 이미 멎었고(55b72c4d) 남은 건 읽기였다.
+                //   ★삭제가 아니라 렌더 제외다. 원장 32행은 그대로 둔다(A-4).
+                //   ★"전부 흘러간다"와 충돌하지 않는다: 안내는 사건이 아니라
+                //     '지금 어느 단계인가'라는 현재 상태의 표시다. 사건만 흐른다.
+                //   ★제외를 복원 경로(Index.tsx:1620~)가 아니라 여기서 하는 이유:
+                //     55b72c4d 의 가드가 storyPlan.messages 안의 마지막 ai_stage_* 를
+                //     읽어 "같은 단계면 다시 말하지 않는다"를 판정한다. 복원에서 빼면
+                //     그 가드가 lastKey=null 을 보고 다시 말하기 시작해 A-5(DELTA 0)가
+                //     깨진다. 원장에는 남기고 화면에서만 접는다.
+                //   ★문구가 아니라 id 접두로 가른다(생성부 Index.tsx `ai_stage_${key}_${ts}`).
+                ...(() => {
+                  const all = (storyPlan?.messages || []) as any[];
+                  const isStage = (m: any) => String(m?.id ?? "").startsWith("ai_stage_");
+                  let lastStageIdx = -1;
+                  for (let i = all.length - 1; i >= 0; i--) { if (isStage(all[i])) { lastStageIdx = i; break; } }
+                  let last = 0;
+                  return all.map((msg: any, i: number) => {
+                    last = typeof msg.timestamp === "number" && msg.timestamp > 0 ? msg.timestamp : last + 1;
+                    // 가장 최근 안내 한 줄만 남기고 나머지 안내는 스트림에 담지 않는다.
+                    if (isStage(msg) && i !== lastStageIdx) return null;
+                    return { kind: "msg" as const, ts: last, msg };
+                  }).filter(Boolean) as any[];
+                })(),
                 ...proposalHistory
                   .map((h) => ({ kind: "pair" as const, ts: h.ts, entry: h })),
                 // [PERSON-PALETTE→FLOW] 인물 문답도 흐름 속 한 지점 — 이후 대화는 아래로
