@@ -521,7 +521,10 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
   // 정의 이후(하단)에 배치한다. (여기서 참조하면 TDZ)
   const [consultationInput, setConsultationInput] = useState("");
   // [FLOW-STAGE] 무대가 이식될 타임라인 내 슬롯 (활성 제안 카드 위치)
-  const [stageSlot, setStageSlot] = useState<HTMLDivElement | null>(null);
+  // [CHAT-ROOT 3-2 2026-08-02] 무대 접힘. ★ 기본 = 펼침이고, 시스템은 어떤 조건에서도
+  //   자동으로 접지 않는다(국장 확정). 접는 것은 사용자뿐이고 이 세션 안에서만 유지된다 —
+  //   저장소를 새로 만들지 않는다. 새 메시지가 와도 이 값은 건드리지 않는다.
+  const [stageFolded, setStageFolded] = useState(false);
   // [STORY-GATE P3] 승인 관문 — 게이트 OFF면 enabled=false로 아무것도 바뀌지 않는다 (I-4)
   // [LAB-48] programId 는 프로젝트 id 와 화면 이름("__new__"·"upload"…)을 겸한다.
   //   LAB-21 이 Index.tsx 에 같은 가드를 넣었는데 이 호출부는 빠져 있었다 — 그래서
@@ -2058,218 +2061,18 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
     }
 
     return (
-      <div
-        ref={chatScrollRef}
-        onScroll={handleChatScroll}
-        className="flex-1 w-full px-4 pt-4 flex flex-col items-center space-y-4 overflow-y-auto no-scrollbar pb-20"
-      >
-
+      <>
         {/* [FRAGMENT-SEARCH] 채팅 자연어 조각 검색 결과 */}
         <FragSearchPanel fragSearch={fragSearch} onClose={() => setFragSearch(null)} />
 
-        {/* [FLOW] 중앙 타임라인 — 개략·채팅·지난 제안이 하나의 흐름으로 위로 흘러간다.
-            현재(활성) 제안 pair만 아래 '무대'(플레이어 그리드)에 서고,
-            지난 제안은 고스트 카드로 흐름 속에 남아 '다시 열기'로 무대 복원. */}
-        {((storyPlan?.messages || []).length > 0 || proposalHistory.length > 0) && (
-          <div className="w-full max-w-[800px] flex flex-col gap-6 py-8 animate-in fade-in duration-700">
-
-            {/* [R8 유령 5호 2026-07-20] 스토리박스 독립 — 렌더 조건에서 `storyPlan &&` 제거.
-                storyPlan(대화 원고)이 죽어도 proposalHistory>0이면 지난 원고 세대는 상주한다
-                (프로젝트 전환·확정 왕복 중 소실 0). '지난 원고 0개'(이 블록 미출현)와 '복원 실패'
-                (세대는 있는데 대화 기록만 못 불러옴)를 아래 안내로 구분한다. */}
-            {!storyPlan && proposalHistory.length > 0 && (
-              <div className="text-[11px] text-muted-foreground/76 px-1">
-                이전 대화 기록은 불러오지 못했어요. 지난 원고 세대는 아래에 그대로 남아 있습니다.
-              </div>
-            )}
-
-            <div className="flex flex-col gap-8">
-              {[
-                // timestamp 없는 메시지는 ts=0으로 맨 위로 튀지 않게 — 직전 메시지
-                // 시각을 승계해 입력 순서(아래로 쌓임)를 지킨다.
-                ...(() => { let last = 0; return (storyPlan?.messages || []).map((msg: any) => {
-                  last = typeof msg.timestamp === "number" && msg.timestamp > 0 ? msg.timestamp : last + 1;
-                  return { kind: "msg" as const, ts: last, msg };
-                }); })(),
-                ...proposalHistory
-                  .map((h) => ({ kind: "pair" as const, ts: h.ts, entry: h })),
-                // [PERSON-PALETTE→FLOW] 인물 문답도 흐름 속 한 지점 — 이후 대화는 아래로
-                ...(paletteTsRef.current && (pendingPersons.length > 0 || personSavedNote)
-                  ? [{ kind: "palette" as const, ts: paletteTsRef.current }]
-                  : []),
-              ]
-                .sort((a, b) => a.ts - b.ts)
-                .map((item: any) => item.kind === "palette" ? (
-                <div key="person_palette" className="flex flex-col gap-3">
-                  {personSavedNote && (
-                    <div className="flex justify-start animate-in fade-in duration-500">
-                      <div className="flex gap-4 max-w-[85%]">
-                        <div className="w-8 h-8 rounded-lg flex-shrink-0 flex items-center justify-center mt-1 bg-primary/10 text-primary">
-                          <BookOpen size={16} />
-                        </div>
-                        <div className="px-5 py-3.5 rounded-2xl rounded-tl-none bg-secondary/10 border border-border/5 text-[14px] text-foreground/90">
-                          {personSavedNote}
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                  {pendingPersons.length > 0 && (
-                    <div className="flex justify-start animate-in fade-in duration-500">
-                      <div className="flex gap-4 w-full max-w-[85%]">
-                        <div className="w-8 h-8 rounded-lg flex-shrink-0 flex items-center justify-center mt-1 bg-primary/10 text-primary">
-                          <BookOpen size={16} />
-                        </div>
-                        <div className="flex-1 px-5 py-3.5 rounded-2xl rounded-tl-none bg-secondary/10 border border-border/5 space-y-3">
-                          <p className="text-[13px] text-foreground/90">영상에 자주 나오는 분들이 보여요. 누구인지 알려주시면 편집할 때 이름으로 부를 수 있어요.</p>
-                          <div className="flex flex-wrap gap-3">
-                            {pendingPersons.map((p) => (
-                              <div key={p.person_id} className="flex flex-col items-center gap-1.5 bg-black/20 rounded-lg p-2.5 w-[120px]">
-                                <img
-                                  src={p.face_url}
-                                  alt="face"
-                                  className="w-16 h-16 rounded-full object-cover border border-white/10"
-                                />
-                                <span className="text-[9px] text-muted-foreground/76">{p.appearances}개 장면 등장</span>
-                                <input
-                                  value={personNameDraft[p.person_id] ?? ""}
-                                  onChange={(e) => setPersonNameDraft((prev) => ({ ...prev, [p.person_id]: e.target.value }))}
-                                  onKeyDown={(e) => { if (e.key === "Enter" && !e.nativeEvent.isComposing) savePersonName(p.person_id); }}
-                                  placeholder="이름"
-                                  className="w-full bg-transparent border-b border-white/15 focus:border-primary/60 text-center text-[12px] text-foreground py-0.5 outline-none"
-                                />
-                                <div className="flex gap-1">
-                                  <button
-                                    onClick={() => savePersonName(p.person_id)}
-                                    disabled={!(personNameDraft[p.person_id] ?? "").trim()}
-                                    className="px-2 py-0.5 rounded text-[10px] font-bold bg-primary/15 text-primary hover:bg-primary hover:text-primary-foreground disabled:opacity-30 transition-all"
-                                  >저장</button>
-                                  <button
-                                    onClick={() => rejectPerson(p.person_id)}
-                                    className="px-2 py-0.5 rounded text-[10px] text-muted-foreground/60 hover:text-foreground transition-all"
-                                  >건너뛰기</button>
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                </div>
-                ) : item.kind === "msg" ? (
-                <div key={item.msg.id} className={`flex ${item.msg.sender === "user" ? "justify-end" : "justify-start"} animate-in fade-in slide-in-from-bottom-2 duration-500`}>
-                  <div className={`flex gap-4 max-w-[85%] ${item.msg.sender === "user" ? "flex-row-reverse" : "flex-row"}`}>
-                    <div className={`w-8 h-8 rounded-lg flex-shrink-0 flex items-center justify-center mt-1 ${item.msg.sender === "ai" ? "bg-primary/10 text-primary" : "bg-secondary/40 text-muted-foreground"}`}>
-                      {item.msg.sender === "ai" ? <BookOpen size={16} /> : <List size={16} />}
-                    </div>
-                    <div className={`flex flex-col gap-1.5 ${item.msg.sender === "user" ? "items-end" : "items-start"}`}>
-                      <div className={`px-5 py-3.5 rounded-2xl leading-relaxed text-[14px] whitespace-pre-wrap break-words ${
-                        item.msg.sender === "user"
-                          ? "bg-[#161618] border border-white/5 text-foreground/90 rounded-tr-none"
-                          : "bg-secondary/10 border border-border/5 text-foreground/90 rounded-tl-none"
-                      }`}>
-                        {/* [S-1] 스피너는 첫 토큰 전까지만 — say가 차오르기 시작하면 소거 */}
-                        {item.msg.isInterpreting && !item.msg.text && (
-                          <div className="flex items-center gap-2 text-primary/60">
-                            <Loader2 size={14} className="animate-spin" />
-                            <span className="text-[11px] font-medium animate-pulse">듣고 있어요…</span>
-                          </div>
-                        )}
-                        {String(item.msg.text || "").replace(/\b\d{8}_\d{6}(?:_\d+)?\b/g, "")}
-                      </div>
-                      {/* [관문D 2026-07-21] 큐원 판단근거(대사·장면·맥락) 얇게 표시 — 없으면 "근거 없음" */}
-                      {item.msg.sender === "ai" && (item.msg as any).candidate_evidence && Object.keys((item.msg as any).candidate_evidence).length > 0 && (
-                        <div className="px-4 py-2 rounded-xl bg-secondary/5 border border-border/5 text-[11px] text-muted-foreground/70 space-y-1.5 max-w-full">
-                          {Object.entries((item.msg as any).candidate_evidence).map(([fid, lines]: any) => {
-                            const ev = (lines as string[]).filter((l) => !l.startsWith("meta:"));
-                            return (
-                              <div key={fid} className="space-y-0.5">
-                                {ev.length === 0 ? (
-                                  <div className="italic text-muted-foreground/70">근거 없음</div>
-                                ) : ev.map((l: string, i: number) => {
-                                  const label = l.startsWith("speech:") ? "대사" : l.startsWith("scene:") ? "장면" : l.startsWith("context:") ? "맥락" : "";
-                                  const val = l.replace(/^(speech|scene|context):\s*/, "").slice(0, 80);
-                                  return (
-                                    <div key={i}><span className="text-primary/50 mr-1">✓ {label}</span>{val}</div>
-                                  );
-                                })}
-                              </div>
-                            );
-                          })}
-                        </div>
-                      )}
-                      {/* [SHOW] 조회 결과 카드 — 사람 말 명칭(제목·시간), 클릭=그 자리 재생 */}
-                      {(item.msg as any).kind === "search_results" && Array.isArray((item.msg as any).results) && (item.msg as any).results.length > 0 && (
-                        <SearchResultCards results={(item.msg as any).results} />
-                      )}
-                      <span className="text-[12px] text-muted-foreground/70 px-1">{new Date(item.msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
-                    </div>
-                  </div>
-                </div>
-                ) : item.entry.id === activeProposalEntryId ? (
-                // [FLOW-STAGE] 활성 제안 = 무대 슬롯. 무대(플레이어+내보내기)가 portal로 이 자리에 선다.
-                <div key={`stage_${item.entry.id}`} ref={setStageSlot} className="w-full flex flex-col items-center space-y-4" />
-                ) : (
-                // [#19가 통일 2026-07-19] 과거 원고 세대는 승인 전·후(story·edit) 모양 불변 —
-                // 항상 같은 스토리박스로 상주한다(옛 '지난 제안' 고스트카드 폐지). '렌더된 편집
-                // 결과'(A/B 미리보기 영상)는 여기 내지 않는다. 원고 메타(조각 수) + '재작업' 버튼만.
-                // 클릭=그 원고 소환(재작업 진입).
-                (() => {
-                  const pair = item.entry.pair as any;
-                  const primary = pair?.B ?? pair?.A;
-                  const fragCount = (primary?.key_fragments?.length ?? primary?.sequence?.length ?? 0);
-                  const isOpen = openStoryBox === item.entry.id;
-                  const when = new Date(item.entry.ts).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-                  return (
-                    <div key={`storybox_${item.entry.id}`} className="flex justify-start animate-in fade-in duration-500">
-                      <div className="flex gap-4 max-w-[85%]">
-                        <div className="w-8 h-8 rounded-lg flex-shrink-0 flex items-center justify-center mt-1 bg-primary/10 text-primary">
-                          <BookOpen size={16} />
-                        </div>
-                        <div className="flex flex-col gap-1.5 items-start">
-                          <div className="rounded-2xl rounded-tl-none bg-secondary/10 border border-border/5 min-w-[240px] overflow-hidden">
-                            <button
-                              type="button"
-                              onClick={() => setOpenStoryBox(isOpen ? null : item.entry.id)}
-                              className="w-full flex items-center gap-2 px-4 py-3 text-left hover:bg-white/[0.02] transition-colors"
-                              title={isOpen ? "접기" : "펼치기"}
-                            >
-                              <span className="text-[10px] font-black tracking-widest uppercase text-muted-foreground/60">지난 원고</span>
-                              <span className="text-[12px] text-foreground/80">{fragCount}조각</span>
-                              <ChevronDown size={13} className={`ml-auto flex-shrink-0 text-muted-foreground/76 transition-transform ${isOpen ? "rotate-180" : ""}`} />
-                            </button>
-                            {isOpen && (
-                              <div className="px-4 pb-3.5 pt-0.5 flex flex-col gap-2 border-t border-border/5">
-                                <span className="text-[11px] text-muted-foreground/70 pt-2">
-                                  이 원고를 불러와 이어서 다시 다듬을 수 있어요.
-                                </span>
-                                {onRestoreProposalEntry && (
-                                  <button
-                                    type="button"
-                                    onClick={() => onRestoreProposalEntry(item.entry.id)}
-                                    className="self-start flex items-center gap-1.5 rounded-lg border border-primary/25 bg-primary/10 px-2.5 py-1 text-[11px] font-semibold text-primary hover:bg-primary/20 transition-colors"
-                                    title="이 원고를 조각맵·무대로 불러와 재작업합니다"
-                                  >
-                                    <Play size={11} /> 이 원고로 재작업
-                                  </button>
-                                )}
-                              </div>
-                            )}
-                          </div>
-                          <span className="text-[12px] text-muted-foreground/70 px-1">{when}</span>
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })()
-                ))}
-            </div>
-
-          </div>
-        )}
-        
-        {/* [PERSON-PALETTE→FLOW] 팔레트는 이제 흐름 속 아이템으로 렌더 (위 타임라인 map) */}
-
+      {/* [CHAT-ROOT 3-2 2026-08-02] 무대(전사·플레이어·내보내기)는 상태다 — 스트림 밖 위에
+          고정한다. 구판은 이것이 chatScrollRef 안에 있어, 슬롯이 있으면 채팅 메시지 사이로
+          끼어들고 없으면 최신 메시지 아래를 통째로 덮었다. 스크롤(위치)이 아니라 순서 문제였고,
+          그래서 지난 4차수가 위치만 고쳐서는 재발했다.
+          ★ 자동으로 접지 않는다. 기본 펼침. 접는 것은 사용자뿐이다(국장 확정). */}
+      <div className="w-full flex-shrink-0 flex flex-col items-center">
+        {!stageFolded && (
+          <div className="w-full px-4 pt-4 flex flex-col items-center space-y-4 max-h-[62vh] overflow-y-auto no-scrollbar">
         {/* [FLOW-STAGE] 무대(방향바+A/B 플레이어+상세+내보내기)를 하나의 콘텐츠로 묶어,
             타임라인의 활성 제안 위치(slot)로 portal 이동. slot이 없으면 기존 위치에 그대로. */}
         {(() => { const stageContent = (
@@ -2996,20 +2799,242 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
             {editStageAllowed && stageContent}
           </>
         );
-        // [C1-DIAGNOSED 2026-08-01] ★ 이 한 줄이 RoughCutStage 를 두 번 마운트시킨다.
-        //   stageSlot 은 처음 null 이라 finalContent 를 **인라인**으로 그리고, 아래 ref 콜백
-        //   (:2211, activeProposalEntryId 일 때만 존재하는 슬롯)이 값을 채우면 같은 내용이
-        //   **포털**로 옮겨간다. React 에게는 부모가 바뀐 것이므로 언마운트 -> 재마운트다.
+        // [CHAT-ROOT 3-2 2026-08-02] 포털 분기 제거 — 주석이 지목한 그 한 줄이다.
+        //   구판: `stageSlot ? createPortal(finalContent, stageSlot) : finalContent`
+        //   stageSlot 은 처음 null 이라 인라인으로 그렸다가, 슬롯 ref 콜백이 값을 채우면
+        //   같은 내용이 포털로 옮겨갔다. React 에게는 부모가 바뀐 것이므로 언마운트 -> 재마운트다.
         //   실측(프로젝트 전환 Freesia -> Adhara):
-        //     mount(t=70397) -> unmount(t=70425) -> mount(t=70425)  = 28ms 한 틱
-        //     그 결과 /rough-cut/project 가 2회 호출된다(27ms 간격).
-        //   앞서 의심한 인라인 콜백·StrictMode 는 실측으로 부정됐다 — 의존성은 안정적이었고
-        //   트리가 갈아엎힌 것이었다.
-        //   지금은 **고치지 않는다**(국장 판정): 낭비가 전환당 요청 1회(<500ms)로 작고,
-        //   슬롯을 항상 렌더하거나 무대 구조를 정리하는 수리는 레이아웃 변경이라
-        //   '제안 없는 프로젝트에서 전사가 사라지는' 위험이 있다(겨우 살린 것이다).
-        //   ★ 다음에 이 포털/인라인 구조를 손대는 사람은 그때 이 재마운트도 함께 없앨 것.
-        return stageSlot ? createPortal(finalContent, stageSlot) : finalContent; })()}
+        //     mount(t=70397) -> unmount(t=70425) -> mount(t=70425) = 28ms 한 틱,
+        //     그 결과 /rough-cut/project 가 2회 호출됐다(27ms 간격).
+        //   [C1-DIAGNOSED 2026-08-01] 이 재마운트를 기록하며 "다음에 이 포털/인라인 구조를
+        //   손대는 사람이 함께 없앨 것"이라 남겼다. 지금이 그때다 — 무대가 스트림 밖 한 자리에
+        //   고정되므로 슬롯도 포털도 필요 없다.
+        return finalContent; })()}
+
+          </div>
+        )}
+        {/* [CHAT-ROOT 3-2] 아래쪽 접기 — 길게 읽고 내려온 자리에서 바로 접히게.
+            위쪽 접기(RoughCutStage, 644bb6f6)는 그대로 두고 여기에 하나 더 둔다. */}
+        <button
+          type="button"
+          onClick={() => setStageFolded((v) => !v)}
+          title={stageFolded ? "무대 펼치기" : "무대 접기"}
+          className="mx-auto mb-1 mt-1 flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] text-muted-foreground/60 hover:text-foreground/80 hover:bg-white/5 transition-colors"
+        >
+          <ChevronDown size={12} className={stageFolded ? "" : "rotate-180"} />
+          {stageFolded ? "무대 펼치기" : "무대 접기"}
+        </button>
+      </div>
+      <div
+        ref={chatScrollRef}
+        onScroll={handleChatScroll}
+        className="flex-1 w-full px-4 pt-4 flex flex-col items-center space-y-4 overflow-y-auto no-scrollbar pb-20"
+      >
+        {/* [FLOW] 중앙 타임라인 — 개략·채팅·지난 제안이 하나의 흐름으로 위로 흘러간다.
+            현재(활성) 제안 pair만 아래 '무대'(플레이어 그리드)에 서고,
+            지난 제안은 고스트 카드로 흐름 속에 남아 '다시 열기'로 무대 복원. */}
+        {((storyPlan?.messages || []).length > 0 || proposalHistory.length > 0) && (
+          <div className="w-full max-w-[800px] flex flex-col gap-6 py-8 animate-in fade-in duration-700">
+
+            {/* [R8 유령 5호 2026-07-20] 스토리박스 독립 — 렌더 조건에서 `storyPlan &&` 제거.
+                storyPlan(대화 원고)이 죽어도 proposalHistory>0이면 지난 원고 세대는 상주한다
+                (프로젝트 전환·확정 왕복 중 소실 0). '지난 원고 0개'(이 블록 미출현)와 '복원 실패'
+                (세대는 있는데 대화 기록만 못 불러옴)를 아래 안내로 구분한다. */}
+            {!storyPlan && proposalHistory.length > 0 && (
+              <div className="text-[11px] text-muted-foreground/76 px-1">
+                이전 대화 기록은 불러오지 못했어요. 지난 원고 세대는 아래에 그대로 남아 있습니다.
+              </div>
+            )}
+
+            <div className="flex flex-col gap-8">
+              {[
+                // timestamp 없는 메시지는 ts=0으로 맨 위로 튀지 않게 — 직전 메시지
+                // 시각을 승계해 입력 순서(아래로 쌓임)를 지킨다.
+                ...(() => { let last = 0; return (storyPlan?.messages || []).map((msg: any) => {
+                  last = typeof msg.timestamp === "number" && msg.timestamp > 0 ? msg.timestamp : last + 1;
+                  return { kind: "msg" as const, ts: last, msg };
+                }); })(),
+                ...proposalHistory
+                  .map((h) => ({ kind: "pair" as const, ts: h.ts, entry: h })),
+                // [PERSON-PALETTE→FLOW] 인물 문답도 흐름 속 한 지점 — 이후 대화는 아래로
+                ...(paletteTsRef.current && (pendingPersons.length > 0 || personSavedNote)
+                  ? [{ kind: "palette" as const, ts: paletteTsRef.current }]
+                  : []),
+              ]
+                .sort((a, b) => a.ts - b.ts)
+                .map((item: any) => item.kind === "palette" ? (
+                <div key="person_palette" className="flex flex-col gap-3">
+                  {personSavedNote && (
+                    <div className="flex justify-start animate-in fade-in duration-500">
+                      <div className="flex gap-4 max-w-[85%]">
+                        <div className="w-8 h-8 rounded-lg flex-shrink-0 flex items-center justify-center mt-1 bg-primary/10 text-primary">
+                          <BookOpen size={16} />
+                        </div>
+                        <div className="px-5 py-3.5 rounded-2xl rounded-tl-none bg-secondary/10 border border-border/5 text-[14px] text-foreground/90">
+                          {personSavedNote}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                  {pendingPersons.length > 0 && (
+                    <div className="flex justify-start animate-in fade-in duration-500">
+                      <div className="flex gap-4 w-full max-w-[85%]">
+                        <div className="w-8 h-8 rounded-lg flex-shrink-0 flex items-center justify-center mt-1 bg-primary/10 text-primary">
+                          <BookOpen size={16} />
+                        </div>
+                        <div className="flex-1 px-5 py-3.5 rounded-2xl rounded-tl-none bg-secondary/10 border border-border/5 space-y-3">
+                          <p className="text-[13px] text-foreground/90">영상에 자주 나오는 분들이 보여요. 누구인지 알려주시면 편집할 때 이름으로 부를 수 있어요.</p>
+                          <div className="flex flex-wrap gap-3">
+                            {pendingPersons.map((p) => (
+                              <div key={p.person_id} className="flex flex-col items-center gap-1.5 bg-black/20 rounded-lg p-2.5 w-[120px]">
+                                <img
+                                  src={p.face_url}
+                                  alt="face"
+                                  className="w-16 h-16 rounded-full object-cover border border-white/10"
+                                />
+                                <span className="text-[9px] text-muted-foreground/76">{p.appearances}개 장면 등장</span>
+                                <input
+                                  value={personNameDraft[p.person_id] ?? ""}
+                                  onChange={(e) => setPersonNameDraft((prev) => ({ ...prev, [p.person_id]: e.target.value }))}
+                                  onKeyDown={(e) => { if (e.key === "Enter" && !e.nativeEvent.isComposing) savePersonName(p.person_id); }}
+                                  placeholder="이름"
+                                  className="w-full bg-transparent border-b border-white/15 focus:border-primary/60 text-center text-[12px] text-foreground py-0.5 outline-none"
+                                />
+                                <div className="flex gap-1">
+                                  <button
+                                    onClick={() => savePersonName(p.person_id)}
+                                    disabled={!(personNameDraft[p.person_id] ?? "").trim()}
+                                    className="px-2 py-0.5 rounded text-[10px] font-bold bg-primary/15 text-primary hover:bg-primary hover:text-primary-foreground disabled:opacity-30 transition-all"
+                                  >저장</button>
+                                  <button
+                                    onClick={() => rejectPerson(p.person_id)}
+                                    className="px-2 py-0.5 rounded text-[10px] text-muted-foreground/60 hover:text-foreground transition-all"
+                                  >건너뛰기</button>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+                ) : item.kind === "msg" ? (
+                <div key={item.msg.id} className={`flex ${item.msg.sender === "user" ? "justify-end" : "justify-start"} animate-in fade-in slide-in-from-bottom-2 duration-500`}>
+                  <div className={`flex gap-4 max-w-[85%] ${item.msg.sender === "user" ? "flex-row-reverse" : "flex-row"}`}>
+                    <div className={`w-8 h-8 rounded-lg flex-shrink-0 flex items-center justify-center mt-1 ${item.msg.sender === "ai" ? "bg-primary/10 text-primary" : "bg-secondary/40 text-muted-foreground"}`}>
+                      {item.msg.sender === "ai" ? <BookOpen size={16} /> : <List size={16} />}
+                    </div>
+                    <div className={`flex flex-col gap-1.5 ${item.msg.sender === "user" ? "items-end" : "items-start"}`}>
+                      <div className={`px-5 py-3.5 rounded-2xl leading-relaxed text-[14px] whitespace-pre-wrap break-words ${
+                        item.msg.sender === "user"
+                          ? "bg-[#161618] border border-white/5 text-foreground/90 rounded-tr-none"
+                          : "bg-secondary/10 border border-border/5 text-foreground/90 rounded-tl-none"
+                      }`}>
+                        {/* [S-1] 스피너는 첫 토큰 전까지만 — say가 차오르기 시작하면 소거 */}
+                        {item.msg.isInterpreting && !item.msg.text && (
+                          <div className="flex items-center gap-2 text-primary/60">
+                            <Loader2 size={14} className="animate-spin" />
+                            <span className="text-[11px] font-medium animate-pulse">듣고 있어요…</span>
+                          </div>
+                        )}
+                        {String(item.msg.text || "").replace(/\b\d{8}_\d{6}(?:_\d+)?\b/g, "")}
+                      </div>
+                      {/* [관문D 2026-07-21] 큐원 판단근거(대사·장면·맥락) 얇게 표시 — 없으면 "근거 없음" */}
+                      {item.msg.sender === "ai" && (item.msg as any).candidate_evidence && Object.keys((item.msg as any).candidate_evidence).length > 0 && (
+                        <div className="px-4 py-2 rounded-xl bg-secondary/5 border border-border/5 text-[11px] text-muted-foreground/70 space-y-1.5 max-w-full">
+                          {Object.entries((item.msg as any).candidate_evidence).map(([fid, lines]: any) => {
+                            const ev = (lines as string[]).filter((l) => !l.startsWith("meta:"));
+                            return (
+                              <div key={fid} className="space-y-0.5">
+                                {ev.length === 0 ? (
+                                  <div className="italic text-muted-foreground/70">근거 없음</div>
+                                ) : ev.map((l: string, i: number) => {
+                                  const label = l.startsWith("speech:") ? "대사" : l.startsWith("scene:") ? "장면" : l.startsWith("context:") ? "맥락" : "";
+                                  const val = l.replace(/^(speech|scene|context):\s*/, "").slice(0, 80);
+                                  return (
+                                    <div key={i}><span className="text-primary/50 mr-1">✓ {label}</span>{val}</div>
+                                  );
+                                })}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                      {/* [SHOW] 조회 결과 카드 — 사람 말 명칭(제목·시간), 클릭=그 자리 재생 */}
+                      {(item.msg as any).kind === "search_results" && Array.isArray((item.msg as any).results) && (item.msg as any).results.length > 0 && (
+                        <SearchResultCards results={(item.msg as any).results} />
+                      )}
+                      <span className="text-[12px] text-muted-foreground/70 px-1">{new Date(item.msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                    </div>
+                  </div>
+                </div>
+                // [CHAT-ROOT 3-2 2026-08-02] 활성 제안 슬롯 제거.
+                //   구판은 활성 pair 자리에 빈 div 를 두고 무대를 portal 로 그 안에 세웠다 —
+                //   전사·플레이어가 **채팅 메시지들 사이에 끼는** 원인이었다.
+                //   업계 규칙(Cloudscape): 아티팩트를 말풍선 안에 중첩하지 않는다.
+                //   이제 활성이든 아니든 pair 는 카드 하나로만 남고(사건), 무대는 스트림
+                //   밖 위에 선다(상태). 카드 클릭 -> activeProposalEntryId 갱신 -> 위 무대 전환.
+                ) : (
+                // [#19가 통일 2026-07-19] 과거 원고 세대는 승인 전·후(story·edit) 모양 불변 —
+                // 항상 같은 스토리박스로 상주한다(옛 '지난 제안' 고스트카드 폐지). '렌더된 편집
+                // 결과'(A/B 미리보기 영상)는 여기 내지 않는다. 원고 메타(조각 수) + '재작업' 버튼만.
+                // 클릭=그 원고 소환(재작업 진입).
+                (() => {
+                  const pair = item.entry.pair as any;
+                  const primary = pair?.B ?? pair?.A;
+                  const fragCount = (primary?.key_fragments?.length ?? primary?.sequence?.length ?? 0);
+                  const isOpen = openStoryBox === item.entry.id;
+                  const when = new Date(item.entry.ts).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+                  return (
+                    <div key={`storybox_${item.entry.id}`} className="flex justify-start animate-in fade-in duration-500">
+                      <div className="flex gap-4 max-w-[85%]">
+                        <div className="w-8 h-8 rounded-lg flex-shrink-0 flex items-center justify-center mt-1 bg-primary/10 text-primary">
+                          <BookOpen size={16} />
+                        </div>
+                        <div className="flex flex-col gap-1.5 items-start">
+                          <div className="rounded-2xl rounded-tl-none bg-secondary/10 border border-border/5 min-w-[240px] overflow-hidden">
+                            <button
+                              type="button"
+                              onClick={() => setOpenStoryBox(isOpen ? null : item.entry.id)}
+                              className="w-full flex items-center gap-2 px-4 py-3 text-left hover:bg-white/[0.02] transition-colors"
+                              title={isOpen ? "접기" : "펼치기"}
+                            >
+                              <span className="text-[10px] font-black tracking-widest uppercase text-muted-foreground/60">지난 원고</span>
+                              <span className="text-[12px] text-foreground/80">{fragCount}조각</span>
+                              <ChevronDown size={13} className={`ml-auto flex-shrink-0 text-muted-foreground/76 transition-transform ${isOpen ? "rotate-180" : ""}`} />
+                            </button>
+                            {isOpen && (
+                              <div className="px-4 pb-3.5 pt-0.5 flex flex-col gap-2 border-t border-border/5">
+                                <span className="text-[11px] text-muted-foreground/70 pt-2">
+                                  이 원고를 불러와 이어서 다시 다듬을 수 있어요.
+                                </span>
+                                {onRestoreProposalEntry && (
+                                  <button
+                                    type="button"
+                                    onClick={() => onRestoreProposalEntry(item.entry.id)}
+                                    className="self-start flex items-center gap-1.5 rounded-lg border border-primary/25 bg-primary/10 px-2.5 py-1 text-[11px] font-semibold text-primary hover:bg-primary/20 transition-colors"
+                                    title="이 원고를 조각맵·무대로 불러와 재작업합니다"
+                                  >
+                                    <Play size={11} /> 이 원고로 재작업
+                                  </button>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                          <span className="text-[12px] text-muted-foreground/70 px-1">{when}</span>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })()
+                ))}
+            </div>
+
+          </div>
+        )}
+        
+        {/* [PERSON-PALETTE→FLOW] 팔레트는 이제 흐름 속 아이템으로 렌더 (위 타임라인 map) */}
 
         {/* [CHATSCROLL-FIX-01] 위에서 읽는 중에 새 내용이 오면 끌어내리지 않고 여기로 알린다.
             sticky라 기존 레이아웃을 건드리지 않는다 (높이 점유 없음). */}
@@ -3033,6 +3058,7 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
         <div ref={chatEndRef} />
 
       </div>
+      </>
     );
   };
 
