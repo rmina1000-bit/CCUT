@@ -1,6 +1,5 @@
 // CCUT 1.0.4 - R9.1 Rollback Verified
 import React, { useRef, useEffect, useState, useCallback, useMemo } from "react";
-import { createPortal } from "react-dom";
 import { UploadStagingView, probeFileMeta, type StagedMeta, type IntakeAnswers } from "@/components/views/UploadStagingView";
 import { setKnownPersonNames } from "@/hooks/useProposalState";
 import { Play, Loader2, Send, ArrowUp, Plus, CheckCircle2, Package, BookOpen, List, ChevronDown, AlertCircle } from "lucide-react";
@@ -521,10 +520,9 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
   // 정의 이후(하단)에 배치한다. (여기서 참조하면 TDZ)
   const [consultationInput, setConsultationInput] = useState("");
   // [FLOW-STAGE] 무대가 이식될 타임라인 내 슬롯 (활성 제안 카드 위치)
-  // [CHAT-ROOT 3-2 2026-08-02] 무대 접힘. ★ 기본 = 펼침이고, 시스템은 어떤 조건에서도
-  //   자동으로 접지 않는다(국장 확정). 접는 것은 사용자뿐이고 이 세션 안에서만 유지된다 —
-  //   저장소를 새로 만들지 않는다. 새 메시지가 와도 이 값은 건드리지 않는다.
-  const [stageFolded, setStageFolded] = useState(false);
+  // [CHAT-FLOW 2026-08-02] 무대 접힘 상태 폐지.
+  //   CHAT-ROOT 에서 무대를 스트림 위에 고정하며 접기를 뒀는데, 국장 확정으로 붙박이 자체가
+  //   사라졌다 — 무대가 흐름 속 한 지점이 되었으니 접을 대상도, 접기 버튼도 없다.
   // [STORY-GATE P3] 승인 관문 — 게이트 OFF면 enabled=false로 아무것도 바뀌지 않는다 (I-4)
   // [LAB-48] programId 는 프로젝트 id 와 화면 이름("__new__"·"upload"…)을 겸한다.
   //   LAB-21 이 Index.tsx 에 같은 가드를 넣었는데 이 호출부는 빠져 있었다 — 그래서
@@ -759,8 +757,15 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
     if (!text) return;
     setConsultationInput("");
     resetConsultationTextarea();
+    // [CHAT-FLOW-2 2026-08-02] 내가 보냈으면 내려간다 (국장 확정).
+    //   남이 보낸 것이 도착할 때는 안 끌려간다(INV-1, 현행 HOLD+배지 그대로).
+    //   전송은 다르다 — "대화로 돌아간다"는 사용자 의사표시이므로 억지 이동이 아니다.
+    //   ★ 배지 클릭이 쓰는 그 함수를 그대로 부른다. 새 스크롤 구현을 만들지 않는다.
+    //     이 함수 하나가 HOLD 해제(chatAtBottomRef·chatUserGestureRef·chatHasNew)와
+    //     하단 이동을 함께 한다 — 해제 코드를 따로 쓰지 않는 이유다.
+    scrollChatToBottom();
     dispatchCommand(text);
-  }, [consultationInput, dispatchCommand, resetConsultationTextarea]);
+  }, [consultationInput, dispatchCommand, resetConsultationTextarea, scrollChatToBottom]);
 
   // [F 스크롤 앵커] 새 메시지/새 제안 세대가 실제로 '늘어날' 때만 하단으로 흐른다.
   // 과거 제안 소환(activeProposalEntryId 변경)은 스크롤을 끌어내리지 않는다 — 무대가
@@ -1885,8 +1890,10 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
     if (!chatValue.trim()) return;
     const raw = chatValue.trim();
     setChatValue("");
+    // [CHAT-FLOW-2 2026-08-02] 내가 보냈으면 내려간다 — 위 handleSubmitConsultation 과 같은 이유.
+    scrollChatToBottom();
     await dispatchCommand(raw);
-  }, [chatValue, dispatchCommand]);
+  }, [chatValue, dispatchCommand, scrollChatToBottom]);
 
   const getProposalPoster = useCallback(
     (key: "A" | "B") => {
@@ -2060,22 +2067,11 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
       return <AnalysisLoadingView analyzeMessage={analyzeMessage} analysisLogs={analysisLogs} analyzeProgress={analyzeProgress} />;
     }
 
-    return (
-      <>
-        {/* [FRAGMENT-SEARCH] 채팅 자연어 조각 검색 결과 */}
-        <FragSearchPanel fragSearch={fragSearch} onClose={() => setFragSearch(null)} />
-
-      {/* [CHAT-ROOT 3-2 2026-08-02] 무대(전사·플레이어·내보내기)는 상태다 — 스트림 밖 위에
-          고정한다. 구판은 이것이 chatScrollRef 안에 있어, 슬롯이 있으면 채팅 메시지 사이로
-          끼어들고 없으면 최신 메시지 아래를 통째로 덮었다. 스크롤(위치)이 아니라 순서 문제였고,
-          그래서 지난 4차수가 위치만 고쳐서는 재발했다.
-          ★ 자동으로 접지 않는다. 기본 펼침. 접는 것은 사용자뿐이다(국장 확정). */}
-      <div className="w-full flex-shrink-0 flex flex-col items-center">
-        {!stageFolded && (
-          <div className="w-full px-4 pt-4 flex flex-col items-center space-y-4 max-h-[62vh] overflow-y-auto no-scrollbar">
-        {/* [FLOW-STAGE] 무대(방향바+A/B 플레이어+상세+내보내기)를 하나의 콘텐츠로 묶어,
-            타임라인의 활성 제안 위치(slot)로 portal 이동. slot이 없으면 기존 위치에 그대로. */}
-        {(() => { const stageContent = (
+    // [CHAT-FLOW 2026-08-02] Stage is no longer a fixed wrapper above the stream.
+    //   Director's rule: everything flows. Nothing stays pinned.
+    //   The stage body is unchanged; only its home moved - it is now a stream item
+    //   carrying a ts, so new messages push it upward like any other event.
+        const stageBlock = (() => { const stageContent = (
           <>
         {/* [STEP 10-I.5.28-E9-R1-R1] Story Direction Adjustment Bar (Only after confirmed) */}
         {storyPlan && storyPlan.consultation_status === "confirmed" && (
@@ -2793,12 +2789,19 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
         //   전사가 통째로 사라졌다. 채팅은 기록이므로 사라지지 않고 위로 올라가야 한다.
         //   신판: 확정된 스토리(전사)가 위에 남고, 승인되면 그 아래로 제안 A·B가 붙는다.
         //   탭·아코디언 없음 — 세 블록이 동시에 존재한다.
-        const finalContent = (
-          <>
-            {roughCutStage ?? storyContent}
-            {editStageAllowed && stageContent}
-          </>
-        );
+        // [CHAT-FLOW-3 2026-08-02] 전사와 편집안을 끊는다 (국장 지시:
+        //   "편집을 지시하니 전사와 편집본을 통으로 가져온다. 끊어라").
+        //   붙어다녀야 할 이유가 있어서가 아니라, 무대가 한 덩이였던 시절의 조립이
+        //   가①에서 그대로 흘러온 것이다. 이음새는 이 한 줄뿐이었다.
+        //   실측(STEP 1-3): 두 덩이는 서로의 변수를 하나도 공유하지 않는다 —
+        //     전사 쪽은 proposals·activeProposalEntryId 참조 0건,
+        //     A/B 쪽은 storyGate·activeStoryItems·storyReplacement 참조 0건.
+        //   그래서 부품 내부를 한 글자도 건드리지 않고 여기서만 가른다.
+        //   ★ 빈 아이템을 만들지 않는다 — 없는 쪽은 null 이고 스트림에 안 들어간다.
+        const finalContent = {
+          transcript: roughCutStage ?? storyContent,
+          proposal: editStageAllowed ? stageContent : null,
+        };
         // [CHAT-ROOT 3-2 2026-08-02] 포털 분기 제거 — 주석이 지목한 그 한 줄이다.
         //   구판: `stageSlot ? createPortal(finalContent, stageSlot) : finalContent`
         //   stageSlot 은 처음 null 이라 인라인으로 그렸다가, 슬롯 ref 콜백이 값을 채우면
@@ -2809,22 +2812,13 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
         //   [C1-DIAGNOSED 2026-08-01] 이 재마운트를 기록하며 "다음에 이 포털/인라인 구조를
         //   손대는 사람이 함께 없앨 것"이라 남겼다. 지금이 그때다 — 무대가 스트림 밖 한 자리에
         //   고정되므로 슬롯도 포털도 필요 없다.
-        return finalContent; })()}
+        return finalContent; })();
 
-          </div>
-        )}
-        {/* [CHAT-ROOT 3-2] 아래쪽 접기 — 길게 읽고 내려온 자리에서 바로 접히게.
-            위쪽 접기(RoughCutStage, 644bb6f6)는 그대로 두고 여기에 하나 더 둔다. */}
-        <button
-          type="button"
-          onClick={() => setStageFolded((v) => !v)}
-          title={stageFolded ? "무대 펼치기" : "무대 접기"}
-          className="mx-auto mb-1 mt-1 flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] text-muted-foreground/60 hover:text-foreground/80 hover:bg-white/5 transition-colors"
-        >
-          <ChevronDown size={12} className={stageFolded ? "" : "rotate-180"} />
-          {stageFolded ? "무대 펼치기" : "무대 접기"}
-        </button>
-      </div>
+    return (
+      <>
+        {/* [FRAGMENT-SEARCH] 채팅 자연어 조각 검색 결과 */}
+        <FragSearchPanel fragSearch={fragSearch} onClose={() => setFragSearch(null)} />
+
       <div
         ref={chatScrollRef}
         onScroll={handleChatScroll}
@@ -2860,9 +2854,33 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
                 ...(paletteTsRef.current && (pendingPersons.length > 0 || personSavedNote)
                   ? [{ kind: "palette" as const, ts: paletteTsRef.current }]
                   : []),
+                // [CHAT-FLOW 2026-08-02 · CHAT-FLOW-3 분리] 전사와 편집안은 각각 다른 사건이다.
+                //   국장 확정: 전부 흘러간다. 붙박이는 없다.
+                //   ★ 없는 쪽은 아이템을 만들지 않는다 — 빈 말풍선을 띄우지 않는다.
+                //   ts 는 지어내지 않는다:
+                //     전사   = 0. 분석이 대화보다 먼저 끝났으니 맨 위가 시간순으로 맞다.
+                //              (전사 생성 시각을 들고 있는 값이 프론트에 없다 — 국장 보고 완료)
+                //     편집안 = 가장 최근 편집안이 만들어진 시각(proposalHistory 승계).
+                //              아직 없으면 0 이고, 그때는 배열 순서상 전사 다음에 온다
+                //              (Array#sort 는 안정 정렬).
+                ...(stageBlock.transcript
+                  ? [{ kind: "transcript" as const, ts: 0 }] : []),
+                ...(stageBlock.proposal
+                  ? [{ kind: "proposal" as const,
+                       ts: proposalHistory.length
+                         ? proposalHistory[proposalHistory.length - 1].ts
+                         : 0 }] : []),
               ]
                 .sort((a, b) => a.ts - b.ts)
-                .map((item: any) => item.kind === "palette" ? (
+                .map((item: any) => item.kind === "transcript" ? (
+                <div key="flow_transcript" className="w-full flex flex-col items-center space-y-4">
+                  {stageBlock.transcript}
+                </div>
+                ) : item.kind === "proposal" ? (
+                <div key="flow_proposal" className="w-full flex flex-col items-center space-y-4">
+                  {stageBlock.proposal}
+                </div>
+                ) : item.kind === "palette" ? (
                 <div key="person_palette" className="flex flex-col gap-3">
                   {personSavedNote && (
                     <div className="flex justify-start animate-in fade-in duration-500">
