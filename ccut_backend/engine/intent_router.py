@@ -205,6 +205,76 @@ def _mirror_summary_fact(project_id):
     return (line + "\n") if line else ""
 
 
+# [CHAT-EYES 2026-08-02] 자유 대화용 조각 근거 블록 — ★상한을 두고 발췌만 싣는다.
+#   왜 이 방식인가(갈래 ㄱ):
+#     갈래 ㄴ(_qwen_tools 안내에 조각·시각 테이블 추가)은 목표에 못 닿는다.
+#     _qwen_tool_show 는 `if _show_subject:` 안에서만 불린다(:783). 자유 대화는
+#     거기까지 가지 않으므로 안내 테이블을 아무리 늘려도 chat 분기에는 0건이다.
+#   ★전문 금지: 조각당 scene 60자 · 전사 60자 발췌. 건수 상한 _EVID_MAX.
+#   ★없으면 없다고 말할 수 있게 실패를 표지로 남긴다(8/2 실측: 표지 없으면 7B 3/3 날조).
+#   ★검색은 기존 fragment_search(임베딩 + FTS bm25 보너스)를 그대로 쓴다. 새 검색 안 만든다.
+#     실측(Merope, 2026-08-02): "바닷가"·"바닷가 장면"·"바다" 모두 정답 6조각을 상위 6/6 으로
+#     집었다. visual_desc 가 영어("beach, sand, ocean")라 한국어 LIKE 로는 0건인데
+#     다국어 임베딩이 건넌다 — 그래서 키워드가 아니라 이 검색을 쓴다.
+_EVID_MAX = 8            # 프롬프트에 싣는 조각 최대 건수
+_EVID_POOL = 120         # 검색 후보 상한(프로젝트 필터 전)
+# ★문턱은 실측으로 잡았다(Merope, 2026-08-02).
+#   "바닷가"      정답 6조각의 점수 0.49 ~ 0.61
+#   "파인애플"    이 프로젝트에 없음 — 최고 0.40 (전부 엉뚱한 bench 조각)
+#   두 분포가 0.45 에서 갈린다. 아래는 싣지 않는다 -> 없는 것은 0건 표지로 나간다.
+#   ★표본이 한 프로젝트라 절대값이 아니다. 어긋나면 이 숫자부터 다시 잰다.
+_EVID_CUT = 0.45
+
+
+def _evid_snip(s, n=60):
+    # ★이 모듈은 모듈 레벨에 `re` 가 없다(함수 안 지역 import 관행). _re_mod 를 쓴다.
+    t = _re_mod.sub(r"\s+", " ", str(s or "")).strip()
+    # ★전사 꼬리에 붙은 조각 id(VF1_SRC_… )를 뗀다. 그대로 두면 큐원이 그 id 를
+    #   답에 옮겨 적어 "실재하지 않는 id" 처럼 보인다(B-2 오판 유발).
+    t = _re_mod.sub(r"\b[A-Z]{1,3}\d*_SRC_[0-9A-Za-z_]+", "", t).strip()
+    return t[:n]
+
+
+def _fragment_evidence_block(input_text, source_ids=None):
+    """질문과 가까운 조각 몇 개를 fid + 발췌로. 실패·0건도 표지로 남긴다."""
+    q = str(input_text or "").strip()
+    if not q:
+        return ""
+    sids = {str(s) for s in (source_ids or []) if s}
+    if not sids:
+        return ""
+    try:
+        from engine import fragment_search as _fs
+        res = _fs.search(q, top_k=_EVID_POOL)
+        rows = [r for r in (res.get("results") or [])
+                if str(r.get("source_id")) in sids and float(r.get("score") or 0) >= _EVID_CUT]
+    except Exception as e:
+        print(f"[CHAT-EYES][WARN] 조각 조회 실패 ({e})")
+        return ("[조각 근거] 조회에 실패했다. 조각 내용을 아는 척하지 말고 "
+                "지금은 확인할 수 없다고 말하라.\n")
+    if not rows:
+        return ("[조각 근거] 이 질문과 가까운 조각을 이 프로젝트에서 찾지 못했다(0건). "
+                "없으면 없다고 말하라 — 조각 id 나 내용을 지어내지 마라.\n")
+    rows = rows[:_EVID_MAX]
+    # ★1회차 실패 기록: 처음엔 "가까운 순서일 뿐 조건에 맞는다는 뜻이 아니다 …
+    #   맞는 것이 없으면 '없습니다'" 로 썼다. 근거 6건을 주고도 답이 "없습니다." 였다.
+    #   7B 는 부정 프레이밍을 먼저 집는다. 그래서 (1) 문턱으로 걸러 목록 자체를 믿을 수
+    #   있게 만들고 (2) 지시를 '세어서 답하라'로 돌린다. '없다'는 마지막 예외로 내린다.
+    out = [f"[조각 근거] 이 프로젝트에서 질문과 가까운 조각 {len(rows)}개를 찾았다(가까운 순). "
+           "아래 장면·말을 근거로 답하라. 개수를 물으면 질문 조건에 맞는 것을 세어 "
+           "숫자로 답하라. 목록에 없는 조각 id·내용은 지어내지 마라. "
+           "이전 질문에 나온 낱말은 이 답에 섞지 마라. "
+           "장면 설명은 영어일 수 있다(beach=바닷가, ocean=바다) — 뜻으로 읽어라. "
+           "조건에 맞는 것이 정말 하나도 없을 때만 없다고 답하라."]
+    for r in rows:
+        out.append("  - {fid} {s:.0f}~{e:.0f}s (근접 {sc:.2f}) | 장면: {vd} | 말: {tr}".format(
+            fid=r.get("fragment_id"), s=float(r.get("start") or 0), e=float(r.get("end") or 0),
+            sc=float(r.get("score") or 0),
+            vd=_evid_snip(r.get("visual_desc")) or "-",
+            tr=_evid_snip(r.get("transcript")) or "-"))
+    return "\n".join(out) + "\n"
+
+
 def _llm_understand(input_text, recent_messages=None, source_ids=None,
                     person_vocab=None, defer_chat=False, project_id=None):
     """[문맥 종업원 v2 — 국장지시 2026-07-06] 매트릭스가 아니라 문맥으로 판단한다.
@@ -357,6 +427,14 @@ def _llm_understand(input_text, recent_messages=None, source_ids=None,
                      "'물놀이 위주로', '실내만', '더 길게/짧게'.",
                      confidence=0.6, via="qwen", matched={"kind": "llm_unclear"})
     if kind == "chat":
+        # [CHAT-EYES 2026-08-02] 자유 대화에서 큐원에게 ★조각을 보여준다.
+        #   국장 실화면: 조각맵에 바닷가 조각이 여럿인데 "1개뿐"이라 답하고
+        #   직전 질문의 "파인애플"까지 섞였다. 원인은 성격이 아니라 ★눈이 없어서다 —
+        #   이 분기는 candidate_fragment_ids 를 채우지 않고, facts 에는 조각 '수'만 있고
+        #   조각 '내용'이 0건이다. 못 보는데 물으면 지어낸다.
+        #   ★분류 프롬프트(facts)와 되묻기 템플릿은 건드리지 않는다. 대화용 facts_chat 에만
+        #     붙이고, kind=="chat" 으로 판정된 뒤에만 조회한다(다른 경로 비용 0 · 회귀 0).
+        facts_chat = facts_chat + _fragment_evidence_block(input_text, source_ids)
         # [F2 스트리밍] defer_chat=True면 대화 생성을 하지 않고 표식만 반환 —
         # 스트림 엔드포인트가 stream_smalltalk로 토큰 단위 생성한다. 분류는 이미 완료.
         if defer_chat:
