@@ -1070,15 +1070,30 @@ export const useProposalState = (
         //    사용자가 정한 값이 아니라 ★지난 결과가 다음 요청의 상한이 되는 구조였다)
         //   그래서 개수를 명시하면 그 개수가 들어갈 만큼 길이도 함께 연다.
         //   조각 평균 길이는 이 프로젝트 실물에서 구한다 — 상수를 지어내지 않는다.
-        const _durs = (sourceFragments || [])
-          .map((f: any) => Number(f?.duration) || 0).filter((d: number) => d > 0);
-        const _avg = _durs.length
-          ? _durs.reduce((a: number, b: number) => a + b, 0) / _durs.length
+        // ★★내 어제 버그를 고친다 — `duration` 은 초가 아니라 ★프레임 수다.
+        //   Index.tsx:490  const durationFrames = Math.max(1, endFrame - startFrame)
+        //   Index.tsx:527  duration: durationFrames          <- 여기서 프레임이 담긴다
+        //   그걸 초로 읽어 17 × 374.5 = 6366.9초(1시간 46분)를 target_length 로 보냈다.
+        //   국장 콘솔 실측: "[COUNT-TRUTH] … 평균조각 374.5s · target_length 60.0 -> 6366.9"
+        //   DB 대조: SRC_3111FA4F 조각 135개 평균 12.48초 → ×30fps = 374.4 프레임. 정확히 일치.
+        //   ★fps 30 은 이 코드베이스의 상수다(Index.tsx:1584 `end_frame / 30`, :968 동일).
+        const FPS = 30;
+        const _durSec = (sourceFragments || [])
+          .map((f: any) => (Number(f?.duration) || 0) / FPS)
+          .filter((d: number) => d > 0);
+        const _avg = _durSec.length
+          ? _durSec.reduce((a: number, b: number) => a + b, 0) / _durSec.length
           : 15;
-        const _need = _reqCount * _avg;
+        // ★위로 무한정 열지 않는다. 6366초짜리 목표는 "아무거나 다 담아라"와 같다.
+        //   원본 총 길이를 넘기지 않는다 — 없는 분량을 요구할 수는 없다.
+        const _srcTotalSec = (sourceFragments || [])
+          .reduce((a: number, f: any) => a + (Number(f?.duration) || 0) / FPS, 0);
+        const _need = Math.min(_reqCount * _avg, _srcTotalSec || _reqCount * _avg);
+        const _before = targetLen;
         if (_need > targetLen) targetLen = _need;
         console.info(`[COUNT-TRUTH] 사용자 명시 개수 ${_reqCount} -> requested_count · `
-          + `평균조각 ${_avg.toFixed(1)}s · target_length ${(proposals?.A?.preview_duration || 60).toFixed(1)} -> ${targetLen.toFixed(1)}`);
+          + `평균조각 ${_avg.toFixed(1)}s(프레임/${FPS}) · 원본총길이 ${_srcTotalSec.toFixed(0)}s · `
+          + `target_length ${_before.toFixed(1)} -> ${targetLen.toFixed(1)}`);
       }
       const userIntent = {
         ...nextIntent,
