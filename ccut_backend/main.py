@@ -5468,7 +5468,17 @@ def _rubric_direct_route(input_text: str) -> dict | None:
     return r
 
 
-def _chat_only_speed_bypass(input_text: str) -> dict | None:
+# [FRAG-TRUTH 2026-08-03] ★이 게이트가 "지어낸다"의 진짜 뿌리였다.
+#   실측: "식당에서 식사하는 영상 있나?" -> via=structural_chat_gate ·
+#   matched={kind:free_chat, speed_bypass:true} · 그리고 아래에서 `facts: ""`.
+#   즉 이 경로로 오는 자유대화는 날짜·작업 상황·기억·조각 근거를 ★통째로 0건으로
+#   받는다. 속도를 위해 사실을 버린 것이고, 큐원은 아무 근거 없이 답해야 하니 지어낸다
+#   ("네, 식당에서 식사하는 영상이 있습니다" / "내부 조명이 뛰어난 실내 촬영…").
+#   ★_llm_understand 쪽(intent_router)의 근거 주입은 이 게이트를 지나온 말에는 닿지 않는다.
+#     그래서 같은 근거를 여기에도 준다 — 사실을 두 벌 만드는 게 아니라 같은 함수를 부른다.
+#   ★없다/애매하다는 서버가 직접 답한다(모델에게 지시문으로 시켜 두 번 실패했다).
+def _chat_only_speed_bypass(input_text: str, project_id: str = None,
+                            source_ids: list = None) -> dict | None:
     t = (input_text or "").strip()
     if not t:
         return None
@@ -5510,7 +5520,30 @@ def _chat_only_speed_bypass(input_text: str) -> dict | None:
                     "gate": "structural_chat"},
         "via": "structural_chat_gate",
     }
-    r["_stream_chat"] = {"facts": ""}
+    # ★빈 facts 를 그대로 넘기지 않는다 — 근거 없이 답하게 하면 지어낸다.
+    facts = ""
+    try:
+        from engine import converse as _cv
+        facts += _cv.load_memory_facts(project_id) or ""
+    except Exception as e:
+        print(f"[FRAG-TRUTH][WARN] 기억 주입 실패 ({e})")
+    try:
+        from engine import intent_router as _ir2
+        state, total, block = _ir2._fragment_evidence(t, source_ids)
+        facts += block or ""
+        if _ir2._is_fragment_question(t):
+            if state == "ZERO":
+                r["reply"] = "그런 조각은 이 프로젝트에서 못 찾았어요."
+                r["matched"] = {"kind": "frag_zero", "gate": "structural_chat"}
+                return r                     # ★_stream_chat 없이 = 서버 즉답
+            if state == "UNCERTAIN":
+                r["reply"] = ("확실하지 않습니다. 비슷해 보이는 조각은 있는데 찾으시는 것과 "
+                              "맞는지 자신이 없어요. 어떤 장면인지 한 가지만 더 알려주시겠어요?")
+                r["matched"] = {"kind": "frag_uncertain", "gate": "structural_chat"}
+                return r
+    except Exception as e:
+        print(f"[FRAG-TRUTH][WARN] 조각 근거 주입 실패 ({e})")
+    r["_stream_chat"] = {"facts": facts}
     return r
 
 
@@ -5570,7 +5603,7 @@ async def route_edit_intent_api(req: EditIntentRouteRequest):
         r = (
             _unknown_fragment_label_route(req.input_text, labels)
             or _rubric_direct_route(req.input_text)
-            or _chat_only_speed_bypass(req.input_text)
+            or _chat_only_speed_bypass(req.input_text, req.project_id, req.source_ids)
             or route_edit_intent(
                 source_ids=req.source_ids, input_text=req.input_text,
                 recent_messages=req.recent_messages,
@@ -5655,7 +5688,7 @@ async def route_edit_intent_stream_api(req: EditIntentRouteRequest, request: Req
             r = (
                 _unknown_fragment_label_route(req.input_text, labels)
                 or _rubric_direct_route(req.input_text)
-                or _chat_only_speed_bypass(req.input_text)
+                or _chat_only_speed_bypass(req.input_text, req.project_id, req.source_ids)
                 or route_edit_intent(
                     source_ids=req.source_ids, input_text=req.input_text,
                     recent_messages=req.recent_messages,
