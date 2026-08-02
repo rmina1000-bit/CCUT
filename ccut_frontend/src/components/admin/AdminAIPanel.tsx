@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { Sparkles, Send, PanelRightClose, PanelRightOpen } from "lucide-react";
 import { fetcher } from "@/services/api";
-import { DRAG_HANDLE_W } from "@/pages/Index";
+import ResizeHandle from "@/components/ResizeHandle";
 
 // [ADMIN-AI-LIVE 2026-08-02 C-1] 패널 폭 — 화면을 옮겨도 이 세션 동안은 유지된다.
 //   저장소를 새로 만들지 않는다(지시서 금지). 모듈 메모리라 앱을 새로 열면 기본값이다.
@@ -189,13 +189,10 @@ export const AdminAIPanel: React.FC<{
       style={{ width }}
       className="relative flex-shrink-0 border-l border-border/15 bg-[hsl(228_12%_9%)] flex flex-col"
     >
-      {/* [C-1] 좌측 경계 손잡이 — 폭 조절. 얇게 두고 hover 때만 보인다. */}
-      <div
-        onMouseDown={onDragStart}
-        title="드래그하여 폭 조절"
-        style={{ width: DRAG_HANDLE_W, marginLeft: -DRAG_HANDLE_W / 2 }}
-        className="absolute left-0 top-0 h-full cursor-col-resize z-20 hover:bg-primary/40 active:bg-primary/60 transition-colors"
-      />
+      {/* [DRAG-ONE 2026-08-02] 공용 손잡이로 교체.
+          구판은 여기만 음수 마진(-6px)으로 옆으로 삐져나와 있어, 관제실에서 옆 칸의
+          손잡이와 서로 물려 잡히지 않았다(국장 실사용 보고). overlay 는 음수 마진을 쓰지 않는다. */}
+      <ResizeHandle variant="overlay" side="left" onStart={onDragStart} />
       <div className="px-4 py-3 border-b border-border/15 flex items-center justify-between">
         <div className="flex items-center gap-1.5">
           <Sparkles size={13} className="text-primary" />

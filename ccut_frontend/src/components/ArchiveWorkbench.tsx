@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from "react";
 import { Input } from "@/components/ui/input";
 import { fetcher } from "@/services/api";
-import { DRAG_HANDLE_W } from "@/pages/Index";
+import ResizeHandle from "@/components/ResizeHandle";
 import { Send, Film, Clock, Plus, Check, X, ShoppingBasket, Search as SearchIcon, Layers, Play, FolderOpen, ChevronDown, ChevronUp } from "lucide-react";
 import { ArchivePreviewModal, PreviewItem } from "@/components/ArchivePreviewModal";
 import {
@@ -311,13 +311,7 @@ export const ArchiveWorkbench: React.FC = () => {
       </div>
 
       {/* [LAYOUT] 아카이브 채팅/작업대 경계 리사이즈 핸들 */}
-      <div
-        className={`flex-shrink-0 flex items-center justify-center cursor-col-resize group transition-colors ${isChatDragging ? "bg-primary/15" : "hover:bg-primary/8"}`}
-        style={{ width: DRAG_HANDLE_W }}
-        onMouseDown={(e) => { e.preventDefault(); setIsChatDragging(true); }}
-      >
-        <div className={`w-[2px] h-10 rounded-full transition-all duration-150 ${isChatDragging ? "bg-primary/60 h-16" : "bg-border/40 group-hover:bg-primary/40 group-hover:h-14"}`} />
-      </div>
+      <ResizeHandle active={isChatDragging} onStart={() => setIsChatDragging(true)} />
 
       {/* ══ 우: 확인/수집 작업대 ══ */}
       <div className="flex flex-col gap-3 min-h-0 flex-1 min-w-0">

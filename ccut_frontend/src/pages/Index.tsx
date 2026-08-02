@@ -10,13 +10,9 @@ import FragmentMiniPlayer from "@/components/FragmentMiniPlayer";
 import RoughCutStage from "@/components/RoughCutStage";
 import type { RoughCutData, RoughCutSpan } from "@/components/RoughCutOutline";
 
-// [DRAG-WIDTH 2026-08-02 국장 지시] 창 경계 드래그바 폭 — 6px 은 잡기 힘들다는 실사용 불만.
-//   두 배로 넓히고 값을 한 곳에 둔다. CCUT 의 모든 창 경계가 이 값을 쓴다
-//   (메뉴창 · 채팅창 · 아카이브 작업대 · 관제실 AI 보조).
-//   ★새로 드래그바를 만들면 임의 숫자를 쓰지 말고 이것을 import 해서 쓸 것.
-//   ※국장이 "메뉴창 것만 더 가늘다"고 느끼셨는데 코드상으론 셋 다 6px 로 같았다 —
-//     안쪽 선(w-[2px] h-10)까지 동일했다. 착시였고, 이제 12px 로 함께 넓어진다.
-export const DRAG_HANDLE_W = 12;
+// [DRAG-ONE 2026-08-02] 드래그바는 components/ResizeHandle.tsx 하나에서 관리한다.
+//   폭·색·안쪽 선·커서가 전부 거기 있다 — 여기서 숫자를 다시 적지 않는다.
+import ResizeHandle from "@/components/ResizeHandle";
 // [dev ESM 안전] 타입 전용 import는 반드시 `import type` — 혼합 import는 esbuild가 못 벗겨
 // 런타임에 존재하지 않는 named export(interface)를 요청해 모듈 에러가 난다(build는 통과).
 import type { MiniPlayTarget } from "@/components/FragmentMiniPlayer";
@@ -3321,21 +3317,7 @@ const Index: React.FC = () => {
 
       {/* [LAYOUT] 좌측 사이드바 리사이즈 핸들 — 모든 화면에서 폭 조절 가능 */}
       {!navCollapsed && (
-        <div
-          className={`flex-shrink-0 flex items-center justify-center cursor-col-resize group transition-colors ${isNavDragging ? "bg-primary/15" : "hover:bg-primary/8"}`}
-          style={{ width: DRAG_HANDLE_W }}
-          onMouseDown={(e) => {
-            e.preventDefault();
-            setIsNavDragging(true);
-          }}
-        >
-          <div
-            className={`w-[2px] h-10 rounded-full transition-all duration-150 ${isNavDragging
-              ? "bg-primary/60 h-16"
-              : "bg-border/40 group-hover:bg-primary/40 group-hover:h-14"
-              }`}
-          />
-        </div>
+        <ResizeHandle active={isNavDragging} onStart={() => setIsNavDragging(true)} />
       )}
 
       <div style={!(activeNavItem === "archive" || activeNavItem === "upload" || activeNavItem === "account" || activeNavItem === "settings" || activeNavItem === "trash") && hasProjectMedia ? { width: centerWidth, flexShrink: 0 } : { flex: 1, minWidth: 0 }} className="h-full">
@@ -3478,22 +3460,7 @@ const Index: React.FC = () => {
 
       {!(activeNavItem === "archive" || activeNavItem === "upload" || activeNavItem === "account" || activeNavItem === "trash") && hasProjectMedia && (
         <>
-          <div
-            className={`flex-shrink-0 flex items-center justify-center cursor-col-resize group transition-colors ${isDragging ? "bg-primary/15" : "hover:bg-primary/8"
-              }`}
-            style={{ width: DRAG_HANDLE_W }}
-            onMouseDown={(e) => {
-              e.preventDefault();
-              setIsDragging(true);
-            }}
-          >
-            <div
-              className={`w-[2px] h-10 rounded-full transition-all duration-150 ${isDragging
-                ? "bg-primary/60 h-16"
-                : "bg-border/40 group-hover:bg-primary/40 group-hover:h-14"
-                }`}
-            />
-          </div>
+          <ResizeHandle active={isDragging} onStart={() => setIsDragging(true)} />
 
           {/* [#3+#13 재시공 2026-07-19] pb-0 — 이 컬럼의 p-2 바닥 패딩(8px)이 보류맵을
               viewport 하단에서 8px 띄우던 '공중부양'의 실제 원인(부모 높이 체인). 바닥만
