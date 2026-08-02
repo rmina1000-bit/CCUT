@@ -155,13 +155,36 @@ def persist_decision(program_id, action, params):
 
 # ---------------------------------------------------------------- ①② 주입 재료
 
+# [STAGE-VOICE 분리 2026-08-02] 화면 안내는 대화가 아니다 — 큐원 기억에서 뺀다.
+#   STAGE-VOICE(Index.tsx:3249~3272)는 "지금은 분석 중입니다" 같은 단계 안내를 화면에
+#   한 줄 띄우고, 그것이 storyPlan.messages 를 타고 원장에 message 로 append 된다.
+#   실측(2026-08-02, Freesia): load_history(n=12) 가 큐원에게 넘기는 최근 12턴 중
+#   4턴이 이 안내였고, 프로젝트를 한 번 열 때마다 2턴씩 더 밀려 들어왔다.
+#   국장이 한 말이 뒤로 밀리고 시스템이 자기에게 한 말이 앞을 차지한다.
+#   ★고치는 곳은 화면도 저장도 아니라 '읽는 쪽'이다.
+#     - 화면 렌더 경로 무접촉 — 안내는 그대로 뜬다.
+#     - 기존 511행 무접촉 — append-only 원장은 지우지 않는다.
+#     - 범용 message 조회가 잘못 먹던 것을 조회에서 뺀다.
+#   ★문구로 판정하지 않는다. 문구는 바뀌고 번역되고 사용자가 따라 칠 수도 있다.
+#     client_id 접두로 판정한다 — client_id 는 payload["id"] 와 같은 값이고
+#     (Index.tsx:1773 `const cid = String(m?.id ?? ...)`), 생성부가 그 접두를 박는다
+#     (Index.tsx:3258 `id: \`ai_stage_${storyStage.key}_${Date.now()}\``).
+_STAGE_NOTICE_PREFIX = "ai_stage_"
+
+
+def _is_stage_notice(client_id):
+    """화면 단계 안내인가 — 구조적 표지(client_id 접두)로만 판정한다."""
+    return str(client_id or "").startswith(_STAGE_NOTICE_PREFIX)
+
+
 def load_history(program_id, n=_RECENT_TURNS):
-    """최근 n개 message + 최신 chat_summary. project_timeline이 단일 진실."""
+    """최근 n개 message + 최신 chat_summary. project_timeline이 단일 진실.
+    ★단계 안내(ai_stage_*)는 화면용이므로 여기서 제외한다 — 대화가 아니다."""
     con = sqlite3.connect("file:" + hub.DB_PATH.replace("\\", "/") + "?mode=ro",
                           uri=True, timeout=10)
     try:
         rows = list(con.execute(
-            "SELECT kind, payload FROM project_timeline WHERE program_id=? "
+            "SELECT kind, payload, client_id FROM project_timeline WHERE program_id=? "
             "AND kind IN ('message','chat_summary') ORDER BY entry_id DESC LIMIT 300",
             (program_id,)))
     except sqlite3.OperationalError:
@@ -171,7 +194,7 @@ def load_history(program_id, n=_RECENT_TURNS):
     summary = None
     msgs = []
     total_msgs = 0
-    for kind, payload in rows:  # 최신 → 과거
+    for kind, payload, client_id in rows:  # 최신 → 과거
         try:
             p = json.loads(payload) if payload else {}
         except Exception:
@@ -179,6 +202,8 @@ def load_history(program_id, n=_RECENT_TURNS):
         if kind == "chat_summary" and summary is None:
             summary = str(p.get("summary") or "")[:600]
         elif kind == "message":
+            if _is_stage_notice(client_id):
+                continue        # 화면 안내 — 대화 기억에도 요약 문턱에도 넣지 않는다
             total_msgs += 1
             if len(msgs) < n:
                 txt = str(p.get("text") or "").strip()
@@ -708,12 +733,16 @@ def maybe_roll_summary(program_id, hist):
                           uri=True, timeout=10)
     try:
         rows = list(con.execute(
-            "SELECT payload FROM project_timeline WHERE program_id=? AND kind='message' "
-            "ORDER BY entry_id DESC LIMIT 120", (program_id,)))
+            "SELECT payload, client_id FROM project_timeline WHERE program_id=? "
+            "AND kind='message' ORDER BY entry_id DESC LIMIT 120", (program_id,)))
     finally:
         con.close()
     lines = []
-    for (payload,) in reversed(rows):
+    for payload, client_id in reversed(rows):
+        # [STAGE-VOICE 분리] 요약도 대화만 요약한다 — 안내를 요약하면
+        #   "지금은 분석 중입니다"가 사용자의 기준으로 굳는다.
+        if _is_stage_notice(client_id):
+            continue
         try:
             p = json.loads(payload)
             t = str(p.get("text") or "").strip()
