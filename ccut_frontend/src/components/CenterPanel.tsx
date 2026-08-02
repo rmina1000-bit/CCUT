@@ -1,5 +1,5 @@
 // CCUT 1.0.4 - R9.1 Rollback Verified
-import React, { useRef, useEffect, useState, useCallback, useMemo } from "react";
+import React, { useRef, useEffect, useLayoutEffect, useState, useCallback, useMemo } from "react";
 import { UploadStagingView, probeFileMeta, type StagedMeta, type IntakeAnswers } from "@/components/views/UploadStagingView";
 import { setKnownPersonNames } from "@/hooks/useProposalState";
 import { Play, Loader2, Send, ArrowUp, Plus, CheckCircle2, Package, BookOpen, List, ChevronDown, AlertCircle } from "lucide-react";
@@ -163,7 +163,9 @@ interface CenterPanelProps {
   // [FLOW] 제안 세대 기록 — 타임라인에 흘려보내고 옛 제안을 무대로 복원
   proposalHistory?: Array<{ id: string; ts: number; pair: any }>;
   activeProposalEntryId?: string | null;
-  onRestoreProposalEntry?: (id: string) => void;
+  // [CHAT-FOLD 3-1] onRestoreProposalEntry 폐지 — '이 원고로 재작업' 버튼 전용 배선이었다.
+  //   ★ Index.tsx:3456 이 아직 이 prop 을 넘기고 있다(무해: 받는 쪽이 안 쓴다).
+  //     Index 쪽 handleRestoreProposalEntry 정리는 별건 — 국장 보고 목록에 올렸다.
   // [UI-③⑤] 문진 답변 (영상 설명, 화면/사운드 기준) → story_intent에 주입
   onIntake?: (answers: IntakeAnswers) => void;
   // [UI-⑧] 컴포저 + 버튼 → 영상 추가 파일창 열기 / 드래그된 파일 직접 추가
@@ -417,7 +419,6 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
   storyRefreshNonce,
   proposalHistory = [],
   activeProposalEntryId = null,
-  onRestoreProposalEntry,
   onIntake,
   onRequestAddVideos,
   onAddVideoFiles,
@@ -515,7 +516,8 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
   //   이제 A·B는 항상 펼친 채 세로로 누적되고, 선택은 '재생 위치'만 옮긴다.
   // [#19 스토리박스] 승인 전(story mode) 제안 세대를 채팅 흐름에 경량 스토리박스로 상주시킨다.
   // 기본 접힘(append-only 이력이 쌓여도 흐름이 스캔 가능하게 — E 판단). 헤더 클릭으로 펼침.
-  const [openStoryBox, setOpenStoryBox] = useState<string | null>(null);
+  // [CHAT-FOLD 3-1 2026-08-02] openStoryBox 폐지 — 지난 원고를 펼쳤다 접는 상태였다.
+  //   그 펼침 안에 있던 것이 안내 문구와 '재작업' 버튼, 곧 옛 컨텐츠 특별 취급이었다.
   // toggleProposal / playProposal / 기본 B 펼침 효과는 재생 의존성(previewUrl·startSeq 등)
   // 정의 이후(하단)에 배치한다. (여기서 참조하면 TDZ)
   const [consultationInput, setConsultationInput] = useState("");
@@ -523,6 +525,84 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
   // [CHAT-FLOW 2026-08-02] 무대 접힘 상태 폐지.
   //   CHAT-ROOT 에서 무대를 스트림 위에 고정하며 접기를 뒀는데, 국장 확정으로 붙박이 자체가
   //   사라졌다 — 무대가 흐름 속 한 지점이 되었으니 접을 대상도, 접기 버튼도 없다.
+  //
+  // [CHAT-FOLD 2026-08-02] A 를 벗어나면 개켠다.
+  //   국장 확정 규칙:
+  //     (1) A(지금 보고 있는 화면) 안의 컨텐츠 — 접기·펴기는 오직 사용자가 정한다
+  //     (2) A 를 크게 벗어나 올라간 컨텐츠 — 자동으로 아이콘화
+  //   ★국장 눈앞에서 시스템이 접는 일은 없어야 한다. 그래서 경계를 A 가 아니라
+  //     A + FOLD_MARGIN×A 로 둔다 — 화면에서 사라지고도 한참 뒤에 접힌다.
+  //   ★한 번 접힌 것은 사용자 클릭으로만 펴진다. 다시 A 안으로 돌아와도 저절로 펴지지
+  //     않는다(A 안은 사용자 주권). 펴놓은 것이 다시 밖으로 나가면 또 접힌다.
+  //   ★아래쪽은 접지 않는다 — 아래는 새 것이 오는 방향이다.
+  //   ★scroll 이벤트에 의존하지 않는다. 이 환경 실측(7/28)에서 scroll 이벤트는 0건
+  //     발화했다. IntersectionObserver 로만 판정한다.
+  const FOLD_MARGIN = 1.5;                    // 감시범위 = A + 1.5A = 2.5A (국장 조정용 상수)
+  const [foldedIds, setFoldedIds] = useState<Set<string>>(() => new Set());
+  const foldNodeRefs = useRef<Record<string, HTMLDivElement | null>>({});
+  // 접기로 줄어든 높이를 되갚기 위한 예약 — 넉 달 싸운 '화면 튐'이 여기서 갈린다.
+  const pendingFoldFixRef = useRef<{ id: string; h1: number } | null>(null);
+  const unfoldItem = useCallback((id: string) => {
+    setFoldedIds((prev) => {
+      if (!prev.has(id)) return prev;
+      const next = new Set(prev);
+      next.delete(id);
+      return next;
+    });
+  }, []);
+
+  // [CHAT-FOLD STEP 1] 높이 붕괴 보정 — ★이것이 먼저다.
+  //   A 위쪽 아이템이 접히면 위 높이가 (h1-h2) 만큼 줄어 보던 화면이 그만큼 밀려 올라간다.
+  //   넉 달 싸운 '화면 튐'이 정확히 이 모양이었다. 줄어든 만큼 scrollTop 에서 되갚는다.
+  //   ★기존 스크롤 함수(scrollChatToBottom·settleChatToBottom·HOLD)는 건드리지 않는다.
+  //     이 보정만 따로 선다.
+  useLayoutEffect(() => {
+    const fix = pendingFoldFixRef.current;
+    if (!fix) return;
+    pendingFoldFixRef.current = null;
+    const el = foldNodeRefs.current[fix.id];
+    const root = chatScrollRef.current;
+    if (!el || !root) return;
+    const h2 = el.getBoundingClientRect().height;
+    const delta = fix.h1 - h2;
+    if (delta > 0) {
+      root.scrollTop = Math.max(0, root.scrollTop - delta);
+      if (import.meta.env.DEV) {
+        console.log("[CHAT-FOLD][HEIGHT-FIX]", { id: fix.id, h1: fix.h1, h2, delta });
+      }
+    }
+  }, [foldedIds]);
+
+  // [CHAT-FOLD STEP 2] A + 1.5A 밖으로 올라간 컨텐츠만 접는다.
+  //   root 는 채팅 스크롤 컨테이너, rootMargin top 을 FOLD_MARGIN 배만큼 넓혀
+  //   '화면에서 사라짐'과 '한참 멀어짐'을 가른다 — 국장 눈앞에서는 접히지 않는다.
+  useEffect(() => {
+    const root = chatScrollRef.current;
+    if (!root || typeof IntersectionObserver === "undefined") return;
+    const io = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((e) => {
+          const id = (e.target as HTMLElement).dataset.foldId;
+          if (!id || e.isIntersecting) return;
+          // 위로 벗어난 것만 접는다. 아래쪽(새 것이 오는 방향)은 건드리지 않는다.
+          const rb = e.rootBounds;
+          if (rb && e.boundingClientRect.bottom > rb.top) return;
+          setFoldedIds((prev) => {
+            if (prev.has(id)) return prev;
+            const el = foldNodeRefs.current[id];
+            // 접기 직전 높이를 여기서 잡아둔다 — 접힌 뒤에는 잴 수 없다.
+            if (el) pendingFoldFixRef.current = { id, h1: el.getBoundingClientRect().height };
+            const next = new Set(prev);
+            next.add(id);
+            return next;
+          });
+        });
+      },
+      { root, rootMargin: `${FOLD_MARGIN * 100}% 0px 0px 0px`, threshold: 0 },
+    );
+    Object.values(foldNodeRefs.current).forEach((el) => { if (el) io.observe(el); });
+    return () => io.disconnect();
+  }, [foldedIds, storyPlan?.messages?.length, proposalHistory.length]);
   // [STORY-GATE P3] 승인 관문 — 게이트 OFF면 enabled=false로 아무것도 바뀌지 않는다 (I-4)
   // [LAB-48] programId 는 프로젝트 id 와 화면 이름("__new__"·"upload"…)을 겸한다.
   //   LAB-21 이 Index.tsx 에 같은 가드를 넣었는데 이 호출부는 빠져 있었다 — 그래서
@@ -2872,15 +2952,56 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
                          : 0 }] : []),
               ]
                 .sort((a, b) => a.ts - b.ts)
-                .map((item: any) => item.kind === "transcript" ? (
-                <div key="flow_transcript" className="w-full flex flex-col items-center space-y-4">
-                  {stageBlock.transcript}
-                </div>
-                ) : item.kind === "proposal" ? (
-                <div key="flow_proposal" className="w-full flex flex-col items-center space-y-4">
-                  {stageBlock.proposal}
-                </div>
-                ) : item.kind === "palette" ? (
+                .map((item: any) => (item.kind === "transcript" || item.kind === "proposal") ? (() => {
+                  // [CHAT-FOLD] 컨텐츠 아이템만 개킨다. msg 말풍선은 대상이 아니다 —
+                  //   글자까지 아이콘으로 바꾸면 대화가 안 읽힌다(국장 확정).
+                  const foldId: string = item.kind;
+                  const folded = foldedIds.has(foldId);
+                  const isTranscript = foldId === "transcript";
+                  const label = isTranscript ? "전사" : "편집안 A·B";
+                  const count = isTranscript
+                    ? (storyGate.story?.item_count ?? activeStoryItems.length)
+                    : (proposals?.A?.key_fragments?.length ?? null);
+                  const poster = isTranscript ? undefined : getProposalPoster("A");
+                  const timeText = item.ts > 0
+                    ? new Date(item.ts).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+                    : null;   // 전사는 생성 시각을 들고 있는 값이 없다 — 지어내지 않고 생략한다
+                  return (
+                    <div
+                      key={`flow_${foldId}`}
+                      data-fold-id={foldId}
+                      ref={(el) => { foldNodeRefs.current[foldId] = el; }}
+                      className="w-full flex flex-col items-center space-y-4"
+                    >
+                      {/* ★접혔으면 몸통을 아예 만들지 않는다. display:none 으로 숨기면
+                          플레이어·썸네일이 그대로 살아 있어 이 작업의 목적(무게)이 무너진다. */}
+                      {folded ? (
+                        <button
+                          type="button"
+                          onClick={() => unfoldItem(foldId)}
+                          title={`${label} 펼치기`}
+                          className="w-full max-w-[800px] flex items-center gap-3 rounded-xl border border-white/8 bg-white/[0.02] px-3 py-2.5 text-left hover:bg-white/[0.05] transition-colors"
+                        >
+                          {poster ? (
+                            <img src={poster} alt="" className="w-12 h-12 rounded-lg object-cover flex-shrink-0 border border-white/10" />
+                          ) : (
+                            <span className="w-12 h-12 rounded-lg flex-shrink-0 flex items-center justify-center bg-primary/10 text-primary">
+                              <BookOpen size={18} />
+                            </span>
+                          )}
+                          <span className="text-[13px] font-bold text-foreground/85">{label}</span>
+                          {timeText && (
+                            <span className="text-[12px] text-muted-foreground/70">{timeText}</span>
+                          )}
+                          <span className="ml-auto text-[12px] text-muted-foreground/70">
+                            {count != null ? `${count}조각` : "펼치기"}
+                          </span>
+                          <ChevronDown size={14} className="flex-shrink-0 text-muted-foreground/60" />
+                        </button>
+                      ) : (isTranscript ? stageBlock.transcript : stageBlock.proposal)}
+                    </div>
+                  );
+                })() : item.kind === "palette" ? (
                 <div key="person_palette" className="flex flex-col gap-3">
                   {personSavedNote && (
                     <div className="flex justify-start animate-in fade-in duration-500">
@@ -3002,7 +3123,7 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
                   const pair = item.entry.pair as any;
                   const primary = pair?.B ?? pair?.A;
                   const fragCount = (primary?.key_fragments?.length ?? primary?.sequence?.length ?? 0);
-                  const isOpen = openStoryBox === item.entry.id;
+                  // [CHAT-FOLD 3-1] isOpen 폐지 — 펼침 자체가 특별 취급이었다.
                   const when = new Date(item.entry.ts).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
                   return (
                     <div key={`storybox_${item.entry.id}`} className="flex justify-start animate-in fade-in duration-500">
@@ -3012,33 +3133,16 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
                         </div>
                         <div className="flex flex-col gap-1.5 items-start">
                           <div className="rounded-2xl rounded-tl-none bg-secondary/10 border border-border/5 min-w-[240px] overflow-hidden">
-                            <button
-                              type="button"
-                              onClick={() => setOpenStoryBox(isOpen ? null : item.entry.id)}
-                              className="w-full flex items-center gap-2 px-4 py-3 text-left hover:bg-white/[0.02] transition-colors"
-                              title={isOpen ? "접기" : "펼치기"}
-                            >
+                            {/* [CHAT-FOLD 3-1 2026-08-02] 옛 원고 특별 취급 제거 (국장 지시).
+                                지웠던 것: 펼침/접힘 버튼 · "이 원고를 불러와 이어서 다시 다듬을 수
+                                있어요" 안내 · "이 원고로 재작업" 버튼.
+                                옛 컨텐츠와 새 컨텐츠의 생김새·동작이 같아야 한다 — 옛것만 따로
+                                안내를 달고 따로 되살리는 문을 두면 그게 특별 취급이다.
+                                이제 이 카드는 종류·분량·시각만 말한다(아이콘 카드와 같은 문법). */}
+                            <div className="w-full flex items-center gap-2 px-4 py-3 text-left">
                               <span className="text-[10px] font-black tracking-widest uppercase text-muted-foreground/60">지난 원고</span>
                               <span className="text-[12px] text-foreground/80">{fragCount}조각</span>
-                              <ChevronDown size={13} className={`ml-auto flex-shrink-0 text-muted-foreground/76 transition-transform ${isOpen ? "rotate-180" : ""}`} />
-                            </button>
-                            {isOpen && (
-                              <div className="px-4 pb-3.5 pt-0.5 flex flex-col gap-2 border-t border-border/5">
-                                <span className="text-[11px] text-muted-foreground/70 pt-2">
-                                  이 원고를 불러와 이어서 다시 다듬을 수 있어요.
-                                </span>
-                                {onRestoreProposalEntry && (
-                                  <button
-                                    type="button"
-                                    onClick={() => onRestoreProposalEntry(item.entry.id)}
-                                    className="self-start flex items-center gap-1.5 rounded-lg border border-primary/25 bg-primary/10 px-2.5 py-1 text-[11px] font-semibold text-primary hover:bg-primary/20 transition-colors"
-                                    title="이 원고를 조각맵·무대로 불러와 재작업합니다"
-                                  >
-                                    <Play size={11} /> 이 원고로 재작업
-                                  </button>
-                                )}
-                              </div>
-                            )}
+                            </div>
                           </div>
                           <span className="text-[12px] text-muted-foreground/70 px-1">{when}</span>
                         </div>
