@@ -341,6 +341,103 @@ def _ollama_stream(prompt: str, timeout: int = 60, temperature: float = 0.7,
             _OLLAMA_LOCK.release()
 
 
+# [QWEN-01 STEP 1-3 2026-08-02] 큐원의 손 — /api/chat + tools 왕복.
+#   ★ 기존 /api/generate 경로는 지우지 않는다. 이 함수는 새 경로이고 게이트로 감싼다.
+#   실측 근거(격리, Ollama 0.32.5 · qwen2.5:7b-instruct):
+#     /api/chat + tools      -> tool_calls 옴: find_fragments(keyword="딸기")
+#     /api/generate + tools  -> tools 를 통째로 무시. tool_calls 키조차 없고 환각 답변
+#   그래서 손을 달려면 엔드포인트를 갈아타야 한다. 프롬프트로는 안 된다.
+#   ★ 락(_OLLAMA_LOCK)은 라운드마다 잡고 놓는다. 왕복 전체를 한 번에 점유하면
+#     8GB VRAM 에서 제안 생성이 그동안 통째로 막힌다(STEP 4-3 관측 대상).
+def _ollama_chat_tools(messages: list[dict], tools: list[dict], run_tool,
+                       timeout: int = 90, temperature: float = 0,
+                       num_predict: int = 1024, max_rounds: int = 6) -> dict:
+    """도구를 쥐여준 채 왕복시킨다. run_tool(name, args) -> str 를 호출자가 준다.
+
+    반환: {"text": 최종 답, "tool_calls": n, "rounds": n, "calls": [...],
+           "hit_round_limit": bool}
+    실패를 감추지 않는다 — 도구가 에러를 내면 그 문자열을 그대로 모델에게 돌려준다.
+    """
+    msgs = list(messages)
+    trace = {"tool_calls": 0, "rounds": 0, "calls": [], "hit_round_limit": False}
+
+    def _post(payload):
+        body = json.dumps(payload).encode("utf-8")
+        req = urllib.request.Request(
+            OLLAMA_URL + "/api/chat", data=body,
+            headers={"Content-Type": "application/json"})
+        if _SERIALIZE:
+            with _OLLAMA_LOCK:
+                with urllib.request.urlopen(req, timeout=timeout) as resp:
+                    return json.loads(resp.read().decode("utf-8"))
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            return json.loads(resp.read().decode("utf-8"))
+
+    for _r in range(max_rounds):
+        trace["rounds"] = _r + 1
+        data = _post({
+            "model": HUB_MODEL,
+            "messages": msgs,
+            "tools": tools,
+            "stream": False,
+            "keep_alive": OLLAMA_KEEP_ALIVE,
+            "options": {"temperature": temperature, "num_predict": num_predict,
+                        "num_ctx": OLLAMA_NUM_CTX},
+        })
+        msg = data.get("message") or {}
+        calls = msg.get("tool_calls") or []
+        if not calls:
+            trace["text"] = str(msg.get("content") or "").strip()
+            return trace
+        msgs.append(msg)
+        for c in calls:
+            fn = (c.get("function") or {})
+            name = fn.get("name")
+            args = fn.get("arguments") or {}
+            if isinstance(args, str):
+                try:
+                    args = json.loads(args)
+                except Exception:
+                    args = {"_raw": args}
+            out = run_tool(name, args)
+            trace["tool_calls"] += 1
+            # [QWEN-01 실측 2026-08-02] 7B 는 실패한 조회를 실패로 읽지 않는다.
+            #   1차 실증: SQL 이 no such column 으로 죽었는데 "조각 ID 58, 케이크 전사"를
+            #   통째로 지어냈다(정답은 VF1_SRC_009AE91F "딸기가 영롱하네").
+            #   빈 결과에도 다른 테이블을 시도하지 않고 "없습니다"로 끝냈다(정답 3건).
+            #   → 결과의 성격을 말로 붙여 되돌린다. 판단을 막는 재갈이 아니라,
+            #     실패를 실패로 보이게 하는 표지다.
+            #   [QWEN-02 1-3] 표지 문구는 admin/ai_tools.failure_note 하나에서 온다 —
+            #   같은 문구가 두 곳에 있으면 언젠가 다르게 판정한다.
+            from admin.ai_tools import failure_note as _fnote
+            note = _fnote(out)
+            failed = out.lstrip().startswith('{"error"')
+            empty = '"row_count": 0' in out or "NO ROW" in out
+            trace["calls"].append({"tool": name, "input": args,
+                                   "output_chars": len(out),
+                                   "failed": failed, "empty": empty})
+            print(f"[QWEN-TOOL] {name} {json.dumps(args, ensure_ascii=False)[:180]} "
+                  f"-> {len(out)}자{' [실패]' if failed else (' [0건]' if empty else '')}",
+                  flush=True)
+            # tool_name 은 Ollama 규격 — 어느 도구의 결과인지 모델이 알아야 한다.
+            msgs.append({"role": "tool", "tool_name": name, "content": out + note})
+
+    # 상한 도달 — 조용히 끝내지 않는다. 도구 없이 한 번 정리시킨다.
+    trace["hit_round_limit"] = True
+    print(f"[QWEN-TOOL][LIMIT] {max_rounds}회 왕복 상한 도달", flush=True)
+    msgs.append({"role": "user",
+                 "content": "더 조회하지 말고, 지금까지 확인한 것만으로 한국어로 답하라. "
+                            "못 본 것이 있으면 무엇을 못 봤는지 밝혀라."})
+    data = _post({
+        "model": HUB_MODEL, "messages": msgs, "stream": False,
+        "keep_alive": OLLAMA_KEEP_ALIVE,
+        "options": {"temperature": temperature, "num_predict": num_predict,
+                    "num_ctx": OLLAMA_NUM_CTX},
+    })
+    trace["text"] = str((data.get("message") or {}).get("content") or "").strip()
+    return trace
+
+
 def _ollama_chat_stream(messages: list[dict], timeout: int = 60, temperature: float = 0.7,
                         num_predict: int = 512, top_p: float = None, top_k: int = None):
     opts = {"temperature": temperature, "num_predict": num_predict,

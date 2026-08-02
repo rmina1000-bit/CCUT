@@ -281,7 +281,8 @@ def _llm_understand(input_text, recent_messages=None, source_ids=None,
         "instruction 규칙: edit일 때만 채운다. 반드시 '무엇을 고르는 기준'(예: '정은한 나오는 "
         "장면만', '물놀이 위주로 길게')이어야 한다. 사용자에게 묻는 문장을 넣으면 절대 안 된다. "
         "기준을 모르면 kind를 unclear로 하라.\n"
-        "reply 규칙: 반드시 한국어로만(중국어·영어 문장 금지). 모델명·제조사(Qwen 등) 언급 금지 — "
+        # [QWEN-01 2-2] 정체 금지는 서버 후처리(:372 · :479)로 이관. 중국어 금지는 유지.
+        "reply 규칙: 반드시 한국어로만(중국어·영어 문장 금지). "
         "너의 이름은 오직 CCUT이다. 날짜·시간·작업 상황 질문은 위 값으로 정확히 답하고, "
         "날씨·뉴스 등 모르는 실시간 정보는 아는 척하지 않는다.\n"
         'JSON만 출력: {"kind":"chat|edit|confirm|retrigger|reset|unclear","reply":"...",'
@@ -395,7 +396,10 @@ def _smalltalk_prompt(input_text, recent_messages=None, facts="", plain=False):
         "사용자가 알려주면 그 말을 믿고 따라가라.\n"
         "3. 고민·감정을 말하면 가볍게 공감하고, 구체적으로 하나만 되물어라.\n"
         "4. '저는 편집기라서'류 거절 금지. 매번 편집 얘기로 돌리지도 마라.\n"
-        "5. 반드시 한국어만(중국어·영어 문장 금지). 모델명·제조사(Qwen 등) 언급 금지 — "
+        # [QWEN-01 2-2] "모델명·제조사 언급 금지" 삭제 → 서버 후처리에 맡긴다
+        #   (:372 정체 노출 차단, :479 스트림 중단). 중국어 금지는 남긴다(실측 누출 있음).
+        #   정체성 확립("너의 이름은 오직 CCUT")은 금지가 아니라 자기규정이라 남긴다.
+        "5. 반드시 한국어만(중국어·영어 문장 금지). "
         "너의 이름은 오직 CCUT이다. 모르는 건 솔직히 모른다고 한다.\n"
         + tail
         + (f"최근 대화:\n{ctx}" if ctx else "")
@@ -404,6 +408,67 @@ def _smalltalk_prompt(input_text, recent_messages=None, facts="", plain=False):
 
 def _chat_role_enabled():
     return os.getenv("CCUT_CHAT_ROLE", "0") in ("1", "true", "True", "on", "ON")
+
+
+# ── [QWEN-02 STEP 2 2026-08-02] 큐원의 손 — 조회 의도에만 배선 ──────────────
+#   왜 여기인가(실측): 현행 show_fragments 경로는 임베딩 top-k 라 **무엇을 물어도
+#     12건을 뱉는다.** DB 에 0건인 '파인애플'에도 12건을 냈고, 딸기 정답
+#     VF1_SRC_009AE91F 는 12건에 없었다. 즉 이 경로는 "없다"고 말하지 못한다.
+#     큐원이 전사를 직접 조회하면 없는 것을 없다고 말할 수 있다.
+#   ★ 편집 실행 경로(run_proposal)는 건드리지 않는다. 조회 의도에서만 갈린다.
+#   ★ 기본 OFF. 게이트를 끄면 이 함수는 즉시 None 이고 기존 경로가 그대로 산다.
+def _qwen_tools_enabled():
+    return os.getenv("CCUT_QWEN_TOOLS", "0") in ("1", "true", "True", "on", "ON")
+
+
+_QWEN_TOOL_SYSTEM = (
+    "너는 CCUT — 영상 편집을 돕는 동료다. 사용자가 조각을 찾아달라고 하면 "
+    "db_query 도구로 DB를 직접 조회해서 답한다. 추측하지 말고 조회해라.\n"
+    "주요 테이블(이 밖의 테이블도 조회할 수 있다):\n"
+    "- evidence_board(fragment_id, source_id, text) : text 가 조각의 전사(대사)다\n"
+    "- semantic_fragments(fragment_id, source_id, start, \"end\") : 조각의 시간 좌표\n"
+    "- fragment_vault(fragment_id, transcript) : 조각 금고\n"
+    "- programs(program_id, title) / sources(source_id, filename)\n"
+    "조회가 실패하거나 0건이면 다른 테이블·컬럼으로 다시 조회한다. "
+    "조회 결과에 없는 조각 id 나 전사 내용을 절대 지어내지 않는다. "
+    "정말 없으면 없다고 말한다.\n"
+    "찾은 뒤에는 조회 결과에 실제로 있는 조각 id 와 전사 내용을 한국어로 짧게 알려준다.\n"
+)
+
+
+def _qwen_tool_show(user_text):
+    """조회 의도를 큐원이 DB 를 직접 보고 답하게 한다. 실패하면 None (기존 경로 폴백).
+
+    ★ 조용히 실패하지 않는다 — 이 방 원칙: 안 닿는 방어는 영원히 조용하다.
+      게이트가 켜졌는데 도구를 한 번도 안 불렀으면 그 사실을 로그로 말한다.
+    """
+    if not _qwen_tools_enabled():
+        return None
+    try:
+        from admin import ai_tools
+        r = hub._ollama_chat_tools(
+            [{"role": "system", "content": _QWEN_TOOL_SYSTEM},
+             {"role": "user", "content": user_text}],
+            ai_tools.ollama_tool_defs(["db_query"]), ai_tools.run,
+            timeout=120, temperature=0, max_rounds=6)
+    except Exception as e:
+        print(f"[QWEN-TOOLS] 실패 -> 기존 조회 경로로 폴백: {type(e).__name__}: {e}",
+              flush=True)
+        return None
+    text = (r or {}).get("text") or ""
+    if not r or not r.get("tool_calls"):
+        # 게이트는 켜졌는데 도구가 안 불렸다. 조용히 넘어가면 영원히 모른다.
+        print(f"[QWEN-TOOLS][NO-CALL] 게이트 ON 인데 도구 호출 0건 "
+              f"(rounds={(r or {}).get('rounds')}). 기존 조회 경로로 폴백. "
+              f"입력={user_text[:40]!r}", flush=True)
+        return None
+    if not text.strip():
+        print("[QWEN-TOOLS][EMPTY] 도구는 돌았는데 답이 비었다 -> 기존 경로 폴백",
+              flush=True)
+        return None
+    print(f"[QWEN-TOOLS] tool_calls={r['tool_calls']} rounds={r['rounds']} "
+          f"limit={r['hit_round_limit']}", flush=True)
+    return {"reply": text.strip(), "trace": r}
 
 
 def _estimate_chat_tokens(text):
@@ -423,7 +488,10 @@ def _smalltalk_chat_messages(input_text, recent_messages=None, facts=""):
         "사용자가 알려주면 그 말을 믿고 따라가라.\n"
         "3. 고민·감정을 말하면 가볍게 공감하고, 구체적으로 하나만 되물어라.\n"
         "4. '저는 편집기라서'류 거절 금지. 매번 편집 얘기로 돌리지도 마라.\n"
-        "5. 반드시 한국어만(중국어·영어 문장 금지). 모델명·제조사(Qwen 등) 언급 금지 — "
+        # [QWEN-01 2-2] "모델명·제조사 언급 금지" 삭제 → 서버 후처리에 맡긴다
+        #   (:372 정체 노출 차단, :479 스트림 중단). 중국어 금지는 남긴다(실측 누출 있음).
+        #   정체성 확립("너의 이름은 오직 CCUT")은 금지가 아니라 자기규정이라 남긴다.
+        "5. 반드시 한국어만(중국어·영어 문장 금지). "
         "너의 이름은 오직 CCUT이다. 모르는 건 솔직히 모른다고 한다.\n"
         "답변 문장만 출력한다 — JSON·따옴표·머리말 금지.\n")
     messages = [{"role": "system", "content": system}]
@@ -618,6 +686,14 @@ def route_edit_intent(source_ids=None, input_text="", recent_messages=None,
         else:
             from engine.fragment_show import search_show
             found = search_show(t, _person0, source_ids)
+        # [QWEN-02 STEP 2] 조회 의도 — 게이트 ON 이면 큐원이 DB 를 직접 보고 답한다.
+        #   기본 OFF 이므로 이 분기는 평상시 통째로 건너뛴다(회귀 없음).
+        #   실패·무응답이면 None 이라 아래 기존 임베딩 경로가 그대로 산다.
+        if _show_subject:
+            _qt = _qwen_tool_show(t)
+            if _qt is not None:
+                return _resp("show_fragments", _qt["reply"], confidence=0.9,
+                             via="qwen_tools")
         if found is not None:
             n = len(found.get("results") or [])
             who = found.get("person")
