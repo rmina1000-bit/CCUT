@@ -5496,6 +5496,20 @@ def _chat_only_speed_bypass(input_text: str, project_id: str = None,
     if det.get("theme_found") or det.get("count") or edit_request:
         return None
     meta_self_reference = bool(re.search(r"\S+(?:이란|이라는)\s*말|말만\s*들으면", t))
+    # [FRAG-TRUTH 2026-08-03] 묻는 말은 되묻기로 죽이지 않는다.
+    #   실측: "고양이 나오는 조각 있나?" 가 여기서 edit_mark+chat_signal 로 잡혀
+    #   "편집 지시인지 대화인지 한 번만 확인할게요" 로 끝났다. 조각이 실제로 있는데도.
+    #   (앞 카드에서 파인애플 질문 2종이 못 측정된 것도 같은 문 때문이었다)
+    #   ★조각을 묻는 말인데 편집 동사가 하나도 없으면 되묻지 않고 사다리를 계속 간다.
+    #     intent_router 와 det 사다리에 이미 두 번 쓴 같은 규칙이다.
+    try:
+        from engine import intent_router as _ir3
+        _ask_only = _ir3._is_fragment_question(t) and not re.search(
+            r"편집|골라|만들어|빼|줄여|늘려|남겨|자르|이어|바꿔|다시 골|재제안|추천해", t)
+    except Exception:
+        _ask_only = False
+    if _ask_only:
+        edit_mark = False
     if edit_mark and not meta_self_reference:
         if chat_signal:
             return {

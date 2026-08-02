@@ -272,6 +272,84 @@ def _is_fragment_question(t):
     return bool(_re_mod.search(_FRAG_NOUN, t) and _re_mod.search(_FRAG_ASK, t))
 
 
+# [FRAG-TRUTH 2026-08-03] 임베딩이 놓친 것을 ★전사 낱말로 건진다.
+#   국장 화면이 증명한 실패: "식당에서 식사하는 영상 있나?" 에 "못 찾았어요"라고 답했는데
+#   SRC_3111FA4F 에 식사 장면이 ★실제로 있었다 —
+#     SF_6C6CF9 "…손가락에 분명히 먹을 거 들어있을 건데? 아침에 식사도 하신다고…"
+#     SF_6D6452 "한 번 잘라서 맛을 볼까요? … 맛이 있을까?"
+#   임베딩 top 은 0.34 였다. 장면 설명(visual_desc)이 영어라 '식사'가 시각 쪽에 없고,
+#   전사 쪽 신호는 FTS 보너스 0.15 뿐인데 그 FTS 는 질문 ★문장 전체로 매칭을 시도해
+#   한국어 조사("식사도")를 못 넘는다.
+#   ★그래서 의미검색 하나에 맡기지 않는다. 질문의 내용어로 전사·장면을 직접 훑는다.
+#     낱말이 실제로 전사에 있으면 그것은 점수가 아니라 ★사실이다 — 무조건 건진다.
+#   ★기능어를 막지 않으면 "있어" 가 전사의 "있어" 에 걸려 없는 것을 있다고 한다
+#     (실측: "혹시 파인애플 본 적 있어?" -> Freesia 에서 4건 오탐).
+_TOK_STOP = {"영상", "조각", "장면", "클립", "사진", "화면", "소스", "원본", "프로젝트",
+             "지금", "여기", "그거", "이거", "저거", "어떤", "무슨", "누가", "언제",
+             "혹시", "정말", "진짜", "그냥", "좀더", "다시", "모두", "전부", "얼마",
+             # 존재·요청·의문 기능어 — 전사에 흔해서 아무거나 걸린다
+             "있나", "있어", "있는", "있을", "있다", "없나", "없어", "없는", "없다",
+             "알려", "보여", "찾아", "말해", "어때", "어떻", "그런", "이런", "저런",
+             "하는", "하고", "해줘", "주세", "인지", "인가", "될까", "몇개", "개수",
+             "본적", "적이", "적있", "한번", "번쯤", "정도", "대해", "관련", "포함"}
+
+
+def _content_tokens(q):
+    """질문에서 내용어 후보. 한국어 조사를 못 떼므로 ★접두 부분문자열을 함께 본다."""
+    out = []
+    for w in _re_mod.findall(r"[가-힣]{2,}|[A-Za-z]{3,}", str(q or "")):
+        if w in _TOK_STOP:
+            continue
+        # "식당에서" -> 식당에서·식당에·식당 / "식사하는" -> 식사하는·식사하·식사
+        for n in range(len(w), 1, -1):
+            p = w[:n]
+            if len(p) >= 2 and p not in _TOK_STOP:
+                out.append(p)
+    # 긴 것부터, 중복 제거
+    seen, uniq = set(), []
+    for t in sorted(set(out), key=len, reverse=True):
+        if t not in seen:
+            seen.add(t); uniq.append(t)
+    return uniq[:24]
+
+
+def _transcript_hits(tokens, sids, limit=60):
+    """전사·장면에 그 낱말이 실제로 든 조각. 점수가 아니라 사실이다."""
+    if not tokens or not sids:
+        return {}
+    import sqlite3 as _sq
+    found = {}
+    try:
+        con = _sq.connect("file:" + hub.DB_PATH.replace("\\", "/") + "?mode=ro",
+                          uri=True, timeout=10)
+    except Exception:
+        return {}
+    try:
+        ph = ",".join("?" * len(sids))
+        for t in tokens:
+            if len(found) >= limit:
+                break
+            rows = con.execute(
+                f"""SELECT sf.fragment_id, sf.source_id, sf.start, sf."end",
+                           fi.visual_desc, fi.transcript
+                    FROM semantic_fragments sf
+                    JOIN fragment_index fi ON fi.fragment_id = sf.fragment_id
+                    WHERE sf.source_id IN ({ph})
+                      AND (fi.transcript LIKE ? OR fi.visual_desc LIKE ?)
+                    LIMIT ?""",
+                list(sids) + [f"%{t}%", f"%{t}%", limit]).fetchall()
+            for fid, sid, s, e, vd, tr in rows:
+                if fid not in found:
+                    found[fid] = {"fragment_id": fid, "source_id": sid,
+                                  "start": s, "end": e, "visual_desc": vd,
+                                  "transcript": tr, "score": 1.0, "_kw": t}
+    except Exception as ex:
+        print(f"[FRAG-TRUTH][WARN] 전사 낱말 조회 실패 ({ex})")
+    finally:
+        con.close()
+    return found
+
+
 def _fragment_evidence(input_text, source_ids=None):
     """(state, total, block) — state 는 HAVE / ZERO / UNCERTAIN / SKIP.
     ★판정은 여기서 끝난다. 모델에게 '세어라'·'없으면 없다고 해라'를 시키지 않는다.
@@ -292,6 +370,13 @@ def _fragment_evidence(input_text, source_ids=None):
         mine = [r for r in (res.get("results") or []) if str(r.get("source_id")) in sids]
         top = max((float(r.get("score") or 0) for r in mine), default=0.0)
         hits = [r for r in mine if float(r.get("score") or 0) >= _EVID_CUT]
+        # ★전사에 그 낱말이 실제로 든 조각은 점수와 무관하게 건진다.
+        #   의미검색이 놓쳐도 낱말이 거기 있으면 그건 사실이다(국장 화면이 증명한 실패).
+        kw = _transcript_hits(_content_tokens(q), sorted(sids))
+        if kw:
+            have = {str(r.get("fragment_id")) for r in hits}
+            hits = hits + [v for k, v in kw.items() if k not in have]
+            top = max(top, 1.0)          # 낱말 일치는 확실하다 -> UNCERTAIN 으로 새지 않는다
         # ★_P00N 형제 병합 — 점수 높은 쪽을 대표로 두고 시간 구간만 합친다.
         #   전사·장면은 대표의 것을 쓴다(형제는 같은 장면의 앞뒤라 거의 같다).
         merged = {}
