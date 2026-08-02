@@ -1042,10 +1042,48 @@ export const useProposalState = (
         sourceCount: effectiveSourceIds.length
       }, null, 2));
 
-      const targetLen = proposals?.A?.preview_duration || 60.0;
+      let targetLen = proposals?.A?.preview_duration || 60.0;
+      // [COUNT-TRUTH 2026-08-03] ★사용자가 말한 개수를 엔진까지 보낸다.
+      //   국장이 "물속장면이 17개 조각이야. 모두 편집에 넣어줘" 라고 했는데 9개로 갔다.
+      //   "스토리는 사용자 결정" 원칙 위반이고, 원인은 엔진이 아니라 ★배선 결손이었다:
+      //     · proposal_engine.py:920 이 user_intent["requested_count"] 를 읽는다
+      //     · 그런데 그 키를 ★채우는 코드가 어디에도 없었다 (프론트/백엔드 grep 0건)
+      //     · command_parser 경로는 CCUT_HUB_PLAN=1 이라 항상 count=None 으로 덮인다
+      //       (proposal_engine.py:899 _hub_planned -> _cmd={"count":None})
+      //     · 유일하게 살아있던 hub 경로는 instruction_text 안에 "17개" 문자열이
+      //       그대로 남아야만 잡는데, 큐원이 지시문을 재작성하면 숫자가 사라진다
+      //       (intent_router.py:556 instr = out["instruction"] or input_text)
+      //   ★그래서 사용자 원문에서 직접 뽑아 requested_count 로 싣는다.
+      //     엔진이 이미 1..40 범위를 검증한다(proposal_engine.py:921) — 새 검증 안 만든다.
+      //   ★원문(text)에서 뽑는다. 재작성문(inputText)이 아니다 — 거기선 숫자가 죽는다.
+      const _reqCount = (() => {
+        const m = String(text || "").match(/(\d{1,2})\s*(?:개|컷|조각|장면)/);
+        if (!m) return null;
+        const n = parseInt(m[1], 10);
+        return Number.isFinite(n) && n >= 1 && n <= 40 ? n : null;
+      })();
+      if (_reqCount) {
+        // ★개수만 보내면 여전히 못 채운다 — 진짜 제약은 길이다.
+        //   proposal_engine.py:1239 · :1295 `current_len + f_dur <= target_len * 1.1`
+        //   가 상한이라, target_len 이 짧으면 count 를 아무리 올려도 거기서 잘린다.
+        //   (국장 화면의 target_length 104.469 는 직전 A안 preview_duration 이다 —
+        //    사용자가 정한 값이 아니라 ★지난 결과가 다음 요청의 상한이 되는 구조였다)
+        //   그래서 개수를 명시하면 그 개수가 들어갈 만큼 길이도 함께 연다.
+        //   조각 평균 길이는 이 프로젝트 실물에서 구한다 — 상수를 지어내지 않는다.
+        const _durs = (sourceFragments || [])
+          .map((f: any) => Number(f?.duration) || 0).filter((d: number) => d > 0);
+        const _avg = _durs.length
+          ? _durs.reduce((a: number, b: number) => a + b, 0) / _durs.length
+          : 15;
+        const _need = _reqCount * _avg;
+        if (_need > targetLen) targetLen = _need;
+        console.info(`[COUNT-TRUTH] 사용자 명시 개수 ${_reqCount} -> requested_count · `
+          + `평균조각 ${_avg.toFixed(1)}s · target_length ${(proposals?.A?.preview_duration || 60).toFixed(1)} -> ${targetLen.toFixed(1)}`);
+      }
       const userIntent = {
         ...nextIntent,
         instruction_text: inputText,
+        ...(_reqCount ? { requested_count: _reqCount, count_scope: "both" } : {}),
         // [ARCHIVE P1] 종업원이 추린 교집합 후보 — 백엔드 hub가 이 조각들만 판정
         ...(consultationDecision.candidateFragmentIds?.length
           ? { candidate_fragment_ids: consultationDecision.candidateFragmentIds }
