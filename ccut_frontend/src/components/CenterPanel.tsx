@@ -172,6 +172,12 @@ interface CenterPanelProps {
   // [UI-⑧] 컴포저 + 버튼 → 영상 추가 파일창 열기 / 드래그된 파일 직접 추가
   onRequestAddVideos?: () => void;
   onAddVideoFiles?: (files: File[]) => void;
+  // [TIMELINE-PAGE 2026-08-02] 300행 절단 복구 — 서버가 has_more 를 주는데 듣는 코드가
+  //   0이었다(실측: Merope 614행 중 314행 도달 불가). 서버·서비스 계층은 손대지 않고
+  //   호출처만 잇는다. 버튼 방식인 이유는 아래 렌더부 주석에.
+  timelineHasMore?: boolean;
+  timelineLoadingMore?: boolean;
+  onLoadOlderTimeline?: () => void;
 }
 
 function parseDirectionFromText(text: string): Direction | null {
@@ -423,6 +429,9 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
   onIntake,
   onRequestAddVideos,
   onAddVideoFiles,
+  timelineHasMore = false,
+  timelineLoadingMore = false,
+  onLoadOlderTimeline,
 }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const videoRefA = useRef<HTMLVideoElement>(null);
@@ -575,6 +584,31 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
       }
     }
   }, [foldedIds]);
+
+  // [TIMELINE-PAGE 2026-08-02] 옛 기록이 위에 붙을 때 화면을 그대로 붙잡는다.
+  //   위쪽에 노드가 생기면 그만큼 문서가 길어져 보던 자리가 아래로 밀린다 —
+  //   CHAT-FOLD 의 '높이 붕괴'와 부호만 반대인 같은 문제다. 그래서 같은 방식으로 갚는다
+  //   (새 스크롤 구현을 만들지 않는다 · 기존 HOLD·배지·전송하강 무접촉).
+  //   ★판정 좌표는 §4-2 규약대로 앵커의 viewport rect.top 이다. scrollTop 은 늘어난
+  //     높이만큼 당연히 변하므로 그것으로 성패를 가르지 않는다.
+  const pendingOlderFixRef = useRef<{ h1: number; top1: number } | null>(null);
+  const requestOlderTimeline = useCallback(() => {
+    const root = chatScrollRef.current;
+    if (root) pendingOlderFixRef.current = { h1: root.scrollHeight, top1: root.scrollTop };
+    onLoadOlderTimeline?.();
+  }, [onLoadOlderTimeline]);
+  useLayoutEffect(() => {
+    const fix = pendingOlderFixRef.current;
+    const root = chatScrollRef.current;
+    if (!fix || !root) return;
+    const grew = root.scrollHeight - fix.h1;
+    if (grew <= 0) return;            // 아직 안 붙었다 — 다음 렌더에서 다시 본다
+    pendingOlderFixRef.current = null;
+    root.scrollTop = fix.top1 + grew;
+    if (import.meta.env.DEV) {
+      console.log("[TIMELINE-PAGE][ANCHOR-FIX]", { h1: fix.h1, h2: root.scrollHeight, grew });
+    }
+  }, [storyPlan?.messages?.length]);
 
   // [CHAT-FOLD STEP 2] A + 1.5A 밖으로 올라간 컨텐츠만 접는다.
   //   root 는 채팅 스크롤 컨테이너, rootMargin top 을 FOLD_MARGIN 배만큼 넓혀
@@ -859,13 +893,22 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
   // 과거 제안 소환(activeProposalEntryId 변경)은 스크롤을 끌어내리지 않는다 — 무대가
   // 중간 슬롯으로 이동하는데 하단으로 튕기던 '흘러내림'을 절단. 소환 고지 메시지는
   // length 증가로 자연히 하단 정렬(그건 최신 사건이므로 정상).
-  const _prevChatLenRef = useRef({ msgs: 0, gens: 0, activeGen: null as string | null });
+  // [TIMELINE-PAGE 2026-08-02] '늘었다'가 아니라 '아래에 붙었다'로 판정한다.
+  //   실측 사고(이 차수 1회차): 이전 기록 303행을 위에 붙였더니 이 효과가 개수 증가만
+  //   보고 '새 메시지 도착'으로 읽어 settleChatToBottom 을 태웠다 —
+  //   앵커 viewport rect.top 이 42 -> -12211 (delta -12253px). 화면을 통째로 빼앗겼다.
+  //   길이는 위에 붙여도 늘고 아래에 붙여도 는다. 구분하는 것은 ★맨 끝의 정체다.
+  const _prevChatLenRef = useRef({ msgs: 0, gens: 0, activeGen: null as string | null,
+                                   lastMsgId: null as string | null });
   useEffect(() => {
-    const msgs = storyPlan?.messages?.length ?? 0;
+    const msgList = storyPlan?.messages ?? [];
+    const msgs = msgList.length;
+    const lastMsgId = msgs ? String((msgList[msgs - 1] as any)?.id ?? "") : null;
     const gens = proposalHistory.length;
     const activeGen = activeProposalEntryId ?? null;
     const prev = _prevChatLenRef.current;
-    const msgsGrew = msgs > prev.msgs;
+    // 개수가 늘고 ★맨 끝이 바뀌었을 때만 새 사건이 아래에 도착한 것이다.
+    const msgsGrew = msgs > prev.msgs && lastMsgId !== prev.lastMsgId;
     // [LAB-38 C 2회차] 세대 증가는 **무대가 그 세대로 이동했을 때만** 하단 추종한다.
     //   실측(SCROLL_XRAY 2026-07-29): 승인 후 백그라운드 생성 도착 순간 이 효과의 gens
     //   트리거가 settleChatToBottom을 발화, 채팅 컬럼(chatScrollRef)이 새 카드로
@@ -875,7 +918,7 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
     //   메시지 증가(대화 사건)는 기존대로 추종 — 소환(activeGen만 변경)도 기존대로 무추종.
     const stageMoved = activeGen !== prev.activeGen;
     const gensGrew = gens > prev.gens;
-    _prevChatLenRef.current = { msgs, gens, activeGen };
+    _prevChatLenRef.current = { msgs, gens, activeGen, lastMsgId };
     const grew = msgsGrew || (gensGrew && stageMoved);
     if (!grew) {
       if (gensGrew) setChatHasNew(true); // 도착 사실 알림은 유지 — 화면만 빼앗지 않는다
@@ -2924,6 +2967,24 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
               <div className="text-[11px] text-muted-foreground/76 px-1">
                 이전 대화 기록은 불러오지 못했어요. 지난 원고 세대는 아래에 그대로 남아 있습니다.
               </div>
+            )}
+
+            {/* [TIMELINE-PAGE 2026-08-02] 잘린 옛 기록으로 가는 유일한 문.
+                서버는 limit=300 을 넘으면 has_more=true 를 주는데(실측: Merope 614행 중
+                314행 도달 불가) 그것을 듣는 코드가 0이었다 — 방어는 있고 호출처가 없었다.
+                ★버튼으로 둔 이유: 이 환경에서 IntersectionObserver 가 0회 발화한다(§4-2).
+                  스크롤 자동 로드는 만들어도 발동을 증명할 수 없다. 증명 가능한 것만 만든다.
+                ★스트림 맨 위에 둔다 — 옛것은 위에 있다(entry_id 오름차순). */}
+            {timelineHasMore && (
+              <button
+                type="button"
+                data-timeline-load-older
+                onClick={requestOlderTimeline}
+                disabled={timelineLoadingMore}
+                className="w-full max-w-[800px] self-center rounded-xl border border-border/15 bg-card/40 px-3 py-2.5 text-meta text-muted-foreground hover:bg-card/70 transition-colors disabled:opacity-60"
+              >
+                {timelineLoadingMore ? "불러오는 중…" : "이전 기록 불러오기"}
+              </button>
             )}
 
             <div className="flex flex-col gap-8">

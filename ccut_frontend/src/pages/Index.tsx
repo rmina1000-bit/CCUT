@@ -350,6 +350,13 @@ const Index: React.FC = () => {
   const [roughCutData, setRoughCutData] = useState<RoughCutData | null>(null);
   const [roughCutPlacement, setRoughCutPlacement] = useState<RoughCutPlacement | null>(null);
   const roughCutMapReady = storyStage.key !== "scanned" && roughCutData !== null;
+  // [TIMELINE-PAGE 2026-08-02] 300행 절단 복구용 커서.
+  //   서버는 limit 을 넘으면 has_more=true 와 함께 최신 N행만 준다(main.py:6467).
+  //   구판은 이 사실을 DEBUG_LOG 문자열 안에서만 읽어 사용자에게 0으로 도달했다.
+  //   oldest = 지금까지 받은 것 중 가장 오래된 entry_id — 다음 페이지의 before 커서.
+  const [timelineHasMore, setTimelineHasMore] = useState(false);
+  const [timelineOldestEntry, setTimelineOldestEntry] = useState<number | null>(null);
+  const [timelineLoadingMore, setTimelineLoadingMore] = useState(false);
   // 이 프로젝트의 ui_state 재수화가 끝났는가 (저장이 복원을 앞질러 덮는 것을 막는 문턱)
   const [uiRestoredFor, setUiRestoredFor] = useState<string | null>(null);
 
@@ -1678,6 +1685,14 @@ const Index: React.FC = () => {
                     });
                   }
                   if (gens.length) hydrateProposalHistory(gens);
+                  // [TIMELINE-PAGE 2026-08-02] has_more 를 콘솔이 아니라 사용자에게 도달시킨다.
+                  //   구판은 이 값을 DEBUG_LOG 안에서만 읽었다 — 서버가 "더 있다"고 말하는데
+                  //   듣는 코드가 0이었고, 그래서 Merope 614행 중 314행이 도달 불가였다.
+                  //   커서는 이번 페이지의 ★최소 entry_id (서버가 entry_id 오름차순으로 준다).
+                  setTimelineHasMore(!!tl.has_more);
+                  setTimelineOldestEntry(
+                    tl.entries.reduce((mn: number, en: any) =>
+                      (mn === 0 || en.entry_id < mn ? en.entry_id : mn), 0) || null);
                   DEBUG_LOG && console.log(`[TIMELINE] 복원: 메시지 ${msgs.length} · 세대 ${gens.length}` +
                     (tl.has_more ? " (이전 페이지 더 있음)" : ""));
                 }
@@ -1764,6 +1779,69 @@ const Index: React.FC = () => {
   //   복원은 이제 setStoryPlan 안에서 골격을 직접 만들어 담는다(:1543).
   const syncedTimelineIdsRef = useRef<Set<string>>(new Set());
   const genSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // [TIMELINE-PAGE 2026-08-02] 잘린 옛 기록을 커서로 이어 붙인다.
+  //   ★서버·서비스 계층 무수정 — before 인자는 이미 있었고(videoService.ts:154,
+  //     main.py:6467) 부르는 사람만 없었다. 호출처만 잇는다.
+  //   ★옛것은 ★위에★ 붙인다. entry_id 오름차순이 원장의 순서이고, ts 로 정렬하지 않는다.
+  //   ★복원분 client_id 는 synced 에 등록 — 되받은 것을 다시 보내지 않는다(중복 0).
+  const loadOlderTimeline = useCallback(async () => {
+    if (!activeNavItem || !activeNavItem.startsWith("proj_")) return;
+    if (!timelineOldestEntry || timelineLoadingMore) return;
+    setTimelineLoadingMore(true);
+    try {
+      const tl = await videoService.getTimeline(activeNavItem, 300, timelineOldestEntry);
+      const entries: any[] = tl?.entries ?? [];
+      if (!entries.length) { setTimelineHasMore(false); return; }
+      const msgs: any[] = [];
+      const gens: any[] = [];
+      for (const en of entries) {
+        syncedTimelineIdsRef.current.add(en.client_id);
+        if (en.kind === "message" && en.payload) msgs.push({ ...en.payload, isInterpreting: false });
+        else if (en.kind === "generation" && en.payload) gens.push(en.payload);
+      }
+      if (msgs.length) {
+        setStoryPlan((prev: any) => {
+          const base = prev?.messages ?? [];
+          const have = new Set(base.map((m: any) => String(m.id)));
+          const olds = msgs.filter((m: any) => !have.has(String(m.id)));
+          if (!prev) {
+            // 복원 경로(:1646)와 같은 골격 — 대화가 없다고 옛 기록을 버리지 않는다.
+            return {
+              story_plan_id: `STP_${Date.now()}`,
+              source_count: 0,
+              consultation_status: "draft_ready",
+              confirmation_status: "pending",
+              direction_options: [],
+              detected_theme: "",
+              selected_direction: undefined,
+              messages: olds,
+            };
+          }
+          return { ...prev, messages: [...olds, ...base] };
+        });
+      }
+      if (gens.length) {
+        // ★hydrateProposalHistory 는 통째로 갈아끼운다(useProposalState.ts:205).
+        //   옛 세대만 넘기면 새 세대가 지워지므로 합쳐서 넘긴다. 마지막 원소는
+        //   여전히 최신이라 activeProposalEntryId 는 움직이지 않는다.
+        const seen = new Set(proposalHistory.map((g: any) => String(g.id)));
+        const merged = [...gens.filter((g: any) => !seen.has(String(g.id))), ...proposalHistory];
+        if (merged.length !== proposalHistory.length) hydrateProposalHistory(merged as any);
+      }
+      setTimelineHasMore(!!tl.has_more);
+      setTimelineOldestEntry(
+        entries.reduce((mn: number, en: any) =>
+          (mn === 0 || en.entry_id < mn ? en.entry_id : mn), 0) || timelineOldestEntry);
+      DEBUG_LOG && console.log(`[TIMELINE-PAGE] 이전 페이지 +${entries.length}행 ` +
+        `(메시지 ${msgs.length} · 세대 ${gens.length}) has_more=${!!tl.has_more}`);
+    } catch (e) {
+      console.warn("[TIMELINE-PAGE] 이전 기록 불러오기 실패 — 다시 눌러 재시도", e);
+    } finally {
+      setTimelineLoadingMore(false);
+    }
+  }, [activeNavItem, timelineOldestEntry, timelineLoadingMore,
+      proposalHistory, hydrateProposalHistory, setStoryPlan]);
   useEffect(() => {
     if (!activeNavItem || !activeNavItem.startsWith("proj_")) return;
     if (isSwitchingProject) return;
@@ -3454,6 +3532,9 @@ const Index: React.FC = () => {
               if (files.length === 0) return;
               handleAnalyzeRef.current?.(files[0], files.slice(1));
             }}
+            timelineHasMore={timelineHasMore}
+            timelineLoadingMore={timelineLoadingMore}
+            onLoadOlderTimeline={loadOlderTimeline}
           />
         )}
       </div>
