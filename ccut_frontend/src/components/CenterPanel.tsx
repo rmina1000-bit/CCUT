@@ -2,7 +2,8 @@
 import React, { useRef, useEffect, useLayoutEffect, useState, useCallback, useMemo } from "react";
 import { UploadStagingView, probeFileMeta, type StagedMeta, type IntakeAnswers } from "@/components/views/UploadStagingView";
 import { setKnownPersonNames } from "@/hooks/useProposalState";
-import { Play, Loader2, Send, ArrowUp, Plus, CheckCircle2, Package, BookOpen, List, ChevronDown, AlertCircle } from "lucide-react";
+// [CHAT-SKIN 2026-08-02] BookOpen(책 펼침) 아이콘은 프로젝트에서 완전히 뺐다 — 국장 지시.
+import { Play, Loader2, Send, ArrowUp, Plus, CheckCircle2, Package, List, ChevronDown, AlertCircle } from "lucide-react";
 import { Fragment } from "@/data/fragmentData";
 import { videoService } from "@/services/videoService";
 import { Direction, StoryPlanPreview } from "@/proposal/proposalTypes";
@@ -516,8 +517,10 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
   //   이제 A·B는 항상 펼친 채 세로로 누적되고, 선택은 '재생 위치'만 옮긴다.
   // [#19 스토리박스] 승인 전(story mode) 제안 세대를 채팅 흐름에 경량 스토리박스로 상주시킨다.
   // 기본 접힘(append-only 이력이 쌓여도 흐름이 스캔 가능하게 — E 판단). 헤더 클릭으로 펼침.
-  // [CHAT-FOLD 3-1 2026-08-02] openStoryBox 폐지 — 지난 원고를 펼쳤다 접는 상태였다.
-  //   그 펼침 안에 있던 것이 안내 문구와 '재작업' 버튼, 곧 옛 컨텐츠 특별 취급이었다.
+  // [CHAT-SKIN 2026-08-02] 지난 원고 펼침 상태 — CHAT-FOLD 3-1 에서 없앴다가 되살린다.
+  //   없애야 했던 것은 안내 문구와 '재작업' 버튼(옛것만의 특별 취급)이지 내용이 아니었다.
+  //   내용까지 없애니 클릭해도 아무것도 안 나왔다 — 국장 지적으로 확인된 내 잘못이다.
+  const [openStoryBox, setOpenStoryBox] = useState<string | null>(null);
   // toggleProposal / playProposal / 기본 B 펼침 효과는 재생 의존성(previewUrl·startSeq 등)
   // 정의 이후(하단)에 배치한다. (여기서 참조하면 TDZ)
   const [consultationInput, setConsultationInput] = useState("");
@@ -721,7 +724,12 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
 
   useEffect(() => {
     // 프로젝트가 열리고 분석이 끝나 있으면 얼굴 스캔(멱등) 후 미명명 군집 조회
-    if (!programId || !programId.startsWith("proj_") || appState !== "complete") {
+    // [CHAT-SKIN 2026-08-02 국장 지시] "초반에만" — 편집안이 한 번이라도 나온 뒤에는 묻지 않는다.
+    //   구판은 appState 가 complete 이기만 하면 언제든 떴다. 그래서 한참 편집하다가
+    //   뜬금없이 "이 사람 누구냐"가 끼어들었다(국장: "그러면 짜증나").
+    //   인물 이름은 편집을 시작하기 전에 받아야 쓸모가 있다.
+    if (!programId || !programId.startsWith("proj_") || appState !== "complete"
+        || proposalHistory.length > 0) {
       setPendingPersons([]);
       return;
     }
@@ -741,7 +749,7 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
       }
     })();
     return () => { alive = false; };
-  }, [programId, appState]);
+  }, [programId, appState, proposalHistory.length]);
 
   const savePersonName = async (pid: string) => {
     const name = (personNameDraft[pid] || "").trim();
@@ -2158,9 +2166,7 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
           <div className="w-full max-w-[800px] bg-secondary/10 border border-border/10 rounded-xl px-4 py-2.5 shadow-sm">
             <div className="flex items-center justify-between gap-4">
               <div className="flex items-center gap-2.5 overflow-hidden">
-                <div className="flex-shrink-0 w-7 h-7 rounded-lg bg-primary/10 flex items-center justify-center">
-                  <BookOpen size={14} className="text-primary" />
-                </div>
+                {/* [CHAT-SKIN] 파란 책 아이콘 제거 (국장 지시) */}
                 <div className="flex flex-col min-w-0">
                   <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">이야기 방향</span>
                   <p className="text-[11px] text-foreground font-medium truncate">
@@ -2807,7 +2813,7 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
             {(storyGate.story?.item_count ?? 0) > 0 ? (
               <div className="px-5 py-4 flex flex-col gap-2 max-h-[70vh] overflow-y-auto">
                 <div className="flex items-center gap-2 mb-1">
-                  <BookOpen size={13} className="text-primary/70" />
+                  {/* [CHAT-SKIN] 파란 책 아이콘 제거 (국장 지시) */}
                   <span className="text-[12px] font-bold tracking-wider uppercase text-muted-foreground/60">{storyReplacement ? "전사" : "이야기 (고른 장면)"}</span>
                   <span className="ml-auto text-[12px] text-muted-foreground/70">우측 조각맵에서 고르고 빼세요</span>
                 </div>
@@ -2952,7 +2958,40 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
                          : 0 }] : []),
               ]
                 .sort((a, b) => a.ts - b.ts)
-                .map((item: any) => (item.kind === "transcript" || item.kind === "proposal") ? (() => {
+                // [CHAT-SKIN 2026-08-02] 날짜가 바뀌거나 한참 벌어졌을 때만 시간을 말한다.
+                //   국장 지시: "날짜 바뀌면 간단한 표식... 시간 너무 지났으면 표식."
+                //   참조 제품도 그렇다 — 줄마다 시각을 달지 않는다.
+                //   ★배열 단계에서 끼워 넣는다. 아래 map 구조는 건드리지 않는다.
+                .reduce((acc: any[], item: any, i: number, src: any[]) => {
+                  const prev = i > 0 ? src[i - 1] : null;
+                  // ★ 날짜가 바뀔 때만. 같은 날 안에서는 몇 시간이 벌어지든 긋지 않는다 —
+                  //   국장: "같은 날짜면 이렇게 자주 안 해도 돼. 그냥 날짜인데."
+                  //   (1시간 간격 표식을 넣었다가 같은 날에 여러 번 그어져 걷어냈다)
+                  if (item.ts > 0 && (
+                    !prev || prev.ts <= 0 ||
+                    new Date(prev.ts).toDateString() !== new Date(item.ts).toDateString()
+                  )) {
+                    acc.push({ kind: "divider", ts: item.ts });
+                  }
+                  acc.push(item);
+                  return acc;
+                }, [])
+                .map((item: any) => item.kind === "divider" ? (
+                <div key={`divider_${item.ts}`} className="w-full flex items-center gap-3 py-2">
+                  <span className="flex-1 h-px bg-border/15" />
+                  <span className="text-micro text-muted-foreground">
+                    {(() => {
+                      // 날짜만 말한다. 시각은 말하지 않는다 — 구분선의 일은 날이 바뀌었음을
+                      // 알리는 것뿐이다.
+                      const d = new Date(item.ts);
+                      return d.toDateString() === new Date().toDateString()
+                        ? "오늘"
+                        : d.toLocaleDateString([], { month: "long", day: "numeric" });
+                    })()}
+                  </span>
+                  <span className="flex-1 h-px bg-border/15" />
+                </div>
+                ) : (item.kind === "transcript" || item.kind === "proposal") ? (() => {
                   // [CHAT-FOLD] 컨텐츠 아이템만 개킨다. msg 말풍선은 대상이 아니다 —
                   //   글자까지 아이콘으로 바꾸면 대화가 안 읽힌다(국장 확정).
                   const foldId: string = item.kind;
@@ -2980,23 +3019,28 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
                           type="button"
                           onClick={() => unfoldItem(foldId)}
                           title={`${label} 펼치기`}
-                          className="w-full max-w-[800px] flex items-center gap-3 rounded-xl border border-white/8 bg-white/[0.02] px-3 py-2.5 text-left hover:bg-white/[0.05] transition-colors"
+                          // [CCUT-TOKEN 첫 적용 2026-08-02] 임의 수치를 쓰지 않는다.
+                          //   글자는 토큰 5단계(micro/meta/body/title/display)에서만 고르고,
+                          //   색은 변수(foreground·muted-foreground·primary)를 그대로 쓴다.
+                          //   투명도로 명도를 깎지 않는다 — /85, /70 같은 값이 제각각 늘어나면
+                          //   그게 또 하나의 '14종'이 된다. 대비는 국장이 CONTRAST-1 에서
+                          //   올려둔 변수 명도를 신뢰한다.
+                          className="w-full max-w-[800px] flex items-center gap-3 rounded-xl border border-border/15 bg-card/40 px-3 py-2.5 text-left hover:bg-card/70 transition-colors"
                         >
                           {poster ? (
-                            <img src={poster} alt="" className="w-12 h-12 rounded-lg object-cover flex-shrink-0 border border-white/10" />
-                          ) : (
-                            <span className="w-12 h-12 rounded-lg flex-shrink-0 flex items-center justify-center bg-primary/10 text-primary">
-                              <BookOpen size={18} />
-                            </span>
-                          )}
-                          <span className="text-[13px] font-bold text-foreground/85">{label}</span>
+                            <img src={poster} alt="" className="w-12 h-12 rounded-lg object-cover flex-shrink-0 border border-border/15" />
+                          ) : null}
+                          {/* [CHAT-SKIN 2026-08-02 국장 지시] 책 펼침 아이콘 절대 금지.
+                              대표이미지가 없으면 아무것도 두지 않는다 — 빈 파란 상자를
+                              세우느니 글자만 있는 편이 낫다. */}
+                          <span className="text-meta font-bold text-foreground">{label}</span>
                           {timeText && (
-                            <span className="text-[12px] text-muted-foreground/70">{timeText}</span>
+                            <span className="text-meta text-muted-foreground">{timeText}</span>
                           )}
-                          <span className="ml-auto text-[12px] text-muted-foreground/70">
+                          <span className="ml-auto text-meta text-muted-foreground">
                             {count != null ? `${count}조각` : "펼치기"}
                           </span>
-                          <ChevronDown size={14} className="flex-shrink-0 text-muted-foreground/60" />
+                          <ChevronDown size={16} className="flex-shrink-0 text-muted-foreground" />
                         </button>
                       ) : (isTranscript ? stageBlock.transcript : stageBlock.proposal)}
                     </div>
@@ -3005,24 +3049,18 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
                 <div key="person_palette" className="flex flex-col gap-3">
                   {personSavedNote && (
                     <div className="flex justify-start animate-in fade-in duration-500">
-                      <div className="flex gap-4 max-w-[85%]">
-                        <div className="w-8 h-8 rounded-lg flex-shrink-0 flex items-center justify-center mt-1 bg-primary/10 text-primary">
-                          <BookOpen size={16} />
-                        </div>
-                        <div className="px-5 py-3.5 rounded-2xl rounded-tl-none bg-secondary/10 border border-border/5 text-[14px] text-foreground/90">
-                          {personSavedNote}
-                        </div>
+                      {/* [CHAT-SKIN] 아이콘·말풍선 박스 제거 — AI 말은 글자만 흐른다 */}
+                      <div className="w-full text-body text-foreground">
+                        {personSavedNote}
                       </div>
                     </div>
                   )}
                   {pendingPersons.length > 0 && (
                     <div className="flex justify-start animate-in fade-in duration-500">
-                      <div className="flex gap-4 w-full max-w-[85%]">
-                        <div className="w-8 h-8 rounded-lg flex-shrink-0 flex items-center justify-center mt-1 bg-primary/10 text-primary">
-                          <BookOpen size={16} />
-                        </div>
-                        <div className="flex-1 px-5 py-3.5 rounded-2xl rounded-tl-none bg-secondary/10 border border-border/5 space-y-3">
-                          <p className="text-[13px] text-foreground/90">영상에 자주 나오는 분들이 보여요. 누구인지 알려주시면 편집할 때 이름으로 부를 수 있어요.</p>
+                      {/* [CHAT-SKIN] 아이콘·말풍선 박스 제거 */}
+                      <div className="w-full">
+                        <div className="w-full space-y-3">
+                          <p className="text-body text-foreground">영상에 자주 나오는 분들이 보여요. 누구인지 알려주시면 편집할 때 이름으로 부를 수 있어요.</p>
                           <div className="flex flex-wrap gap-3">
                             {pendingPersons.map((p) => (
                               <div key={p.person_id} className="flex flex-col items-center gap-1.5 bg-black/20 rounded-lg p-2.5 w-[120px]">
@@ -3059,16 +3097,16 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
                   )}
                 </div>
                 ) : item.kind === "msg" ? (
-                <div key={item.msg.id} className={`flex ${item.msg.sender === "user" ? "justify-end" : "justify-start"} animate-in fade-in slide-in-from-bottom-2 duration-500`}>
-                  <div className={`flex gap-4 max-w-[85%] ${item.msg.sender === "user" ? "flex-row-reverse" : "flex-row"}`}>
-                    <div className={`w-8 h-8 rounded-lg flex-shrink-0 flex items-center justify-center mt-1 ${item.msg.sender === "ai" ? "bg-primary/10 text-primary" : "bg-secondary/40 text-muted-foreground"}`}>
-                      {item.msg.sender === "ai" ? <BookOpen size={16} /> : <List size={16} />}
-                    </div>
-                    <div className={`flex flex-col gap-1.5 ${item.msg.sender === "user" ? "items-end" : "items-start"}`}>
-                      <div className={`px-5 py-3.5 rounded-2xl leading-relaxed text-[14px] whitespace-pre-wrap break-words ${
+                // [CHAT-SKIN 2026-08-02 국장 지시 "일단은 같게"] 참조 제품(Claude·ChatGPT) 방식.
+                //   지운 것: 줄마다 붙던 아이콘(BookOpen/List) · AI 답변의 말풍선 박스와 테두리.
+                //   AI 답변은 배경 없이 글자만 흐른다 — 저쪽이 그렇고, 박스가 매 줄 반복되면
+                //   국장 말대로 낭비다. 박스는 '내가 한 말'을 가르는 데만 쓴다.
+                <div key={item.msg.id} className={`flex ${item.msg.sender === "user" ? "justify-end" : "justify-start"} animate-in fade-in duration-300`}>
+                  <div className={`flex flex-col gap-1.5 ${item.msg.sender === "user" ? "items-end max-w-[80%]" : "items-start w-full"}`}>
+                      <div className={`text-body whitespace-pre-wrap break-words ${
                         item.msg.sender === "user"
-                          ? "bg-[#161618] border border-white/5 text-foreground/90 rounded-tr-none"
-                          : "bg-secondary/10 border border-border/5 text-foreground/90 rounded-tl-none"
+                          ? "px-4 py-2.5 rounded-2xl bg-secondary/40 text-foreground"
+                          : "text-foreground"
                       }`}>
                         {/* [S-1] 스피너는 첫 토큰 전까지만 — say가 차오르기 시작하면 소거 */}
                         {item.msg.isInterpreting && !item.msg.text && (
@@ -3104,8 +3142,8 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
                       {(item.msg as any).kind === "search_results" && Array.isArray((item.msg as any).results) && (item.msg as any).results.length > 0 && (
                         <SearchResultCards results={(item.msg as any).results} />
                       )}
-                      <span className="text-[12px] text-muted-foreground/70 px-1">{new Date(item.msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
-                    </div>
+                      {/* [CHAT-SKIN] 줄마다 붙던 시각 제거 — 국장 말대로 낭비다.
+                          시간은 아래 구분선이 날짜가 바뀌거나 한참 벌어졌을 때만 말한다. */}
                   </div>
                 </div>
                 // [CHAT-ROOT 3-2 2026-08-02] 활성 제안 슬롯 제거.
@@ -3123,30 +3161,39 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
                   const pair = item.entry.pair as any;
                   const primary = pair?.B ?? pair?.A;
                   const fragCount = (primary?.key_fragments?.length ?? primary?.sequence?.length ?? 0);
-                  // [CHAT-FOLD 3-1] isOpen 폐지 — 펼침 자체가 특별 취급이었다.
-                  const when = new Date(item.entry.ts).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+                  // [CHAT-SKIN 2026-08-02] 아이콘·시각 제거. 클릭하면 내용이 이 자리에 펼쳐진다.
+                  //   ★ CHAT-FOLD 3-1 에서 제가 펼침을 통째로 없앤 것이 잘못이었다 —
+                  //     지워야 했던 건 안내 문구와 '재작업' 버튼(특별 취급)이지 내용이 아니었다.
+                  //     국장: "클릭해도 아무것도 없다. 아무것도 안 나오면 속상해."
+                  const openFids: string[] = (primary?.key_fragments ?? []) as string[];
+                  const isOpen = openStoryBox === item.entry.id;
                   return (
-                    <div key={`storybox_${item.entry.id}`} className="flex justify-start animate-in fade-in duration-500">
-                      <div className="flex gap-4 max-w-[85%]">
-                        <div className="w-8 h-8 rounded-lg flex-shrink-0 flex items-center justify-center mt-1 bg-primary/10 text-primary">
-                          <BookOpen size={16} />
+                    <div key={`storybox_${item.entry.id}`} className="w-full flex flex-col gap-1.5 items-start animate-in fade-in duration-300">
+                      <button
+                        type="button"
+                        onClick={() => setOpenStoryBox(isOpen ? null : item.entry.id)}
+                        className="w-full max-w-[800px] flex items-center gap-3 rounded-xl border border-border/15 bg-card/40 px-3 py-2.5 text-left hover:bg-card/70 transition-colors"
+                      >
+                        <span className="text-meta font-bold text-foreground">지난 원고</span>
+                        <span className="ml-auto text-meta text-muted-foreground">{fragCount}조각</span>
+                        <ChevronDown size={16} className={`flex-shrink-0 text-muted-foreground transition-transform ${isOpen ? "rotate-180" : ""}`} />
+                      </button>
+                      {isOpen && (
+                        <div className="w-full max-w-[800px] rounded-xl border border-border/15 bg-card/20 px-4 py-3 flex flex-col gap-1.5">
+                          {openFids.length === 0 ? (
+                            <span className="text-meta text-muted-foreground">이 원고에 담긴 조각을 찾지 못했어요.</span>
+                          ) : openFids.map((fid, i) => {
+                            const frag = allSourceFragments.find((f: any) => f.fragment_id === fid);
+                            const text = fragmentTranscriptText(frag) || "";
+                            return (
+                              <div key={`${item.entry.id}_${fid}_${i}`} className="text-meta text-foreground flex gap-2">
+                                <span className="text-muted-foreground font-mono flex-shrink-0">{i + 1}.</span>
+                                <span style={FRAGMENT_TEXT_STYLE}>{text || <span style={FRAGMENT_SILENT_STYLE}>(무음)</span>}</span>
+                              </div>
+                            );
+                          })}
                         </div>
-                        <div className="flex flex-col gap-1.5 items-start">
-                          <div className="rounded-2xl rounded-tl-none bg-secondary/10 border border-border/5 min-w-[240px] overflow-hidden">
-                            {/* [CHAT-FOLD 3-1 2026-08-02] 옛 원고 특별 취급 제거 (국장 지시).
-                                지웠던 것: 펼침/접힘 버튼 · "이 원고를 불러와 이어서 다시 다듬을 수
-                                있어요" 안내 · "이 원고로 재작업" 버튼.
-                                옛 컨텐츠와 새 컨텐츠의 생김새·동작이 같아야 한다 — 옛것만 따로
-                                안내를 달고 따로 되살리는 문을 두면 그게 특별 취급이다.
-                                이제 이 카드는 종류·분량·시각만 말한다(아이콘 카드와 같은 문법). */}
-                            <div className="w-full flex items-center gap-2 px-4 py-3 text-left">
-                              <span className="text-[10px] font-black tracking-widest uppercase text-muted-foreground/60">지난 원고</span>
-                              <span className="text-[12px] text-foreground/80">{fragCount}조각</span>
-                            </div>
-                          </div>
-                          <span className="text-[12px] text-muted-foreground/70 px-1">{when}</span>
-                        </div>
-                      </div>
+                      )}
                     </div>
                   );
                 })()
