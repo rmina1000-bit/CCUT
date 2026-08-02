@@ -1,6 +1,13 @@
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { Sparkles, Send, PanelRightClose, PanelRightOpen } from "lucide-react";
 import { fetcher } from "@/services/api";
+
+// [ADMIN-AI-LIVE 2026-08-02 C-1] 패널 폭 — 화면을 옮겨도 이 세션 동안은 유지된다.
+//   저장소를 새로 만들지 않는다(지시서 금지). 모듈 메모리라 앱을 새로 열면 기본값이다.
+const PANEL_WIDTH_DEFAULT = 288;   // 구판 w-72 와 같은 값
+const PANEL_WIDTH_MIN = 240;
+const PANEL_WIDTH_MAX = 640;
+let sessionPanelWidth = PANEL_WIDTH_DEFAULT;
 
 // [War Room v1] 공통 AI 보조 패널 — 전 관리자 화면 우측에 부착.
 // read/query only: 이 패널에서 write 액션 실행 금지 (지시서 §STEP1).
@@ -11,6 +18,10 @@ interface QueryResult {
   result?: string;
   error?: string;
   detail?: string;
+  turns_carried?: number;   // [B-2] 이 답이 몇 턴을 기억하고 나왔는지 (백엔드 실측)
+  // [UNMUZZLE 3] 이 답을 내려고 AI 가 직접 조회한 횟수. 0이면 지표만 보고 답한 것이다.
+  tool_calls?: number;
+  tool_round_limit?: boolean;
 }
 
 interface SituationLite {
@@ -35,9 +46,27 @@ export const AdminAIPanel: React.FC<{
   const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(false);
   const [history, setHistory] = useState<QueryResult[]>([]);
+  // [B-4] 답을 기다리는 동안 화면에 남는 내 질문 (오래된 것 위 → 최신 아래 순서).
+  const [pending, setPending] = useState<string | null>(null);
   const [labAudit, setLabAudit] = useState<LabAudit | null>(null);
   // [LAB-52 ②] 감사 조회 실패를 '이상 없음'과 구분한다 (상황실 쪽 situationError와 같은 방식).
   const [labError, setLabError] = useState<string | null>(null);
+  // [ADMIN-AI-LIVE B-4] 대화가 위로 쌓이고 입력은 아래 고정 — 답이 오면 하단을 따라간다.
+  //   CenterPanel 의 하단 근접 판정(CHATSCROLL-FIX-01, slack 120px)과 같은 규칙을 쓴다.
+  //   손짓 감지까지 복제하지 않는 이유: 이 패널의 새 내용은 전부 사용자가 방금 던진
+  //   질문의 답이다 — 백그라운드로 도착하는 카드가 없어 오판할 대상 자체가 없다.
+  const logRef = useRef<HTMLDivElement>(null);
+  const logEndRef = useRef<HTMLDivElement>(null);
+  const CHAT_BOTTOM_SLACK = 120;
+  const isNearBottom = useCallback(() => {
+    const el = logRef.current;
+    if (!el) return true;
+    if (el.scrollHeight <= el.clientHeight + 4) return true;
+    return el.scrollHeight - el.scrollTop - el.clientHeight <= CHAT_BOTTOM_SLACK;
+  }, []);
+  // [C-1] 폭 — 세션 값에서 시작해 드래그로 바꾼다.
+  const [width, setWidth] = useState(sessionPanelWidth);
+  const dragRef = useRef<{ startX: number; startW: number } | null>(null);
 
   useEffect(() => {
     fetcher("/admin/situation")
@@ -57,24 +86,66 @@ export const AdminAIPanel: React.FC<{
       .catch(e => { setLabAudit(null); setLabError(String(e)); });
   }, [contextSource]);
 
+  // [C-1] 좌측 경계 드래그. 문서 레벨에서 듣다가 버튼을 떼면 끝낸다.
+  const onDragStart = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    dragRef.current = { startX: e.clientX, startW: width };
+    const onMove = (ev: MouseEvent) => {
+      const d = dragRef.current;
+      if (!d) return;
+      // 왼쪽 경계라 왼쪽으로 끌수록 넓어진다.
+      const next = Math.min(PANEL_WIDTH_MAX,
+        Math.max(PANEL_WIDTH_MIN, d.startW + (d.startX - ev.clientX)));
+      sessionPanelWidth = next;
+      setWidth(next);
+    };
+    const onUp = () => {
+      dragRef.current = null;
+      document.removeEventListener("mousemove", onMove);
+      document.removeEventListener("mouseup", onUp);
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+    };
+    document.addEventListener("mousemove", onMove);
+    document.addEventListener("mouseup", onUp);
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+  }, [width]);
+
+  // [B-4] 새 내용·대기 표시가 붙으면 하단으로 따라간다 (하단 근처에 있을 때만).
+  useEffect(() => {
+    if (isNearBottom()) {
+      logEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+    }
+  }, [history, loading, isNearBottom]);
+
   const ask = async () => {
     const q = query.trim();
     if (!q || loading) return;
     setLoading(true);
+    setQuery("");
+    // [B-4] 질문을 먼저 화면에 올린다 — 답을 기다리는 동안 무엇을 물었는지 보인다.
+    setPending(q);
+    // [B-2] 이전 대화를 함께 보낸다. 실패한 턴(result 없음)은 빼고 오래된 것부터.
+    //   화면이 보관하는 것 이상은 보내지 않고, 몇 턴을 쓸지는 백엔드가 자른다.
+    const carried = history
+      .filter(h => h.query && h.result)
+      .map(h => ({ query: h.query, result: h.result }));
     try {
       const r = await fetcher("/admin/ai/query", {
         method: "POST",
         body: JSON.stringify({
           role: "ops_brief",
           query: `[화면: ${screen}] ${q}`,
+          history: carried,
           ...(labAudit ? { context: { screen: "편집연구실", audit: labAudit } } : {}),
         }),
       }) as QueryResult;
-      setHistory(prev => [r, ...prev].slice(0, 10));
-      setQuery("");
+      setHistory(prev => [...prev, r].slice(-20));
     } catch (e) {
-      setHistory(prev => [{ query: q, error: String(e) }, ...prev].slice(0, 10));
+      setHistory(prev => [...prev, { query: q, error: String(e) }].slice(-20));
     } finally {
+      setPending(null);
       setLoading(false);
     }
   };
@@ -113,7 +184,16 @@ export const AdminAIPanel: React.FC<{
   }
 
   return (
-    <aside className="w-72 flex-shrink-0 border-l border-border/15 bg-[hsl(228_12%_9%)] flex flex-col">
+    <aside
+      style={{ width }}
+      className="relative flex-shrink-0 border-l border-border/15 bg-[hsl(228_12%_9%)] flex flex-col"
+    >
+      {/* [C-1] 좌측 경계 손잡이 — 폭 조절. 얇게 두고 hover 때만 보인다. */}
+      <div
+        onMouseDown={onDragStart}
+        title="드래그하여 폭 조절"
+        className="absolute left-0 top-0 h-full w-1.5 -ml-0.5 cursor-col-resize z-20 hover:bg-primary/40 active:bg-primary/60 transition-colors"
+      />
       <div className="px-4 py-3 border-b border-border/15 flex items-center justify-between">
         <div className="flex items-center gap-1.5">
           <Sparkles size={13} className="text-primary" />
@@ -131,7 +211,13 @@ export const AdminAIPanel: React.FC<{
       </div>
 
       <div className="px-4 py-3 border-b border-border/10">
-        <p className="text-[10px] font-semibold text-muted-foreground/76 uppercase mb-1.5">권장 다음 행동</p>
+        {/* [ADMIN-AI-LIVE 2026-08-02 B-6] 라벨 정직화.
+            이 목록은 AI 응답이 아니다 — 일반 탭은 /admin/situation 의 경보·대기작업을,
+            EDIT LAB 은 /lab/audit 수치를 그대로 옮긴 것이다(:96-101 실측 확인).
+            그래서 화면이 바뀌어도 같은 세 줄이 나왔다. 출처대로 이름을 붙인다. */}
+        <p className="text-[10px] font-semibold text-muted-foreground/76 uppercase mb-1.5">
+          {contextSource === "lab" ? "감사 결과 요약" : "상황실 경보 · 대기 작업"}
+        </p>
         {/* [LAB-52 ②] 조회 실패·측정 전은 '이상 없음'이 아니다. 셋을 각각 다르게 표기한다. */}
         {contextSource === "lab" && labError ? (
           <p className="text-[11px] text-red-400/80">편집연구실 감사 조회 실패 — {labError}</p>
@@ -150,7 +236,52 @@ export const AdminAIPanel: React.FC<{
         )}
       </div>
 
-      <div className="px-4 py-3 flex gap-1.5">
+      {/* [ADMIN-AI-LIVE 2026-08-02 B-4] 대화가 위로 쌓이고 입력은 아래 고정.
+          구판은 입력이 위, 답이 아래로 내려가 최신이 화면 밖으로 밀렸다(국장 지적). */}
+      <div ref={logRef} className="flex-1 overflow-y-auto px-4 py-3 space-y-2">
+        {history.length === 0 && !pending && (
+          <p className="text-[11px] text-muted-foreground/60 leading-snug">
+            운영 지표를 근거로 묻고 답합니다. 앞선 대화를 기억합니다.
+          </p>
+        )}
+        {history.map((h, i) => (
+          <div key={i} className="space-y-1">
+            <p className="text-[11px] text-foreground/70 text-right leading-snug">
+              <span className="inline-block rounded-md bg-secondary/40 px-2 py-1">{h.query}</span>
+            </p>
+            <div className="rounded-md border border-border/10 bg-card/20 p-2.5">
+              {h.error ? (
+                <p className="text-[11px] text-red-400">{h.error}{h.detail ? ` — ${h.detail}` : ""}</p>
+              ) : (
+                <p className="text-[11px] text-foreground/80 leading-snug whitespace-pre-wrap">{h.result}</p>
+              )}
+              {/* [B-2] 기억이 실제로 실려 갔는지 화면에서 확인할 수 있게. 0턴이면 표시하지 않는다.
+                  [UNMUZZLE 3] 직접 조회 횟수 — 스스로 봤는지 지표만 읽었는지가 여기서 갈린다. */}
+              {!h.error && ((h.turns_carried ?? 0) > 0 || (h.tool_calls ?? 0) > 0) && (
+                <p className="text-[10px] text-muted-foreground/50 mt-1.5">
+                  {[(h.turns_carried ?? 0) > 0 ? `앞선 대화 ${h.turns_carried}턴 기억` : null,
+                    (h.tool_calls ?? 0) > 0 ? `직접 조회 ${h.tool_calls}회` : null,
+                    h.tool_round_limit ? "왕복 상한 도달(못 본 것 있음)" : null,
+                  ].filter(Boolean).join(" · ")}
+                </p>
+              )}
+            </div>
+          </div>
+        ))}
+        {pending && (
+          <div className="space-y-1">
+            <p className="text-[11px] text-foreground/70 text-right leading-snug">
+              <span className="inline-block rounded-md bg-secondary/40 px-2 py-1">{pending}</span>
+            </p>
+            <p className="text-[11px] text-muted-foreground/60 flex items-center gap-1.5">
+              <Sparkles size={11} className="animate-pulse text-primary" /> 생각하는 중...
+            </p>
+          </div>
+        )}
+        <div ref={logEndRef} />
+      </div>
+
+      <div className="px-4 py-3 border-t border-border/15 flex gap-1.5">
         <input
           value={query}
           onChange={e => setQuery(e.target.value)}
@@ -162,19 +293,6 @@ export const AdminAIPanel: React.FC<{
           className="px-2.5 h-8 rounded-md bg-primary/15 hover:bg-primary/25 text-primary transition-colors disabled:opacity-50">
           {loading ? <Sparkles size={12} className="animate-pulse" /> : <Send size={12} />}
         </button>
-      </div>
-
-      <div className="flex-1 overflow-y-auto px-4 pb-4 space-y-2">
-        {history.map((h, i) => (
-          <div key={i} className="rounded-md border border-border/10 bg-card/20 p-2.5">
-            <p className="text-[10px] text-muted-foreground/76 truncate">Q. {h.query}</p>
-            {h.error ? (
-              <p className="text-[11px] text-red-400 mt-1">{h.error}{h.detail ? ` — ${h.detail}` : ""}</p>
-            ) : (
-              <p className="text-[11px] text-foreground/80 mt-1 leading-snug">{h.result}</p>
-            )}
-          </div>
-        ))}
       </div>
     </aside>
   );

@@ -1310,12 +1310,17 @@ def design_config_status(config_id: int, status: str) -> dict:
 _AI_ROLES = ("ops_brief", "support_classify", "security_triage",
              "strategy_advice", "copy_suggest")
 
+# [ADMIN-AI-UNMUZZLE 2026-08-02] 재갈 전면 해제 (국장 지시: "오히려 다 풀어줘").
+#   구판 이력: "지표만 근거로" → (B-3) 판단 허용 → 지금 전면 해제.
+#   B-3 까지도 남아 있던 것은 '지표에 없으면 못 본다'는 전제였다. 그 전제 때문에
+#   AI 가 국장에게 심부름을 시켰다 — "확인해서 알려주시면 판단해드릴게요".
+#   이제 손(admin/ai_tools.py)이 있으므로 그 전제 자체가 사라진다.
 _ROLE_PROMPTS = {
-    "ops_brief": "너는 CCUT 운영 브리핑 담당이다. 아래 실측 지표만 근거로 운영자 질문에 답하라.",
-    "support_classify": "너는 지원 문의 분류 담당이다. 질문 내용을 분류·요약하라.",
-    "security_triage": "너는 보안 이벤트 triage 담당이다. 위험도와 첫 조치를 제안하라.",
-    "strategy_advice": "너는 서비스 전략 조언 담당이다. 아래 실측 지표 범위 안에서만 조언하라.",
-    "copy_suggest": "너는 UI 문구 제안 담당이다. 짧고 조용한 한국어 운영 도구 톤으로 제안하라.",
+    "ops_brief": "너는 CCUT 운영을 함께 보는 참모다. 운영자와 대화하며 상태를 파악하고 판단을 말한다.",
+    "support_classify": "너는 지원 문의 분류 담당이다. 질문 내용을 분류·요약하고 판단을 말한다.",
+    "security_triage": "너는 보안 이벤트 triage 담당이다. 위험도를 판정하고 첫 조치를 제안한다.",
+    "strategy_advice": "너는 서비스 전략 참모다. 데이터를 직접 확인하고 방향을 조언한다.",
+    "copy_suggest": "너는 UI 문구 제안 담당이다. 짧고 조용한 한국어 운영 도구 톤으로 제안한다.",
 }
 
 
@@ -1452,93 +1457,221 @@ def _lab_transfer_context(context: dict) -> dict:
     }
 
 
-def _build_admin_prompt(role: str, query: str, context: dict = None) -> tuple[str, dict]:
+# [ADMIN-AI-UNMUZZLE 2026-08-02] 남기는 것은 규율 하나뿐 (국장 지시 2-2 원문).
+#   ★ 이것은 재갈이 아니다. 국장이 Claude·실행자에게 똑같이 거는 규율이다.
+#     재갈은 "생각하지 마라"고 말하고, 규율은 "말할 때 근거의 성격을 밝히라"고 말한다.
+_JUDGMENT_RULES = (
+    "원인이나 판단을 말할 때 앞에 '측정했습니다' 또는 '추정입니다'를 붙인다.\n"
+    "모르면 모른다고 하되, 알아볼 수 있으면 직접 알아본 뒤 말한다.\n"
+)
+
+# [ADMIN-AI-UNMUZZLE 3] 손을 달았으므로 그 사실을 알린다.
+#   구판은 '주어진 지표가 세상의 전부'인 줄 알았다. 그래서 없는 수치를 물으면
+#   운영자에게 확인을 부탁했다 — 국장은 실행자가 아니다.
+_TOOL_RULES = (
+    "너에게는 이 시스템을 직접 들여다보는 도구가 있다.\n"
+    "- db_query: 운영 DB 에 SELECT. 어느 테이블이든 본다. 스키마를 모르면 "
+    "sqlite_master 부터 조회하라.\n"
+    "- read_log: 백엔드 로그를 읽는다.\n"
+    "- read_file: 프로젝트 소스·설정·문서를 읽는다.\n"
+    "아래 [운영 지표]는 출발점일 뿐 전부가 아니다. 지표에 없는 것을 물으면 "
+    "운영자에게 확인을 부탁하지 말고 네가 직접 조회해서 답하라.\n"
+    "한 번 조회해서 부족하면 결과를 보고 다시 조회하라. 답을 지어내는 것보다 "
+    "한 번 더 조회하는 편이 낫다.\n"
+)
+
+
+def _build_admin_prompt(role: str, query: str, context: dict = None) -> tuple[str, str, dict]:
+    """[ADMIN-AI-LIVE B-2] (system, user, transmitted) 로 가른다.
+
+    왜 가르는가: 구판은 역할·규칙·지표·질문·출력계약을 user 메시지 하나에 뭉쳤다.
+      그 상태로 대화를 이으면 지표와 계약이 매 턴 history 에 중복 적재되고,
+      모델이 '지난 턴의 지표'와 '이번 턴의 지표'를 두 개의 사실로 읽는다.
+      고정값(역할·규칙·지표)은 system 으로 올리고 messages 에는 대화만 남긴다.
+    """
     is_lab = bool(context and context.get("screen") == "편집연구실")
     if is_lab:
         transmitted = _lab_transfer_context(context)
-        context_rules = (
-            "아래 EDIT LAB 감사 데이터만 근거로 답하라.\n"
-            "모든 수치와 ID는 감사 데이터에 있는 값만 사용하라.\n"
-            "데이터에 없는 내용은 반드시 '감사 데이터에 없음'이라고 답하라.\n"
-            "추측, 일반지식, 화면 이름 되받기를 금지한다.\n"
-            "답변은 결론 한 줄, 근거 수치, 다음 후보 행동이 있으면 그 순서로 3문장 이내로 작성하라.\n"
-        )
+        context_rules = "화면 이름을 그대로 되받지 마라.\n"
     else:
         con = _connect()
         transmitted = _service_counts(con)
         con.close()
-        context_rules = "지표에 없는 수치는 지어내지 말고 '지표에 없음'이라고 말하라.\n"
+        context_rules = ""
     payload_text = (
         json.dumps(transmitted, ensure_ascii=False, separators=(",", ":"))
         if is_lab
         else "\n".join(f"- {key}: {value}" for key, value in transmitted.items())
     )
-    output_contract = (
-        'JSON만 출력. 형식: {"answer": "한국어 답변"}'
-        if is_lab
-        else 'JSON만 출력. 형식: {"answer": "한국어 답변 (3문장 이내)"}'
-    )
-    prompt = (
+    # [UNMUZZLE 2-1] 삭제한 것: "지표만을 근거로", "지표에 없는 수치는 답하지 않는다",
+    #   "N문장 이내", 'JSON만 출력' 출력계약. 앞의 셋은 생각을 막았고, JSON 계약은
+    #   도구 왕복(tool_use 블록)과 양립하지 않는다 — 답변이 통째로 버려지는 경로였다.
+    system_text = (
         f"{_ROLE_PROMPTS[role]}\n"
         f"{context_rules}"
-        f"[운영 지표]\n{payload_text}\n\n"
-        f"[운영자 입력]\n{query}\n\n"
-        f"{output_contract}"
+        f"{_JUDGMENT_RULES}"
+        f"{_TOOL_RULES}"
+        "앞선 대화가 있으면 기억하고 이어서 답한다. 한국어로 답한다.\n\n"
+        f"[운영 지표 — 출발점]\n{payload_text}"
     )
-    return prompt, transmitted
+    return system_text, query, transmitted
 
 
-def _anthropic_admin_query(prompt: str) -> tuple[str, str]:
+# [ADMIN-AI-LIVE 2026-08-02 B-2] 대화로 실어 보내는 최근 턴 수.
+#   근거(실측): system 에 올라가는 운영 지표는 9줄(_service_counts) — 100토큰 내외.
+#   응답은 output_summary 저장 한도와 같은 300자(≈200토큰) 규모.
+#   8턴이면 (질문 60 + 답 200) x 8 ≈ 2,100토큰 + 지표·규칙 300 ≈ 2,400토큰.
+#   max_tokens 1000 을 더해도 컨텍스트 여유가 크고, 8턴이면 국장이 화면에서
+#   되짚는 범위(패널이 보관하는 10건)를 실질적으로 덮는다.
+ADMIN_AI_HISTORY_TURNS = 8
+
+
+# [ADMIN-AI-UNMUZZLE 3] 도구 왕복 상한.
+#   1차 8회 → 2차 16회. 올린 근거는 추정이 아니라 실측이다:
+#   실증 케이스 "저 173개 제안은 뭐야?" 가 8회 상한에 **걸렸다**(tool_calls=18, 76초).
+#   AI 는 DB 를 18번 조회해 "A/B 쌍이라 173(홀수)이 된 시점은 없다"까지 밝혀냈지만,
+#   그 숫자를 표시한 화면 소스를 read_file 로 찾기 전에 상한에 걸려 국장에게 되물었다.
+#   손을 달아놓고 상한으로 심부름을 시키게 만든 셈이라 올린다.
+#   ★ 상한에 걸리면 조용히 멈추지 않는다 — 몇 번 돌았고 무엇을 못 봤는지 답변에 실어 보낸다.
+ADMIN_AI_MAX_TOOL_ROUNDS = 16
+
+
+def _anthropic_admin_query(system_text: str, user_text: str,
+                           history: list = None) -> tuple[str, str, dict]:
+    """[UNMUZZLE] 도구를 쥐여준 채 왕복시킨다.
+
+    구판은 1회 호출로 끝났고 출력이 JSON {"answer":...} 이 아니면 답을 통째로 버렸다.
+    도구를 달면 응답에 tool_use 블록이 섞이므로 그 계약은 성립하지 않는다 — 걷어냈다.
+    반환: (answer, model, trace) — trace 는 실제로 무엇을 조회했는지의 기록이다.
+    """
     provider = os.getenv("CCUT_ADMIN_LLM_PROVIDER", "").strip()
     model = os.getenv("CCUT_ADMIN_LLM_MODEL", "").strip()
     api_key = os.getenv("ANTHROPIC_API_KEY", "").strip()
     if provider != "anthropic" or not model or not api_key:
         raise RuntimeError("관리자 AI 미설정")
 
+    from admin import ai_tools
+
+    # [B-2] 이전 대화 → messages. 형식이 어긋난 항목은 조용히 버리지 않고 개수를 로그로 남긴다.
+    messages = []
+    skipped = 0
+    for turn in (history or [])[-ADMIN_AI_HISTORY_TURNS:]:
+        if not isinstance(turn, dict):
+            skipped += 1
+            continue
+        q = str(turn.get("query") or "").strip()
+        a = str(turn.get("result") or "").strip()
+        if not q or not a:
+            skipped += 1          # 실패한 턴(error)은 대화에 넣지 않는다
+            continue
+        messages.append({"role": "user", "content": q})
+        messages.append({"role": "assistant", "content": a})
+    if skipped:
+        print(f"[ADMIN-AI] history 항목 {skipped}건 제외(형식 불일치·실패 턴)")
+    messages.append({"role": "user", "content": user_text})
+
     import httpx
-    request_payload = {
-        "model": model,
-        "max_tokens": 700,
-        "messages": [{"role": "user", "content": prompt}],
+    headers = {
+        "x-api-key": api_key,
+        "anthropic-version": "2023-06-01",
+        "content-type": "application/json",
     }
+    trace = {"tool_calls": 0, "rounds": 0, "calls": [], "hit_round_limit": False}
+
+    for _round in range(ADMIN_AI_MAX_TOOL_ROUNDS):
+        trace["rounds"] = _round + 1
+        response = httpx.post(
+            "https://api.anthropic.com/v1/messages",
+            headers=headers,
+            json={
+                "model": model,
+                "max_tokens": 4000,
+                "system": system_text,
+                "messages": messages,
+                "tools": ai_tools.TOOL_DEFS,
+            },
+            timeout=180,
+        )
+        response.raise_for_status()
+        body = response.json()
+        content = body.get("content", []) or []
+        text = "".join(
+            b.get("text", "") for b in content
+            if isinstance(b, dict) and b.get("type") == "text"
+        ).strip()
+
+        if body.get("stop_reason") != "tool_use":
+            if not text:
+                raise ValueError("empty Anthropic response")
+            return text, model, trace
+
+        # 도구를 부르겠다고 했다 — 실제로 실행해 결과를 되돌려준다.
+        messages.append({"role": "assistant", "content": content})
+        results = []
+        for block in content:
+            if not (isinstance(block, dict) and block.get("type") == "tool_use"):
+                continue
+            name = block.get("name")
+            args = block.get("input") or {}
+            out = ai_tools.run(name, args)
+            trace["tool_calls"] += 1
+            trace["calls"].append({
+                "tool": name,
+                "input": args,
+                "output_chars": len(out),
+                "is_error": '"error"' in out[:200],
+            })
+            print(f"[ADMIN-AI][TOOL] {name} {json.dumps(args, ensure_ascii=False)[:200]} "
+                  f"-> {len(out)}자", flush=True)
+            results.append({
+                "type": "tool_result",
+                "tool_use_id": block.get("id"),
+                "content": out,
+            })
+        messages.append({"role": "user", "content": results})
+
+    # 상한 도달 — 조용히 끝내지 않는다. 마지막으로 도구 없이 한 번 정리시킨다.
+    trace["hit_round_limit"] = True
+    print(f"[ADMIN-AI][TOOL-LIMIT] {ADMIN_AI_MAX_TOOL_ROUNDS}회 왕복 상한 도달", flush=True)
+    messages.append({
+        "role": "user",
+        "content": (f"도구 왕복 상한({ADMIN_AI_MAX_TOOL_ROUNDS}회)에 도달했다. "
+                    "지금까지 조회한 것만으로 답하고, 아직 확인하지 못한 것이 있으면 "
+                    "무엇을 못 봤는지 밝혀라."),
+    })
     response = httpx.post(
         "https://api.anthropic.com/v1/messages",
-        headers={
-            "x-api-key": api_key,
-            "anthropic-version": "2023-06-01",
-            "content-type": "application/json",
-        },
-        json=request_payload,
-        timeout=60,
+        headers=headers,
+        json={"model": model, "max_tokens": 4000,
+              "system": system_text, "messages": messages},
+        timeout=180,
     )
     response.raise_for_status()
-    body = response.json()
     text = "".join(
-        block.get("text", "")
-        for block in body.get("content", [])
-        if isinstance(block, dict) and block.get("type") == "text"
+        b.get("text", "") for b in (response.json().get("content", []) or [])
+        if isinstance(b, dict) and b.get("type") == "text"
     ).strip()
     if not text:
         raise ValueError("empty Anthropic response")
-    try:
-        answer = json.loads(text).get("answer")
-    except json.JSONDecodeError:
-        answer = None
-    if not answer:
-        raise ValueError("Anthropic response is not answer JSON")
-    return answer, model
+    return text, model, trace
 
 
-def ai_query(role: str, query: str, context: dict = None, record: bool = True) -> dict:
-    """역할별 관리자 API 질의. EDIT LAB은 실행·감사 로그를 남기지 않는다."""
+def ai_query(role: str, query: str, context: dict = None, record: bool = True,
+             history: list = None) -> dict:
+    """역할별 관리자 API 질의. EDIT LAB은 실행·감사 로그를 남기지 않는다.
+
+    [ADMIN-AI-LIVE B-2] history: 프론트가 들고 있는 이전 대화
+      ([{query, result}, ...] 오래된 것부터). 없으면 구판과 같은 단발 질의다 —
+      기존 호출자는 손대지 않아도 그대로 동작한다.
+    """
     import time as _time
     if role not in _AI_ROLES:
         return {"error": f"role must be one of {_AI_ROLES}"}
 
-    prompt, transmitted = _build_admin_prompt(role, query, context)
+    system_text, user_text, transmitted = _build_admin_prompt(role, query, context)
     t0 = _time.time()
     try:
-        answer, model = _anthropic_admin_query(prompt)
+        answer, model, tool_trace = _anthropic_admin_query(system_text, user_text, history)
     except Exception as e:
         error = (
             "관리자 AI 미설정"
@@ -1564,7 +1697,16 @@ def ai_query(role: str, query: str, context: dict = None, record: bool = True) -
         audit_append("ai_query", target_type="ai_run", note=f"[{role}] {query}")
     return {"role": role, "query": query, "result": answer,
             "duration_ms": duration,
-            "sources_referenced": len(transmitted)}
+            "sources_referenced": len(transmitted),
+            # [B-2] 이번 답이 몇 턴을 기억하고 나왔는지 — 화면·검증이 확인할 수 있게.
+            "turns_carried": min(len([
+                t for t in (history or [])
+                if isinstance(t, dict) and t.get("query") and t.get("result")
+            ]), ADMIN_AI_HISTORY_TURNS),
+            # [UNMUZZLE 3] 무엇을 직접 조회했는지 — 심부름을 시켰는지 스스로 봤는지가 여기서 갈린다.
+            "tool_calls": tool_trace.get("tool_calls", 0),
+            "tool_trace": tool_trace.get("calls", []),
+            "tool_round_limit": tool_trace.get("hit_round_limit", False)}
 
 
 # ═══════════════════════════════════════════════════════════════════

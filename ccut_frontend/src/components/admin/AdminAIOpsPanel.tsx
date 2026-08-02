@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { ExternalLink, KeyRound, PlugZap, Send, Sparkles, Unplug } from "lucide-react";
 import { fetcher } from "@/services/api";
 
@@ -49,6 +49,10 @@ interface QueryResult {
   duration_ms?: number;
   error?: string;
   detail?: string;
+  turns_carried?: number;   // [B-2] 이 답이 몇 턴을 기억하고 나왔는지 (백엔드 실측)
+  // [UNMUZZLE 3] 이 답을 내려고 AI 가 직접 조회한 횟수. 0이면 지표만 보고 답한 것이다.
+  tool_calls?: number;
+  tool_round_limit?: boolean;
 }
 
 const encryptSecret = async (value: string): Promise<string> => {
@@ -82,6 +86,8 @@ export const AdminAIOpsPanel: React.FC = () => {
   const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(false);
   const [results, setResults] = useState<QueryResult[]>([]);
+  // [B-4] 답을 기다리는 동안 화면에 남는 내 질문.
+  const [pending, setPending] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [providers, setProviders] = useState<ApiProvider[]>([]);
   const [keyInputs, setKeyInputs] = useState<Record<string, string>>({});
@@ -96,20 +102,43 @@ export const AdminAIOpsPanel: React.FC = () => {
   };
   useEffect(load, []);
 
+  // [ADMIN-AI-LIVE 2026-08-02 B-4] 대화가 위로 쌓이고 입력은 아래 — 답이 오면 따라간다.
+  //   CenterPanel 의 하단 근접 판정(CHATSCROLL-FIX-01, slack 120px)과 같은 규칙.
+  const logRef = useRef<HTMLDivElement>(null);
+  const logEndRef = useRef<HTMLDivElement>(null);
+  const isNearBottom = useCallback(() => {
+    const el = logRef.current;
+    if (!el) return true;
+    if (el.scrollHeight <= el.clientHeight + 4) return true;
+    return el.scrollHeight - el.scrollTop - el.clientHeight <= 120;
+  }, []);
+  useEffect(() => {
+    if (isNearBottom()) {
+      logEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+    }
+  }, [results, loading, isNearBottom]);
+
   const ask = async () => {
     const q = query.trim();
     if (!q || loading) return;
     setLoading(true);
+    setQuery("");
+    setPending(q);
+    // [B-2] 이전 대화를 함께 보낸다 — 실패한 턴은 빼고 오래된 것부터.
+    //   역할이 바뀌면 문맥이 달라지므로 같은 역할의 턴만 잇는다.
+    const carried = results
+      .filter(r => r.query && r.result && (r.role ?? role) === role)
+      .map(r => ({ query: r.query, result: r.result }));
     try {
       const r = await fetcher("/admin/ai/query", {
-        method: "POST", body: JSON.stringify({ role, query: q }),
+        method: "POST", body: JSON.stringify({ role, query: q, history: carried }),
       }) as QueryResult;
-      setResults(prev => [r, ...prev].slice(0, 10));
-      setQuery("");
+      setResults(prev => [...prev, r].slice(-20));
       load();
     } catch (e) {
-      setResults(prev => [{ query: q, error: String(e) }, ...prev].slice(0, 10));
+      setResults(prev => [...prev, { role, query: q, error: String(e) }].slice(-20));
     } finally {
+      setPending(null);
       setLoading(false);
     }
   };
@@ -291,7 +320,53 @@ export const AdminAIOpsPanel: React.FC = () => {
           ) : <p className="text-[11px] text-muted-foreground/76 animate-pulse mt-1">확인 중...</p>}
       </div>
 
-      {/* 역할별 질의 */}
+      {/* [ADMIN-AI-LIVE 2026-08-02 B-4] 대화가 위로 쌓이고 입력은 아래.
+          구판은 입력이 위(:295), 답이 그 아래로 내려갔다 — 국장 지적 그대로다. */}
+      <div
+        ref={logRef}
+        className="rounded-lg border border-border/15 bg-card/10 p-3 space-y-3 max-h-[46vh] overflow-y-auto"
+      >
+        {results.length === 0 && !pending && (
+          <p className="text-[11px] text-muted-foreground/70">
+            운영 지표를 근거로 묻고 답합니다. 같은 역할 안에서 앞선 대화를 기억합니다.
+          </p>
+        )}
+        {results.map((r, i) => (
+          <div key={i} className="space-y-1.5">
+            <p className="text-xs text-foreground/75 text-right">
+              <span className="inline-block rounded-lg bg-secondary/40 px-3 py-1.5 text-left">{r.query}</span>
+            </p>
+            <div className="rounded-lg border border-border/15 bg-card/20 p-3">
+              {r.error ? (
+                <p className="text-xs text-red-400">{r.error}{r.detail ? ` — ${r.detail}` : ""}</p>
+              ) : (
+                <p className="text-sm text-foreground/90 leading-relaxed whitespace-pre-wrap">{r.result}</p>
+              )}
+              <p className="text-[10px] text-muted-foreground/60 mt-1.5">
+                [{r.role}]{r.duration_ms != null ? ` · ${r.duration_ms}ms` : ""}
+                {/* [B-2] 기억이 실제로 실려 갔는지 화면에서 확인할 수 있게. */}
+                {!r.error && (r.turns_carried ?? 0) > 0 ? ` · 앞선 대화 ${r.turns_carried}턴 기억` : ""}
+                {/* [UNMUZZLE 3] 스스로 봤는지 지표만 읽었는지가 이 숫자에서 갈린다. */}
+                {!r.error && (r.tool_calls ?? 0) > 0 ? ` · 직접 조회 ${r.tool_calls}회` : ""}
+                {r.tool_round_limit ? " · 왕복 상한 도달(못 본 것 있음)" : ""}
+              </p>
+            </div>
+          </div>
+        ))}
+        {pending && (
+          <div className="space-y-1.5">
+            <p className="text-xs text-foreground/75 text-right">
+              <span className="inline-block rounded-lg bg-secondary/40 px-3 py-1.5 text-left">{pending}</span>
+            </p>
+            <p className="text-xs text-muted-foreground/70 flex items-center gap-1.5">
+              <Sparkles size={12} className="animate-pulse text-primary" /> 생각하는 중...
+            </p>
+          </div>
+        )}
+        <div ref={logEndRef} />
+      </div>
+
+      {/* 역할별 질의 — 입력은 대화 아래 */}
       <div className="flex gap-2">
         <select value={role} onChange={e => setRole(e.target.value)}
           className="h-9 rounded-md bg-secondary/30 border border-border/15 px-2 text-xs text-foreground/90 outline-none">
@@ -310,21 +385,6 @@ export const AdminAIOpsPanel: React.FC = () => {
           {loading ? "질의 중..." : "질의"}
         </button>
       </div>
-
-      {results.map((r, i) => (
-        <div key={i} className="rounded-lg border border-border/15 bg-card/20 p-4">
-          <p className="text-[11px] font-semibold text-foreground/60">
-            [{r.role}] Q. {r.query}
-          </p>
-          {r.error ? (
-            <p className="text-xs text-red-400 mt-1">{r.error}{r.detail ? ` — ${r.detail}` : ""}</p>
-          ) : (
-            <p className="text-sm text-foreground/90 leading-relaxed mt-1">
-              {r.result} <span className="text-[10px] text-muted-foreground/70">({r.duration_ms}ms)</span>
-            </p>
-          )}
-        </div>
-      ))}
 
       {/* 실행 로그 */}
       <div>

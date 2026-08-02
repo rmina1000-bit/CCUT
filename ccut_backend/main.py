@@ -4733,11 +4733,15 @@ async def admin_ai_query(payload: dict = None):
     if not query:
         raise HTTPException(status_code=400, detail="query is required")
     context = p.get("context") if isinstance(p.get("context"), dict) else None
+    # [ADMIN-AI-LIVE 2026-08-02 B-2] 대화 기억 — 기존 라우트에 옵션 파라미터만 더한다
+    #   (지시서: 새 라우트 신설 금지). 안 보내면 구판과 같은 단발 질의다.
+    history = p.get("history") if isinstance(p.get("history"), list) else None
     return _adm.ai_query(
         (p.get("role") or "ops_brief").strip(),
         query,
         context=context,
         record=not (context and context.get("screen") == "편집연구실"),
+        history=history,
     )
 
 
