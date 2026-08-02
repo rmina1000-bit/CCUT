@@ -192,6 +192,7 @@ def load_history(program_id, n=_RECENT_TURNS):
     finally:
         con.close()
     summary = None
+    summary_covers = 0
     msgs = []
     total_msgs = 0
     for kind, payload, client_id in rows:  # 최신 → 과거
@@ -201,6 +202,11 @@ def load_history(program_id, n=_RECENT_TURNS):
             continue
         if kind == "chat_summary" and summary is None:
             summary = str(p.get("summary") or "")[:600]
+            # [MEMORY-SPINE 2026-08-02] 마지막 요약이 어디까지 덮었는지 — 다음 요약 시점 판정용.
+            try:
+                summary_covers = int(p.get("covers") or 0)
+            except Exception:
+                summary_covers = 0
         elif kind == "message":
             if _is_stage_notice(client_id):
                 continue        # 화면 안내 — 대화 기억에도 요약 문턱에도 넣지 않는다
@@ -210,7 +216,62 @@ def load_history(program_id, n=_RECENT_TURNS):
                 if txt:
                     msgs.append({"sender": p.get("sender") or "?", "text": txt[:200]})
     msgs.reverse()
-    return {"summary": summary, "messages": msgs, "total_messages": total_msgs}
+    return {"summary": summary, "summary_covers": summary_covers,
+            "messages": msgs, "total_messages": total_msgs}
+
+
+# [MEMORY-SPINE 2026-08-02] 살아있는 채팅 경로(/intent/route-edit*)를 위한 기억 어댑터.
+#   왜 필요했나: 요약(load_history)과 적용 중 기준(state_snapshot)은 이미 있었지만
+#   둘 다 decide_stream 안에서만 쓰였고, 그 함수를 부르는 /chat/converse/stream 을
+#   프론트가 한 번도 호출하지 않는다(videoService.ts 는 /intent/route-edit* 만 부른다).
+#   ★새 기억 시스템을 만들지 않는다. 이미 있는 세 kind 를 한 쿼리로 읽어
+#     라이브 경로의 facts 블록에 실어주는 어댑터 하나가 전부다.
+#   ★state_snapshot 을 그대로 쓰지 않는 이유: 그 함수는 조각 수·소스별 집계까지 도는데
+#     이 경로는 TTFT 를 계측 중이라([F2-TTFT]) 필요 없는 쿼리를 얹지 않는다.
+def load_memory_facts(program_id):
+    """지난 요약 · 적용 중 기준 · 분량 선호를 프롬프트 한 덩이로. 쿼리 1개."""
+    if not program_id:
+        return ""
+    summary = intent = None
+    pref = {}
+    try:
+        con = sqlite3.connect("file:" + hub.DB_PATH.replace("\\", "/") + "?mode=ro",
+                              uri=True, timeout=10)
+    except Exception:
+        return ""
+    try:
+        for kind, payload in con.execute(
+                "SELECT kind, payload FROM project_timeline WHERE program_id=? "
+                "AND kind IN ('chat_summary','active_intent','chat_pref') "
+                "ORDER BY entry_id DESC LIMIT 30", (program_id,)):
+            try:
+                p = json.loads(payload) if payload else {}
+            except Exception:
+                continue
+            if kind == "chat_summary" and summary is None:
+                summary = str(p.get("summary") or "")[:600]
+            elif kind == "active_intent" and intent is None:
+                # 빈 문자열은 'clear_intent'가 남긴 해제 기록이다 — 기준 없음으로 확정한다.
+                intent = str(p.get("instruction") or "")[:120]
+            elif kind == "chat_pref" and not pref:
+                pref = {"count": p.get("count"), "target_length": p.get("target_length")}
+    except sqlite3.OperationalError:
+        pass
+    finally:
+        con.close()
+    out = ""
+    if summary:
+        out += f"[지난 요약] {summary}\n"
+    if intent:
+        out += f"[적용 중 기준] {intent}\n"
+    if pref.get("count") or pref.get("target_length"):
+        bits = []
+        if pref.get("count"):
+            bits.append(f"조각 {pref['count']}개")
+        if pref.get("target_length"):
+            bits.append(f"목표 {pref['target_length']}초")
+        out += f"[분량 선호] {' · '.join(bits)}\n"
+    return out
 
 
 def _clean_fragment_labels(fragment_labels):
@@ -727,8 +788,20 @@ def maybe_roll_summary(program_id, hist):
     요약은 '추출' 계열 — format:json 유지 (③ 예외 규정)."""
     if hist["total_messages"] < _SUMMARY_EVERY:
         return
-    if hist.get("summary") and hist["total_messages"] < _SUMMARY_EVERY * 2:
-        return
+    # [MEMORY-SPINE 2026-08-02] 요약이 매 턴 돌던 것을 막는다.
+    #   구판: `if summary and total < _SUMMARY_EVERY*2: return` — total 이 80 을 넘는
+    #   순간부터 두 조건 다 통과해 ★대화 한 턴마다 ollama 요약이 돌았다.
+    #   실측(Freesia): covers 73 -> 75 -> 77 로 세 턴 연속 새 요약이 쌓였고,
+    #   매번 새로 요약되니 같은 사실이 실렸다 빠졌다 했다
+    #   (#5927 '은빛해오라기' 포함 -> #5933 누락). 기억이 흔들리는 원인이다.
+    #   ★문턱의 뜻은 "마지막 요약 이후 _SUMMARY_EVERY 만큼 더 쌓였을 때"다.
+    #     covers(그 요약이 덮은 줄 수)를 기준선으로 그 뜻대로 판정한다.
+    #     covers 가 없는 옛 요약(0)은 구판과 같게 _SUMMARY_EVERY*2 로 동작한다.
+    _covers = int(hist.get("summary_covers") or 0)
+    if hist.get("summary"):
+        _floor = (_covers + _SUMMARY_EVERY) if _covers else (_SUMMARY_EVERY * 2)
+        if hist["total_messages"] < _floor:
+            return
     con = sqlite3.connect("file:" + hub.DB_PATH.replace("\\", "/") + "?mode=ro",
                           uri=True, timeout=10)
     try:

@@ -26,7 +26,17 @@ DB_PATH = os.path.join(BACKEND_DIR, "ccut_app.db")
 #     같은 함정에 빠져 열 때마다 한 행씩 쌓인다.
 #   ※ 이 튜플은 파이썬 상수다. project_timeline 에 kind CHECK 제약이 없으므로
 #     여기 한 줄 추가는 스키마 변경이 아니다(DDL 0 · 마이그레이션 0).
-_KINDS = ("message", "generation", "transcript_ref")
+# [MEMORY-SPINE 2026-08-02] 기억 3종 복구 — 이 문이 큐원의 장기 기억을 막고 있었다.
+#   chat_summary   12턴 밖의 대화를 요약해 남기는 유일한 통로 (converse.py:725)
+#   active_intent  국장이 정한 선별 기준 ("사람 중심으로")   (converse.py:637)
+#   chat_pref      분량 선호 (조각 수·목표 길이)            (converse.py:643)
+#   쓰는 코드도 읽는 코드도 다 있는데 이 튜플이 append 를 조용히 skip 했다
+#   (append_entries:`if kind not in _KINDS: continue` — 예외도 없고 added 에도 안 잡혀
+#    호출자는 200 OK 로 본다). 실측: 그 세 kind 는 2026-07-19~07-22 이후 새 행이 0이고
+#   message 만 08-02 까지 이어졌다.
+#   ※ project_timeline 에 kind CHECK 제약이 없다 — 스키마 변경 아님(DDL 0).
+_KINDS = ("message", "generation", "transcript_ref",
+          "chat_summary", "active_intent", "chat_pref")
 
 
 def _connect():

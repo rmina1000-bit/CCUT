@@ -5514,6 +5514,49 @@ def _chat_only_speed_bypass(input_text: str) -> dict | None:
     return r
 
 
+# [MEMORY-SPINE 2026-08-02] 살아있는 채팅 경로에서도 기억을 남긴다.
+#   왜: persist_decision·maybe_roll_summary 는 decide_stream(=/chat/converse/stream) 안에만
+#   있었는데, 프론트는 그 엔드포인트를 한 번도 부르지 않는다(videoService.ts 는
+#   /intent/route-edit 과 /intent/route-edit/stream 만 부른다 — 실측 grep 0건).
+#   그래서 "기준을 기억한다"는 계약이 코드에는 있고 제품에는 없었다.
+#   ★새 저장소를 만들지 않는다. 있는 함수를 살아있는 경로에서 부를 뿐이다.
+#   ★액션 이름이 두 벌이다: route-edit 은 구명칭(intent_clear), persist_decision 은
+#     신명칭(clear_intent)을 받는다. _NEW_TO_OLD_ACTION 의 역방향으로 되돌려 넘긴다.
+#     ★역맵을 모듈 최상단에서 계산하지 않는다 — _NEW_TO_OLD_ACTION 은 이 아래(:5760)에서
+#       정의되므로 import 시점에 NameError 로 서버가 통째로 죽는다(1회차 실측:
+#       backend2.log.err `NameError: name '_NEW_TO_OLD_ACTION' is not defined`).
+#       호출 시점에 뒤집는다.
+
+
+def _persist_route_memory(program_id, r):
+    """route-edit 응답 하나를 기억 원장에 남긴다(active_intent · chat_pref)."""
+    if not program_id or not isinstance(r, dict):
+        return
+    try:
+        from engine import converse as _cv
+        old_to_new = {v: k for k, v in _NEW_TO_OLD_ACTION.items()}
+        action = str(r.get("action") or "")
+        action = old_to_new.get(action, action)
+        params = dict(r.get("params") or {})
+        # route-edit 계약은 기준을 normalized_instruction 으로 낸다(params 는 rubric 경로만).
+        if not params.get("instruction") and r.get("normalized_instruction"):
+            params["instruction"] = r["normalized_instruction"]
+        _cv.persist_decision(program_id, action, params)
+    except Exception as e:
+        print(f"[MEMORY-SPINE][WARN] route 기억 저장 실패 ({e})")
+
+
+def _roll_route_summary(program_id):
+    """12턴 밖을 요약해 남긴다 — 문턱을 넘었을 때만 돈다(converse 가 판정)."""
+    if not program_id:
+        return
+    try:
+        from engine import converse as _cv
+        _cv.maybe_roll_summary(program_id, _cv.load_history(program_id))
+    except Exception as e:
+        print(f"[MEMORY-SPINE][WARN] 요약 롤링 실패 ({e})")
+
+
 @app.post("/intent/route-edit")
 async def route_edit_intent_api(req: EditIntentRouteRequest):
     """[INTENT-ROUTER] 종업원 — 프론트 메뉴판 정규식을 대체. 프론트는 말을 거의
@@ -5542,6 +5585,9 @@ async def route_edit_intent_api(req: EditIntentRouteRequest):
                 r["candidate_evidence"] = _candidate_evidence(r["candidate_fragment_ids"])
             except Exception as _e:
                 print(f"[ROUTE-EDIT][WARN] candidate_evidence 실패 ({_e})")
+        # [MEMORY-SPINE] 답을 다 만든 뒤에 남긴다 — 응답을 늦추지 않는다.
+        _persist_route_memory(req.project_id, r)
+        _roll_route_summary(req.project_id)
         return r
 
     return await asyncio.get_event_loop().run_in_executor(None, _run)
@@ -5638,6 +5684,9 @@ async def route_edit_intent_stream_api(req: EditIntentRouteRequest, request: Req
                                                            "stream_complete": False,
                                                            "backend_assistant_text": str(r.get("reply") or "")})
                 yield _emit({"type": "final", "result": r})
+                # [MEMORY-SPINE] 응답을 다 흘린 뒤에 남긴다 — TTFT 에 얹지 않는다.
+                _persist_route_memory(req.project_id, r)
+                _roll_route_summary(req.project_id)
                 return
             yield _emit({"type": "meta", "action": "answer_only"})
             first_ms = None
@@ -5683,6 +5732,11 @@ async def route_edit_intent_stream_api(req: EditIntentRouteRequest, request: Req
             print(f"[F2-TTFT] path=stream total_ms={int((_time.time() - t0) * 1000)} "
                   f"reply_len={len(final_text)}")
             yield _emit({"type": "final", "result": r})
+            # [MEMORY-SPINE] 자유대화 경로도 요약 문턱을 넘으면 남긴다.
+            #   (이 경로의 action 은 answer_only 라 active_intent 는 안 생긴다 — 정상이다.
+            #    기준을 말한 발화는 위 direct 분기에서 run_proposal 로 빠진다.)
+            _persist_route_memory(req.project_id, r)
+            _roll_route_summary(req.project_id)
         except GeneratorExit:
             client_aborted = True
             if trace_id:

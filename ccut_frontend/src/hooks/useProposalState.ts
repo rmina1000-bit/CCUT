@@ -680,7 +680,16 @@ export const useProposalState = (
         project_id: projectId,
         source_ids: orderedSourceIds ?? [],
         input_text: text,
+        // [MEMORY-SPINE 2026-08-02] 화면 단계 안내는 큐원 기억에 넣지 않는다.
+        //   ★여기가 제품의 진짜 문맥 입구다. 8/2 에 백엔드 load_history 를 고쳤지만
+        //     그 함수를 부르는 /chat/converse/stream 을 프론트가 한 번도 안 부른다 —
+        //     실제로 큐원이 보는 것은 이 여섯 줄이다(videoService.ts:177,196).
+        //   ★개수(6)는 그대로 둔다. 무엇을 세는지만 고친다 — 안내를 빼고 나서 여섯 줄.
+        //     안 그러면 프로젝트를 열 때마다 붙는 안내 2줄이 여섯 자리 중 둘을 먹는다.
+        //   ★문구가 아니라 id 접두로 가른다(생성부 Index.tsx:3380 `ai_stage_${key}_...`).
+        //     문구는 바뀌고 번역되고 사용자가 따라 칠 수도 있다.
         recent_messages: (storyPlan.messages ?? [])
+          .filter((m: any) => !String(m?.id ?? "").startsWith("ai_stage_"))
           .slice(-6)
           .map((m: any) => ({ sender: m.sender, text: m.text })),
         selected_proposal_id: selectedProposalId,

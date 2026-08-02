@@ -244,8 +244,20 @@ def _llm_understand(input_text, recent_messages=None, source_ids=None,
             "위 [지금]/[작업 상황] 수치는 실측값이다 — 날짜·조각·원본 질문은 이 값으로만 답하라. "
             "[수첩 요약]은 mirror_ledger의 pass/correction 집계값으로만 읽어라.\n"
         )
+    # [MEMORY-SPINE 2026-08-02] 12턴(여기선 8턴) 밖의 기억을 이 자리에서 잇는다.
+    #   recent_messages 는 프론트가 보낸 최근 몇 마디뿐이라, 그 앞의 대화와 국장이 정한
+    #   기준은 이 블록으로 들어오지 않으면 큐원에게 존재하지 않는다.
+    #   ★새로 만드는 값이 아니다 — 원장에 이미 쌓이는 chat_summary·active_intent·
+    #     chat_pref 를 읽어 붙일 뿐이다(converse.load_memory_facts, 쿼리 1개).
+    #   ★없으면 빈 문자열이라 프롬프트 모양이 종전과 같다(첫 대화·빈 프로젝트 무영향).
+    memory_line = ""
+    try:
+        from engine.converse import load_memory_facts
+        memory_line = load_memory_facts(project_id)
+    except Exception as _e:
+        print(f"[MEMORY-SPINE][WARN] 기억 주입 실패 ({_e})")
     facts = (f"[지금] {now.year}년 {now.month}월 {now.day}일 {weekday}요일 "
-             f"{now.strftime('%H:%M')}\n" + work_line + mirror_line + fact_rule)
+             f"{now.strftime('%H:%M')}\n" + work_line + memory_line + mirror_line + fact_rule)
     # [MIRROR-FIX-1 R4(2)] 자유대화 프롬프트에서는 수첩을 뺀다.
     #   판정 근거(R2-4 실측): 프롬프트 어디에도 큐원이 수첩으로 무엇을 하라는 지시가 없다.
     #     유일한 언급이 "…집계값으로만 읽어라"(읽는 법)뿐이라 대화에서 이 값으로
