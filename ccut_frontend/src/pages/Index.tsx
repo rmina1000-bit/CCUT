@@ -3761,6 +3761,11 @@ const Index: React.FC = () => {
                     onApproveComposition={handleApproveComposition}
                     onReopenComposition={handleReopenComposition}
                     storyApproved={storyStage.key === "final" || storyStage.key === "edit_consult"}
+                    // [APPROVAL-SYNC 2026-08-03] 승인 원고 vs 현재 원고 — 백엔드가 이미 준다.
+                    //   storyGate.story.approved.stale / .item_count (story_gate/service.py:223~)
+                    storyStale={!!storyGate.story?.approved?.stale}
+                    approvedItemCount={storyGate.story?.approved?.item_count ?? null}
+                    currentItemCount={storyGate.story?.item_count ?? null}
                     compositionNotice={compositionNotice}
                     modeRound={storyGate.story?.mode_round ?? 1}
                     sourceFragments={(sourceEntries ?? []).flatMap((e) => e.fragments ?? [])}

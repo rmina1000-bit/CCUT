@@ -19,7 +19,10 @@ export interface StoryInfo {
   mode_round?: number;
   mode_reopen_at?: string | null;
   approved: { approval_id: number; sequence_hash: string; approved_at: string;
-              actor: string; stale: boolean } | null;
+              actor: string; stale: boolean;
+              /** [APPROVAL-SYNC 2026-08-03] 승인 당시 조각 수. 서버가 이미 조회하던 값을
+               *  응답에 실었다(story_gate/service.py:223~). "승인 9 → 지금 8"을 화면에 보이려면 필요하다. */
+              item_count?: number | null } | null;
 }
 
 type ApproveOptions = {

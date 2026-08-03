@@ -226,6 +226,11 @@ def story_state(program_id):
             "approved_at": appr["approved_at"],
             "actor": appr["actor"],
             "stale": appr["sequence_hash"] != h,
+            # [APPROVAL-SYNC 2026-08-03] 승인 당시 조각 수 — 이미 조회하고 있었는데(:324)
+            #   응답에만 안 실려 프론트가 "무엇이 달라졌는지"를 말할 수 없었다.
+            #   실측(Freesia): 승인 9조각 vs 현재 8조각인데 화면에는 그 차이가 어디에도 없고
+            #   채팅만 "원고를 먼저 승인해 주세요"라고 했다. 무엇을 승인하라는지 알 수 없다.
+            "item_count": appr["item_count"],
         } if appr else None),
     }
 
