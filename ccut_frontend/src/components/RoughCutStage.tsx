@@ -116,7 +116,18 @@ const RoughCutStage: React.FC<RoughCutStageProps> = ({
     void load();
     return () => {
       active = false;
-      onData?.(null);
+      // [FOLD-VISUAL-ONLY 2026-08-03] ★언마운트가 부모 상태를 죽이지 않는다.
+      //   여기서 onData(null) 을 부르면 Index.tsx 의 roughCutData 가 null 이 되고,
+      //   그러면 roughCutMapReady=false -> FragmentMap 입력이 [] -> ★조각맵이 통째로 빈다.
+      //   실측(국장 화면 2026-08-03 06:02): 전송으로 채팅이 하단 이동 -> 전사 블록이
+      //   2.5A 밖으로 -> IO 가 접음 -> 몸통 언마운트 -> 이 줄 -> 조각맵 8 -> 0.
+      //   데이터(story.fids 8 · 조각 풀 135)는 하나도 안 지워졌는데 게이트만 닫혔다.
+      //   ★"조각맵을 비워야 하는" 진짜 상황은 ★프로젝트 전환뿐이고,
+      //     그 경로는 Index.tsx 에 이미 따로 있다(activeNavItem 전환 effect).
+      //     이 컴포넌트가 사라지는 것은 '화면에서 안 보이게 됐다'는 뜻일 뿐이다.
+      //   ★남겨두면 옛 프로젝트 데이터가 새 방에 남지 않는가? 남지 않는다 —
+      //     위 전환 effect 가 먼저 비우고, 이 컴포넌트는 projectId 가 바뀌면
+      //     새로 load() 해서 덮어쓴다(deps 에 projectId 가 있다).
     };
   }, [onData, projectId]);
 

@@ -3106,8 +3106,23 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
                       ref={(el) => { foldNodeRefs.current[foldId] = el; }}
                       className="w-full flex flex-col items-center space-y-4"
                     >
-                      {/* ★접혔으면 몸통을 아예 만들지 않는다. display:none 으로 숨기면
-                          플레이어·썸네일이 그대로 살아 있어 이 작업의 목적(무게)이 무너진다. */}
+                      {/* [FOLD-VISUAL-ONLY 2026-08-03 국장 확정] 접힘은 ★화면 점유만 바꾼다.
+                          이 자리의 옛 주석은 "접혔으면 몸통을 아예 만들지 않는다 —
+                          display:none 으로 숨기면 플레이어·썸네일이 살아 있어 무게가 무너진다"
+                          였다. 그 목적(무게)을 국장이 폐기했다:
+                            "접는 이유는 전사가 화면을 다 차지해서일 뿐, 그 외 이유는 없다.
+                             펼쳤을 때와 모든 게 동일해야 한다."
+                          ★언마운트가 실제로 무엇을 죽였는지 실측으로 확정됐기 때문이다:
+                            접힘 -> RoughCutStage 언마운트 -> RoughCutStage.tsx cleanup 의
+                            onData(null) -> Index.tsx roughCutData=null -> roughCutMapReady=false
+                            -> FragmentMap 입력이 [] -> ★조각맵이 통째로 비었다(국장 화면 8 -> 0).
+                          데이터는 하나도 안 지워졌는데 게이트만 닫힌 것이다.
+                          그래서 몸통은 ★항상 마운트하고 display 로만 감춘다.
+                          ★접힌 카드가 그 자리를 대신 차지하므로 화면 점유는 여전히 줄고,
+                            CHAT-FOLD 의 높이 보정(pendingFoldFixRef)도 그대로 의미가 있다
+                            (h1=펼침 높이 -> h2=접힌 카드 높이, 줄어든 만큼 scrollTop 되갚음).
+                          ★[data-fold-id] 노드 자체는 계속 존재하므로 IntersectionObserver 의
+                            관측 대상도 그대로다 — 접힌 뒤 다시 접힘 판정이 깨지지 않는다. */}
                       {folded ? (
                         <button
                           type="button"
@@ -3136,7 +3151,16 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
                           </span>
                           <ChevronDown size={16} className="flex-shrink-0 text-muted-foreground" />
                         </button>
-                      ) : (isTranscript ? stageBlock.transcript : stageBlock.proposal)}
+                      ) : null}
+                      {/* ★몸통은 접혀도 마운트를 유지한다. 감추는 것은 display 뿐이다. */}
+                      <div
+                        data-fold-body={foldId}
+                        className="w-full flex flex-col items-center space-y-4"
+                        style={folded ? { display: "none" } : undefined}
+                        aria-hidden={folded || undefined}
+                      >
+                        {isTranscript ? stageBlock.transcript : stageBlock.proposal}
+                      </div>
                     </div>
                   );
                 })() : item.kind === "palette" ? (
