@@ -3580,6 +3580,45 @@ const Index: React.FC = () => {
     appendStoryGateMessage("ai_edit_started", STORY_GATE_COPY.chat.editStarted);
   }, [appendStoryGateMessage]);
 
+  const handleOpenProposalLarge = useCallback((key: "A" | "B", proposal: any, durationSec: number) => {
+    const rawUrl = proposal?.preview_url;
+    if (rawUrl) {
+      setMiniTarget({
+        videoUrl: toFullUrl(rawUrl) ?? rawUrl,
+        spans: [[0, Math.max(1, durationSec)]],
+        label: `${STORY_GATE_COPY.abCards.heading} ${key}`,
+      });
+      return;
+    }
+    const aliases = (proposal?.resolved_aliases ?? proposal?.sequence ?? []) as any[];
+    const first = aliases.find((item) => item?.source_id && Number.isFinite(Number(item?.start_sec ?? item?.start)));
+    const sourceId = first?.source_id;
+    const urlMap = Object.fromEntries(
+      (sourceEntries ?? []).flatMap((e) => [[e.source_id, e.video_url], [e.label, e.video_url]]).filter(([, v]) => v),
+    ) as Record<string, string>;
+    const sourceUrl = sourceId ? urlMap[sourceId] : null;
+    if (!sourceUrl) {
+      toast.error("크게 볼 영상을 찾지 못했습니다.");
+      return;
+    }
+    const spans = aliases
+      .filter((item) => item?.source_id === sourceId)
+      .map((item) => [
+        Number(item.start_sec ?? item.start ?? 0),
+        Number(item.end_sec ?? item.end ?? item.start_sec ?? item.start ?? 0),
+      ] as [number, number])
+      .filter(([s, e]) => Number.isFinite(s) && Number.isFinite(e) && e > s);
+    if (!spans.length) {
+      toast.error("크게 볼 구간을 찾지 못했습니다.");
+      return;
+    }
+    setMiniTarget({
+      videoUrl: toFullUrl(sourceUrl) ?? sourceUrl,
+      spans,
+      label: `${STORY_GATE_COPY.abCards.heading} ${key}`,
+    });
+  }, [sourceEntries, toFullUrl]);
+
   const handleRestoreProposalEntry = useCallback((id: string) => {
     if (activeNavItem && activeNavItem.startsWith("proj_")) {
       reEditSessionStartRef.current = Date.now();
@@ -3923,6 +3962,7 @@ const Index: React.FC = () => {
             activeProposalEntryId={activeProposalEntryId}
             onRestoreProposalEntry={handleRestoreProposalEntry}
             onStartStoryEditing={handleStartStoryEditing}
+            onOpenProposalLarge={handleOpenProposalLarge}
             onIntake={(a) => { intakeRef.current = a; }}
             onRequestAddVideos={
               activeNavItem && activeNavItem.startsWith("proj_")

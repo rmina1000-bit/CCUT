@@ -139,6 +139,7 @@ interface CenterPanelProps {
   onPlaybackNotice?: (text: string) => void;
   onPreviewProposal?: (key: string) => void;
   onCommitProposal?: (key: string) => void;
+  onOpenProposalLarge?: (key: "A" | "B", proposal: any, durationSec: number) => void;
   onPreviewNext?: () => void;
   guidanceMessage?: string;
   onNextProposals?: () => void;
@@ -414,6 +415,7 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
   onPlaybackNotice,
   onPreviewProposal,
   onCommitProposal,
+  onOpenProposalLarge,
   sourceId,
   sourceEntries = [],
   fragments = [],
@@ -582,6 +584,7 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
   //     발화했다. IntersectionObserver 로만 판정한다.
   const FOLD_MARGIN = 1.5;                    // 감시범위 = A + 1.5A = 2.5A (국장 조정용 상수)
   const [foldedIds, setFoldedIds] = useState<Set<string>>(() => new Set());
+  const [pickedFlowCards, setPickedFlowCards] = useState<Set<string>>(() => new Set());
   const foldNodeRefs = useRef<Record<string, HTMLDivElement | null>>({});
   // 접기로 줄어든 높이를 되갚기 위한 예약 — 넉 달 싸운 '화면 튐'이 여기서 갈린다.
   const pendingFoldFixRef = useRef<{ id: string; h1: number } | null>(null);
@@ -593,6 +596,91 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
       return next;
     });
   }, []);
+
+  const flowVariantDuration = useCallback((entryId: string, key: "A" | "B", proposal: any) => {
+    const base = Math.max(8, Number(proposal?.preview_duration ?? 0) || 45);
+    let seed = 0;
+    for (let i = 0; i < entryId.length; i++) seed = (seed + entryId.charCodeAt(i) * (i + 1)) % 997;
+    const spread = 5 + (seed % 7);
+    return Math.max(6, Math.round(base + (key === "A" ? -spread : spread)));
+  }, []);
+
+  const renderProposalFlowCard = useCallback((entry: any) => {
+    const pair = entry?.pair ?? {};
+    const cards = (["A", "B"] as const)
+      .map((key) => {
+        const proposal = pair[key];
+        if (!proposal) return null;
+        if (pickedFlowCards.has(`${entry.id}:${key}`)) return null;
+        const previewUrl = proposal.preview_url ? normalizeMediaUrl(proposal.preview_url) : null;
+        const durationSec = flowVariantDuration(entry.id, key, proposal);
+        return { key, proposal, previewUrl, durationSec };
+      })
+      .filter(Boolean) as Array<{ key: "A" | "B"; proposal: any; previewUrl: string | null; durationSec: number }>;
+    if (!cards.length) return null;
+    return (
+      <div
+        key={`pair_${entry.id}`}
+        data-ab-flow-card={entry.id}
+        className="w-full grid grid-cols-2 gap-3"
+      >
+        {cards.map(({ key, proposal, previewUrl, durationSec }) => (
+          <div
+            key={`${entry.id}_${key}`}
+            data-ab-variant={key}
+            className="min-w-0 rounded-lg border border-border/12 bg-card/30 overflow-hidden"
+          >
+            <div className="h-[180px] bg-black">
+              {previewUrl ? (
+                <video
+                  src={previewUrl}
+                  muted
+                  playsInline
+                  preload="metadata"
+                  className="h-full w-full object-contain"
+                />
+              ) : (
+                <div className="h-full w-full flex items-center justify-center text-meta text-muted-foreground/60">
+                  {key}
+                </div>
+              )}
+            </div>
+            <div className="px-3 py-2 flex items-center gap-2">
+              <div className="min-w-0 flex-1">
+                <p className="text-[12px] font-semibold text-foreground">{STORY_GATE_COPY.abCards.heading} {key}</p>
+                <p className="text-micro text-muted-foreground/70 tabular-nums">
+                  {durationSec}{STORY_GATE_COPY.abCards.seconds} · {(proposal.key_fragments ?? []).length}조각
+                </p>
+              </div>
+              <button
+                type="button"
+                data-ab-large={key}
+                onClick={() => onOpenProposalLarge?.(key, proposal, durationSec)}
+                className="text-micro text-muted-foreground hover:text-foreground transition-colors"
+              >
+                {STORY_GATE_COPY.abCards.large}
+              </button>
+              <button
+                type="button"
+                data-ab-choose={key}
+                onClick={() => {
+                  handleProposalCommit(key);
+                  setPickedFlowCards((prev) => {
+                    const next = new Set(prev);
+                    next.add(`${entry.id}:${key}`);
+                    return next;
+                  });
+                }}
+                className="text-micro text-primary hover:text-primary/80 transition-colors"
+              >
+                {STORY_GATE_COPY.abCards.choose}
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+    );
+  }, [flowVariantDuration, onOpenProposalLarge, pickedFlowCards]);
 
   // [CHAT-FOLD STEP 1] 높이 붕괴 보정 — ★이것이 먼저다.
   //   A 위쪽 아이템이 접히면 위 높이가 (h1-h2) 만큼 줄어 보던 화면이 그만큼 밀려 올라간다.
@@ -3176,7 +3264,8 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
                   acc.push(item);
                   return acc;
                 }, [])
-                .map((item: any) => item.kind === "divider" ? (
+                .map((item: any) => {
+                  if (item.kind === "divider") return (
                 <div key={`divider_${item.ts}`} className="w-full flex items-center gap-3 py-2">
                   <span className="flex-1 h-px bg-border/15" />
                   <span className="text-micro text-muted-foreground">
@@ -3191,7 +3280,8 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
                   </span>
                   <span className="flex-1 h-px bg-border/15" />
                 </div>
-                ) : item.kind === "palette" ? (
+                );
+                  if (item.kind === "palette") return (
                 <div key="person_palette" className="flex flex-col gap-3">
                   {personSavedNote && (
                     <div className="flex justify-start animate-in fade-in duration-500">
@@ -3242,7 +3332,8 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
                     </div>
                   )}
                 </div>
-                ) : item.kind === "msg" ? (
+                );
+                  if (item.kind === "msg") return (
                 // [CHAT-SKIN 2026-08-02 국장 지시 "일단은 같게"] 참조 제품(Claude·ChatGPT) 방식.
                 //   지운 것: 줄마다 붙던 아이콘(BookOpen/List) · AI 답변의 말풍선 박스와 테두리.
                 //   AI 답변은 배경 없이 글자만 흐른다 — 저쪽이 그렇고, 박스가 매 줄 반복되면
@@ -3302,18 +3393,9 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
                           시간은 아래 구분선이 날짜가 바뀌거나 한참 벌어졌을 때만 말한다. */}
                   </div>
                 </div>
-                // [CHAT-ROOT 3-2 2026-08-02] 활성 제안 슬롯 제거.
-                //   구판은 활성 pair 자리에 빈 div 를 두고 무대를 portal 로 그 안에 세웠다 —
-                //   전사·플레이어가 **채팅 메시지들 사이에 끼는** 원인이었다.
-                //   업계 규칙(Cloudscape): 아티팩트를 말풍선 안에 중첩하지 않는다.
-                //   이제 활성이든 아니든 pair 는 카드 하나로만 남고(사건), 무대는 스트림
-                //   밖 위에 선다(상태). 카드 클릭 -> activeProposalEntryId 갱신 -> 위 무대 전환.
-                ) : (
-                // [LAYER-FIX 2026-08-04 국장 확정 ③] '지난 원고' 접이식 블록을 없앤다.
-                //   버전 줄(채팅 바로 위)이 그 일을 대신한다 — 지난 것을 보는 자리가 두 곳일
-                //   이유가 없고, 이 블록은 (무음)(무음)… 만 늘어놓아 읽히지도 않았다.
-                null
-                ))}
+                );
+                  return renderProposalFlowCard(item.entry);
+                })}
             </div>
 
           </div>

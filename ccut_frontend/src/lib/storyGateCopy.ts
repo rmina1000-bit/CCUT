@@ -40,6 +40,12 @@ export const STORY_GATE_COPY = {
   editVersionBar: {
     label: "편집본",
   },
+  abCards: {
+    heading: "편집 제안",
+    large: "크게 보기",
+    choose: "고르기",
+    seconds: "초",
+  },
   toast: {
     storySaved: "이야기를 저장했어요",
   },
