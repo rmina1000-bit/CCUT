@@ -2965,7 +2965,11 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
             ★몸통은 항상 마운트하고 display 로만 감춘다. 안 보이는 것과 없는 것을 섞지 않는다. */}
         {roughCutStage ? (
           <div className="w-full flex flex-col items-center px-4 pt-2" data-layer="transcript">
-            <div className="w-full max-w-[800px]">
+            {/* [LAYER-FIX 2026-08-04 국장 확정 ①] 펼친 전사는 ★겹쳐 뜬다 — 아래를 밀지 않는다.
+                구판은 문서 흐름 안에서 자라서 버전 줄을 331px 아래로 밀어냈다(실측 36 -> 367).
+                버전 줄은 채팅 바로 위에 고정이어야 하므로, 전사 몸통을 absolute 로 띄운다.
+                ★몸통은 접혀도 마운트를 유지한다 — 감추는 것은 display 뿐이다(8/3 교훈 그대로). */}
+            <div className="w-full max-w-[800px] relative">
               <button
                 type="button"
                 onClick={() => setTranscriptOpen((v) => !v)}
@@ -2981,7 +2985,7 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
               </button>
               <div
                 data-transcript-body
-                className="w-full max-h-[46vh] overflow-y-auto no-scrollbar"
+                className="absolute left-0 right-0 top-full z-30 max-h-[60vh] overflow-y-auto no-scrollbar rounded-xl border border-border/15 bg-background shadow-xl"
                 style={transcriptOpen ? undefined : { display: "none" }}
                 aria-hidden={transcriptOpen ? undefined : true}
               >
@@ -3237,50 +3241,10 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
                 //   이제 활성이든 아니든 pair 는 카드 하나로만 남고(사건), 무대는 스트림
                 //   밖 위에 선다(상태). 카드 클릭 -> activeProposalEntryId 갱신 -> 위 무대 전환.
                 ) : (
-                // [#19가 통일 2026-07-19] 과거 원고 세대는 승인 전·후(story·edit) 모양 불변 —
-                // 항상 같은 스토리박스로 상주한다(옛 '지난 제안' 고스트카드 폐지). '렌더된 편집
-                // 결과'(A/B 미리보기 영상)는 여기 내지 않는다. 원고 메타(조각 수) + '재작업' 버튼만.
-                // 클릭=그 원고 소환(재작업 진입).
-                (() => {
-                  const pair = item.entry.pair as any;
-                  const primary = pair?.B ?? pair?.A;
-                  const fragCount = (primary?.key_fragments?.length ?? primary?.sequence?.length ?? 0);
-                  // [CHAT-SKIN 2026-08-02] 아이콘·시각 제거. 클릭하면 내용이 이 자리에 펼쳐진다.
-                  //   ★ CHAT-FOLD 3-1 에서 제가 펼침을 통째로 없앤 것이 잘못이었다 —
-                  //     지워야 했던 건 안내 문구와 '재작업' 버튼(특별 취급)이지 내용이 아니었다.
-                  //     국장: "클릭해도 아무것도 없다. 아무것도 안 나오면 속상해."
-                  const openFids: string[] = (primary?.key_fragments ?? []) as string[];
-                  const isOpen = openStoryBox === item.entry.id;
-                  return (
-                    <div key={`storybox_${item.entry.id}`} className="w-full flex flex-col gap-1.5 items-start animate-in fade-in duration-300">
-                      <button
-                        type="button"
-                        onClick={() => setOpenStoryBox(isOpen ? null : item.entry.id)}
-                        className="w-full max-w-[800px] flex items-center gap-3 rounded-xl border border-border/15 bg-card/40 px-3 py-2.5 text-left hover:bg-card/70 transition-colors"
-                      >
-                        <span className="text-meta font-bold text-foreground">지난 원고</span>
-                        <span className="ml-auto text-meta text-muted-foreground">{fragCount}조각</span>
-                        <ChevronDown size={16} className={`flex-shrink-0 text-muted-foreground transition-transform ${isOpen ? "rotate-180" : ""}`} />
-                      </button>
-                      {isOpen && (
-                        <div className="w-full max-w-[800px] rounded-xl border border-border/15 bg-card/20 px-4 py-3 flex flex-col gap-1.5">
-                          {openFids.length === 0 ? (
-                            <span className="text-meta text-muted-foreground">이 원고에 담긴 조각을 찾지 못했어요.</span>
-                          ) : openFids.map((fid, i) => {
-                            const frag = allSourceFragments.find((f: any) => f.fragment_id === fid);
-                            const text = fragmentTranscriptText(frag) || "";
-                            return (
-                              <div key={`${item.entry.id}_${fid}_${i}`} className="text-meta text-foreground flex gap-2">
-                                <span className="text-muted-foreground font-mono flex-shrink-0">{i + 1}.</span>
-                                <span style={FRAGMENT_TEXT_STYLE}>{text || <span style={FRAGMENT_SILENT_STYLE}>(무음)</span>}</span>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      )}
-                    </div>
-                  );
-                })()
+                // [LAYER-FIX 2026-08-04 국장 확정 ③] '지난 원고' 접이식 블록을 없앤다.
+                //   버전 줄(채팅 바로 위)이 그 일을 대신한다 — 지난 것을 보는 자리가 두 곳일
+                //   이유가 없고, 이 블록은 (무음)(무음)… 만 늘어놓아 읽히지도 않았다.
+                null
                 ))}
             </div>
 

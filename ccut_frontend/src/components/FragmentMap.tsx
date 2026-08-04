@@ -688,15 +688,10 @@ const FragmentMap: React.FC<FragmentMapProps> = ({
                   >
                     다른 이름으로 저장
                   </button>
-                  {storyApproved && (
-                    <button
-                      type="button"
-                      className="px-2 py-1 rounded border border-border/30 text-[12px]"
-                      onClick={onReopenComposition}
-                    >
-                      조각을 다시 고르기
-                    </button>
-                  )}
+                  {/* [LAYER-FIX 2026-08-04 국장 확정 ②] '조각을 다시 고르기' 제거.
+                      조각맵에서 직접 고르면 되는 일이라 버튼이 따로 있을 이유가 없었다.
+                      ★reopen 경로(useStoryGate.reopen / POST /story/{id}/reopen)는 그대로 산다 —
+                        버튼만 없애고 배관은 남긴다(다른 호출처가 쓰고, 되살릴 때 다시 필요하다). */}
                 </>
               )}
             </div>
