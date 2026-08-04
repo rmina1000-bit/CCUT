@@ -131,6 +131,12 @@ const Index: React.FC = () => {
   const uiStateSaveRef = useRef<Promise<unknown> | null>(null);
   // [SAVE-SPINE 2-C] 직전 저장 버전 — 다음 저장의 부모가 된다(설계 ⑥: 부모/자식은 버전 사이).
   const lastSavedVersionIdRef = useRef<number | null>(null);
+  // [LAYER-SPLIT 2026-08-04 ②] 저장된 버전 목록. 채팅 밖 자기 층이 이걸 그린다.
+  const [savedVersions, setSavedVersions] = useState<Array<{
+    version_id: number; name: string; item_count: number;
+    parent_version_id: number | null; created_at: string;
+  }>>([]);
+  const [activeVersionId, setActiveVersionId] = useState<number | null>(null);
   const [compositionNotice, setCompositionNotice] = useState<string | null>(null);
   const [appDialog, setAppDialog] = useState<{
     message: string;
@@ -731,6 +737,48 @@ const Index: React.FC = () => {
   //   주인은 프로젝트가 아니라 사용자가 저장한 버전이다(국장 확정 ③).
   //   승인 행은 저장의 부산물로 서버가 함께 적는다 — P4 배관(main.py:3122-3132)은 무접촉.
   //   ★버튼 위치·레이아웃은 그대로. 이름과 하는 일만 바뀐다.
+  // [LAYER-SPLIT 2026-08-04 ②] 저장된 버전 목록을 다시 읽는다. 저장 직후·프로젝트 전환 시.
+  const refreshVersions = useCallback(async (programId?: string | null) => {
+    const pid = programId ?? activeNavItem;
+    if (!pid?.startsWith("proj_")) { setSavedVersions([]); return; }
+    try {
+      const res = await videoService.listStoryVersions(pid);
+      setSavedVersions(res?.versions ?? []);
+    } catch (e) {
+      console.warn("[LAYER-SPLIT] 버전 목록을 읽지 못했습니다", e);
+      setSavedVersions([]);          // 못 읽은 것을 '없다'로 위장하지 않는다 — 위 경고가 이유를 남긴다
+    }
+  }, [activeNavItem]);
+
+  useEffect(() => { void refreshVersions(); }, [refreshVersions]);
+
+  // [LAYER-SPLIT 2026-08-04 ③] 버전 아이콘 클릭 -> 조각맵·전사 선택상태를 그 버전의 것으로.
+  //   ★버전 클릭은 사용자 명시 행위다 — origin='user' 를 세워야 이 상태가 저장 경로에 진입한다.
+  //   ★단방향: 여기서 조각맵을 바꾸고 끝. 조각맵이 다시 전사를 갱신하지 않는다(설계 ⑦ 순환 금지).
+  const handleVersionPick = useCallback(async (versionId: number) => {
+    try {
+      const res = await fetch(`/api/story-version/detail/${versionId}`);
+      const d = await res.json();
+      if (!res.ok || !d?.ok) {
+        toast.error("그 버전을 불러오지 못했습니다.");
+        return;
+      }
+      storyOriginRef.current = "user";
+      setStoryFids(d.fids ?? []);
+      setRoughCutPlacement((prev) => ({
+        inputHash: d.rough_cut_input_hash ?? prev?.inputHash ?? null,
+        selectedSpanIds: d.selected_span_ids ?? [],
+      }));
+      setActiveVersionId(versionId);
+      lastSavedVersionIdRef.current = versionId;
+      console.info(`[LAYER-SPLIT] 버전 ${versionId} 적용 — 조각 ${(d.fids || []).length}개 `
+        + `· 전사선택 ${(d.selected_span_ids || []).length}개`);
+    } catch (e) {
+      console.error("[LAYER-SPLIT] 버전 적용 실패", e);
+      toast.error("그 버전을 불러오지 못했습니다.");
+    }
+  }, []);
+
   const handleSaveVersion = useCallback(async (options?: { askName?: boolean }) => {
     setCompositionNotice(null);
     const programId = activeNavItem;
@@ -774,6 +822,8 @@ const Index: React.FC = () => {
     }
 
     lastSavedVersionIdRef.current = result.body?.version_id ?? null;
+    setActiveVersionId(result.body?.version_id ?? null);
+    void refreshVersions(programId);
     console.info(`[SAVE-SPINE] 저장됨 version_id=${result.body?.version_id} `
       + `items=${result.body?.item_count} gate_opened=${result.body?.gate_opened}`);
     toast.success(`저장했습니다 — ${name}`, {
@@ -3607,6 +3657,34 @@ const Index: React.FC = () => {
             activeStoryFragmentId={selectedFragment ? String((selectedFragment as any).fragment_id ?? getUid(selectedFragment)) : highlightedPanoramaFrag}
             modeGateEnabled={modeGateOn}
             activeFragmentId={selectedFragment ? String((selectedFragment as any).fragment_id ?? getUid(selectedFragment)) : null}
+            /* [LAYER-SPLIT 2026-08-04 국장 확정 ②] 저장된 버전 아이콘 줄.
+               ★한 줄만 차지한다 — 가로로만 늘고 세로로는 자라지 않는다(flex-nowrap + overflow-x-auto,
+                 원본맵과 같은 방식). 아이콘은 텍스트 한 줄 높이(h-6)에 맞춘다.
+               ★저장한 적이 없으면 줄 자체를 그리지 않는다 — 빈 줄이 자리를 먹지 않게. */
+            versionBar={savedVersions.length > 0 ? (
+              <div className="flex flex-row flex-nowrap items-center gap-1.5 overflow-x-auto no-scrollbar py-1">
+                {savedVersions.map((v) => {
+                  const active = v.version_id === activeVersionId;
+                  return (
+                    <button
+                      key={v.version_id}
+                      type="button"
+                      data-version-chip={v.version_id}
+                      onClick={() => handleVersionPick(v.version_id)}
+                      title={`${v.name} · ${v.item_count}조각`}
+                      className={`flex items-center gap-1.5 h-6 flex-shrink-0 rounded-md border px-2 text-micro transition-colors ${
+                        active
+                          ? "border-primary/60 bg-primary/15 text-foreground"
+                          : "border-border/20 bg-card/40 text-muted-foreground hover:bg-card/70"
+                      }`}
+                    >
+                      <span className="max-w-[110px] truncate">{v.name}</span>
+                      <span className="opacity-70">{v.item_count}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            ) : undefined}
             roughCutStage={activeNavItem?.startsWith("proj_") ? (
               <RoughCutStage
                 projectId={activeNavItem}

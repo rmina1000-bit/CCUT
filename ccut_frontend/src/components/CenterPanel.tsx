@@ -156,6 +156,8 @@ interface CenterPanelProps {
   activeStoryFragmentId?: string | null;
   storyReplacement?: React.ReactNode;
   roughCutStage?: React.ReactNode;
+  /** [LAYER-SPLIT 2026-08-04 ②] 저장된 버전 아이콘 줄. 채팅창 바로 위 한 줄. */
+  versionBar?: React.ReactNode;
   programId?: string | null;
   programTitle?: string | null;
   onExportDone?: () => void;
@@ -422,6 +424,7 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
   activeStoryFragmentId: activeStoryFragmentIdProp,
   storyReplacement,
   roughCutStage,
+  versionBar,
   programId,
   programTitle,
   onExportDone,
@@ -446,6 +449,9 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
   //   실측: 중간(S1=1200, 남은거리 2272)에서 새 메시지 1건 -> +2193px 하단 점프.
   //   위로 올려 읽는 중에는 끌어내리지 않고 '새 내용' 버튼만 띄운다.
   const chatScrollRef = useRef<HTMLDivElement>(null);
+  // [LAYER-SPLIT 2026-08-04 ①] 전사층 펼침. 기본은 접힘 — 전사가 화면을 다 차지하기 때문이다.
+  //   ★이 상태는 표시만 바꾼다. 몸통은 접혀도 마운트를 유지한다(8/3 교훈).
+  const [transcriptOpen, setTranscriptOpen] = useState(false);
   const CHAT_BOTTOM_SLACK = 120; // 하단 근접 판정(px)
   const chatAtBottomRef = useRef(true);
   const [chatHasNew, setChatHasNew] = useState(false);
@@ -2952,6 +2958,47 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
         {/* [FRAGMENT-SEARCH] 채팅 자연어 조각 검색 결과 */}
         <FragSearchPanel fragSearch={fragSearch} onClose={() => setFragSearch(null)} />
 
+        {/* [LAYER-SPLIT 2026-08-04 국장 확정 ①] 전사층 — 채팅창 최상단 한 줄.
+            ★chatScrollRef 바깥이다. 채팅이 아무리 흘러도 이 층은 닿지 않는다.
+              8/3 사고(접힘 한 줄이 조각맵·플레이어·내보내기를 전부 죽임)가
+              구조적으로 재발할 수 없는 이유가 이 위치다 — 매달릴 스트림이 없다.
+            ★몸통은 항상 마운트하고 display 로만 감춘다. 안 보이는 것과 없는 것을 섞지 않는다. */}
+        {roughCutStage ? (
+          <div className="w-full flex flex-col items-center px-4 pt-2" data-layer="transcript">
+            <div className="w-full max-w-[800px]">
+              <button
+                type="button"
+                onClick={() => setTranscriptOpen((v) => !v)}
+                data-transcript-toggle
+                aria-expanded={transcriptOpen}
+                className="w-full flex items-center gap-2 py-1 text-left text-meta text-muted-foreground hover:text-foreground transition-colors"
+              >
+                <span className="font-bold">전사</span>
+                <ChevronDown
+                  size={14}
+                  className={`transition-transform ${transcriptOpen ? "" : "-rotate-90"}`}
+                />
+              </button>
+              <div
+                data-transcript-body
+                className="w-full max-h-[46vh] overflow-y-auto no-scrollbar"
+                style={transcriptOpen ? undefined : { display: "none" }}
+                aria-hidden={transcriptOpen ? undefined : true}
+              >
+                {roughCutStage}
+              </div>
+            </div>
+          </div>
+        ) : null}
+
+        {/* [LAYER-SPLIT 2026-08-04 국장 확정 ②] 버전층 — 채팅창 바로 위 한 줄, 가로 스크롤.
+            내용은 Index 가 만들어 넘긴다(데이터가 그쪽에 있다). 여기는 자리만 준다. */}
+        {versionBar ? (
+          <div className="w-full flex justify-center px-4" data-layer="versionbar">
+            <div className="w-full max-w-[800px]">{versionBar}</div>
+          </div>
+        ) : null}
+
       <div
         ref={chatScrollRef}
         onScroll={handleChatScroll}
@@ -3043,13 +3090,10 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
                 //     편집안 = 가장 최근 편집안이 만들어진 시각(proposalHistory 승계).
                 //              아직 없으면 0 이고, 그때는 배열 순서상 전사 다음에 온다
                 //              (Array#sort 는 안정 정렬).
-                ...(stageBlock.transcript
-                  ? [{ kind: "transcript" as const, ts: transcriptRefTs ?? 0 }] : []),
-                ...(stageBlock.proposal
-                  ? [{ kind: "proposal" as const,
-                       ts: proposalHistory.length
-                         ? proposalHistory[proposalHistory.length - 1].ts
-                         : 0 }] : []),
+                // [LAYER-SPLIT 2026-08-04] 전사·편집안을 이 흐름에서 뺐다.
+                //   둘은 대화가 아니라 작업물이다. 채팅 스크롤 밖 자기 층에서 산다.
+                //   ★이 줄이 사라지면서 CHAT-FOLD 가 조각맵을 죽이던 경로도 함께 사라진다
+                //     (8/3 사고: 접힘 -> 언마운트 -> onData(null) -> 조각맵 0).
               ]
                 .sort((a, b) => a.ts - b.ts)
                 // [CHAT-SKIN 2026-08-02] 날짜가 바뀌거나 한참 벌어졌을 때만 시간을 말한다.
@@ -3085,85 +3129,7 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
                   </span>
                   <span className="flex-1 h-px bg-border/15" />
                 </div>
-                ) : (item.kind === "transcript" || item.kind === "proposal") ? (() => {
-                  // [CHAT-FOLD] 컨텐츠 아이템만 개킨다. msg 말풍선은 대상이 아니다 —
-                  //   글자까지 아이콘으로 바꾸면 대화가 안 읽힌다(국장 확정).
-                  const foldId: string = item.kind;
-                  const folded = foldedIds.has(foldId);
-                  const isTranscript = foldId === "transcript";
-                  const label = isTranscript ? "전사" : "편집안 A·B";
-                  const count = isTranscript
-                    ? (storyGate.story?.item_count ?? activeStoryItems.length)
-                    : (proposals?.A?.key_fragments?.length ?? null);
-                  const poster = isTranscript ? undefined : getProposalPoster("A");
-                  const timeText = item.ts > 0
-                    ? new Date(item.ts).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
-                    : null;   // 전사는 생성 시각을 들고 있는 값이 없다 — 지어내지 않고 생략한다
-                  return (
-                    <div
-                      key={`flow_${foldId}`}
-                      data-fold-id={foldId}
-                      ref={(el) => { foldNodeRefs.current[foldId] = el; }}
-                      className="w-full flex flex-col items-center space-y-4"
-                    >
-                      {/* [FOLD-VISUAL-ONLY 2026-08-03 국장 확정] 접힘은 ★화면 점유만 바꾼다.
-                          이 자리의 옛 주석은 "접혔으면 몸통을 아예 만들지 않는다 —
-                          display:none 으로 숨기면 플레이어·썸네일이 살아 있어 무게가 무너진다"
-                          였다. 그 목적(무게)을 국장이 폐기했다:
-                            "접는 이유는 전사가 화면을 다 차지해서일 뿐, 그 외 이유는 없다.
-                             펼쳤을 때와 모든 게 동일해야 한다."
-                          ★언마운트가 실제로 무엇을 죽였는지 실측으로 확정됐기 때문이다:
-                            접힘 -> RoughCutStage 언마운트 -> RoughCutStage.tsx cleanup 의
-                            onData(null) -> Index.tsx roughCutData=null -> roughCutMapReady=false
-                            -> FragmentMap 입력이 [] -> ★조각맵이 통째로 비었다(국장 화면 8 -> 0).
-                          데이터는 하나도 안 지워졌는데 게이트만 닫힌 것이다.
-                          그래서 몸통은 ★항상 마운트하고 display 로만 감춘다.
-                          ★접힌 카드가 그 자리를 대신 차지하므로 화면 점유는 여전히 줄고,
-                            CHAT-FOLD 의 높이 보정(pendingFoldFixRef)도 그대로 의미가 있다
-                            (h1=펼침 높이 -> h2=접힌 카드 높이, 줄어든 만큼 scrollTop 되갚음).
-                          ★[data-fold-id] 노드 자체는 계속 존재하므로 IntersectionObserver 의
-                            관측 대상도 그대로다 — 접힌 뒤 다시 접힘 판정이 깨지지 않는다. */}
-                      {folded ? (
-                        <button
-                          type="button"
-                          onClick={() => unfoldItem(foldId)}
-                          title={`${label} 펼치기`}
-                          // [CCUT-TOKEN 첫 적용 2026-08-02] 임의 수치를 쓰지 않는다.
-                          //   글자는 토큰 5단계(micro/meta/body/title/display)에서만 고르고,
-                          //   색은 변수(foreground·muted-foreground·primary)를 그대로 쓴다.
-                          //   투명도로 명도를 깎지 않는다 — /85, /70 같은 값이 제각각 늘어나면
-                          //   그게 또 하나의 '14종'이 된다. 대비는 국장이 CONTRAST-1 에서
-                          //   올려둔 변수 명도를 신뢰한다.
-                          className="w-full max-w-[800px] flex items-center gap-3 rounded-xl border border-border/15 bg-card/40 px-3 py-2.5 text-left hover:bg-card/70 transition-colors"
-                        >
-                          {poster ? (
-                            <img src={poster} alt="" className="w-12 h-12 rounded-lg object-cover flex-shrink-0 border border-border/15" />
-                          ) : null}
-                          {/* [CHAT-SKIN 2026-08-02 국장 지시] 책 펼침 아이콘 절대 금지.
-                              대표이미지가 없으면 아무것도 두지 않는다 — 빈 파란 상자를
-                              세우느니 글자만 있는 편이 낫다. */}
-                          <span className="text-meta font-bold text-foreground">{label}</span>
-                          {timeText && (
-                            <span className="text-meta text-muted-foreground">{timeText}</span>
-                          )}
-                          <span className="ml-auto text-meta text-muted-foreground">
-                            {count != null ? `${count}조각` : "펼치기"}
-                          </span>
-                          <ChevronDown size={16} className="flex-shrink-0 text-muted-foreground" />
-                        </button>
-                      ) : null}
-                      {/* ★몸통은 접혀도 마운트를 유지한다. 감추는 것은 display 뿐이다. */}
-                      <div
-                        data-fold-body={foldId}
-                        className="w-full flex flex-col items-center space-y-4"
-                        style={folded ? { display: "none" } : undefined}
-                        aria-hidden={folded || undefined}
-                      >
-                        {isTranscript ? stageBlock.transcript : stageBlock.proposal}
-                      </div>
-                    </div>
-                  );
-                })() : item.kind === "palette" ? (
+                ) : item.kind === "palette" ? (
                 <div key="person_palette" className="flex flex-col gap-3">
                   {personSavedNote && (
                     <div className="flex justify-start animate-in fade-in duration-500">
