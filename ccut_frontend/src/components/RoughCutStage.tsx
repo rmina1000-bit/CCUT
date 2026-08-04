@@ -21,17 +21,33 @@ interface RoughCutStageProps {
   fragmentForSpan?: (span: RoughCutSpan) => Fragment | null;
   onAddSpan?: (span: RoughCutSpan) => void;
   onData?: (data: RoughCutData | null) => void;
+  /** [FIRST-RUN 2026-08-04] 조각화가 끝났는가 = /story 의 item_count > 0.
+   *  새 폴링이 아니라 이미 도는 useStoryGate(10초)의 값을 받아 쓴다.
+   *  false 인 동안의 insufficient_text 는 '아직'이지 '없음'이 아니다. */
+  analysisReady?: boolean;
 }
 
-const readError = async (response: Response) => {
+/** [FIRST-RUN 2026-08-04] 재시도 간격·상한. 서버 폭격 금지 — 5회로 끝난다.
+ *  분석완료 신호(analysisReady)가 오면 이 백오프를 기다리지 않고 즉시 재시도하므로,
+ *  이 표는 신호가 끝내 안 올 때의 안전망이다. 합계 최대 2분 15초. */
+const RETRY_DELAYS_MS = [5000, 10000, 20000, 40000, 60000];
+
+const ANALYZING_MESSAGE = "지금은 분석 중입니다. 영상에서 조각을 만들고 있어요.";
+const NO_TRANSCRIPT_MESSAGE = "이 영상은 전사가 부족해 가편집을 만들 수 없습니다.";
+
+/** 응답을 '아직(전사 미완)'과 '진짜 없음'으로 가른다.
+ *  서버의 422 insufficient_text 판정은 건드리지 않는다 — 읽는 시점만 옮긴다. */
+const classifyError = async (response: Response) => {
   const body = await response.json().catch(() => null);
   const detail = body?.detail;
   if (detail?.error === "insufficient_text") {
-    return "이 영상은 전사가 부족해 가편집을 만들 수 없습니다.";
+    return { insufficientText: true, message: NO_TRANSCRIPT_MESSAGE };
   }
-  if (typeof detail === "string") return detail;
-  if (detail?.message) return `가편집을 만들지 못했습니다: ${String(detail.message)}`;
-  return `HTTP ${response.status}`;
+  if (typeof detail === "string") return { insufficientText: false, message: detail };
+  if (detail?.message) {
+    return { insufficientText: false, message: `가편집을 만들지 못했습니다: ${String(detail.message)}` };
+  }
+  return { insufficientText: false, message: `HTTP ${response.status}` };
 };
 
 interface LedgerTranscriptItem {
@@ -51,11 +67,22 @@ const RoughCutStage: React.FC<RoughCutStageProps> = ({
   fragmentForSpan,
   onAddSpan,
   onData,
+  analysisReady = false,
 }) => {
   const [data, setData] = useState<RoughCutData | null>(null);
   const [ledgerItems, setLedgerItems] = useState<LedgerTranscriptItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  // [FIRST-RUN 2026-08-04] 재시도 상태. 프로젝트가 바뀌면 전부 처음으로 돌아간다.
+  const [exhausted, setExhausted] = useState(false);
+  const [manualRetryTick, setManualRetryTick] = useState(0);
+  const loadedForRef = useRef<string | null>(null);
+  const attemptRef = useRef(0);
+  useEffect(() => {
+    loadedForRef.current = null;
+    attemptRef.current = 0;
+    setExhausted(false);
+  }, [projectId]);
 
   // [TRANSCRIPT-FOLD 2026-08-01] 전사 제목 + 접기.
   //   접힘은 **프로젝트별로** 기억한다. 이유: 같은 프로젝트를 매일 여는데 열 때마다
@@ -84,7 +111,11 @@ const RoughCutStage: React.FC<RoughCutStageProps> = ({
   }, [projectId]);
 
   useEffect(() => {
+    // [FIRST-RUN 2026-08-04] 이미 뜬 프로젝트는 다시 부르지 않는다.
+    //   analysisReady 가 나중에 바뀌어도 성공한 화면을 재요청으로 흔들지 않는다(F-6).
+    if (loadedForRef.current === projectId) return;
     let active = true;
+    let timer: number | undefined;
     const load = async () => {
       setLoading(true);
       setError(null);
@@ -99,9 +130,39 @@ const RoughCutStage: React.FC<RoughCutStageProps> = ({
             { method: "POST" },
           );
         }
-        if (!response.ok) throw new Error(await readError(response));
+        if (!response.ok) {
+          const { insufficientText, message } = await classifyError(response);
+          // ★핵심: '전사 부족'이 왔는데 조각화가 아직 안 끝났으면 그건 '없음'이 아니라 '아직'이다.
+          //   (실측 2026-08-04: 업로드 06:06:10 → 이 컴포넌트 발사 06:07:2x → ASR 완료 06:10:41.
+          //    3분 34초 먼저 물어보고 다시 안 물어서 새 프로젝트가 영영 빈 화면이었다.)
+          if (insufficientText && !analysisReady) {
+            const idx = attemptRef.current;
+            if (idx < RETRY_DELAYS_MS.length) {
+              attemptRef.current = idx + 1;
+              const wait = RETRY_DELAYS_MS[idx];
+              if (active) {
+                setError(ANALYZING_MESSAGE);
+                setExhausted(false);
+                console.info(
+                  `[FIRST-RUN] 조각화 미완 — ${wait}ms 뒤 재시도 `
+                  + `(${idx + 1}/${RETRY_DELAYS_MS.length}) project=${projectId}`,
+                );
+                timer = window.setTimeout(() => { if (active) void load(); }, wait);
+              }
+              return;
+            }
+            // 상한 도달 — 폭격하지 않는다. 화면에 '다시 시도'를 남기고 멈춘다.
+            if (active) { setError(ANALYZING_MESSAGE); setExhausted(true); }
+            console.warn(`[FIRST-RUN] 재시도 상한(${RETRY_DELAYS_MS.length}회) 도달 — 중지 project=${projectId}`);
+            return;
+          }
+          throw new Error(message);
+        }
         const result = await response.json();
         if (active) {
+          loadedForRef.current = projectId;
+          attemptRef.current = 0;
+          setExhausted(false);
           setData(result);
           onData?.(result);
         }
@@ -116,6 +177,7 @@ const RoughCutStage: React.FC<RoughCutStageProps> = ({
     void load();
     return () => {
       active = false;
+      if (timer !== undefined) window.clearTimeout(timer);   // [FIRST-RUN] 예약 재시도 회수
       // [FOLD-VISUAL-ONLY 2026-08-03] ★언마운트가 부모 상태를 죽이지 않는다.
       //   여기서 onData(null) 을 부르면 Index.tsx 의 roughCutData 가 null 이 되고,
       //   그러면 roughCutMapReady=false -> FragmentMap 입력이 [] -> ★조각맵이 통째로 빈다.
@@ -129,7 +191,10 @@ const RoughCutStage: React.FC<RoughCutStageProps> = ({
       //     위 전환 effect 가 먼저 비우고, 이 컴포넌트는 projectId 가 바뀌면
       //     새로 load() 해서 덮어쓴다(deps 에 projectId 가 있다).
     };
-  }, [onData, projectId]);
+    // [FIRST-RUN 2026-08-04] analysisReady 가 deps 에 있다 = 조각화가 끝나는 순간 자동 재발사.
+    //   이것이 주 경로이고 RETRY_DELAYS_MS 백오프는 신호가 안 올 때의 안전망이다.
+    //   manualRetryTick 은 상한 도달 뒤 사용자가 '다시 시도'를 눌렀을 때만 움직인다.
+  }, [onData, projectId, analysisReady, manualRetryTick]);
 
   useEffect(() => {
     let active = true;
@@ -272,10 +337,24 @@ const RoughCutStage: React.FC<RoughCutStageProps> = ({
   if (!displayData || error) {
     return (
       <div
-        className="flex min-h-[220px] w-full max-w-[800px] items-center justify-center text-[13px] text-muted-foreground/60"
+        className="flex min-h-[220px] w-full max-w-[800px] flex-col items-center justify-center gap-3 text-[13px] text-muted-foreground/60"
         data-rough-cut-error={error || "empty"}
       >
-        {error || "전사를 불러오지 못했습니다."}
+        <span>{error || "전사를 불러오지 못했습니다."}</span>
+        {/* [FIRST-RUN 2026-08-04] 자동 재시도 상한에 닿았을 때만 나온다. 평소엔 사람 손이 필요 없다. */}
+        {exhausted ? (
+          <button
+            type="button"
+            className="rounded-md border border-border px-3 py-1 text-[12px] text-foreground/80 hover:bg-muted"
+            onClick={() => {
+              attemptRef.current = 0;
+              setExhausted(false);
+              setManualRetryTick((n) => n + 1);
+            }}
+          >
+            다시 시도
+          </button>
+        ) : null}
       </div>
     );
   }

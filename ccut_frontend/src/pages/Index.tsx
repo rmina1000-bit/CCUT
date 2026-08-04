@@ -3563,6 +3563,15 @@ const Index: React.FC = () => {
                 onAddSpan={handleRoughCutSpanAdd}
                 onData={setRoughCutData}
                 onPlay={setMiniTarget}
+                /* [FIRST-RUN 2026-08-04] 분석 완료 신호. 새 폴러를 만들지 않는다 —
+                   이미 도는 분석 폴러(2초)가 끝에 찍는 setAppState("complete", :1408)와
+                   기존 프로젝트 복원 경로(:1616)가 쓰는 바로 그 값이다.
+                   false → true 로 바뀌는 순간 RoughCutStage 가 스스로 다시 묻는다.
+                   ★item_count>0 을 쓰지 않는 이유: 그것은 semantic_fragments 개수라
+                   (service.py:140) 무음 영상에서 영영 0이다. 그러면 '전사 부족'이라
+                   말해야 할 영상이 '분석 중'에 갇힌다(F-5). appState 는 전사 유무와
+                   무관하게 완료를 알린다. */
+                analysisReady={appState === "complete"}
               />
             ) : undefined}
             storyReplacement={modeGateOn ? (
