@@ -905,13 +905,49 @@ def _background_whisper_impl(source_id: str, video_path: str, fragments: list):
         provider = whisper_res.get("provider", "whisper")
         provider_error = whisper_res.get("provider_error")
         rejected_fragments = whisper_res.get("rejected_fragments", {})
+        raw_fragment_transcripts = whisper_res.get("raw_fragment_transcripts", {}) or {}
+        cleaned_fragments = whisper_res.get("cleaned_fragments", {}) or {}
+
+        _asr_program_id = None
+        _asr_program_candidates = []
+        _asr_program_resolution = "not_found"
+        try:
+            from database import SessionLocal as _AsrSession
+            with _AsrSession() as _db:
+                _rows = (
+                    _db.query(ProjectSourceTable.program_id, ProgramTable.name,
+                              ProgramTable.status, ProgramTable.deleted_at)
+                    .join(ProgramTable, ProjectSourceTable.program_id == ProgramTable.program_id)
+                    .filter(ProjectSourceTable.source_id == source_id)
+                    .filter(ProgramTable.deleted_at.is_(None))
+                    .filter(ProgramTable.status != "DELETED")
+                    .order_by(ProjectSourceTable.added_at)
+                    .all()
+                )
+                _asr_program_candidates = [
+                    {
+                        "program_id": r.program_id,
+                        "name": r.name,
+                        "status": r.status,
+                    }
+                    for r in _rows
+                ]
+                if len(_asr_program_candidates) == 1:
+                    _asr_program_id = _asr_program_candidates[0]["program_id"]
+                    _asr_program_resolution = "single_active_project"
+                elif len(_asr_program_candidates) > 1:
+                    _asr_program_resolution = "ambiguous_active_projects"
+        except Exception as _pid_e:
+            _asr_program_resolution = f"lookup_failed:{_pid_e}"
+        whisper_res["program_id_resolution"] = _asr_program_resolution
+        whisper_res["program_id_candidates"] = _asr_program_candidates
 
         # [ASR-REPORT 2026-08-01] 반복 루프를 원장에 신고만 한다 — 고치지도 막지도 않는다.
         #   여기가 삽입 지점인 이유: main.py 의 ASR 진입 4곳이 전부 한 자리(:894)로 모이고,
         #   source_id 가 스코프에 있는 첫 지점이다. 어댑터 안에 넣으면 GPU/CPU 두 벌이 된다.
         #   report_safe = 신고가 실패해도 본선은 완주, 다만 실패는 로그로 드러난다.
         from ai import asr_repetition_report as _arr
-        _arr.report_safe(source_id, whisper_res, fragments)
+        _arr.report_safe(source_id, whisper_res, fragments, program_id=_asr_program_id)
 
         # [단계2] 경계 스냅 보정 — 발화 휴지 정렬 (기본 dry-run)
         _all_words = whisper_res.get("words", []) or []
@@ -1060,6 +1096,11 @@ def _background_whisper_impl(source_id: str, video_path: str, fragments: list):
                         "asr_provider_error": provider_error,
                         "asr_rejected_reason": rejected_fragments.get(frag_id),
                         "asr_has_text": bool(transcript),
+                        "asr_raw_text": raw_fragment_transcripts.get(frag_id),
+                        "asr_loop_cleaned": cleaned_fragments.get(frag_id),
+                        "asr_loop_cleaning": whisper_res.get("asr_loop_cleaning"),
+                        "program_id_resolution": _asr_program_resolution,
+                        "program_id_candidates": _asr_program_candidates,
                         # [LAB-42] 조용한 강하 금지 — 폴백 사실을 원장에 남긴다.
                         "asr_fallback": whisper_res.get("asr_fallback"),
                         "asr_fallback_reason": whisper_res.get("asr_fallback_reason"),

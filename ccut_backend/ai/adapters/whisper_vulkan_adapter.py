@@ -25,6 +25,79 @@ from ..schemas import TranscriptResult, HealthStatus
 from .base import BaseAdapter
 
 _SPECIAL = re.compile(r"^\s*[\[<]")  # [_BEG_], <|...|> 등 특수토큰
+_ASR_LOOP_SEGMENT_REPEAT_LIMIT = 10
+
+
+def _normalize_loop_text(text: str) -> str:
+    return re.sub(r"^[\[\(]+|[\]\)]+$", "", " ".join(str(text or "").split()).strip())
+
+
+def _clean_segment_repetition_loop(segments: list) -> tuple[list, list]:
+    """표시용 ASR 세그먼트만 정리한다. 원본 보존은 호출부 raw_*가 맡는다."""
+    from rough_cut.transcript_reader import detect_repetition_hallucination
+
+    cleaned = []
+    events = []
+    i = 0
+    while i < len(segments):
+        seg = dict(segments[i])
+        text = str(seg.get("text") or "").strip()
+        finding = detect_repetition_hallucination(text)
+        if finding and finding.repeat_count >= _ASR_LOOP_SEGMENT_REPEAT_LIMIT:
+            seg["text"] = finding.unit
+            seg["asr_loop_cleaned"] = {
+                "kind": "single_segment",
+                "raw_text": text,
+                "unit": finding.unit,
+                "repeat_count": finding.repeat_count,
+                "coverage": finding.coverage,
+                "threshold": _ASR_LOOP_SEGMENT_REPEAT_LIMIT,
+            }
+            events.append({
+                "kind": "single_segment",
+                "start": seg.get("start"),
+                "end": seg.get("end"),
+                "unit": finding.unit,
+                "repeat_count": finding.repeat_count,
+                "coverage": finding.coverage,
+            })
+            cleaned.append(seg)
+            i += 1
+            continue
+
+        unit = _normalize_loop_text(text)
+        j = i + 1
+        while j < len(segments):
+            next_text = str(segments[j].get("text") or "").strip()
+            if not unit or _normalize_loop_text(next_text) != unit:
+                break
+            if float(segments[j].get("start") or 0) > float(segments[j - 1].get("end") or 0) + 0.75:
+                break
+            j += 1
+
+        repeat_count = j - i
+        if unit and repeat_count >= _ASR_LOOP_SEGMENT_REPEAT_LIMIT:
+            seg["asr_loop_cleaned"] = {
+                "kind": "segment_run",
+                "raw_texts": [str(s.get("text") or "").strip() for s in segments[i:j]],
+                "unit": unit,
+                "repeat_count": repeat_count,
+                "threshold": _ASR_LOOP_SEGMENT_REPEAT_LIMIT,
+                "raw_start": segments[i].get("start"),
+                "raw_end": segments[j - 1].get("end"),
+            }
+            events.append({
+                "kind": "segment_run",
+                "start": segments[i].get("start"),
+                "end": segments[j - 1].get("end"),
+                "unit": unit,
+                "repeat_count": repeat_count,
+            })
+            cleaned.append(seg)
+        else:
+            cleaned.extend(dict(s) for s in segments[i:j])
+        i = j
+    return cleaned, events
 
 
 def _tokens_to_words(tokens: list) -> list:
@@ -217,29 +290,58 @@ class WhisperVulkanAdapter(BaseAdapter, ASRProvider):
                 "words": sw,
             })
 
+        raw_all_segments = [dict(seg) for seg in all_segments]
+        all_segments, loop_events = _clean_segment_repetition_loop(all_segments)
+
         # fragment 분배 (transcribe_full_then_split 와 동일 로직)
         fragment_transcripts = {}
+        raw_fragment_transcripts = {}
         fragment_words = {}
         rejected = {}
         for frag in fragments:
             fid = frag["fragment_id"]
             fs = float(frag.get("start_time", 0))
             fe = float(frag.get("end_time", 0))
-            parts, fw = [], []
+            raw_parts, parts, fw = [], [], []
+            for seg in raw_all_segments:
+                if seg["end"] <= fs or seg["start"] >= fe:
+                    continue
+                raw_parts.append(seg["text"])
             for seg in all_segments:
                 if seg["end"] <= fs or seg["start"] >= fe:
                     continue
                 parts.append(seg["text"])
                 fw.extend(seg.get("words", []))
             txt = " ".join(parts).strip()
+            raw_txt = " ".join(raw_parts).strip()
+            raw_fragment_transcripts[fid] = raw_txt
             fragment_transcripts[fid] = txt
             fragment_words[fid] = fw
             if not txt:
                 rejected[fid] = "empty_text"
 
+        cleaned_fragments = {}
+        for fid, raw_txt in raw_fragment_transcripts.items():
+            txt = fragment_transcripts.get(fid, "")
+            if txt != raw_txt:
+                cleaned_fragments[fid] = {
+                    "raw_text": raw_txt,
+                    "cleaned_text": txt,
+                    "raw_len": len(raw_txt),
+                    "cleaned_len": len(txt),
+                    "threshold": _ASR_LOOP_SEGMENT_REPEAT_LIMIT,
+                }
+
         return {
             "fragment_transcripts": fragment_transcripts,
             "all_segments": all_segments,
+            "raw_all_segments": raw_all_segments,
+            "raw_fragment_transcripts": raw_fragment_transcripts,
+            "cleaned_fragments": cleaned_fragments,
+            "asr_loop_cleaning": {
+                "threshold": _ASR_LOOP_SEGMENT_REPEAT_LIMIT,
+                "events": loop_events,
+            },
             "fragment_words": fragment_words,
             "words": all_words,
             "language": data.get("result", {}).get("language", "unknown"),

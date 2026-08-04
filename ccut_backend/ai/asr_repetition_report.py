@@ -113,6 +113,8 @@ def report(
         "asr_provider": whisper_res.get("provider"),
         "asr_fallback": whisper_res.get("asr_fallback"),
         "max_context_zero": os.getenv("CCUT_ASR_MAX_CONTEXT_ZERO", "1"),
+        "program_id_resolution": whisper_res.get("program_id_resolution"),
+        "program_id_candidates": whisper_res.get("program_id_candidates"),
         "detector": "rough_cut.transcript_reader.detect_repetition_hallucination",
         "truncated": len(found) > len(items),
         "items": items,
