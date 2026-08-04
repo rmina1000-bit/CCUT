@@ -447,6 +447,11 @@ from story_gate import gate as story_gate
 from story_gate import service as story_service
 app.include_router(story_gate_router)
 
+# [SAVE-SPINE 2-B] 저장된 버전 원장 — 한 덩어리로 저장되거나 아무것도 안 남거나.
+#   테이블이 없으면 목록은 빈 배열, 저장은 503 으로 정직하게 답한다 (story_gate 와 같은 규율).
+from story_version.api import router as story_version_router
+app.include_router(story_version_router)
+
 # [LEDGER-1] Text Ledger R0 — 스토리 원고 read API (읽기 전용, DB 무변)
 from ledger_r0 import router as ledger_router
 app.include_router(ledger_router)
