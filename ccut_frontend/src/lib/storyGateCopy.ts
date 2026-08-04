@@ -25,6 +25,20 @@ export const STORY_GATE_COPY = {
   },
   chat: {
     storySaved: "이야기를 저장했어요. 이제 편집으로 가볼까요?",
+    editStarted: "편집을 시작할게요. 조각을 누르면 소리와 화면을 다듬을 수 있어요.",
+    storyReturned: "이야기로 돌아왔어요. 조각을 고르고 빼는 중이에요.",
+  },
+  chatActions: {
+    startEditing: "편집 시작",
+  },
+  precisionPanel: {
+    storyHeading: "이야기",
+    editHeading: "편집",
+    editBody: "소리와 화면을 다듬는 자리는 여기입니다.",
+    editSoon: "세부 손질은 다음 카드에서 이어집니다.",
+  },
+  editVersionBar: {
+    label: "편집본",
   },
   toast: {
     storySaved: "이야기를 저장했어요",

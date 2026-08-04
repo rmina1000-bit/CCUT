@@ -137,7 +137,9 @@ const Index: React.FC = () => {
     version_id: number; name: string; item_count: number;
     parent_version_id: number | null; created_at: string;
   }>>([]);
+  const [editVersions] = useState<Array<{ id: string; name: string }>>([]);
   const [activeVersionId, setActiveVersionId] = useState<number | null>(null);
+  const [precisionPaneMode, setPrecisionPaneMode] = useState<"story" | "edit">("story");
   // [LAYER-FIX 3-A] 방금 복원한 버전의 fids. 급증 가드가 '이건 복원이다'를 알아보는 유일한 근거.
   //   ref 인 이유: 가드는 렌더 밖(saveUiStateMerged 안)에서 도므로 최신 값이 필요하다.
   const versionRestoreFidsRef = useRef<string[] | null>(null);
@@ -327,6 +329,36 @@ const Index: React.FC = () => {
 
   // [GATE-LOOP-01 3번] 단계 배지 — 상태기계에서 파생만 한다 (배지가 자기 상태를 갖지 않는다).
   const storyStage = storyStageBadge(storyGate.story?.story_state, committedProposalId, activeReEdit);
+
+  const appendStoryGateMessage = useCallback((idPrefix: string, text: string, extra?: Record<string, unknown>) => {
+    setStoryPlan((prev: any) => {
+      const messages = (prev?.messages) ?? [];
+      const lastText = messages.length ? String(messages[messages.length - 1]?.text ?? "") : "";
+      if (lastText === text) return prev;
+      return {
+        ...(prev ?? {
+          story_plan_id: `STP_${Date.now()}`,
+          source_count: sourceEntries.length,
+          consultation_status: "draft_ready",
+          confirmation_status: "pending",
+          direction_options: [],
+          detected_theme: "",
+          selected_direction: undefined,
+          messages: [],
+        }),
+        messages: [
+          ...messages,
+          {
+            id: `${idPrefix}_${Date.now()}`,
+            sender: "ai" as const,
+            text,
+            timestamp: Date.now(),
+            ...(extra ?? {}),
+          },
+        ],
+      };
+    });
+  }, [sourceEntries.length]);
 
 
   // ── [STORY-LAYER-01 A-1] live story = program 단위 하나 ──
@@ -794,7 +826,9 @@ const Index: React.FC = () => {
         selectedSpanIds: d.selected_span_ids ?? [],
       }));
       setActiveVersionId(versionId);
+      setPrecisionPaneMode("story");
       lastSavedVersionIdRef.current = versionId;
+      appendStoryGateMessage("ai_story_returned", STORY_GATE_COPY.chat.storyReturned);
       console.info(`[LAYER-SPLIT] 버전 ${versionId} 적용 — 조각 ${(d.fids || []).length}개 `
         + `· 전사선택 ${(d.selected_span_ids || []).length}개`);
     } catch (e) {
@@ -853,25 +887,11 @@ const Index: React.FC = () => {
     toast.success(`${STORY_GATE_COPY.toast.storySaved} — ${name}`, {
       description: `조각 ${result.body?.item_count ?? storyFids.length}개`,
     });
-    const savedMsg = {
-      id: `ai_story_saved_${result.body?.version_id ?? Date.now()}_${Date.now()}`,
-      sender: "ai" as const,
-      text: STORY_GATE_COPY.chat.storySaved,
-      timestamp: Date.now(),
-    };
-    setStoryPlan((prev: any) => ({
-      ...(prev ?? {
-        story_plan_id: `STP_${Date.now()}`,
-        source_count: sourceEntries.length,
-        consultation_status: "draft_ready",
-        confirmation_status: "pending",
-        direction_options: [],
-        detected_theme: "",
-        selected_direction: undefined,
-        messages: [],
-      }),
-      messages: [...((prev?.messages) ?? []), savedMsg],
-    }));
+    appendStoryGateMessage(
+      `ai_story_saved_${result.body?.version_id ?? Date.now()}`,
+      STORY_GATE_COPY.chat.storySaved,
+      { kind: "story_saved_prompt" },
+    );
 
     recordMirrorEvent({
       event_kind: "accept",
@@ -959,6 +979,7 @@ const Index: React.FC = () => {
     setRoughCutData(null);
     setRoughCutPlacement(null);
     setHoldPositions({});
+    setPrecisionPaneMode("story");
   }, [activeNavItem]);
 
   const {
@@ -3554,6 +3575,11 @@ const Index: React.FC = () => {
     setCompositionNotice(text);
   }, []);
 
+  const handleStartStoryEditing = useCallback(() => {
+    setPrecisionPaneMode("edit");
+    appendStoryGateMessage("ai_edit_started", STORY_GATE_COPY.chat.editStarted);
+  }, [appendStoryGateMessage]);
+
   const handleRestoreProposalEntry = useCallback((id: string) => {
     if (activeNavItem && activeNavItem.startsWith("proj_")) {
       reEditSessionStartRef.current = Date.now();
@@ -3764,6 +3790,22 @@ const Index: React.FC = () => {
                ★한 줄만 차지한다 — 가로로만 늘고 세로로는 자라지 않는다(flex-nowrap + overflow-x-auto,
                  원본맵과 같은 방식). 아이콘은 텍스트 한 줄 높이(h-6)에 맞춘다.
                ★저장한 적이 없으면 줄 자체를 그리지 않는다 — 빈 줄이 자리를 먹지 않게. */
+            editVersionBar={editVersions.length > 0 ? (
+              <div className="flex flex-row flex-nowrap items-center gap-2 overflow-x-auto no-scrollbar py-0.5">
+                <span className="flex-shrink-0 text-micro text-muted-foreground/40 pr-0.5">{STORY_GATE_COPY.editVersionBar.label}</span>
+                {editVersions.map((v) => (
+                  <button
+                    key={v.id}
+                    type="button"
+                    data-edit-version-chip={v.id}
+                    className="group flex items-center gap-1.5 h-7 flex-shrink-0 rounded-full px-2.5 text-micro text-muted-foreground/60 hover:bg-foreground/5 hover:text-foreground transition-colors"
+                  >
+                    <span className="h-1 w-1 rounded-full bg-muted-foreground/30 group-hover:bg-muted-foreground/60 transition-colors" />
+                    <span className="max-w-[130px] truncate">{v.name}</span>
+                  </button>
+                ))}
+              </div>
+            ) : undefined}
             versionBar={savedVersions.length > 0 ? (
               /* [LAYER-FIX3 2026-08-04 국장 지시] 심플하되 허허벌판이 아니게.
                  더한 것은 셋뿐이다 — 무엇을 보는 줄인지 알리는 라벨, 칩을 칩으로 읽히게 하는
@@ -3821,39 +3863,47 @@ const Index: React.FC = () => {
               />
             ) : undefined}
             storyReplacement={modeGateOn ? (
-              <FragmentMap
-                fragments={roughCutMapReady ? roughCutFragmentPool : []}
-                storyFragmentIds={roughCutMapReady ? storyFids : []}
-                storyOnly
-                onFragmentsChange={roughCutData ? handleRoughCutStoryReorder : handleFragmentsReorder}
-                selectedFragmentId={selectedFragment ? String((selectedFragment as any).fragment_id ?? getUid(selectedFragment)) : null}
-                activeFragmentId={selectedFragment ? String((selectedFragment as any).fragment_id ?? getUid(selectedFragment)) : highlightedPanoramaFrag}
-                focusOrigin={fragmentFocusOrigin}
-                expandedFragmentId={expandedFragment}
-                onFragmentClick={handleEditFragmentClick}
-                onFragmentPlay={playImageFragmentInMini}
-                onEditFragment={handleSingleFragmentEdit}
-                onFragmentDoubleClick={handleEditFragmentDoubleClick}
-                onExcludeFragment={roughCutData ? handleRoughCutStoryRemove : handleExcludeFromEdit}
-                onRestoreFragment={roughCutData ? handleRoughCutStoryInsert : handleRestoreFromHold}
-                onSourceRestore={roughCutData ? handleRoughCutStoryInsert : handleAddFromSource}
-                onMoveToHold={roughCutData ? handleRoughCutStoryRemove : handleMoveToHold}
-                onTrashRestore={roughCutData ? handleRoughCutStoryInsert : handleRestoreToEdit}
-                onBoundaryClick={handleOpenBoundaryEditor}
-                sourceVideoUrls={Object.fromEntries(
-                  (sourceEntries ?? []).flatMap(e => [[e.source_id, e.video_url], [e.label, e.video_url]]).filter(([, v]) => v)
-                )}
-                modeGateEnabled={modeGateOn}
-                fragmentFace="text"
-                title=""
-                textScope="all"
-                showFaceControls={false}
-                showCompositionActions={false}
-                sourceFragments={(sourceEntries ?? []).flatMap((e) => e.fragments ?? [])}
-                storyTextItems={modeStoryTextItems}
-                programId={activeNavItem}
-                onTextEditStateChanged={() => { refreshEditStatesRef.current(); void refreshLedgerEdl(); setStoryLedgerRefreshNonce((n) => n + 1); }}
-              />
+              precisionPaneMode === "edit" ? (
+                <div data-precision-pane="edit" className="h-full min-h-[220px] px-4 py-4 text-left">
+                  <p className="text-[13px] font-semibold text-foreground">{STORY_GATE_COPY.precisionPanel.editHeading}</p>
+                  <p className="mt-2 text-[12px] leading-relaxed text-muted-foreground">{STORY_GATE_COPY.precisionPanel.editBody}</p>
+                  <p className="mt-1 text-[12px] leading-relaxed text-muted-foreground/70">{STORY_GATE_COPY.precisionPanel.editSoon}</p>
+                </div>
+              ) : (
+                <FragmentMap
+                  fragments={roughCutMapReady ? roughCutFragmentPool : []}
+                  storyFragmentIds={roughCutMapReady ? storyFids : []}
+                  storyOnly
+                  onFragmentsChange={roughCutData ? handleRoughCutStoryReorder : handleFragmentsReorder}
+                  selectedFragmentId={selectedFragment ? String((selectedFragment as any).fragment_id ?? getUid(selectedFragment)) : null}
+                  activeFragmentId={selectedFragment ? String((selectedFragment as any).fragment_id ?? getUid(selectedFragment)) : highlightedPanoramaFrag}
+                  focusOrigin={fragmentFocusOrigin}
+                  expandedFragmentId={expandedFragment}
+                  onFragmentClick={handleEditFragmentClick}
+                  onFragmentPlay={playImageFragmentInMini}
+                  onEditFragment={handleSingleFragmentEdit}
+                  onFragmentDoubleClick={handleEditFragmentDoubleClick}
+                  onExcludeFragment={roughCutData ? handleRoughCutStoryRemove : handleExcludeFromEdit}
+                  onRestoreFragment={roughCutData ? handleRoughCutStoryInsert : handleRestoreFromHold}
+                  onSourceRestore={roughCutData ? handleRoughCutStoryInsert : handleAddFromSource}
+                  onMoveToHold={roughCutData ? handleRoughCutStoryRemove : handleMoveToHold}
+                  onTrashRestore={roughCutData ? handleRoughCutStoryInsert : handleRestoreToEdit}
+                  onBoundaryClick={handleOpenBoundaryEditor}
+                  sourceVideoUrls={Object.fromEntries(
+                    (sourceEntries ?? []).flatMap(e => [[e.source_id, e.video_url], [e.label, e.video_url]]).filter(([, v]) => v)
+                  )}
+                  modeGateEnabled={modeGateOn}
+                  fragmentFace="text"
+                  title=""
+                  textScope="all"
+                  showFaceControls={false}
+                  showCompositionActions={false}
+                  sourceFragments={(sourceEntries ?? []).flatMap((e) => e.fragments ?? [])}
+                  storyTextItems={modeStoryTextItems}
+                  programId={activeNavItem}
+                  onTextEditStateChanged={() => { refreshEditStatesRef.current(); void refreshLedgerEdl(); setStoryLedgerRefreshNonce((n) => n + 1); }}
+                />
+              )
             ) : undefined}
             onActiveFragmentChange={handleCenterStoryFragmentFocus}
             onStoryEditStateChanged={() => { refreshEditStatesRef.current(); void refreshLedgerEdl(); void storyGate.reload(); setStoryLedgerRefreshNonce((n) => n + 1); }}
@@ -3872,6 +3922,7 @@ const Index: React.FC = () => {
             proposalHistory={proposalHistory}
             activeProposalEntryId={activeProposalEntryId}
             onRestoreProposalEntry={handleRestoreProposalEntry}
+            onStartStoryEditing={handleStartStoryEditing}
             onIntake={(a) => { intakeRef.current = a; }}
             onRequestAddVideos={
               activeNavItem && activeNavItem.startsWith("proj_")

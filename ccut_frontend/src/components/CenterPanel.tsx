@@ -15,6 +15,7 @@ import { ExportPanelSection } from "@/components/views/ExportPanelSection";
 import { FragSearchPanel } from "@/components/views/FragSearchPanel";
 import { ComposerSection } from "@/components/views/ComposerSection";
 import { DEBUG_LOG } from "@/utils/debugFlags";
+import { STORY_GATE_COPY } from "@/lib/storyGateCopy";
 // [STORY-GATE P3] 승인 전에는 편집 결과물 대신 '원고'를 무대에 세운다.
 import { useStoryGate } from "@/hooks/useStoryGate";
 import { fragmentTranscriptText, FRAGMENT_TEXT_FONT, FRAGMENT_TEXT_STYLE, FRAGMENT_SILENT_STYLE } from "@/lib/fragmentText";
@@ -157,6 +158,7 @@ interface CenterPanelProps {
   storyReplacement?: React.ReactNode;
   roughCutStage?: React.ReactNode;
   /** [LAYER-SPLIT 2026-08-04 ②] 저장된 버전 아이콘 줄. 채팅창 바로 위 한 줄. */
+  editVersionBar?: React.ReactNode;
   versionBar?: React.ReactNode;
   programId?: string | null;
   programTitle?: string | null;
@@ -174,6 +176,7 @@ interface CenterPanelProps {
   // [UI-⑧] 컴포저 + 버튼 → 영상 추가 파일창 열기 / 드래그된 파일 직접 추가
   onRequestAddVideos?: () => void;
   onAddVideoFiles?: (files: File[]) => void;
+  onStartStoryEditing?: () => void;
   // [TIMELINE-PAGE 2026-08-02] 300행 절단 복구 — 서버가 has_more 를 주는데 듣는 코드가
   //   0이었다(실측: Merope 614행 중 314행 도달 불가). 서버·서비스 계층은 손대지 않고
   //   호출처만 잇는다. 버튼 방식인 이유는 아래 렌더부 주석에.
@@ -424,6 +427,7 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
   activeStoryFragmentId: activeStoryFragmentIdProp,
   storyReplacement,
   roughCutStage,
+  editVersionBar,
   versionBar,
   programId,
   programTitle,
@@ -435,6 +439,7 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
   onIntake,
   onRequestAddVideos,
   onAddVideoFiles,
+  onStartStoryEditing,
   timelineHasMore = false,
   timelineLoadingMore = false,
   onLoadOlderTimeline,
@@ -3258,6 +3263,16 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
                         )}
                         {String(item.msg.text || "").replace(/\b\d{8}_\d{6}(?:_\d+)?\b/g, "")}
                       </div>
+                      {(item.msg as any).kind === "story_saved_prompt" && onStartStoryEditing && (
+                        <button
+                          type="button"
+                          data-story-start-editing
+                          onClick={onStartStoryEditing}
+                          className="text-meta text-primary hover:text-primary/80 transition-colors"
+                        >
+                          {STORY_GATE_COPY.chatActions.startEditing}
+                        </button>
+                      )}
                       {/* [관문D 2026-07-21] 큐원 판단근거(대사·장면·맥락) 얇게 표시 — 없으면 "근거 없음" */}
                       {item.msg.sender === "ai" && (item.msg as any).candidate_evidence && Object.keys((item.msg as any).candidate_evidence).length > 0 && (
                         <div className="px-4 py-2 rounded-xl bg-secondary/5 border border-border/5 text-[11px] text-muted-foreground/70 space-y-1.5 max-w-full">
@@ -3344,6 +3359,11 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
       {/* [LAYER-FIX2 2026-08-04 국장 지시] 버전 줄은 ★채팅 입력창 바로 위 한 줄.
           토큰 수량 줄처럼 조용히 붙어 있는 자리다 — 전사와 무관하고, 전사를 펼쳐도 안 움직인다.
           테두리·배경 없이 글자만. 지금 보고 있는 버전만 옅게 강조한다. */}
+      {editVersionBar ? (
+        <div className="w-full flex justify-center px-4 shrink-0" data-layer="edit-versionbar">
+          <div className="w-full max-w-[800px]">{editVersionBar}</div>
+        </div>
+      ) : null}
       {versionBar ? (
         <div className="w-full flex justify-center px-4 shrink-0" data-layer="versionbar">
           <div className="w-full max-w-[800px]">{versionBar}</div>
