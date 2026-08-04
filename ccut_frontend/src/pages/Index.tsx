@@ -1512,12 +1512,14 @@ const Index: React.FC = () => {
                 const _fragCount = Object.values(semanticResults).flat().length;
                 const _failNote = failedSourceIds.length > 0
                   ? ` (영상 ${failedSourceIds.length}개는 분석 실패)` : "";
-                // 승인 전이면 A·B가 없는 게 정상이다 — 그 사실을 그대로 말한다.
-                const _tail = proposalNotice ?? "편집안(A·B)도 준비됐습니다.";
+                // [LAYER-FIX2 2026-08-04 국장 지시] 절차를 통보하지 않는다.
+                //   "원고를 먼저 저장해 주세요"는 사용자가 아직 하지도 않은 일을 재촉하는 말이었다.
+                //   지금 할 수 있는 일을 권하는 문장으로 바꾼다.
+                const _tail = "전사를 보면서 쓸 장면을 골라 보세요. 마음에 들면 저장해 두면 됩니다.";
                 const _doneMsg = {
                   id: `ai_analysis_done_${Date.now()}`,
                   sender: "ai" as const,
-                  text: `분석을 마쳤습니다 — 조각 ${_fragCount}개를 만들었습니다${_failNote}. ${_tail}`,
+                  text: `영상에서 장면 ${_fragCount}개를 찾았어요${_failNote}. ${_tail}`,
                   timestamp: Date.now(),
                 };
                 setStoryPlan((prev: any) => ({
@@ -2091,14 +2093,22 @@ const Index: React.FC = () => {
         setMiniTarget(null);  // [B-2] 재클릭 해제 시 미니 창도 닫는다
       } else {
         setSelectedFragment(f);
-        setActiveSource(f.source_video);
+        // [LAYER-FIX3 2026-08-04 국장 지시] 원본맵이 그 소스로 갈아타야 조각이 화면에 있고,
+        //   그래야 "나 여기 있어요"가 보인다. f.source_video 는 ★문자 라벨뿐이고 비어 있을 수
+        //   있다(STATE-DRIFT 수리 때 source_id 폴백을 뺐다) — 비면 원본맵이 안 움직인다.
+        //   실측: 텍스트조각은 일어나는데 이미지조각은 안 일어났다. 차이가 여기였다.
+        //   handleCenterStoryFragmentFocus 와 같은 방식으로 source_id 로 라벨을 찾아 쓴다.
+        const _label = (sourceEntries ?? []).find(
+          (e) => e.source_id === (f as any).source_id,
+        )?.label || f.source_video;
+        if (_label) setActiveSource(_label);
         const highlightId = String((f as any).fragment_id ?? getUid(f));
         setHighlightedPanoramaFrag(highlightId);
         window.setTimeout(() => setHighlightedPanoramaFrag(highlightId), 0);
         setExpandedFragment(null);
       }
     },
-    [modeGateOn, selectedFragment]
+    [modeGateOn, selectedFragment, sourceEntries]
   );
 
   // [2-2b] 조각편집 진입 (단일 조각 1개).
@@ -2756,6 +2766,17 @@ const Index: React.FC = () => {
     if (!fragment) return;
     const fid = getUid(fragment);
 
+    // [LAYER-FIX3 2026-08-04 국장 지시] 전사에서 고른 조각도 "나 여기 있어요" 하고 일어난다.
+    //   ★어제 배선은 setHighlightedPanoramaFrag(fid) 하나만 세워서 아무 일도 안 났다.
+    //     작동하던 길(텍스트조각 클릭)과 비교해 보니 네 가지가 빠져 있었다:
+    //       (1) setSelectedFragment — 조각맵이 무엇을 가리킬지는 이 값이 정한다
+    //       (2) setActiveSource     — 원본맵이 그 소스로 갈아타야 조각이 화면에 있다
+    //       (3) fragment_id         — 원본맵 data-fid 는 getUid 가 아니라 이 값이다 (★진짜 원인)
+    //       (4) setTimeout(...,0)   — 같은 id 를 다시 눌러도 effect 가 돌게 하는 재발화
+    //   그래서 값을 직접 세우지 않고 ★이미 검증된 그 길을 그대로 부른다. 길이 하나여야
+    //   전사·텍스트조각·이미지조각·원본맵이 같은 규칙으로 움직인다(국장 지시: 모두 연동).
+    handleCenterStoryFragmentFocus(String((fragment as any).fragment_id ?? fid), "user");
+
     // [TOGGLE-RESTORE-2 2026-08-01] 전사도 재클릭으로 해제된다.
     //   조각맵(handleEditFragmentClick)에는 토글이 있었는데(07-25 게이트에 막혔다가
     //   18af4fb2 에서 복원) 전사에는 **애초에 없었다** — 도입 커밋 503e5d48
@@ -2803,6 +2824,7 @@ const Index: React.FC = () => {
     storyFidsWith,
     storyFidsWithout,
     roughCutData?.transcript,
+    handleCenterStoryFragmentFocus,
   ]);
 
   const orderRoughCutSpanIds = useCallback((fids: string[], spanIds: string[]) => {
@@ -3723,7 +3745,12 @@ const Index: React.FC = () => {
                  원본맵과 같은 방식). 아이콘은 텍스트 한 줄 높이(h-6)에 맞춘다.
                ★저장한 적이 없으면 줄 자체를 그리지 않는다 — 빈 줄이 자리를 먹지 않게. */
             versionBar={savedVersions.length > 0 ? (
-              <div className="flex flex-row flex-nowrap items-center gap-1.5 overflow-x-auto no-scrollbar py-1">
+              /* [LAYER-FIX3 2026-08-04 국장 지시] 심플하되 허허벌판이 아니게.
+                 더한 것은 셋뿐이다 — 무엇을 보는 줄인지 알리는 라벨, 칩을 칩으로 읽히게 하는
+                 아주 옅은 바탕, 지금 보고 있는 것만 켜지는 점. 테두리·그림자·색은 쓰지 않는다.
+                 여전히 한 줄(h-7)이고 가로로만 늘어난다. */
+              <div className="flex flex-row flex-nowrap items-center gap-2 overflow-x-auto no-scrollbar py-0.5">
+                <span className="flex-shrink-0 text-micro text-muted-foreground/40 pr-0.5">저장한 이야기</span>
                 {savedVersions.map((v) => {
                   const active = v.version_id === activeVersionId;
                   return (
@@ -3732,15 +3759,20 @@ const Index: React.FC = () => {
                       type="button"
                       data-version-chip={v.version_id}
                       onClick={() => handleVersionPick(v.version_id)}
-                      title={`${v.name} · ${v.item_count}조각`}
-                      className={`flex items-center gap-1.5 h-6 flex-shrink-0 rounded-md border px-2 text-micro transition-colors ${
+                      title={`${v.name} · 조각 ${v.item_count}개`}
+                      className={`group flex items-center gap-1.5 h-7 flex-shrink-0 rounded-full px-2.5 text-micro transition-colors ${
                         active
-                          ? "border-primary/60 bg-primary/15 text-foreground"
-                          : "border-border/20 bg-card/40 text-muted-foreground hover:bg-card/70"
+                          ? "bg-primary/10 text-primary"
+                          : "text-muted-foreground/60 hover:bg-foreground/5 hover:text-foreground"
                       }`}
                     >
-                      <span className="max-w-[110px] truncate">{v.name}</span>
-                      <span className="opacity-70">{v.item_count}</span>
+                      <span
+                        className={`h-1 w-1 rounded-full transition-colors ${
+                          active ? "bg-primary" : "bg-muted-foreground/30 group-hover:bg-muted-foreground/60"
+                        }`}
+                      />
+                      <span className="max-w-[130px] truncate">{v.name}</span>
+                      <span className="tabular-nums opacity-50">{v.item_count}</span>
                     </button>
                   );
                 })}
@@ -3959,7 +3991,7 @@ const Index: React.FC = () => {
                         fragmentFace={fragmentFace}
                     onFragmentFaceChange={setFragmentFace}
                     title={undefined}
-                    textButtonLabel="텍스트 조각"
+                    textButtonLabel="텍스트"
                     textScope="selected"
                     onSaveVersion={handleSaveVersion}
                     onPreviewEdit={handlePreviewEdit}

@@ -455,6 +455,9 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
   const CHAT_BOTTOM_SLACK = 120; // 하단 근접 판정(px)
   const chatAtBottomRef = useRef(true);
   const [chatHasNew, setChatHasNew] = useState(false);
+  // [LAYER-FIX5 2026-08-05] 지금 채팅에 실제로 스크롤할 것이 있는가.
+  //   '새 내용 도착'을 띄울지 가르는 사실 하나. 스크롤 판정 로직과는 별개다.
+  const [chatIsScrollable, setChatIsScrollable] = useState(false);
   const isChatNearBottom = useCallback(() => {
     const el = chatScrollRef.current;
     if (!el) return true;                                   // 아직 없음 = 따라가도 무해
@@ -483,6 +486,19 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
     if (chatUserGestureRef.current) chatAtBottomRef.current = false;
     // else: 프로그램 스크롤·늦은 이미지 로드 — 판정 보류(추종 유지)
   }, [isChatNearBottom]);
+  // [LAYER-FIX5 2026-08-05] 스크롤 가능 여부를 갱신한다 — 스크롤할 때와 내용이 바뀔 때.
+  //   판정은 하나뿐이다: 내용 높이가 보이는 높이보다 큰가. 여유 8px 은 반올림 오차분.
+  const syncChatScrollable = useCallback(() => {
+    const el = chatScrollRef.current;
+    if (!el) return;
+    setChatIsScrollable(el.scrollHeight - el.clientHeight > 8);
+  }, []);
+  useEffect(() => {
+    syncChatScrollable();
+    const t = window.setTimeout(syncChatScrollable, 300);   // 늦게 오는 썸네일 반영
+    return () => window.clearTimeout(t);
+  }, [syncChatScrollable, storyPlan?.messages?.length, proposalHistory.length, transcriptOpen]);
+
   const scrollChatToBottom = useCallback(() => {
     chatAtBottomRef.current = true;
     chatUserGestureRef.current = false;
@@ -2983,9 +2999,18 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
                   className={`transition-transform ${transcriptOpen ? "" : "-rotate-90"}`}
                 />
               </button>
+              {/* [LAYER-FIX2 2026-08-04 국장 지시] 전사는 채팅의 윗칸이 아니라 ★따로 뜨는 레이어다.
+                  구판은 펼치면 채팅 내용이 통째로 묻혔다. 이제
+                    · 높이를 화면 절반(50vh)으로 묶어 아래 대화가 계속 보이고
+                    · 바깥을 누르면 닫힌다 (닫기 버튼을 찾아 헤매지 않게)
+                  ★몸통은 접혀도 마운트를 유지한다 — 감추는 것은 display 뿐(8/3 교훈). */}
+              {/* [LAYER-FIX3 2026-08-04 국장 지시] ★바깥 클릭 닫기를 걷어낸다.
+                  전사를 펼쳐 두고 조각맵을 고치는 것이 이 화면의 정상 작업이다.
+                  화면 전체를 덮는 백드롭은 조각맵을 한 번 누를 때마다 전사를 접어
+                  그 작업을 정확히 방해했다. 닫는 것은 '전사 ⌄'를 다시 누를 때만. */}
               <div
                 data-transcript-body
-                className="absolute left-0 right-0 top-full z-30 max-h-[60vh] overflow-y-auto no-scrollbar rounded-xl border border-border/15 bg-background shadow-xl"
+                className="absolute left-0 right-0 top-full z-30 max-h-[50vh] overflow-y-auto no-scrollbar rounded-xl border border-border/20 bg-background shadow-2xl"
                 style={transcriptOpen ? undefined : { display: "none" }}
                 aria-hidden={transcriptOpen ? undefined : true}
               >
@@ -2995,24 +3020,41 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
           </div>
         ) : null}
 
-        {/* [LAYER-SPLIT 2026-08-04 국장 확정 ②] 버전층 — 채팅창 바로 위 한 줄, 가로 스크롤.
-            내용은 Index 가 만들어 넘긴다(데이터가 그쪽에 있다). 여기는 자리만 준다. */}
-        {versionBar ? (
-          <div className="w-full flex justify-center px-4" data-layer="versionbar">
-            <div className="w-full max-w-[800px]">{versionBar}</div>
-          </div>
-        ) : null}
-
       <div
         ref={chatScrollRef}
-        onScroll={handleChatScroll}
-        className="flex-1 w-full px-4 pt-4 flex flex-col items-center space-y-4 overflow-y-auto no-scrollbar pb-20"
+        onScroll={(e) => { handleChatScroll(e); syncChatScrollable(); }}
+        className="flex-1 w-full px-4 pt-2 flex flex-col items-center space-y-3 overflow-y-auto no-scrollbar pb-1"
       >
+        {/* [LAYER-FIX4 2026-08-05 국장 지시] 대화는 ★아래에 쌓이고 위로 흘러간다.
+            구판은 위에서부터 채워서, 내용이 짧으면 최신 대화가 화면 맨 위에 붙었다.
+            하필 전사를 펼치면 그 자리가 덮여 ★지금 하는 대화가 안 보였다.
+            옛 대화는 위로 밀려 안 보여도 되지만 방금 한 말은 보여야 한다.
+            ★justify-end 를 쓰지 않는다 — 스크롤 컨테이너에서 내용이 길어지면 위쪽이
+              잘려 못 올라가는 브라우저가 있다. 빈 공간을 먹는 스페이서 한 줄이 안전하다. */}
+        <div className="mt-auto" aria-hidden />
+
+        {/* [LAYER-FIX3 2026-08-04 국장 지시] 채팅이 비어 있으면 안내한다 — "소는 누가 키우나".
+            분석은 끝났고 조각도 있는데 채팅만 비어 있던 자리다. 지금 할 수 있는 일을
+            한 번만, 조용히 말한다. 말이 쌓이는 자리가 아니므로 원장에 쓰지 않는다(표시 전용). */}
+        {((storyPlan?.messages || []).length === 0 && proposalHistory.length === 0
+          && appState === "complete") && (
+          <div className="w-full max-w-[800px] pt-6 pb-2 flex flex-col gap-2 animate-in fade-in duration-700">
+            <p className="text-body text-foreground">이야기를 고르는 중이에요.</p>
+            <p className="text-meta text-muted-foreground leading-relaxed">
+              위쪽 <span className="text-foreground">전사</span>를 펼쳐 쓰고 싶은 장면을 누르면 오른쪽 조각맵에 담깁니다.
+              순서를 바꾸거나 빼도 되고, 마음에 들면 <span className="text-foreground">저장</span>해 두세요.
+            </p>
+            <p className="text-meta text-muted-foreground leading-relaxed">
+              말로 시켜도 됩니다 — 아래에 “사람 중심으로”, “더 빠르게”처럼 편하게 적어 주세요.
+            </p>
+          </div>
+        )}
+
         {/* [FLOW] 중앙 타임라인 — 개략·채팅·지난 제안이 하나의 흐름으로 위로 흘러간다.
             현재(활성) 제안 pair만 아래 '무대'(플레이어 그리드)에 서고,
             지난 제안은 고스트 카드로 흐름 속에 남아 '다시 열기'로 무대 복원. */}
         {((storyPlan?.messages || []).length > 0 || proposalHistory.length > 0) && (
-          <div className="w-full max-w-[800px] flex flex-col gap-6 py-8 animate-in fade-in duration-700">
+          <div className="w-full max-w-[800px] flex flex-col gap-4 pt-4 pb-1 animate-in fade-in duration-700">
 
             {/* [R8 유령 5호 2026-07-20] 스토리박스 독립 — 렌더 조건에서 `storyPlan &&` 제거.
                 storyPlan(대화 원고)이 죽어도 proposalHistory>0이면 지난 원고 세대는 상주한다
@@ -3069,6 +3111,17 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
                     last = typeof msg.timestamp === "number" && msg.timestamp > 0 ? msg.timestamp : last + 1;
                     // 가장 최근 안내 한 줄만 남기고 나머지 안내는 스트림에 담지 않는다.
                     if (isStage(msg) && i !== lastStageIdx) return null;
+                    // [LAYER-FIX2 2026-08-04 국장 지시] 지금과 안 맞는 옛 절차 안내는 화면에서 뺀다.
+                    //   "원고를 먼저 승인해 주세요" · "저장대기" 는 승인 시절의 말이고,
+                    //   지금 화면에는 그런 단계가 없다. 남아 있으면 사용자를 없는 절차로 보낸다.
+                    //   ★삭제가 아니라 렌더 제외다 — 원장(project_timeline)은 그대로 둔다.
+                    //     원장은 그때 그 말을 했다는 기록이고, 기록을 고치는 것은 역사 조작이다.
+                    //   ★문구로 거른다: 이 말들은 여러 id 로 흩어져 있어(ai_analysis_done_·ai_stage_)
+                    //     접두로는 못 가른다.
+                    if (typeof msg?.text === "string"
+                        && /승인해 주세요|승인하면 편집안|저장대기|다시 저장하면 편집으로/.test(msg.text)) {
+                      return null;
+                    }
                     return { kind: "msg" as const, ts: last, msg };
                   }).filter(Boolean) as any[];
                 })(),
@@ -3255,18 +3308,23 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
 
         {/* [CHATSCROLL-FIX-01] 위에서 읽는 중에 새 내용이 오면 끌어내리지 않고 여기로 알린다.
             sticky라 기존 레이아웃을 건드리지 않는다 (높이 점유 없음). */}
-        {chatHasNew && (
-          <div className="sticky bottom-5 z-30 self-center pointer-events-none">
-            {/* [C-2 2026-08-02] 동작은 옳았다 — 메시지는 정상 적재되는데 배지가 눈에 안 띄어
-                국장이 '제안이 사라졌다'고 읽었다(실측 [CHATSCROLL][HOLD] user_scrolled_up).
-                ★ 스크롤 로직은 손대지 않는다. 자동 추종으로 되돌리면 원래 결함으로 돌아간다.
-                바꾼 것은 색·크기·위치뿐이다. */}
+        {/* [LAYER-FIX5 2026-08-05 국장 지시] ★내려갈 데가 없으면 띄우지 않는다.
+            국장 화면: 대화가 짧아 스크롤바조차 없는데 "새 내용 도착 ↓"이 떠 있었다.
+            내려갈 곳이 없는 화면에서 '내려가라'는 버튼은 뜻이 없고 자리만 먹는다.
+            ★스크롤 로직(chatHasNew 를 세우는 쪽)은 손대지 않는다 — 자동 추종으로
+              되돌리면 원래 결함(읽는 중에 화면을 빼앗김)으로 돌아간다.
+              표시 조건에 '실제로 스크롤할 것이 있는가'라는 사실만 하나 더한다.
+            디자인도 국장 지시대로 꺾쇠 하나로 줄인다 — 알약·글자·맥박은 과했다. */}
+        {chatHasNew && chatIsScrollable && (
+          <div className="sticky bottom-2 z-30 self-center pointer-events-none">
             <button
               type="button"
               onClick={scrollChatToBottom}
-              className="pointer-events-auto flex items-center gap-1.5 rounded-full border border-primary/50 bg-primary px-4 py-2 text-[13px] font-bold text-primary-foreground shadow-[0_4px_20px_-2px_hsl(var(--primary)/0.75)] ring-2 ring-primary/25 animate-pulse hover:animate-none hover:brightness-110"
+              aria-label="새 내용으로 내려가기"
+              title="새 내용으로 내려가기"
+              className="pointer-events-auto flex h-7 w-7 items-center justify-center rounded-full bg-card/80 text-muted-foreground backdrop-blur transition-colors hover:bg-card hover:text-foreground"
             >
-              새 내용 도착 ↓
+              <ChevronDown size={16} />
             </button>
           </div>
         )}
@@ -3282,6 +3340,15 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
   return (
     <div className="flex flex-col h-full w-full bg-[#0a0a0b] items-center overflow-hidden relative">
       {renderContent()}
+
+      {/* [LAYER-FIX2 2026-08-04 국장 지시] 버전 줄은 ★채팅 입력창 바로 위 한 줄.
+          토큰 수량 줄처럼 조용히 붙어 있는 자리다 — 전사와 무관하고, 전사를 펼쳐도 안 움직인다.
+          테두리·배경 없이 글자만. 지금 보고 있는 버전만 옅게 강조한다. */}
+      {versionBar ? (
+        <div className="w-full flex justify-center px-4 shrink-0" data-layer="versionbar">
+          <div className="w-full max-w-[800px]">{versionBar}</div>
+        </div>
+      ) : null}
 
       <ComposerSection
         storyPlan={storyPlan}

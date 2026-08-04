@@ -54,10 +54,12 @@ export function storyStageBadge(
   }
   switch (storyState) {
     case STORY_DRAFT_STATE:
-      // [SAVE-SPINE 2-C 2026-08-04] 승인 -> 저장. 상태 키(내부 명칭)는 그대로 두고 말만 바꾼다.
-      return { key: "consulting", label: "협의중", hint: "원고를 고치는 중 — 마음에 들면 저장하세요" };
+      // [LAYER-FIX2 2026-08-04 국장 지시] 상태를 통보하지 않는다. 지금 무엇을 하는 중인지만 부드럽게.
+      //   구판은 "협의중 / 저장대기"처럼 시스템 상태를 사용자에게 읽혔다 — 딱딱하고, 무엇을
+      //   하라는 말도 아니었다. 이 자리는 이야기를 고르는 과정에 있다는 것만 알리면 된다.
+      return { key: "consulting", label: "이야기 고르는 중", hint: "전사를 보며 쓸 장면을 골라 보세요" };
     case STORY_REVIEW_STATE:
-      return { key: "awaiting", label: "저장대기", hint: "원고가 바뀌었습니다 — 다시 저장하면 편집으로 갑니다" };
+      return { key: "awaiting", label: "이야기 고르는 중", hint: "고친 이야기가 마음에 들면 저장해 두세요" };
     case STORY_APPROVED_STATE:
       return committedProposalId
         ? { key: "final", label: "확정", hint: `${committedProposalId}안으로 확정 — 내보낼 수 있습니다` }

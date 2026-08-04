@@ -84,6 +84,15 @@ interface FragmentMapProps {
   onTextEditStateChanged?: () => void;
 }
 
+// [LAYER-FIX6 2026-08-05 국장 지시] 조각맵 버튼줄은 ★한 벌이다.
+//   구판은 다섯 개가 제각각이었다 — 미리보기는 회색 테두리, 텍스트·이미지는 조건부,
+//   저장은 꽉 찬 파랑(늘 눌린 것처럼 보였다), 다른이름저장은 파란 테두리(반쯤 눌린 것처럼).
+//   그래서 "무엇이 지금 켜져 있는가"를 눈으로 읽을 수 없었다.
+//   ★안 눌린 것은 모두 같은 모양. 다름은 ★지금 켜진 하나에만 준다.
+const MAP_BTN = "px-2 py-1 rounded border text-[12px] transition-colors";
+const MAP_BTN_OFF = "border-border/30 text-muted-foreground hover:text-foreground hover:border-border/60";
+const MAP_BTN_ON = "border-primary/40 bg-primary/15 text-foreground";
+
 const FragmentMap: React.FC<FragmentMapProps> = ({
   fragments: inputFragments,
   storyFragmentIds,
@@ -632,26 +641,26 @@ const FragmentMap: React.FC<FragmentMapProps> = ({
               {showCompositionActions && (
                 <button
                   type="button"
-                  className="px-2 py-1 rounded border border-border/30 text-[12px]"
+                  className={`${MAP_BTN} ${MAP_BTN_OFF}`}
                   onClick={() => onPreviewEdit?.()}
                   title="지금 조각맵 전체의 편집 결과를 이어서 재생합니다."
                 >
-                  편집미리보기
+                  미리보기
                 </button>
               )}
               <button
                 type="button"
-                className={`px-2 py-1 rounded border text-[12px] ${fragmentFace === "text" ? "bg-primary/15 border-primary/40" : "border-border/30"}`}
+                className={`${MAP_BTN} ${fragmentFace === "text" ? MAP_BTN_ON : MAP_BTN_OFF}`}
                 onClick={() => onFragmentFaceChange?.("text")}
               >
                 {textButtonLabel}
               </button>
               <button
                 type="button"
-                className={`px-2 py-1 rounded border text-[12px] ${fragmentFace === "image" ? "bg-primary/15 border-primary/40" : "border-border/30"}`}
+                className={`${MAP_BTN} ${fragmentFace === "image" ? MAP_BTN_ON : MAP_BTN_OFF}`}
                 onClick={() => onFragmentFaceChange?.("image")}
               >
-                이미지 조각
+                이미지
               </button>
               {/* [SAVE-SPINE 2-C 2026-08-04] 버튼 택일 기준은 '저장했는가'다.
                   잠금은 폐지됐고(사용자는 언제든 고칠 수 있다), 이 자리는 단지
@@ -668,13 +677,13 @@ const FragmentMap: React.FC<FragmentMapProps> = ({
                   <button
                     type="button"
                     data-save-version
-                    className="px-2 py-1 rounded bg-primary text-primary-foreground text-[12px]"
+                    className={`${MAP_BTN} ${MAP_BTN_OFF}`}
                     onClick={() => onSaveVersion?.()}
                     title={storyApproved
                       ? "고친 내용을 새 버전으로 저장합니다. 같은 프로젝트 안에 버전이 하나 더 생깁니다."
                       : "지금 원고를 버전으로 저장합니다. 저장하면 편집안(A·B)을 만듭니다."}
                   >
-                    {storyApproved ? "다시 저장" : "저장"}
+                    저장
                   </button>
                   {/* [실행자 판단·사유] '다른 이름으로 저장'을 [저장] 안(드롭다운)이 아니라 옆에 둔다.
                       드롭다운은 한 번 더 누르게 만들고, 이 줄은 어차피 한 줄에 들어간다.
@@ -682,11 +691,11 @@ const FragmentMap: React.FC<FragmentMapProps> = ({
                   <button
                     type="button"
                     data-save-version-as
-                    className="px-2 py-1 rounded border border-primary/40 text-[12px]"
+                    className={`${MAP_BTN} ${MAP_BTN_OFF}`}
                     onClick={() => onSaveVersion?.({ askName: true })}
                     title="이름을 새로 붙여 버전을 하나 더 저장합니다."
                   >
-                    다른 이름으로 저장
+                    다른이름저장
                   </button>
                   {/* [LAYER-FIX 2026-08-04 국장 확정 ②] '조각을 다시 고르기' 제거.
                       조각맵에서 직접 고르면 되는 일이라 버튼이 따로 있을 이유가 없었다.
@@ -698,15 +707,11 @@ const FragmentMap: React.FC<FragmentMapProps> = ({
           )}
         </div>
         )}
-        {/* [APPROVAL-SYNC 2026-08-03 / SAVE-SPINE 2-C 2026-08-04] ★무엇이 달라졌는지 숫자로 보인다. */}
-        {modeGateEnabled && showCompositionActions && storyStale && !storyApproved
-          && approvedItemCount != null && currentItemCount != null
-          && approvedItemCount !== currentItemCount && (
-          <div className="px-3 pb-1 text-[12px] text-primary/80">
-            저장한 원고는 {approvedItemCount}조각인데 지금 원고는 {currentItemCount}조각이에요.
-            지금 원고로 저장하면 편집안을 다시 만듭니다.
-          </div>
-        )}
+        {/* [LAYER-FIX3 2026-08-04 국장 지시] '저장한 원고는 N조각인데 지금은 M조각' 안내 제거.
+            ★조각맵은 조각을 만지는 자리다. 말은 채팅이 한다 — 여기 있을 이유가 없었다.
+            애초에 이 문장은 8/3 에 "승인할 자리가 없다"를 메우려고 붙인 임시 안내였고,
+            지금은 버전 줄이 무엇을 저장했는지 보여주므로 역할도 끝났다.
+            (숫자 비교가 다시 필요해지면 채팅에 한 줄로 말한다.) */}
         {modeGateEnabled && compositionNotice && (
           <div className="px-3 pb-1 text-[12px] text-primary/80">
             {compositionNotice}
