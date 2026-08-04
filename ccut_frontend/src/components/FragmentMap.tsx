@@ -44,6 +44,8 @@ interface FragmentMapProps {
   modeGateEnabled?: boolean;
   fragmentFace?: "image" | "text";
   onFragmentFaceChange?: (face: "image" | "text") => void;
+  /** [LAYER-SPLIT 3-B] 조각맵 전체의 편집 결과를 별도 창에서 재생. */
+  onPreviewEdit?: () => void;
   /** [SAVE-SPINE 2-C] 저장. askName 이면 이름을 물어 하나 더 저장한다. */
   onSaveVersion?: (options?: { askName?: boolean }) => void;
   onReopenComposition?: () => void;
@@ -106,6 +108,7 @@ const FragmentMap: React.FC<FragmentMapProps> = ({
   fragmentFace = "image",
   onFragmentFaceChange,
   onSaveVersion,
+  onPreviewEdit,
   onReopenComposition,
   storyApproved = false,
   storyStale = false,
@@ -623,6 +626,19 @@ const FragmentMap: React.FC<FragmentMapProps> = ({
           </div>
           {modeGateEnabled && showFaceControls && (
             <div className="flex items-center gap-1">
+              {/* [LAYER-SPLIT 3-B 2026-08-04 국장 확정 ⑤] 조각맵 전체의 편집 결과를 별도 창에서 재생.
+                  ★새 플레이어를 만들지 않는다 — 조각 플레이창(FragmentMiniPlayer)이 이미
+                    다중 구간(spans)을 받는다. 그 창을 그대로 쓴다. */}
+              {showCompositionActions && (
+                <button
+                  type="button"
+                  className="px-2 py-1 rounded border border-border/30 text-[12px]"
+                  onClick={() => onPreviewEdit?.()}
+                  title="지금 조각맵 전체의 편집 결과를 이어서 재생합니다."
+                >
+                  편집미리보기
+                </button>
+              )}
               <button
                 type="button"
                 className={`px-2 py-1 rounded border text-[12px] ${fragmentFace === "text" ? "bg-primary/15 border-primary/40" : "border-border/30"}`}
@@ -640,34 +656,48 @@ const FragmentMap: React.FC<FragmentMapProps> = ({
               {/* [SAVE-SPINE 2-C 2026-08-04] 버튼 택일 기준은 '저장했는가'다.
                   잠금은 폐지됐고(사용자는 언제든 고칠 수 있다), 이 자리는 단지
                   "아직 저장 안 했으니 저장하기" / "이미 저장됐으니 다시 고르기"다. */}
+              {/* [LAYER-SPLIT 3-A 2026-08-04 국장 확정 ④] ★[저장]은 상태와 무관하게 항상 있다.
+                  구판은 storyApproved 면 [저장]을 통째로 [조각을 다시 고르기]로 갈아치웠다.
+                  ★버튼을 승인 상태기계에 묶어둔 것이 8/3 "승인할 자리가 없다"는 벽의 원인이었다.
+                    사용자는 저장한 뒤에도 고치고 다시 저장한다(설계 ④ — 같은 폴더에 버전이 하나 더).
+                    그런데 저장한 순간 저장 버튼이 사라지면 그 길이 막힌다.
+                  이제 상태는 ★문구만 바꾼다. 사라지게 하지 않는다.
+                  '조각을 다시 고르기'는 저장을 대체하지 않고 옆에 함께 선다. */}
               {showCompositionActions && (
-                storyApproved ? (
-                  <button type="button" className="px-2 py-1 rounded border border-primary/40 text-[12px]" onClick={onReopenComposition}>
-                    조각을 다시 고르기
+                <>
+                  <button
+                    type="button"
+                    data-save-version
+                    className="px-2 py-1 rounded bg-primary text-primary-foreground text-[12px]"
+                    onClick={() => onSaveVersion?.()}
+                    title={storyApproved
+                      ? "고친 내용을 새 버전으로 저장합니다. 같은 프로젝트 안에 버전이 하나 더 생깁니다."
+                      : "지금 원고를 버전으로 저장합니다. 저장하면 편집안(A·B)을 만듭니다."}
+                  >
+                    {storyApproved ? "다시 저장" : "저장"}
                   </button>
-                ) : (
-                  // [SAVE-SPINE 2-C 2026-08-04] 이 자리는 '저장'이다.
-                  //   주인은 프로젝트가 아니라 사용자가 저장한 버전이다(국장 확정 ③).
-                  //   ★위치·레이아웃은 그대로 둔다 — 버튼줄 재배치는 다음 카드다.
-                  <>
+                  {/* [실행자 판단·사유] '다른 이름으로 저장'을 [저장] 안(드롭다운)이 아니라 옆에 둔다.
+                      드롭다운은 한 번 더 누르게 만들고, 이 줄은 어차피 한 줄에 들어간다.
+                      이름을 붙여 갈래를 치는 것은 자주 쓰는 길이라 한 번에 닿아야 한다. */}
+                  <button
+                    type="button"
+                    data-save-version-as
+                    className="px-2 py-1 rounded border border-primary/40 text-[12px]"
+                    onClick={() => onSaveVersion?.({ askName: true })}
+                    title="이름을 새로 붙여 버전을 하나 더 저장합니다."
+                  >
+                    다른 이름으로 저장
+                  </button>
+                  {storyApproved && (
                     <button
                       type="button"
-                      className="px-2 py-1 rounded bg-primary text-primary-foreground text-[12px]"
-                      onClick={() => onSaveVersion?.()}
-                      title="지금 원고를 버전으로 저장합니다. 저장하면 편집안(A·B)을 만듭니다."
+                      className="px-2 py-1 rounded border border-border/30 text-[12px]"
+                      onClick={onReopenComposition}
                     >
-                      저장
+                      조각을 다시 고르기
                     </button>
-                    <button
-                      type="button"
-                      className="px-2 py-1 rounded border border-primary/40 text-[12px]"
-                      onClick={() => onSaveVersion?.({ askName: true })}
-                      title="이름을 새로 붙여 버전을 하나 더 저장합니다."
-                    >
-                      다른 이름으로 저장
-                    </button>
-                  </>
-                )
+                  )}
+                </>
               )}
             </div>
           )}

@@ -3301,6 +3301,44 @@ const Index: React.FC = () => {
     return [] as PhysicalClip[];
   }, [ledgerEdlClips, ledgerEdlStatus, resolvedFragments.length]);
 
+  // [LAYER-SPLIT 3-B 2026-08-04 국장 확정 ⑤] 편집미리보기 — 조각맵 전체의 편집 결과를 이어서 재생.
+  //   ★새 플레이어를 만들지 않는다. 조각 플레이창(FragmentMiniPlayer)이 이미 다중 구간을 받는다.
+  //   ★출처는 EDL(physicalClips)이다 — 조각 순서·trim·구간 제외가 이미 반영된 '계산 결과'.
+  //     조각맵 배열에서 직접 만들면 편집이 빠진 것을 미리보기라고 보여주게 된다.
+  //   ★미니창은 videoUrl 하나만 받는다. 여러 소스가 섞이면 첫 소스분만 재생하고
+  //     빠진 수를 말한다 — 조용히 잘라내지 않는다.
+  const handlePreviewEdit = useCallback(() => {
+    if (!physicalClips.length) {
+      toast.error("미리볼 편집 결과가 없습니다.", {
+        description: "조각을 고르고 저장하면 만들어집니다.",
+      });
+      return;
+    }
+    const firstSource = physicalClips[0].source_id;
+    const mine = physicalClips.filter((c) => c.source_id === firstSource);
+    const skipped = physicalClips.length - mine.length;
+    const urlMap = Object.fromEntries(
+      (sourceEntries ?? []).flatMap((e) => [[e.source_id, e.video_url], [e.label, e.video_url]]).filter(([, v]) => v),
+    ) as Record<string, string>;
+    const rawUrl = urlMap[firstSource];
+    if (!rawUrl) {
+      toast.error("영상 주소를 찾지 못했습니다.", { description: firstSource });
+      return;
+    }
+    if (skipped > 0) {
+      console.warn(`[LAYER-SPLIT] 편집미리보기 — 다른 소스 ${skipped}개는 이번 재생에서 빠졌습니다.`);
+      toast(`${mine.length}조각을 재생합니다.`, {
+        description: `다른 영상의 ${skipped}조각은 이 창에서 함께 재생하지 못합니다.`,
+      });
+    }
+    setMiniTarget({
+      videoUrl: toFullUrl(rawUrl),
+      spans: mine.map((c) => [c.start_sec, c.end_sec] as [number, number]),
+      label: `편집 미리보기 · ${mine.length}조각`,
+    });
+  }, [physicalClips, sourceEntries, toFullUrl]);
+
+
   // [STEP 10-I.5.27-E7] Mark first preview ready
   useEffect(() => {
     if (physicalClips.length > 0) {
@@ -3901,6 +3939,7 @@ const Index: React.FC = () => {
                     textButtonLabel="텍스트 조각"
                     textScope="selected"
                     onSaveVersion={handleSaveVersion}
+                    onPreviewEdit={handlePreviewEdit}
                     onReopenComposition={handleReopenComposition}
                     storyApproved={storyStage.key === "final" || storyStage.key === "edit_consult"}
                     // [APPROVAL-SYNC 2026-08-03] 승인 원고 vs 현재 원고 — 백엔드가 이미 준다.
