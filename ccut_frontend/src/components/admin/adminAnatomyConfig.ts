@@ -12,6 +12,7 @@ export type AnatomyNodeId =
   | "transcript"
   | "fragment"
   | "story"
+  | "savedversion"
   | "edit"
   | "render"
   | "export"
@@ -83,6 +84,16 @@ export const ANATOMY_NODES: AnatomyNodeDefinition[] = [
     label: "스토리",
     description: "전사에서 핵심을 골라 이야기의 첫 구성을 세우는 자리입니다.",
     related: ["fragment", "edit"],
+  },
+  {
+    // [SAVE-SPINE 2-D 2026-08-04] 저장된 버전 — 주인은 프로젝트가 아니라 사용자가 저장한 버전이다.
+    //   원장: story_version + story_version_item (값 스냅샷, programs 에 FK 없음).
+    id: "savedversion",
+    label: "저장버전",
+    description: "사용자가 저장한 버전이 쌓이는 자리입니다. 편집안(A·B)은 저장이 열어 줍니다.",
+    related: ["story", "edit"],
+    metricKey: "story_version_count",
+    metricLabel: "저장된 버전",
   },
   {
     // [ANATOMY] 중복주의: 능력지도에도 등장하지만, 여기는 현재 데이터의 통과 여부만 본다.

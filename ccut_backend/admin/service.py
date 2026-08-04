@@ -500,6 +500,11 @@ def _service_counts(con) -> dict:
         "export_success_count": _one(
             "SELECT COUNT(*) FROM export_results WHERE status='RENDER_SUCCESS'"),
         "person_count": _one("SELECT COUNT(*) FROM persons"),
+        # [SAVE-SPINE 2-D 2026-08-04] 저장된 버전 — 사용자가 명시적으로 저장한 것의 수.
+        #   테이블이 없으면 _one 이 None 을 돌려준다(하드코딩 0 금지 — 없는 것과 0을 섞지 않는다).
+        "story_version_count": _one("SELECT COUNT(*) FROM story_version"),
+        "story_version_failed_count": _one(
+            "SELECT COUNT(*) FROM failure_ledger WHERE domain='save_version'"),
     }
 
 

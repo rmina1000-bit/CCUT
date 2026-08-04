@@ -4440,6 +4440,29 @@ async def admin_anatomy_project(
         if con is not None:
             con.close()
 
+    # [SAVE-SPINE 2-D 2026-08-04] 저장된 버전 — 관제실이 "무엇이 주인인가"를 볼 수 있어야 한다.
+    #   테이블이 없으면 versions=None 으로 정직하게 답한다(빈 배열과 부재를 섞지 않는다).
+    version_rows, version_error = None, None
+    try:
+        from story_version.service import list_versions as _lv
+        version_rows = (_lv(program_id) or {}).get("versions")
+    except Exception as exc:
+        version_error = str(exc)
+    save_failures = []
+    try:
+        import sqlite3 as _sv_sq
+        _con = _sv_sq.connect(str(Path(__file__).parent / "ccut_app.db"))
+        _con.row_factory = _sv_sq.Row
+        try:
+            save_failures = [dict(r) for r in _con.execute(
+                "SELECT id, created_at, phase, error_code, detail FROM failure_ledger "
+                "WHERE domain='save_version' AND program_id=? ORDER BY id DESC LIMIT 20",
+                (program_id,))]
+        finally:
+            _con.close()
+    except Exception as exc:
+        version_error = version_error or str(exc)
+
     qwen_read = "OK"
     qwen_error = None
     rough_cut_record = None
@@ -4498,6 +4521,19 @@ async def admin_anatomy_project(
             "states": edit_states,
             "receipts": edit_receipts,
             "error": state_error or receipt_error,
+        },
+        # [SAVE-SPINE 2-D] 저장된 버전 — 최신본 · 부모 사슬 · 저장 실패 기록
+        "story_version": {
+            "source": "story_version + story_version_item",
+            "versions": version_rows,
+            "latest": (version_rows[0] if version_rows else None),
+            "parent_chain": (
+                [{"version_id": v["version_id"], "name": v["name"],
+                  "parent_version_id": v["parent_version_id"]} for v in version_rows]
+                if version_rows else []
+            ),
+            "save_failures": save_failures,
+            "error": version_error,
         },
         "qwen": {
             "source": "programs.ui_state.roughCut.generation",
