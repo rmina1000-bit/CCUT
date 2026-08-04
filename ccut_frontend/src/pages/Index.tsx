@@ -137,6 +137,11 @@ const Index: React.FC = () => {
     parent_version_id: number | null; created_at: string;
   }>>([]);
   const [activeVersionId, setActiveVersionId] = useState<number | null>(null);
+  // [LAYER-FIX 3-A] 방금 복원한 버전의 fids. 급증 가드가 '이건 복원이다'를 알아보는 유일한 근거.
+  //   ref 인 이유: 가드는 렌더 밖(saveUiStateMerged 안)에서 도므로 최신 값이 필요하다.
+  const versionRestoreFidsRef = useRef<string[] | null>(null);
+  const activeVersionIdRef = useRef<number | null>(null);
+  activeVersionIdRef.current = activeVersionId;
   const [compositionNotice, setCompositionNotice] = useState<string | null>(null);
   const [appDialog, setAppDialog] = useState<{
     message: string;
@@ -655,7 +660,24 @@ const Index: React.FC = () => {
     //   실측된 사고: 보류 이동 1회로 9 → 329(조각 웅덩이 전체)로 치환됐다. 원인은 고쳤지만,
     //   같은 종류의 사고가 다시 나면 **DB에 닿기 전에** 여기서 멈춘다. 조용히 넘기지 않는다.
     const nextFids = Array.isArray(snapshot?.story?.fids) ? snapshot.story.fids : null;
-    if (nextFids && serverFidCount !== null && serverFidCount > 0
+    // [LAYER-FIX 3-A 2026-08-04] 저장된 버전으로 되돌리는 것은 '급증'이 아니다.
+    //   5조각 버전에서 25조각 버전으로 옮기면 ratio 5.0x 라 가드가 막았다(실측 REJECT).
+    //   ★가드를 없애지도, 임계값을 올리지도 않는다 — 그건 8/1 사고 방지 장치를 무르게 한다.
+    //   대신 입력에 맥락을 준다: 방금 복원한 버전의 fids 와 ★정확히 일치할 때만 통과.
+    //   길이만 보는 게 아니라 원소·순서까지 같아야 하므로, 버전 복원을 가장한 급증은 못 지나간다.
+    const restoring = versionRestoreFidsRef.current;
+    const isVersionRestore = !!(nextFids && restoring
+      && restoring.length === nextFids.length
+      && restoring.every((f, i) => f === nextFids[i]));
+    if (isVersionRestore && nextFids && serverFidCount !== null
+        && nextFids.length > serverFidCount * 3) {
+      console.info(
+        `[STORY-WRITE-GUARD][ALLOW] 저장된 버전 복원 — 급증 아님. `
+        + `before=${serverFidCount} after=${nextFids.length} version=${activeVersionIdRef.current}`,
+      );
+    }
+    if (!isVersionRestore
+        && nextFids && serverFidCount !== null && serverFidCount > 0
         && nextFids.length > serverFidCount * 3) {
       console.error(
         `[STORY-WRITE-GUARD][REJECT] story.fids 급증 — 저장 거부. `
@@ -764,6 +786,7 @@ const Index: React.FC = () => {
         return;
       }
       storyOriginRef.current = "user";
+      versionRestoreFidsRef.current = d.fids ?? [];   // [LAYER-FIX 3-A] 가드에 줄 맥락
       setStoryFids(d.fids ?? []);
       setRoughCutPlacement((prev) => ({
         inputHash: d.rough_cut_input_hash ?? prev?.inputHash ?? null,
