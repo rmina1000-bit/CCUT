@@ -135,13 +135,13 @@ const LedgerPage: React.FC<LedgerPageProps> = ({
       if (!result.ok) {
         setApprovalError(
           result.status === 409 ? "원고가 바뀌었습니다. 다시 확인해 주세요."
-          : result.status === 503 ? "승인 원장을 사용할 수 없습니다."
-          : "승인하지 못했습니다."
+          : result.status === 503 ? "저장 원장을 사용할 수 없습니다."
+          : "저장하지 못했습니다."
         );
       }
       onEditStateChanged?.();
     } catch {
-      setApprovalError("승인하지 못했습니다.");
+      setApprovalError("저장하지 못했습니다.");
     } finally {
       setApproving(false);
     }
@@ -711,7 +711,7 @@ const LedgerPage: React.FC<LedgerPageProps> = ({
             className="ml-3 inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-2 text-[12px] font-semibold text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-wait disabled:opacity-60"
           >
             <Check size={14} />
-            {approving ? "승인 중" : "이 이야기로 갑니다"}
+            {approving ? "저장 중" : "이 이야기로 갑니다"}
           </button>
         )}
       </header>

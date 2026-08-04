@@ -1313,7 +1313,7 @@ export const useProposalState = (
             // 승인 전에는 편집 결과물이 없으므로 "무대에서 재생해 보시고"라고 말하면 거짓말이 된다.
             const _gateOn = await storyGateEnabled();
             const _doneText = _gateOn
-              ? `이런 이야기로 엮었습니다 — ${_fmt(generatedProposals.B ?? generatedProposals.A)}.${_trLine}${_ledgerLine} 원고를 읽어 보시고, 고치고 싶은 곳을 말씀해 주세요. 마음에 드시면 승인해 주시면 그때 편집으로 넘어갑니다.`
+              ? `이런 이야기로 엮었습니다 — ${_fmt(generatedProposals.B ?? generatedProposals.A)}.${_trLine}${_ledgerLine} 원고를 읽어 보시고, 고치고 싶은 곳을 말씀해 주세요. 마음에 드시면 저장해 주시면 그때 편집으로 넘어갑니다.`
               : `다 골랐습니다 — A안 ${_fmt(generatedProposals.A)} · B안 ${_fmt(generatedProposals.B)}.${_trLine}${_ledgerLine} 아래 무대에서 재생해 보시고, 방향이 다르면 조건을 바꿔 말씀해 주세요.`;
             setStoryPlan((prev: any) => prev ? {
               ...prev,

@@ -44,7 +44,8 @@ interface FragmentMapProps {
   modeGateEnabled?: boolean;
   fragmentFace?: "image" | "text";
   onFragmentFaceChange?: (face: "image" | "text") => void;
-  onApproveComposition?: () => void;
+  /** [SAVE-SPINE 2-C] 저장. askName 이면 이름을 물어 하나 더 저장한다. */
+  onSaveVersion?: (options?: { askName?: boolean }) => void;
   onReopenComposition?: () => void;
   /** [GATE-LOOP-01 1번] 승인 여부(잠금 아님). 구성 버튼 택일에만 쓴다 — 조작은 절대 막지 않는다. */
   storyApproved?: boolean;
@@ -104,7 +105,7 @@ const FragmentMap: React.FC<FragmentMapProps> = ({
   modeGateEnabled,
   fragmentFace = "image",
   onFragmentFaceChange,
-  onApproveComposition,
+  onSaveVersion,
   onReopenComposition,
   storyApproved = false,
   storyStale = false,
@@ -636,43 +637,49 @@ const FragmentMap: React.FC<FragmentMapProps> = ({
               >
                 이미지 조각
               </button>
-              {/* [GATE-LOOP-01 1번] 버튼 택일 기준을 '잠금'에서 '승인 여부'로 바꿨다.
+              {/* [SAVE-SPINE 2-C 2026-08-04] 버튼 택일 기준은 '저장했는가'다.
                   잠금은 폐지됐고(사용자는 언제든 고칠 수 있다), 이 자리는 단지
-                  "아직 승인 안 했으니 승인하러 가기" / "이미 승인됐으니 다시 고르기"다. */}
+                  "아직 저장 안 했으니 저장하기" / "이미 저장됐으니 다시 고르기"다. */}
               {showCompositionActions && (
                 storyApproved ? (
                   <button type="button" className="px-2 py-1 rounded border border-primary/40 text-[12px]" onClick={onReopenComposition}>
                     조각을 다시 고르기
                   </button>
                 ) : (
-                  // [APPROVAL-SYNC 2026-08-03] 이 버튼이 곧 승인이다 — 문구가 그렇게 안 읽혔다.
-                  //   채팅은 "원고를 먼저 승인해 주세요"라 하고 화면 버튼은 "편집으로 가기"였다.
-                  //   두 말이 안 이어지니 국장은 승인할 자리가 없다고 보셨다. 문구를 잇는다.
-                  //   ★새 UI·새 상태를 만들지 않는다. 이미 있던 버튼의 말만 바꾼다.
-                  <button
-                    type="button"
-                    className="px-2 py-1 rounded bg-primary text-primary-foreground text-[12px]"
-                    onClick={onApproveComposition}
-                    title={storyStale
-                      ? "승인한 뒤 원고가 바뀌었습니다. 지금 원고로 다시 승인하면 편집안(A·B)을 만듭니다."
-                      : "이 원고로 승인하면 편집안(A·B)을 만듭니다."}
-                  >
-                    {storyStale ? "바뀐 원고 다시 승인하기" : "이 원고로 승인하기"}
-                  </button>
+                  // [SAVE-SPINE 2-C 2026-08-04] 이 자리는 '저장'이다.
+                  //   주인은 프로젝트가 아니라 사용자가 저장한 버전이다(국장 확정 ③).
+                  //   ★위치·레이아웃은 그대로 둔다 — 버튼줄 재배치는 다음 카드다.
+                  <>
+                    <button
+                      type="button"
+                      className="px-2 py-1 rounded bg-primary text-primary-foreground text-[12px]"
+                      onClick={() => onSaveVersion?.()}
+                      title="지금 원고를 버전으로 저장합니다. 저장하면 편집안(A·B)을 만듭니다."
+                    >
+                      저장
+                    </button>
+                    <button
+                      type="button"
+                      className="px-2 py-1 rounded border border-primary/40 text-[12px]"
+                      onClick={() => onSaveVersion?.({ askName: true })}
+                      title="이름을 새로 붙여 버전을 하나 더 저장합니다."
+                    >
+                      다른 이름으로 저장
+                    </button>
+                  </>
                 )
               )}
             </div>
           )}
         </div>
         )}
-        {/* [APPROVAL-SYNC 2026-08-03] ★무엇이 달라졌는지 숫자로 보인다.
-            지금까지는 "승인해 주세요"만 있고 무엇을 승인하라는지가 화면에 없었다. */}
+        {/* [APPROVAL-SYNC 2026-08-03 / SAVE-SPINE 2-C 2026-08-04] ★무엇이 달라졌는지 숫자로 보인다. */}
         {modeGateEnabled && showCompositionActions && storyStale && !storyApproved
           && approvedItemCount != null && currentItemCount != null
           && approvedItemCount !== currentItemCount && (
           <div className="px-3 pb-1 text-[12px] text-primary/80">
-            승인한 원고는 {approvedItemCount}조각인데 지금 원고는 {currentItemCount}조각이에요.
-            바뀐 원고로 다시 승인해야 편집안을 만듭니다.
+            저장한 원고는 {approvedItemCount}조각인데 지금 원고는 {currentItemCount}조각이에요.
+            지금 원고로 저장하면 편집안을 다시 만듭니다.
           </div>
         )}
         {modeGateEnabled && compositionNotice && (

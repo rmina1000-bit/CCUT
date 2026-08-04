@@ -2992,7 +2992,7 @@ async def post_generate_project_proposals(req: ProjectProposalRequest):
                 "story_state": _st.get("story_state"),
                 "item_count": _st.get("item_count"),
                 "proposals": [],
-                "message": "원고를 먼저 승인해 주세요. 승인하면 편집안(A·B)을 만듭니다.",
+                "message": "원고를 먼저 저장해 주세요. 저장하면 편집안(A·B)을 만듭니다.",
             }
     
     # [STEP 10-I.5.27-E6] Stable Dedupe: 순서 보존하며 중복 제거

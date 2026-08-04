@@ -54,9 +54,10 @@ export function storyStageBadge(
   }
   switch (storyState) {
     case STORY_DRAFT_STATE:
-      return { key: "consulting", label: "협의중", hint: "원고를 고치는 중 — 마음에 들면 승인하세요" };
+      // [SAVE-SPINE 2-C 2026-08-04] 승인 -> 저장. 상태 키(내부 명칭)는 그대로 두고 말만 바꾼다.
+      return { key: "consulting", label: "협의중", hint: "원고를 고치는 중 — 마음에 들면 저장하세요" };
     case STORY_REVIEW_STATE:
-      return { key: "awaiting", label: "승인대기", hint: "원고가 바뀌었습니다 — 다시 승인해야 편집으로 갑니다" };
+      return { key: "awaiting", label: "저장대기", hint: "원고가 바뀌었습니다 — 다시 저장하면 편집으로 갑니다" };
     case STORY_APPROVED_STATE:
       return committedProposalId
         ? { key: "final", label: "확정", hint: `${committedProposalId}안으로 확정 — 내보낼 수 있습니다` }

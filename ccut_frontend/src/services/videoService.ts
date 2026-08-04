@@ -291,6 +291,31 @@ export const videoService = {
     getProjectSources: async (projectId: string) => {
         return await fetcher(`/proposals/project/${encodeURIComponent(projectId)}/sources`);
     },
+
+    /** [SAVE-SPINE 2-C] 이 원고를 버전으로 저장한다.
+     *  서버는 전부 저장하거나 아무것도 안 남긴다 — 반쪽은 없다.
+     *  좌표·trim·숨김은 서버가 원장에서 채우므로 여기서 보내지 않는다. */
+    saveStoryVersion: async (projectId: string, payload: {
+        name: string;
+        fids: string[];
+        selected_span_ids?: string[];
+        rough_cut_input_hash?: string | null;
+        parent_version_id?: number | null;
+        display_ids?: Record<string, string>;
+        note?: string;
+    }) => {
+        const response = await fetch(`${API_BASE_URL}/story-version/${encodeURIComponent(projectId)}`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+        });
+        const body = await response.json().catch(() => ({}));
+        return { ok: response.ok, status: response.status, body };
+    },
+
+    listStoryVersions: async (projectId: string) => {
+        return await fetcher(`/story-version/${encodeURIComponent(projectId)}`);
+    },
     upsertEditOverlay: async (payload: {
         source_id: string;
         fragment_id: string;

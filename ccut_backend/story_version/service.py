@@ -135,6 +135,44 @@ def _log_failure(program_id, phase, code, detail):
         print(f"[SAVE-SPINE][LEDGER-FAIL] {exc}")
 
 
+def _record_approval_byproduct(program_id, version_id, fids, sequence_hash):
+    """저장이 편집안(A·B) 생성의 문지기 역할을 대신한다 — 승인 행은 그 부산물이다.
+
+    ★P4 배관(main.py:3122-3132 live_approval_snapshot -> rebuild_from_approval)은
+      한 줄도 건드리지 않는다. 그 배관이 읽는 story_approval 에 행 하나를 더할 뿐이다.
+      story_gate.service.approve() 를 그대로 부르므로 append-only·supersede 규율도 그대로다.
+
+    ★버전과 서버 원고가 다르면 승인하지 않는다.
+      P4 는 승인 fids 를 권위로 삼아 제안을 통째로 덮는다. 여기서 어긋난 채 승인하면
+      사용자가 저장하지 않은 목록으로 A/B 가 만들어진다 — 8/3 "승인 9 vs 현재 8"의 재림.
+      그때는 저장은 살리고(사용자 것이므로) 문이 안 열렸다고 정직하게 말한다.
+    """
+    try:
+        from story_gate import gate as _gate
+        from story_gate.service import current_story, approve, StoryGateError
+        if not _gate.is_enabled():
+            return {"gate_opened": False, "gate_reason": "story_gate_off"}
+        _mode, cur_fids, cur_hash = current_story(program_id)
+        if list(cur_fids) != list(fids):
+            print(f"[SAVE-SPINE][GATE-SKIP] 저장 {len(fids)}조각 vs 서버 원고 "
+                  f"{len(cur_fids)}조각 — 승인 기록 안 함 (version_id={version_id})")
+            return {"gate_opened": False, "gate_reason": "story_mismatch",
+                    "saved_item_count": len(fids),
+                    "server_item_count": len(cur_fids)}
+        res = approve(program_id, sequence_hash=cur_hash, actor="user",
+                      note=f"save:v{version_id}")
+        print(f"[SAVE-SPINE][GATE-OPEN] approval_id={res.get('approval_id')} "
+              f"version_id={version_id}")
+        return {"gate_opened": True, "approval_id": res.get("approval_id"),
+                "story_state": res.get("story_state")}
+    except Exception as exc:
+        # 저장 자체는 이미 성공했다 — 부산물 실패가 사용자의 저장을 되돌리지 않는다.
+        print(f"[SAVE-SPINE][GATE-FAIL] {exc}")
+        _log_failure(program_id, "approval_byproduct", "gate_write_failed",
+                     {"version_id": version_id, "message": str(exc)})
+        return {"gate_opened": False, "gate_reason": "gate_write_failed"}
+
+
 def save_version(program_id, *, name, fids, selected_span_ids=None,
                  rough_cut_input_hash=None, parent_version_id=None,
                  display_ids=None, source_ids=None, actor="user", note=None,
@@ -219,10 +257,13 @@ def save_version(program_id, *, name, fids, selected_span_ids=None,
 
         print(f"[SAVE-SPINE] 저장 완료 version_id={version_id} "
               f"program={program_id} items={len(items)} name={name!r}")
+        gate = _record_approval_byproduct(program_id, version_id,
+                                          [it[1] for it in items], sequence_hash)
         return {
             "ok": True, "version_id": version_id, "program_id": program_id,
             "name": name, "parent_version_id": parent_version_id,
             "item_count": len(items), "sequence_hash": sequence_hash,
+            **gate,
         }
     except SaveVersionError as e:
         _log_failure(program_id, "save", e.code, {"message": e.message, **e.extra})

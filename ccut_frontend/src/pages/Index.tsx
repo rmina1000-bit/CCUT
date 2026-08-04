@@ -129,6 +129,8 @@ const Index: React.FC = () => {
     appState === "complete",
   );
   const uiStateSaveRef = useRef<Promise<unknown> | null>(null);
+  // [SAVE-SPINE 2-C] 직전 저장 버전 — 다음 저장의 부모가 된다(설계 ⑥: 부모/자식은 버전 사이).
+  const lastSavedVersionIdRef = useRef<number | null>(null);
   const [compositionNotice, setCompositionNotice] = useState<string | null>(null);
   const [appDialog, setAppDialog] = useState<{
     message: string;
@@ -226,32 +228,74 @@ const Index: React.FC = () => {
   // [GATE-LOOP-01 2-1] 승인 후 A/B 생성기. 선언 순서(TDZ) 때문에 ref로 늦게 채운다.
   const requestProposalsForApprovedStoryRef = useRef<(() => void) | null>(null);
 
-  const handleApproveComposition = useCallback(async () => {
+  // [SAVE-SPINE 2-C 2026-08-04] 이 자리는 이제 '저장'이다.
+  //   주인은 프로젝트가 아니라 사용자가 저장한 버전이다(국장 확정 ③).
+  //   승인 행은 저장의 부산물로 서버가 함께 적는다 — P4 배관(main.py:3122-3132)은 무접촉.
+  //   ★버튼 위치·레이아웃은 그대로. 이름과 하는 일만 바뀐다.
+  const handleSaveVersion = useCallback(async (options?: { askName?: boolean }) => {
     setCompositionNotice(null);
-    const result = await storyGate.approve({
-      beforeFetch: async () => {
-        const pending = uiStateSaveRef.current;
-        if (pending) await pending.catch(() => {});
-      },
-    });
-    if (result.ok) {
-      recordMirrorEvent({
-        event_kind: "accept",
-        project_id: activeNavItem ?? undefined,
-        approval_id: result.body?.approval_id,
-        sequence_hash: result.body?.sequence_hash,
-        mode: result.body?.mode,
-        item_count: result.body?.item_count,
-      });
-      await storyGate.reload();
-      // [GATE-LOOP-01 2-1] 승인이 A/B 생성의 방아쇠다. 생성 게이트가 승인 전 생성을
-      // 거절하므로(backend STORY_NOT_APPROVED), 승인된 지금이 만들 시점이다.
-      // 실패해도 승인은 유효 — 이유만 남기고 사용자는 계속 진행할 수 있다.
-      requestProposalsForApprovedStoryRef.current?.();
-    } else if (result.status === 409) {
-      setCompositionNotice(result.body?.user_message || result.body?.message || "구성이 방금 바뀌어 새로 확인했습니다. 다시 눌러 주세요.");
+    const programId = activeNavItem;
+    if (!programId?.startsWith("proj_")) return;
+
+    // 저장 전에 ui_state 쓰기를 끝낸다. 서버는 '지금 서버가 보는 원고'와 대조하므로
+    // 이게 안 끝나면 방금 고친 것이 아직 서버에 없어 문이 안 열린다.
+    const pending = uiStateSaveRef.current;
+    if (pending) await pending.catch(() => {});
+
+    let name = `버전 ${new Date().toLocaleString("ko-KR", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" })}`;
+    if (options?.askName) {
+      const typed = window.prompt("저장할 이름을 적어 주세요.", name);
+      if (typed === null) return;              // 취소 — 아무것도 안 한다
+      if (typed.trim()) name = typed.trim();
     }
-  }, [activeNavItem, storyGate]);
+
+    const result = await videoService.saveStoryVersion(programId, {
+      name,
+      fids: storyFids,
+      selected_span_ids: roughCutPlacement?.selectedSpanIds ?? [],
+      rough_cut_input_hash: roughCutPlacement?.inputHash ?? roughCutData?.input_hash ?? null,
+      parent_version_id: lastSavedVersionIdRef.current,
+    });
+
+    if (!result.ok) {
+      // 반쪽 저장은 없다 — 실패하면 아무것도 안 남았다는 뜻이다. 그대로 말한다.
+      const msg = result.body?.message || "저장하지 못했습니다.";
+      console.error("[SAVE-SPINE] 저장 실패", result.status, result.body);
+      setCompositionNotice(msg);
+      toast.error("저장하지 못했습니다.", { description: msg });
+      return;
+    }
+
+    lastSavedVersionIdRef.current = result.body?.version_id ?? null;
+    console.info(`[SAVE-SPINE] 저장됨 version_id=${result.body?.version_id} `
+      + `items=${result.body?.item_count} gate_opened=${result.body?.gate_opened}`);
+    toast.success(`저장했습니다 — ${name}`, {
+      description: `조각 ${result.body?.item_count ?? storyFids.length}개`,
+    });
+
+    recordMirrorEvent({
+      event_kind: "accept",
+      project_id: programId,
+      approval_id: result.body?.approval_id,
+      sequence_hash: result.body?.sequence_hash,
+      item_count: result.body?.item_count,
+    });
+    await storyGate.reload();
+
+    if (result.body?.gate_opened) {
+      // 저장이 A/B 생성의 방아쇠다. 서버가 저장과 함께 승인 행을 적었으므로 지금이 만들 시점이다.
+      requestProposalsForApprovedStoryRef.current?.();
+    } else {
+      // 저장은 됐는데 문이 안 열렸다 — 왜인지 숨기지 않는다.
+      console.warn(`[SAVE-SPINE] 편집안 생성 보류: ${result.body?.gate_reason}`);
+      if (result.body?.gate_reason === "story_mismatch") {
+        setCompositionNotice(
+          `저장은 됐습니다(${result.body?.saved_item_count}조각). `
+          + `다만 서버가 보는 원고는 ${result.body?.server_item_count}조각이라 편집안은 잠시 뒤에 만듭니다.`,
+        );
+      }
+    }
+  }, [activeNavItem, storyFids, roughCutPlacement, roughCutData?.input_hash, storyGate]);
 
   const handleReopenComposition = useCallback(async () => {
     setAppDialog({
@@ -1319,7 +1363,7 @@ const Index: React.FC = () => {
               //   정상 동작을 실패로 보고하는 것도 거짓말이다 — 백엔드가 준 말을 그대로 쓴다.
               const storyNotApproved = proposalData?.status === "STORY_NOT_APPROVED";
               const proposalNotice = storyNotApproved
-                ? (proposalData?.message || "원고를 먼저 승인해 주세요. 승인하면 편집안(A·B)을 만듭니다.")
+                ? (proposalData?.message || "원고를 먼저 저장해 주세요. 저장하면 편집안(A·B)을 만듭니다.")
                 : null;
 
               setEditFragments(finalEditFragments);
@@ -3767,7 +3811,7 @@ const Index: React.FC = () => {
                     title={undefined}
                     textButtonLabel="텍스트 조각"
                     textScope="selected"
-                    onApproveComposition={handleApproveComposition}
+                    onSaveVersion={handleSaveVersion}
                     onReopenComposition={handleReopenComposition}
                     storyApproved={storyStage.key === "final" || storyStage.key === "edit_consult"}
                     // [APPROVAL-SYNC 2026-08-03] 승인 원고 vs 현재 원고 — 백엔드가 이미 준다.
