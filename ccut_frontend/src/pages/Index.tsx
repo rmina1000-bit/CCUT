@@ -28,6 +28,7 @@ import { SingleFragmentEditor } from "@/components/SingleFragmentEditor";
 import { AppDialog } from "@/components/AppDialog";
 import { storyStageVisible, storyStageBadge } from "@/lib/storyMode";
 import { fragmentTranscriptText } from "@/lib/fragmentText";
+import { STORY_GATE_COPY } from "@/lib/storyGateCopy";
 // [GHOST 소각 #4·5] 구 2조각 PBE(PrecisionBoundaryEditor) 완전 소각 — 타입·주석 렌더 포함. 복원은 git 이력.
 
 
@@ -822,7 +823,7 @@ const Index: React.FC = () => {
 
     let name = `버전 ${new Date().toLocaleString("ko-KR", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" })}`;
     if (options?.askName) {
-      const typed = window.prompt("저장할 이름을 적어 주세요.", name);
+      const typed = window.prompt(STORY_GATE_COPY.actions.saveStoryPrompt, name);
       if (typed === null) return;              // 취소 — 아무것도 안 한다
       if (typed.trim()) name = typed.trim();
     }
@@ -849,9 +850,28 @@ const Index: React.FC = () => {
     void refreshVersions(programId);
     console.info(`[SAVE-SPINE] 저장됨 version_id=${result.body?.version_id} `
       + `items=${result.body?.item_count} gate_opened=${result.body?.gate_opened}`);
-    toast.success(`저장했습니다 — ${name}`, {
+    toast.success(`${STORY_GATE_COPY.toast.storySaved} — ${name}`, {
       description: `조각 ${result.body?.item_count ?? storyFids.length}개`,
     });
+    const savedMsg = {
+      id: `ai_story_saved_${result.body?.version_id ?? Date.now()}_${Date.now()}`,
+      sender: "ai" as const,
+      text: STORY_GATE_COPY.chat.storySaved,
+      timestamp: Date.now(),
+    };
+    setStoryPlan((prev: any) => ({
+      ...(prev ?? {
+        story_plan_id: `STP_${Date.now()}`,
+        source_count: sourceEntries.length,
+        consultation_status: "draft_ready",
+        confirmation_status: "pending",
+        direction_options: [],
+        detected_theme: "",
+        selected_direction: undefined,
+        messages: [],
+      }),
+      messages: [...((prev?.messages) ?? []), savedMsg],
+    }));
 
     recordMirrorEvent({
       event_kind: "accept",
@@ -3750,7 +3770,7 @@ const Index: React.FC = () => {
                  아주 옅은 바탕, 지금 보고 있는 것만 켜지는 점. 테두리·그림자·색은 쓰지 않는다.
                  여전히 한 줄(h-7)이고 가로로만 늘어난다. */
               <div className="flex flex-row flex-nowrap items-center gap-2 overflow-x-auto no-scrollbar py-0.5">
-                <span className="flex-shrink-0 text-micro text-muted-foreground/40 pr-0.5">저장한 이야기</span>
+                <span className="flex-shrink-0 text-micro text-muted-foreground/40 pr-0.5">{STORY_GATE_COPY.versionBar.label}</span>
                 {savedVersions.map((v) => {
                   const active = v.version_id === activeVersionId;
                   return (

@@ -3,6 +3,7 @@ import { Fragment } from "@/data/fragmentData";
 import FragmentTile from "./FragmentTile";
 import { getUid } from "@/lib/fragmentIdentity";
 import { FRAGMENT_EXCLUDED_STYLE } from "@/lib/fragmentText";
+import { STORY_GATE_COPY } from "@/lib/storyGateCopy";
 import { DEBUG_LOG } from "@/utils/debugFlags";
 import { TextCaret, editingFromWords, excludedRangesFromEditing, moveTextCaret, WordTok, TextEditing } from "@/lib/ledgerTextEditor";
 import {
@@ -680,10 +681,10 @@ const FragmentMap: React.FC<FragmentMapProps> = ({
                     className={`${MAP_BTN} ${MAP_BTN_OFF}`}
                     onClick={() => onSaveVersion?.()}
                     title={storyApproved
-                      ? "고친 내용을 새 버전으로 저장합니다. 같은 프로젝트 안에 버전이 하나 더 생깁니다."
-                      : "지금 원고를 버전으로 저장합니다. 저장하면 편집안(A·B)을 만듭니다."}
+                      ? STORY_GATE_COPY.actions.saveStoryAgainTitle
+                      : STORY_GATE_COPY.actions.saveStoryTitle}
                   >
-                    저장
+                    {STORY_GATE_COPY.actions.saveStory}
                   </button>
                   {/* [실행자 판단·사유] '다른 이름으로 저장'을 [저장] 안(드롭다운)이 아니라 옆에 둔다.
                       드롭다운은 한 번 더 누르게 만들고, 이 줄은 어차피 한 줄에 들어간다.
@@ -693,9 +694,9 @@ const FragmentMap: React.FC<FragmentMapProps> = ({
                     data-save-version-as
                     className={`${MAP_BTN} ${MAP_BTN_OFF}`}
                     onClick={() => onSaveVersion?.({ askName: true })}
-                    title="이름을 새로 붙여 버전을 하나 더 저장합니다."
+                    title={STORY_GATE_COPY.actions.saveStoryAsTitle}
                   >
-                    다른이름저장
+                    {STORY_GATE_COPY.actions.saveStoryAs}
                   </button>
                   {/* [LAYER-FIX 2026-08-04 국장 확정 ②] '조각을 다시 고르기' 제거.
                       조각맵에서 직접 고르면 되는 일이라 버튼이 따로 있을 이유가 없었다.
