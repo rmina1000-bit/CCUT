@@ -280,7 +280,7 @@ def approve(program_id, sequence_hash, actor="user", running_ms=None, note=None)
     if sequence_hash and sequence_hash != h:
         # 사용자가 본 원고와 지금 원고가 다르다 — 못 본 것을 승인시키지 않는다.
         raise StoryGateError("sequence_changed",
-                             "그새 원고가 바뀌었습니다. 다시 보고 승인해 주세요.",
+                             "그새 원고가 바뀌었습니다. 다시 보고 저장해 주세요.",
                              http_status=409, expected=h, received=sequence_hash)
 
     now = datetime.datetime.now().isoformat()

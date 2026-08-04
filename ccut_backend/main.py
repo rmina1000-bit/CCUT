@@ -1925,7 +1925,7 @@ async def make_proposal_preview(proposal_id: str, db: Session = Depends(get_db))
         return JSONResponse(status_code=403, content={
             "status": "STORY_NOT_APPROVED", "preview_url": None,
             "error": "STORY_NOT_APPROVED", "program_id": pr.program_id,
-            "message": "이야기가 아직 승인되지 않았습니다. 원고를 확인하고 승인해 주세요.",
+            "message": "아직 저장하지 않았습니다. 원고를 확인하고 저장해 주세요.",
         })
     from engine.proposal_preview_engine import ensure_proposal_preview
     result = ensure_proposal_preview(proposal_id=proposal_id, variant=variant, clips=clips)
@@ -3540,7 +3540,7 @@ async def post_render(export_input_id: str, payload: dict = None, db: Session = 
         return JSONResponse(status_code=403, content={
             "status": "STORY_NOT_APPROVED", "error": "STORY_NOT_APPROVED",
             "program_id": program_id, "export_input_id": export_input_id,
-            "message": "이야기가 아직 승인되지 않았습니다. 원고를 확인하고 승인해 주세요.",
+            "message": "아직 저장하지 않았습니다. 원고를 확인하고 저장해 주세요.",
         })
     result = render_engine.render_from_export_input(export_input_id)
     if result and result.get("success"):
