@@ -509,6 +509,11 @@ const Index: React.FC = () => {
   useEffect(() => {
     if (soundViewEnabled) void refreshSoundRoles();
   }, [refreshSoundRoles, soundStorySignature, soundViewEnabled]);
+  useEffect(() => {
+    if (precisionPaneMode !== "edit") return;
+    setSoundViewEnabled(true);
+    void refreshSoundRoles();
+  }, [precisionPaneMode, refreshSoundRoles]);
   const [roughCutData, setRoughCutData] = useState<RoughCutData | null>(null);
   const [roughCutPlacement, setRoughCutPlacement] = useState<RoughCutPlacement | null>(null);
 
@@ -4131,7 +4136,7 @@ const Index: React.FC = () => {
                     activeFragmentId={selectedFragment ? String((selectedFragment as any).fragment_id ?? getUid(selectedFragment)) : highlightedPanoramaFrag}
                     focusOrigin={fragmentFocusOrigin}
                     expandedFragmentId={expandedFragment}
-                    onFragmentClick={handleEditFragmentClick}
+                    onFragmentClick={handleSingleFragmentEdit}
                     onFragmentPlay={playImageFragmentInMini}
                     onEditFragment={handleSingleFragmentEdit}
                     onFragmentDoubleClick={handleEditFragmentDoubleClick}
@@ -4315,7 +4320,7 @@ const Index: React.FC = () => {
                       activeFragmentId={selectedFragment ? String((selectedFragment as any).fragment_id ?? getUid(selectedFragment)) : highlightedPanoramaFrag}
                       focusOrigin={fragmentFocusOrigin}
                       expandedFragmentId={expandedFragment}
-                      onFragmentClick={handleEditFragmentClick}
+                      onFragmentClick={handleSingleFragmentEdit}
                       onFragmentPlay={playImageFragmentInMini}
                       onEditFragment={handleSingleFragmentEdit}
                       onFragmentDoubleClick={handleEditFragmentDoubleClick}
