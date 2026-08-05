@@ -452,6 +452,10 @@ app.include_router(story_gate_router)
 from story_version.api import router as story_version_router
 app.include_router(story_version_router)
 
+# [SOUND-1] Sensor-derived handling labels; only user corrections are stored.
+from sound_role.api import router as sound_role_router
+app.include_router(sound_role_router)
+
 # [LEDGER-1] Text Ledger R0 — 스토리 원고 read API (읽기 전용, DB 무변)
 from ledger_r0 import router as ledger_router
 app.include_router(ledger_router)
