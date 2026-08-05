@@ -37,7 +37,7 @@ export const STORY_GATE_COPY = {
     storyHeading: "이야기",
     editHeading: "편집",
     editBody: "소리와 화면을 다듬는 자리는 여기입니다.",
-    editSoon: "세부 손질은 다음 카드에서 이어집니다.",
+    editMapNote: "이미지 조각을 누르면 세부 손질창이 열립니다.",
   },
   editVersionBar: {
     label: "편집본",

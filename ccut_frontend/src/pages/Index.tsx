@@ -4121,10 +4121,49 @@ const Index: React.FC = () => {
             ) : undefined}
             storyReplacement={modeGateOn ? (
               precisionPaneMode === "edit" ? (
-                <div data-precision-pane="edit" className="h-full min-h-[220px] px-4 py-4 text-left">
-                  <p className="text-[13px] font-semibold text-foreground">{STORY_GATE_COPY.precisionPanel.editHeading}</p>
-                  <p className="mt-2 text-[12px] leading-relaxed text-muted-foreground">{STORY_GATE_COPY.precisionPanel.editBody}</p>
-                  <p className="mt-1 text-[12px] leading-relaxed text-muted-foreground/70">{STORY_GATE_COPY.precisionPanel.editSoon}</p>
+                <div data-precision-pane="edit" className="h-full min-h-[220px] text-left">
+                  <FragmentMap
+                    fragments={roughCutMapReady ? roughCutFragmentPool : []}
+                    storyFragmentIds={roughCutMapReady ? storyFids : []}
+                    storyOnly
+                    onFragmentsChange={roughCutData ? handleRoughCutStoryReorder : handleFragmentsReorder}
+                    selectedFragmentId={selectedFragment ? String((selectedFragment as any).fragment_id ?? getUid(selectedFragment)) : null}
+                    activeFragmentId={selectedFragment ? String((selectedFragment as any).fragment_id ?? getUid(selectedFragment)) : highlightedPanoramaFrag}
+                    focusOrigin={fragmentFocusOrigin}
+                    expandedFragmentId={expandedFragment}
+                    onFragmentClick={handleEditFragmentClick}
+                    onFragmentPlay={playImageFragmentInMini}
+                    onEditFragment={handleSingleFragmentEdit}
+                    onFragmentDoubleClick={handleEditFragmentDoubleClick}
+                    onExcludeFragment={roughCutData ? handleRoughCutStoryRemove : handleExcludeFromEdit}
+                    onRestoreFragment={roughCutData ? handleRoughCutStoryInsert : handleRestoreFromHold}
+                    onSourceRestore={roughCutData ? handleRoughCutStoryInsert : handleAddFromSource}
+                    onMoveToHold={roughCutData ? handleRoughCutStoryRemove : handleMoveToHold}
+                    onTrashRestore={roughCutData ? handleRoughCutStoryInsert : handleRestoreToEdit}
+                    onBoundaryClick={handleOpenBoundaryEditor}
+                    sourceVideoUrls={Object.fromEntries(
+                      (sourceEntries ?? []).flatMap(e => [[e.source_id, e.video_url], [e.label, e.video_url]]).filter(([, v]) => v)
+                    )}
+                    modeGateEnabled={modeGateOn}
+                    fragmentFace="image"
+                    title={STORY_GATE_COPY.precisionPanel.editHeading}
+                    textButtonLabel="텍스트"
+                    textScope="selected"
+                    showFaceControls
+                    showCompositionActions={false}
+                    compositionNotice={STORY_GATE_COPY.precisionPanel.editMapNote}
+                    sourceFragments={(sourceEntries ?? []).flatMap((e) => e.fragments ?? [])}
+                    storyTextItems={modeStoryTextItems}
+                    programId={activeNavItem}
+                    onTextEditStateChanged={() => { refreshEditStatesRef.current(); void refreshLedgerEdl(); setStoryLedgerRefreshNonce((n) => n + 1); }}
+                    soundViewEnabled
+                    soundRoles={soundRoleItems}
+                    soundRoleLoading={soundRoleLoading}
+                    soundRoleError={soundRoleError}
+                    soundRoleSavingIds={soundRoleSavingIds}
+                    onSoundViewChange={handleSoundViewChange}
+                    onSoundRoleChange={handleSoundRoleChange}
+                  />
                 </div>
               ) : (
                 <FragmentMap
@@ -4266,10 +4305,49 @@ const Index: React.FC = () => {
                 {/* [STORY-TRACK-A A-1/A-2/A-3] 스토리 단계 = 조각맵 자리에 텍스트조각 에디터.
                     편집 단계 = 이미지 조각맵. 같은 아이 옷만 다름(뒤 식별자 동일). */}
                 {modeGateOn && precisionPaneMode === "edit" ? (
-                  <div data-precision-pane="edit" className="h-full min-h-[220px] px-4 py-4 text-left">
-                    <p className="text-[13px] font-semibold text-foreground">{STORY_GATE_COPY.precisionPanel.editHeading}</p>
-                    <p className="mt-2 text-[12px] leading-relaxed text-muted-foreground">{STORY_GATE_COPY.precisionPanel.editBody}</p>
-                    <p className="mt-1 text-[12px] leading-relaxed text-muted-foreground/70">{STORY_GATE_COPY.precisionPanel.editSoon}</p>
+                  <div data-precision-pane="edit" className="h-full min-h-[220px] text-left">
+                    <FragmentMap
+                      fragments={roughCutMapReady ? roughCutFragmentPool : []}
+                      storyFragmentIds={roughCutMapReady ? storyFids : []}
+                      storyOnly
+                      onFragmentsChange={roughCutData ? handleRoughCutStoryReorder : handleFragmentsReorder}
+                      selectedFragmentId={selectedFragment ? String((selectedFragment as any).fragment_id ?? getUid(selectedFragment)) : null}
+                      activeFragmentId={selectedFragment ? String((selectedFragment as any).fragment_id ?? getUid(selectedFragment)) : highlightedPanoramaFrag}
+                      focusOrigin={fragmentFocusOrigin}
+                      expandedFragmentId={expandedFragment}
+                      onFragmentClick={handleEditFragmentClick}
+                      onFragmentPlay={playImageFragmentInMini}
+                      onEditFragment={handleSingleFragmentEdit}
+                      onFragmentDoubleClick={handleEditFragmentDoubleClick}
+                      onExcludeFragment={roughCutData ? handleRoughCutStoryRemove : handleExcludeFromEdit}
+                      onRestoreFragment={roughCutData ? handleRoughCutStoryInsert : handleRestoreFromHold}
+                      onSourceRestore={roughCutData ? handleRoughCutStoryInsert : handleAddFromSource}
+                      onMoveToHold={roughCutData ? handleRoughCutStoryRemove : handleMoveToHold}
+                      onTrashRestore={roughCutData ? handleRoughCutStoryInsert : handleRestoreToEdit}
+                      onBoundaryClick={handleOpenBoundaryEditor}
+                      sourceVideoUrls={Object.fromEntries(
+                        (sourceEntries ?? []).flatMap(e => [[e.source_id, e.video_url], [e.label, e.video_url]]).filter(([, v]) => v)
+                      )}
+                      modeGateEnabled={modeGateOn}
+                      fragmentFace="image"
+                      title={STORY_GATE_COPY.precisionPanel.editHeading}
+                      textButtonLabel="텍스트"
+                      textScope="selected"
+                      showFaceControls
+                      showCompositionActions={false}
+                      compositionNotice={STORY_GATE_COPY.precisionPanel.editMapNote}
+                      sourceFragments={(sourceEntries ?? []).flatMap((e) => e.fragments ?? [])}
+                      storyTextItems={modeStoryTextItems}
+                      programId={activeNavItem}
+                      onTextEditStateChanged={() => { refreshEditStatesRef.current(); void refreshLedgerEdl(); setStoryLedgerRefreshNonce((n) => n + 1); }}
+                      soundViewEnabled
+                      soundRoles={soundRoleItems}
+                      soundRoleLoading={soundRoleLoading}
+                      soundRoleError={soundRoleError}
+                      soundRoleSavingIds={soundRoleSavingIds}
+                      onSoundViewChange={handleSoundViewChange}
+                      onSoundRoleChange={handleSoundRoleChange}
+                    />
                   </div>
                 ) : rightStoryMode && !modeGateOn ? (
                   <LedgerPage
