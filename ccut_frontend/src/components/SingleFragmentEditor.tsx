@@ -13,6 +13,9 @@ import {
 import { Button } from "@/components/ui/button";
 import { Fragment } from "@/data/fragmentData";
 import { getUid, displayName } from "@/lib/fragmentIdentity";
+import { STORY_GATE_COPY } from "@/lib/storyGateCopy";
+import { SoundRoleControl } from "@/components/SoundRoleControl";
+import type { SoundRole, SoundRoleItem } from "@/utils/soundRoleClient";
 
 // [R3 G1] 편집기 단일 진실(ms 구간) 연산 — 순수 함수. 격자 인덱스는 여기 없다.
 type MsRange = [number, number];
@@ -125,6 +128,9 @@ interface SingleFragmentEditorProps {
     text: string;
     words: Array<{ w: string; s_ms: number; e_ms: number; p?: number | null; excluded?: boolean }>;
   } | null;
+  soundRole?: SoundRoleItem | null;
+  soundRoleSaving?: boolean;
+  onSoundRoleChange?: (item: SoundRoleItem, role: SoundRole) => void | Promise<void>;
   onApply?: (payload: {
     fragmentUid: string;
     newStartSec: number;
@@ -144,6 +150,9 @@ export const SingleFragmentEditor: React.FC<SingleFragmentEditorProps> = ({
   readOnly = false,
   contractState = null,
   precisionContext = null,
+  soundRole = null,
+  soundRoleSaving = false,
+  onSoundRoleChange,
   onApply,
 }) => {
   // [R3 G1 — 국장 승인 2026-07-17] 편집기의 단일 진실 = ms 구간 (anchor 절대좌표).
@@ -802,6 +811,21 @@ export const SingleFragmentEditor: React.FC<SingleFragmentEditorProps> = ({
             )}
           </DialogDescription>
         </DialogHeader>
+
+        {soundRole && (
+          <div data-sound-detail="true" className="flex flex-shrink-0 items-center gap-3 border-y border-border/15 py-1.5">
+            <div className="min-w-[108px] px-1">
+              <p className="text-[11px] font-semibold text-foreground">{STORY_GATE_COPY.sound.detailHeading}</p>
+              <p className="text-[9px] text-muted-foreground">{STORY_GATE_COPY.sound.handlingLabel}</p>
+            </div>
+            <SoundRoleControl
+              item={soundRole}
+              saving={soundRoleSaving}
+              onChange={readOnly ? undefined : onSoundRoleChange}
+              className="!w-full !flex-1 border-b-0 px-0"
+            />
+          </div>
+        )}
 
         {/* [PBE-RESIZE] 본문 = flex 세로 분배. 미리보기는 남는 공간에서 줄고, 레일은 고정(절대 안 가려짐) */}
         <div className="flex-1 min-h-0 flex flex-col gap-2 overflow-hidden">

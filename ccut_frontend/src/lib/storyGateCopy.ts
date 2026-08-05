@@ -40,6 +40,37 @@ export const STORY_GATE_COPY = {
   editVersionBar: {
     label: "편집본",
   },
+  sound: {
+    action: "소리",
+    actionTitle: "조각마다 소리를 어떻게 다룰지 봅니다.",
+    play: "조각 재생",
+    handlingLabel: "편집에서 다룰 방식",
+    detailHeading: "소리",
+    corrected: "직접 고침",
+    loading: "소리를 살펴보는 중",
+    loadFailed: "소리를 불러오지 못했어요.",
+    saveFailed: "고친 내용을 남기지 못했어요.",
+    roles: {
+      dialogue: "대사",
+      background: "배경",
+      silence: "무음",
+      unknown: "모르겠음",
+    },
+    reasons: {
+      transcript: (count: number) => `전사 단어 ${count}개가 겹침`,
+      transcriptCompact: (count: number) => `${count}단어`,
+      speech: "말소리가 잡힘",
+      speechCompact: "말소리",
+      background: "말은 없고 주변 소리가 잡힘",
+      backgroundCompact: "주변 소리",
+      silence: "소리가 없는 구간으로 잡힘",
+      silenceCompact: "소리 없음",
+      noMaterial: "살펴볼 재료가 없음",
+      noMaterialCompact: "재료 없음",
+      noCoordinates: "조각 시각을 찾지 못함",
+      noCoordinatesCompact: "시각 없음",
+    },
+  },
   abCards: {
     heading: "편집 제안",
     large: "크게 보기",
@@ -62,3 +93,49 @@ export const STORY_GATE_COPY = {
     storySaved: "이야기를 저장했어요",
   },
 } as const;
+
+export function soundRoleReasonText(
+  item: {
+    reason?: string;
+    overridden?: boolean;
+    evidence?: { transcript?: { word_count?: number | null } };
+  },
+  compact: boolean,
+): string {
+  const wordCount = Number(item.evidence?.transcript?.word_count ?? 0);
+  let reason: string;
+  switch (item.reason) {
+    case "transcript":
+      reason = compact
+        ? STORY_GATE_COPY.sound.reasons.transcriptCompact(wordCount)
+        : STORY_GATE_COPY.sound.reasons.transcript(wordCount);
+      break;
+    case "silero_speech":
+      reason = compact
+        ? STORY_GATE_COPY.sound.reasons.speechCompact
+        : STORY_GATE_COPY.sound.reasons.speech;
+      break;
+    case "audio_energy":
+      reason = compact
+        ? STORY_GATE_COPY.sound.reasons.backgroundCompact
+        : STORY_GATE_COPY.sound.reasons.background;
+      break;
+    case "silence_sensor":
+      reason = compact
+        ? STORY_GATE_COPY.sound.reasons.silenceCompact
+        : STORY_GATE_COPY.sound.reasons.silence;
+      break;
+    case "missing_coordinates":
+      reason = compact
+        ? STORY_GATE_COPY.sound.reasons.noCoordinatesCompact
+        : STORY_GATE_COPY.sound.reasons.noCoordinates;
+      break;
+    default:
+      reason = compact
+        ? STORY_GATE_COPY.sound.reasons.noMaterialCompact
+        : STORY_GATE_COPY.sound.reasons.noMaterial;
+  }
+  return item.overridden && !compact
+    ? `${STORY_GATE_COPY.sound.corrected} · ${reason}`
+    : reason;
+}

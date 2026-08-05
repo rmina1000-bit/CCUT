@@ -1,6 +1,8 @@
 ﻿import React, { useState, useCallback, useMemo, useRef } from "react";
 import { Fragment } from "@/data/fragmentData";
+import { Loader2, Volume2 } from "lucide-react";
 import FragmentTile from "./FragmentTile";
+import { SoundRoleControl } from "./SoundRoleControl";
 import { getUid } from "@/lib/fragmentIdentity";
 import { FRAGMENT_EXCLUDED_STYLE } from "@/lib/fragmentText";
 import { STORY_GATE_COPY } from "@/lib/storyGateCopy";
@@ -16,6 +18,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import type { SoundRole, SoundRoleItem } from "@/utils/soundRoleClient";
 
 interface FragmentMapProps {
   fragments: Fragment[];
@@ -83,6 +86,13 @@ interface FragmentMapProps {
   }>;
   programId?: string | null;
   onTextEditStateChanged?: () => void;
+  soundViewEnabled?: boolean;
+  soundRoles?: SoundRoleItem[];
+  soundRoleLoading?: boolean;
+  soundRoleError?: boolean;
+  soundRoleSavingIds?: Set<string>;
+  onSoundViewChange?: (enabled: boolean) => void;
+  onSoundRoleChange?: (item: SoundRoleItem, role: SoundRole) => void | Promise<void>;
 }
 
 // [LAYER-FIX6 2026-08-05 국장 지시] 조각맵 버튼줄은 ★한 벌이다.
@@ -135,6 +145,13 @@ const FragmentMap: React.FC<FragmentMapProps> = ({
   storyTextItems = [],
   programId,
   onTextEditStateChanged,
+  soundViewEnabled = false,
+  soundRoles = [],
+  soundRoleLoading = false,
+  soundRoleError = false,
+  soundRoleSavingIds = new Set<string>(),
+  onSoundViewChange,
+  onSoundRoleChange,
 }) => {
   const [draggedId, setDraggedId] = useState<string | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
@@ -394,6 +411,23 @@ const FragmentMap: React.FC<FragmentMapProps> = ({
     });
     return m;
   }, [storyTextItems]);
+  const soundRolesByOrdinal = useMemo(
+    () => new Map(soundRoles.map((item) => [item.ordinal, item])),
+    [soundRoles],
+  );
+  const soundRolesByFid = useMemo(() => {
+    const map = new Map<string, SoundRoleItem>();
+    soundRoles.forEach((item) => {
+      if (!map.has(item.fragment_id)) map.set(item.fragment_id, item);
+    });
+    return map;
+  }, [soundRoles]);
+  const soundRoleForFragment = useCallback((fragment: Fragment, ordinal: number) => {
+    const fid = String((fragment as any).root_fragment_uid ?? (fragment as any).fragment_id ?? getUid(fragment));
+    const exact = soundRolesByOrdinal.get(ordinal);
+    if (exact?.fragment_id === fid) return exact;
+    return soundRolesByFid.get(fid);
+  }, [soundRolesByFid, soundRolesByOrdinal]);
   const fragmentSeconds = (f: Fragment) => {
     const rawDuration = Number((f as any).duration);
     if (Number.isFinite(rawDuration)) return Math.max(0, rawDuration / 30);
@@ -651,6 +685,20 @@ const FragmentMap: React.FC<FragmentMapProps> = ({
               )}
               <button
                 type="button"
+                data-sound-toggle="true"
+                aria-pressed={soundViewEnabled}
+                aria-busy={soundRoleLoading}
+                className={`${MAP_BTN} ${soundViewEnabled ? MAP_BTN_ON : MAP_BTN_OFF} flex items-center gap-1`}
+                onClick={() => onSoundViewChange?.(!soundViewEnabled)}
+                title={soundRoleError ? STORY_GATE_COPY.sound.loadFailed : STORY_GATE_COPY.sound.actionTitle}
+              >
+                {soundRoleLoading
+                  ? <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+                  : <Volume2 className="h-3.5 w-3.5" aria-hidden="true" />}
+                {STORY_GATE_COPY.sound.action}
+              </button>
+              <button
+                type="button"
                 className={`${MAP_BTN} ${fragmentFace === "text" ? MAP_BTN_ON : MAP_BTN_OFF}`}
                 onClick={() => onFragmentFaceChange?.("text")}
               >
@@ -716,6 +764,11 @@ const FragmentMap: React.FC<FragmentMapProps> = ({
         {modeGateEnabled && compositionNotice && (
           <div className="px-3 pb-1 text-[12px] text-primary/80">
             {compositionNotice}
+          </div>
+        )}
+        {soundViewEnabled && soundRoleError && (
+          <div data-sound-error="true" className="px-3 pb-1 text-[11px] text-red-300">
+            {STORY_GATE_COPY.sound.loadFailed}
           </div>
         )}
 
@@ -787,6 +840,10 @@ const FragmentMap: React.FC<FragmentMapProps> = ({
             const fid = (f as any).fragment_id ?? uid;
             const activeId = activeFragmentId || selectedFragmentId;
             const fragmentActive = activeId === uid || activeId === fid || activeTextRowId === uid || activeTextRowId === fid;
+            const soundOrdinal = modeGateEnabled && fragmentFace === "text" ? selectedIndex : realIndex;
+            const soundRole = soundViewEnabled && soundOrdinal >= 0
+              ? soundRoleForFragment(f, soundOrdinal)
+              : undefined;
 
             return (
               <React.Fragment key={(f as any).stable_key || uid}>
@@ -887,7 +944,7 @@ const FragmentMap: React.FC<FragmentMapProps> = ({
                         data-transcript-active={fragmentActive ? "true" : "false"}
                         data-transcript-selected={selected ? "true" : "false"}
                         data-source-fid={fid}
-                        className={`flex w-full items-center gap-2.5 border-b-[0.5px] border-l-2 px-3 py-[6px] text-left transition-colors ${fragmentActive ? "border-l-primary bg-primary/10" : "border-l-transparent border-border/30"}`}
+                        className={`flex min-w-0 flex-1 items-center gap-2.5 border-b-[0.5px] border-l-2 px-3 py-[6px] text-left transition-colors ${fragmentActive ? "border-l-primary bg-primary/10" : "border-l-transparent border-border/30"}`}
                       >
                         <span className="flex h-[18px] w-[18px] flex-none items-center justify-center">
                           <span
@@ -971,7 +1028,20 @@ const FragmentMap: React.FC<FragmentMapProps> = ({
                           variant="edit"
                           orderBadge={modeGateEnabled ? selectedIndex + 1 : null}
                         />
-                        {modeGateEnabled && (
+                        {soundRole && (
+                          <SoundRoleControl
+                            item={soundRole}
+                            compact
+                            saving={soundRoleSavingIds.has(soundRole.timeline_item_id)}
+                            onChange={onSoundRoleChange}
+                            onPlay={() => onFragmentPlay?.({
+                              ...f,
+                              video_url: (f as any).video_url ?? sourceVideoUrls?.[(f as any).source_id] ?? sourceVideoUrls?.[(f as any).source_video],
+                            } as Fragment)}
+                            className="absolute bottom-1 left-1 z-40"
+                          />
+                        )}
+                        {modeGateEnabled && !soundRole && (
                           <button
                             type="button"
                             data-image-play="true"
@@ -995,6 +1065,13 @@ const FragmentMap: React.FC<FragmentMapProps> = ({
                           </button>
                         )}
                       </>
+                    )}
+                    {modeGateEnabled && fragmentFace === "text" && soundRole && (
+                      <SoundRoleControl
+                        item={soundRole}
+                        saving={soundRoleSavingIds.has(soundRole.timeline_item_id)}
+                        onChange={onSoundRoleChange}
+                      />
                     )}
                   </div>
 
