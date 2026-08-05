@@ -47,7 +47,8 @@ export type StoryStageKey = "scanned" | "consulting" | "awaiting" | "edit_consul
 export function storyStageBadge(
   storyState: string | null | undefined,
   committedProposalId?: string | null,
-  reEditActive = false
+  reEditActive = false,
+  hasProposalPair = false
 ): { key: StoryStageKey; label: string; hint: string } {
   if (reEditActive) {
     return { key: "consulting", label: "협의중", hint: "이 원고를 다시 다듬고 있습니다" };
@@ -61,9 +62,12 @@ export function storyStageBadge(
     case STORY_REVIEW_STATE:
       return { key: "awaiting", label: "이야기 고르는 중", hint: "고친 이야기가 마음에 들면 저장해 두세요" };
     case STORY_APPROVED_STATE:
-      return committedProposalId
-        ? { key: "final", label: "확정", hint: `${committedProposalId}안으로 확정 — 내보낼 수 있습니다` }
-        : { key: "edit_consult", label: "편집협의", hint: "편집안(A·B)을 고르는 중" };
+      if (committedProposalId) {
+        return { key: "final", label: "확정", hint: `${committedProposalId}안으로 확정 — 내보낼 수 있습니다` };
+      }
+      return hasProposalPair
+        ? { key: "edit_consult", label: "편집협의", hint: "편집안(A·B)을 고르는 중" }
+        : { key: "awaiting", label: "편집으로 가기", hint: "이제 편집으로 가볼까요?" };
     default:
       return { key: "scanned", label: "분석 중", hint: "영상에서 조각을 만들고 있습니다" };
   }

@@ -381,7 +381,13 @@ const Index: React.FC = () => {
   const displayProposalId = committedProposalId ?? selectedProposalId ?? (proposals ? "A" : null);
 
   // [GATE-LOOP-01 3번] 단계 배지 — 상태기계에서 파생만 한다 (배지가 자기 상태를 갖지 않는다).
-  const storyStage = storyStageBadge(storyGate.story?.story_state, committedProposalId, activeReEdit);
+  const hasCurrentProposalPair = proposalPairMatchesFlowStory(proposals, storyFids);
+  const storyStage = storyStageBadge(
+    storyGate.story?.story_state,
+    committedProposalId,
+    activeReEdit,
+    hasCurrentProposalPair,
+  );
 
   const appendStoryGateMessage = useCallback((idPrefix: string, text: string, extra?: Record<string, unknown>) => {
     setStoryPlan((prev: any) => {
