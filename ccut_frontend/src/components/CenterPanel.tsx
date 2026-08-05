@@ -737,6 +737,8 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
         data-ab-near-match={nearMatch.near ? "true" : "false"}
         data-ab-duration-diff-sec={nearMatch.diffSec.toFixed(3)}
         data-ab-duration-diff-ratio={nearMatch.diffRatio.toFixed(4)}
+        data-ab-near-threshold-sec={AB_NEAR_MATCH_MAX_DURATION_DIFF_SEC.toFixed(3)}
+        data-ab-near-threshold-ratio={AB_NEAR_MATCH_MAX_DURATION_DIFF_RATIO.toFixed(4)}
         className="w-full space-y-2"
       >
         {nearMatch.near && (
