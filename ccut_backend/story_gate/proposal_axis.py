@@ -61,6 +61,7 @@ _TECH_CONFIG_PATH = os.path.join(
 
 # motion → zoom 사상의 정의역. PUNCH-1 P3 실측(승인55 13조각 min 0.033263 / max 0.236912).
 PUNCH_MOTION_LO, PUNCH_MOTION_HI = 0.03, 0.24
+PAUSE_COMPRESSION_MIN_GAP_SEC = 0.35
 
 _PUNCH_CACHE = {}
 _CFG_CACHE = None
@@ -454,9 +455,126 @@ def _apply_boundary_profile_to_item(program_id, item, variant, word_cache):
     }
 
 
+def _pause_compression_effect(variant):
+    effects = (variant or {}).get("technique_effects") or {}
+    for effect in effects.values():
+        if not isinstance(effect, dict):
+            continue
+        if "compression_ratio" in effect and "max_pause_sec" in effect:
+            return effect
+    return None
+
+
+def _union_len(intervals):
+    if not intervals:
+        return 0.0
+    intervals = sorted(intervals)
+    total = 0.0
+    cur_s, cur_e = intervals[0]
+    for s, e in intervals[1:]:
+        if s <= cur_e:
+            cur_e = max(cur_e, e)
+        else:
+            total += max(0.0, cur_e - cur_s)
+            cur_s, cur_e = s, e
+    total += max(0.0, cur_e - cur_s)
+    return total
+
+
+def _apply_pause_compression_to_item(item, effect, word_cache):
+    start, end = _item_bounds(item)
+    if start is None or end is None or end <= start:
+        return dict(item), {"changed": False, "reason": "invalid_bounds"}
+    words = _words_for_sequence_item(item, word_cache)
+    if not words:
+        return dict(item), {"changed": False, "reason": "no_words"}
+
+    contained = sorted((ws, we) for ws, we in words if start <= ws and we <= end)
+    if len(contained) < 2:
+        return dict(item), {"changed": False, "reason": "not_enough_words", "word_count": len(contained)}
+
+    try:
+        ratio = float(effect.get("compression_ratio"))
+    except (TypeError, ValueError):
+        ratio = 1.0
+    try:
+        max_pause = float(effect.get("max_pause_sec"))
+    except (TypeError, ValueError):
+        max_pause = 0.5
+    min_gap = PAUSE_COMPRESSION_MIN_GAP_SEC
+    if ratio <= 0 or ratio >= 1.0:
+        return dict(item), {"changed": False, "reason": "ratio_noop", "compression_ratio": ratio}
+
+    compressed_gaps = []
+    reduction = 0.0
+    min_compressed_gap_seen = None
+    for idx, ((_, prev_end), (next_start, _next_end)) in enumerate(zip(contained, contained[1:])):
+        gap = max(0.0, next_start - prev_end)
+        if gap <= max_pause:
+            continue
+        target_gap = max(min_gap, min(max_pause, gap * ratio))
+        if target_gap >= gap:
+            continue
+        reduction += gap - target_gap
+        min_compressed_gap_seen = (
+            target_gap if min_compressed_gap_seen is None else min(min_compressed_gap_seen, target_gap)
+        )
+        compressed_gaps.append({
+            "index": idx,
+            "from_sec": round(gap, 3),
+            "to_sec": round(target_gap, 3),
+            "word_prev_end": round(prev_end, 3),
+            "word_next_start": round(next_start, 3),
+        })
+
+    if reduction <= 0:
+        return dict(item), {
+            "changed": False,
+            "reason": "no_compressible_gap",
+            "word_count": len(contained),
+            "min_compressed_gap_sec": None,
+        }
+
+    out = dict(item)
+    raw_duration = max(0.0, end - start)
+    effective_duration = max(0.0, raw_duration - reduction)
+    speech_len = _union_len(contained)
+    raw_silence = max(0.0, raw_duration - speech_len)
+    effective_silence = max(0.0, raw_silence - reduction)
+    out["duration"] = round(effective_duration, 3)
+    out["duration_sec"] = round(effective_duration, 3)
+    out["pause_compression"] = {
+        "applied": True,
+        "raw_duration_sec": round(raw_duration, 3),
+        "effective_duration_sec": round(effective_duration, 3),
+        "raw_silence_sec": round(raw_silence, 3),
+        "effective_silence_sec": round(effective_silence, 3),
+        "reduced_sec": round(reduction, 3),
+        "compression_ratio": ratio,
+        "max_pause_sec": max_pause,
+        "min_gap_sec": min_gap,
+        "min_compressed_gap_seen_sec": (
+            round(min_compressed_gap_seen, 3) if min_compressed_gap_seen is not None else None
+        ),
+        "compressed_gaps": compressed_gaps,
+    }
+    return out, {
+        "changed": True,
+        "reason": "compressed",
+        "word_count": len(contained),
+        "compressed_gap_count": len(compressed_gaps),
+        "reduced_sec": round(reduction, 3),
+        "raw_silence_sec": round(raw_silence, 3),
+        "effective_silence_sec": round(effective_silence, 3),
+        "min_gap_sec": min_gap,
+        "min_compressed_gap_seen_sec": (
+            round(min_compressed_gap_seen, 3) if min_compressed_gap_seen is not None else None
+        ),
+    }
+
 
 def apply_boundary_profiles(proposals, program_id):
-    """Apply A/B boundary profiles inside sequence items only."""
+    """기법 팩의 A/B 호흡 차이를 조각 내부 경계에만 적용한다."""
     report = {"applied": 0, "modes": {}, "fid_mismatches": []}
     word_cache = {}
     for proposal in proposals or []:
@@ -473,10 +591,41 @@ def apply_boundary_profiles(proposals, program_id):
             "unchanged": 0,
             "trimmed_sec": 0.0,
             "guarded": {},
+            "pause_compression": {
+                "enabled": False,
+                "changed": 0,
+                "reduced_sec": 0.0,
+                "raw_silence_sec": 0.0,
+                "effective_silence_sec": 0.0,
+                "min_gap_sec": PAUSE_COMPRESSION_MIN_GAP_SEC,
+                "min_compressed_gap_seen_sec": None,
+                "guarded": {},
+            },
             "items": [],
         }
+        pause_effect = _pause_compression_effect(variant) if mode == "A" else None
+        if pause_effect:
+            mode_report["pause_compression"]["enabled"] = True
         for item in before_seq:
             new_item, item_report = _apply_boundary_profile_to_item(program_id, item, variant, word_cache)
+            pause_report = None
+            if pause_effect:
+                new_item, pause_report = _apply_pause_compression_to_item(new_item, pause_effect, word_cache)
+                pc = mode_report["pause_compression"]
+                if pause_report.get("changed"):
+                    pc["changed"] += 1
+                    pc["reduced_sec"] += float(pause_report.get("reduced_sec") or 0.0)
+                    pc["raw_silence_sec"] += float(pause_report.get("raw_silence_sec") or 0.0)
+                    pc["effective_silence_sec"] += float(pause_report.get("effective_silence_sec") or 0.0)
+                    seen = pause_report.get("min_compressed_gap_seen_sec")
+                    if seen is not None:
+                        pc["min_compressed_gap_seen_sec"] = (
+                            seen if pc["min_compressed_gap_seen_sec"] is None
+                            else min(pc["min_compressed_gap_seen_sec"], seen)
+                        )
+                else:
+                    reason = pause_report.get("reason") or "unknown"
+                    pc["guarded"][reason] = pc["guarded"].get(reason, 0) + 1
             new_seq.append(new_item)
             if item_report.get("changed"):
                 mode_report["changed"] += 1
@@ -485,7 +634,11 @@ def apply_boundary_profiles(proposals, program_id):
                 mode_report["unchanged"] += 1
                 reason = item_report.get("reason") or "unknown"
                 mode_report["guarded"][reason] = mode_report["guarded"].get(reason, 0) + 1
-            mode_report["items"].append({"fid": item.get("fragment_id"), **item_report})
+            mode_report["items"].append({
+                "fid": item.get("fragment_id"),
+                "pause_compression": pause_report,
+                **item_report,
+            })
         after_fids = [item.get("fragment_id") for item in new_seq]
         if after_fids != before_fids:
             report["fid_mismatches"].append(mode)
@@ -498,12 +651,17 @@ def apply_boundary_profiles(proposals, program_id):
             proposal.setdefault("proposal_reason", {})["boundary_profile"] = mode_report
         mode_report["duration"] = proposal.get("duration")
         mode_report["trimmed_sec"] = round(mode_report["trimmed_sec"], 3)
+        pc = mode_report["pause_compression"]
+        pc["reduced_sec"] = round(pc["reduced_sec"], 3)
+        pc["raw_silence_sec"] = round(pc["raw_silence_sec"], 3)
+        pc["effective_silence_sec"] = round(pc["effective_silence_sec"], 3)
         report["modes"][mode] = mode_report
         report["applied"] += 1
         print(
             f"[BOUNDARY-PROFILE] mode={mode} profile={mode_report['profile']} "
             f"count={mode_report['count']} changed={mode_report['changed']} "
-            f"guarded={mode_report['guarded']} duration={proposal.get('duration')}",
+            f"guarded={mode_report['guarded']} "
+            f"pause={mode_report['pause_compression']} duration={proposal.get('duration')}",
             flush=True,
         )
     return proposals, report
@@ -520,7 +678,6 @@ def punch_config(reload=False):
         if not eff or "zoom_min" not in eff or "zoom_max" not in eff or "ramp_sec" not in eff:
             print(f"[PUNCH][CONFIG] punch_in.engine_effect 없음/불완전 — 기법 적용 불가")
             _CFG_CACHE = None
-_PACK_CACHE = {}
             return None
         # hard_bounds = 기법이 **요청**하는 값(engine_effect)과 분리된 상한.
         #   같은 출처에서 읽으면 규칙이 절대 실패할 수 없어 집행이 아니라 장식이 된다.
@@ -530,7 +687,6 @@ _PACK_CACHE = {}
     except Exception as e:
         print(f"[PUNCH][CONFIG] 로드 실패 — 기법 적용 불가: {e}")
         _CFG_CACHE = None
-_PACK_CACHE = {}
     return _CFG_CACHE
 
 
@@ -538,7 +694,6 @@ def reset_punch_caches():
     """config·spec 캐시 무효화 (값 조절 후 재판정용)."""
     global _CFG_CACHE
     _CFG_CACHE = None
-_PACK_CACHE = {}
     _PUNCH_CACHE.clear()
 
 
