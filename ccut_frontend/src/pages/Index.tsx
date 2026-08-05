@@ -276,6 +276,11 @@ const Index: React.FC = () => {
 
   // [GATE-LOOP-01 2-1] 승인 후 A/B 생성기. 선언 순서(TDZ) 때문에 ref로 늦게 채운다.
   const requestProposalsForApprovedStoryRef = useRef<(() => Promise<boolean>) | null>(null);
+  const startApprovedStoryEditingBridgeRef = useRef<((source: "chat") => Promise<boolean>) | null>(null);
+  const startApprovedStoryEditingFromChat = useCallback(
+    async (source: "chat") => startApprovedStoryEditingBridgeRef.current?.(source) ?? false,
+    [],
+  );
 
 
   const handleReopenComposition = useCallback(async () => {
@@ -364,6 +369,11 @@ const Index: React.FC = () => {
       ? sourceEntries.map(e => e.source_id)
       : currentSourceId ? [currentSourceId] : [],
     storyFids,
+    {
+      approvedStoryReady: storyGate.story?.story_state === "story_approved" && (storyGate.story?.item_count ?? 0) > 0,
+      approvedStoryCount: storyGate.story?.item_count ?? storyFids.length,
+      onStartApprovedStoryEditing: startApprovedStoryEditingFromChat,
+    },
   );
   // [FLOW] 확정/선택 전에도 조각맵이 비지 않게 — 무대에 선 제안(기본 A)을 따라간다.
   // [STORY-LAYER-01 A-1] 이 값은 '표시 방식'(어느 편집안을 무대에 세울지)일 뿐이며,
@@ -3733,7 +3743,14 @@ const Index: React.FC = () => {
     setCompositionNotice(text);
   }, []);
 
-  const handleStartStoryEditing = useCallback(async () => {
+  const handleStartStoryEditing = useCallback(async (source?: unknown) => {
+    const entrySource = source === "chat" ? "chat" : "button";
+    console.info("[EDIT-FLOW][START-EDIT][ENTER]", {
+      source: entrySource,
+      program_id: activeNavItem,
+      story_count: storyFidsRef.current.length,
+      source_count: sourceEntries.length,
+    });
     setPrecisionPaneMode("edit");
     appendStoryGateMessage("ai_edit_started", STORY_GATE_COPY.chat.editStarted);
     appendStoryGateMessage("ai_edit_preparing", STORY_GATE_COPY.chat.editPreparing);
@@ -3744,7 +3761,8 @@ const Index: React.FC = () => {
       sound_roles: roleCount,
       proposals_ready: ok === true,
     });
-  }, [activeNavItem, appendStoryGateMessage, refreshSoundRoles]);
+  }, [activeNavItem, appendStoryGateMessage, refreshSoundRoles, sourceEntries.length]);
+  startApprovedStoryEditingBridgeRef.current = async (source: "chat") => handleStartStoryEditing(source);
 
   const handleFlowProposalCommit = useCallback((key: string, pair?: any) => {
     const ok = handleProposalCommit(key, pair);

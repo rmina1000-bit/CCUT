@@ -90,6 +90,12 @@ type ConsultationDecision = {
   includeSourceIds?: string[];
 };
 
+type UseProposalStateOptions = {
+  approvedStoryReady?: boolean;
+  approvedStoryCount?: number;
+  onStartApprovedStoryEditing?: (source: "chat") => Promise<boolean>;
+};
+
 const LEGACY_NARRATIVE_ENABLED =
   String(import.meta.env.CCUT_LEGACY_NARRATIVE ?? "0") === "1";
 
@@ -177,6 +183,7 @@ export const useProposalState = (
   projectId?: string,
   orderedSourceIds?: string[],
   currentStoryFids: string[] = [],
+  options: UseProposalStateOptions = {},
 ) => {
   const [selectedProposalId, setSelectedProposalId] = useState<string | null>(null);
   const [committedProposalId, setCommittedProposalId] = useState<string | null>(null);
@@ -939,6 +946,38 @@ export const useProposalState = (
         includeSourceIds: route.include_source_ids || undefined,
       };
       candidateEvidence = route.candidate_evidence;
+      console.info("[EDIT-FLOW][ONE-DOOR][CHECK]", {
+        action: route?.action,
+        matched_kind: route?.matched?.kind,
+        story_count: currentStoryFidsRef.current.length || options.approvedStoryCount || 0,
+        approved_story_ready: !!options.approvedStoryReady,
+        bridge_ready: !!options.onStartApprovedStoryEditing,
+      });
+      if (
+        route?.action === "run_proposal" &&
+        options.onStartApprovedStoryEditing &&
+        (
+          route?.matched?.kind === "open_theme" ||
+          currentStoryFidsRef.current.length > 0 ||
+          options.approvedStoryReady
+        )
+      ) {
+        console.info("[EDIT-FLOW][ONE-DOOR][CHAT]", {
+          project_id: projectId,
+          story_count: currentStoryFidsRef.current.length || options.approvedStoryCount || 0,
+          pool_count: (sourceFragments ?? []).length,
+        });
+        const ok = await options.onStartApprovedStoryEditing("chat");
+        setStoryPlan((prev: any) => prev ? {
+          ...prev,
+          messages: (prev.messages ?? []).map((m: any) =>
+            m.id === aiMsgId
+              ? { ...m, text: ok ? STORY_GATE_COPY.chat.editPreparing : STORY_GATE_COPY.abCards.chooseFailed, isInterpreting: false }
+              : m
+          ),
+        } : prev);
+        return;
+      }
     } catch (e: any) {
       console.warn("[INTENT-ROUTER] 서버 라우팅 실패 → 구 메뉴판 폴백:", e?.message);
       consultationDecision = buildConsultationReply(text, storyPlan.messages ?? []);
@@ -1460,7 +1499,10 @@ export const useProposalState = (
     committedProposalId,
     setSelectedProposalId,
     setCommittedProposalId,
-    setProposals
+    setProposals,
+    options.approvedStoryReady,
+    options.approvedStoryCount,
+    options.onStartApprovedStoryEditing
   ]);
 
   return {
