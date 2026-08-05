@@ -3177,6 +3177,7 @@ async def post_generate_project_proposals(req: ProjectProposalRequest):
                     _p["story_approval_id"] = _appr_id
                     # [PUNCH-1 P4] A/B가 갈리는 유일한 축. 조각·순서는 위 rebuild가 이미 동일하게 맞췄다.
                     _p["technique_id"] = _axis.technique_for_mode(_p.get("mode"))
+                proposals, _technique_pack = _axis.attach_technique_pack(proposals, project_id, reload=True)
                 proposals, _word_snap_report = _axis.apply_word_boundary_snap(proposals, project_id)
                 # [LAB-43] 경계 규칙 3종 집행 연결 — 구판은 정의만 되고 호출자가 0건이라
                 #   한 번도 돌지 않았다(무등작). 값은 바꾸지 않고 위반을 사실로 남긴다.
@@ -3187,6 +3188,7 @@ async def post_generate_project_proposals(req: ProjectProposalRequest):
                     "technique_id": {_p.get("mode"): _p.get("technique_id") for _p in proposals},
                     "unresolved_fids": _rb.get("unresolved_fids") or [],
                     "verify_violations": _violations,
+                    "technique_pack": _technique_pack,
                     "word_boundary_snap": _word_snap_report,
                     "boundary_rules": _boundary_report,
                 }

@@ -18,6 +18,8 @@
 """
 import json
 import os
+import hashlib
+import random
 import sqlite3
 
 from .models import TABLE
@@ -62,6 +64,7 @@ PUNCH_MOTION_LO, PUNCH_MOTION_HI = 0.03, 0.24
 
 _PUNCH_CACHE = {}
 _CFG_CACHE = None
+_PACK_CACHE = {}
 
 
 def _technique_node(technique_id):
@@ -72,6 +75,256 @@ def _technique_node(technique_id):
     except Exception as e:
         print(f"[TECHNIQUE][CONFIG] 로드 실패 technique={technique_id}: {e}")
         return None
+
+
+def _load_technique_catalog(config_path=None, extra_techniques=None):
+    """기법 후보 목록은 JSON 자료에서만 읽는다. 테스트 후보는 extra_techniques로만 넣는다."""
+    path = config_path or _TECH_CONFIG_PATH
+    with open(path, encoding="utf-8") as f:
+        data = json.load(f)
+    techniques = list(data.get("techniques") or [])
+    if extra_techniques:
+        techniques.extend(list(extra_techniques))
+    return {
+        "version": data.get("version"),
+        "source": path,
+        "techniques": techniques,
+    }
+
+
+def _as_json(raw):
+    for _ in range(2):
+        if not isinstance(raw, str):
+            break
+        try:
+            raw = json.loads(raw)
+        except Exception:
+            return None
+    return raw
+
+
+def _material_state_for_program(program_id):
+    """현재 프로젝트가 팩 후보를 쓸 재료를 갖고 있는지 읽기 전용으로 센다."""
+    state = {
+        "word_timestamps": {"present": False, "count": 0},
+        "speech_presence": {"present": False, "count": 0},
+        "audio_beat": {"present": False, "count": 0},
+        "duration": {"present": True, "count": 0},
+        "transcript": {"present": False, "count": 0},
+    }
+    con = _connect()
+    try:
+        source_rows = con.execute(
+            "SELECT source_id FROM project_sources WHERE program_id=? ORDER BY display_order, id",
+            (program_id,),
+        ).fetchall()
+        source_ids = [r["source_id"] for r in source_rows if r["source_id"]]
+        if not source_ids and program_id:
+            source_ids = [program_id]
+
+        for source_id in source_ids:
+            for r in con.execute("SELECT segments FROM subtitles WHERE source_id=?", (source_id,)):
+                segs = _as_json(r["segments"])
+                if not isinstance(segs, list):
+                    continue
+                for seg in segs:
+                    if not isinstance(seg, dict):
+                        continue
+                    words = seg.get("words") or []
+                    for w in words:
+                        if isinstance(w, dict) and w.get("start") is not None and w.get("end") is not None:
+                            state["word_timestamps"]["count"] += 1
+                    text = seg.get("text")
+                    if isinstance(text, str) and text.strip():
+                        state["transcript"]["count"] += 1
+
+            for r in con.execute(
+                "SELECT metadata_json FROM evidence_board WHERE source_id=?",
+                (source_id,),
+            ):
+                meta = _as_json(r["metadata_json"]) or {}
+                beats = meta.get("audio_beat") or []
+                if isinstance(beats, list):
+                    state["audio_beat"]["count"] += len(beats)
+
+            for r in con.execute(
+                "SELECT structural_json FROM semantic_fragments WHERE source_id=?",
+                (source_id,),
+            ):
+                structural = _as_json(r["structural_json"]) or {}
+                vad = (((structural.get("sensor_evidence") or {}).get("silero_vad") or {}).get("values") or {})
+                if isinstance(vad.get("speech_ratio"), (int, float)):
+                    state["speech_presence"]["count"] += 1
+                if isinstance(structural.get("duration"), (int, float)):
+                    state["duration"]["count"] += 1
+    except sqlite3.OperationalError as e:
+        state["error"] = str(e)
+    finally:
+        con.close()
+    for item in state.values():
+        if isinstance(item, dict):
+            item["present"] = item.get("count", 0) > 0 or item.get("present") is True
+    return state
+
+
+def _gate_for_technique(technique_id):
+    env_name = "CCUT_TECHNIQUE_" + str(technique_id or "").upper().replace("-", "_")
+    generic = os.getenv(env_name)
+    if generic is not None:
+        return {"env": env_name, "on": _flag_on(env_name)}
+    # 기존 운영 게이트 이름 호환. 게이트를 켜지는 않고 읽기만 한다.
+    legacy_names = {
+        "word_boundary_snap": "CCUT_TECHNIQUE_WORD_SNAP",
+    }
+    legacy = legacy_names.get(str(technique_id or ""))
+    if legacy:
+        return {"env": legacy, "on": _flag_on(legacy)}
+    return None
+
+
+def _technique_candidate(item, material_state):
+    authority = item.get("authority") or {}
+    verdict = authority.get("verdict")
+    category = item.get("category")
+    effect = item.get("engine_effect") or {}
+    required = item.get("requires_materials")
+    if required is None:
+        required = item.get("required_signals") or []
+    required = list(required or [])
+    blockers = []
+    for material in required:
+        mat = material_state.get(material)
+        if not mat or not mat.get("present"):
+            blockers.append({"kind": "material_missing", "id": material})
+    gate = _gate_for_technique(item.get("technique_id"))
+    if gate and not gate["on"]:
+        blockers.append({"kind": "gate_off", "id": gate["env"]})
+
+    condition = " ".join(str(v) for v in (authority.get("basis") or []))
+    condition += " " + str(authority.get("condition") or "")
+    description = str(item.get("description") or "")
+    boundary_only = (
+        "조각 가장자리" in condition
+        or "경계" in description
+        or "컷 지점" in description
+        or "snap_threshold_ms" in effect
+    )
+    usable_verdict = verdict in ("AI_ALLOWED", "AI_ALLOWED_CONDITIONAL") and boundary_only
+    if not usable_verdict:
+        blockers.append({"kind": "authority", "id": verdict or "UNKNOWN"})
+
+    effect_keys = set(effect.keys())
+    trimish = category in ("cutting", "pacing") or bool(
+        effect_keys & {"snap_threshold_ms", "min_duration_sec", "max_pause_sec",
+                       "compression_ratio", "cut_at_punctuation"}
+    )
+    return {
+        "id": item.get("technique_id"),
+        "category": category,
+        "display_name": item.get("display_name"),
+        "engine_effect": effect,
+        "requires_materials": required,
+        "gate": gate,
+        "usable_now": usable_verdict and not blockers,
+        "blockers": blockers,
+        "trimish": trimish,
+    }
+
+
+def build_technique_pack(program_id=None, material_state=None, config_path=None,
+                         extra_techniques=None, seed=None):
+    """A/B가 쓸 수 있는 기법 후보를 자료에서 읽어 팩으로 만든다.
+
+    조각 선택·순서는 건드리지 않는다. 여기서는 후보와 성향만 정한다.
+    """
+    catalog = _load_technique_catalog(config_path=config_path, extra_techniques=extra_techniques)
+    materials = material_state or _material_state_for_program(program_id)
+    candidates = [
+        _technique_candidate(item, materials)
+        for item in catalog["techniques"]
+        if item.get("technique_id")
+    ]
+    usable_boundary = [c for c in candidates if c["usable_now"] and c["trimish"]]
+    blocked = [c for c in candidates if not c["usable_now"]]
+    seed_src = seed or f"{program_id or ''}:{catalog.get('version') or ''}:{len(candidates)}"
+    rng = random.Random(int(hashlib.sha256(seed_src.encode("utf-8")).hexdigest()[:12], 16))
+    shuffled = list(usable_boundary)
+    rng.shuffle(shuffled)
+
+    def _ids(items):
+        return [c["id"] for c in items if c.get("id")]
+
+    def _effects(items):
+        return {c["id"]: c["engine_effect"] for c in items if c.get("id")}
+
+    tight = shuffled[:3]
+    relaxed = list(reversed(shuffled))[:3]
+    pack = {
+        "source": catalog["source"],
+        "version": catalog["version"],
+        "materials": materials,
+        "candidate_count": len(candidates),
+        "usable_now": _ids(usable_boundary),
+        "blocked": [
+            {"id": c["id"], "blockers": c["blockers"]}
+            for c in blocked
+        ],
+        "variants": {
+            "A": {
+                "label_key": "coreOnly",
+                "boundary_profile": "tight",
+                "techniques": _ids(tight),
+                "technique_effects": _effects(tight),
+                "parameters": {
+                    "edge_padding_ms": 80,
+                    "max_trim_each_edge_ms": 4500,
+                    "preserve_words": True,
+                },
+            },
+            "B": {
+                "label_key": "breathingRoom",
+                "boundary_profile": "relaxed",
+                "techniques": _ids(relaxed),
+                "technique_effects": _effects(relaxed),
+                "parameters": {
+                    "edge_padding_ms": 1800,
+                    "max_trim_each_edge_ms": 0,
+                    "preserve_words": True,
+                },
+            },
+        },
+    }
+    return pack
+
+
+def technique_pack_for_project(program_id, reload=False):
+    key = program_id or "__none__"
+    if key not in _PACK_CACHE or reload:
+        _PACK_CACHE[key] = build_technique_pack(program_id)
+    return _PACK_CACHE[key]
+
+
+def attach_technique_pack(proposals, program_id, reload=False):
+    pack = technique_pack_for_project(program_id, reload=reload)
+    print(
+        f"[TECHNIQUE-PACK] program={program_id} source={pack['source']} "
+        f"candidates={pack['candidate_count']} usable={pack['usable_now']} "
+        f"A={pack['variants']['A']['techniques']} B={pack['variants']['B']['techniques']}",
+        flush=True,
+    )
+    for proposal in proposals or []:
+        mode = str(proposal.get("mode") or "").upper()
+        variant = pack["variants"].get(mode)
+        if not variant:
+            continue
+        proposal["technique_pack"] = variant
+        reason = proposal.setdefault("proposal_reason", {})
+        reason["technique_pack"] = {
+            "source": pack["source"],
+            "usable_now": pack["usable_now"],
+            "variant": variant,
+        }
+    return proposals, pack
 
 
 def punch_config(reload=False):
@@ -85,6 +338,7 @@ def punch_config(reload=False):
         if not eff or "zoom_min" not in eff or "zoom_max" not in eff or "ramp_sec" not in eff:
             print(f"[PUNCH][CONFIG] punch_in.engine_effect 없음/불완전 — 기법 적용 불가")
             _CFG_CACHE = None
+_PACK_CACHE = {}
             return None
         # hard_bounds = 기법이 **요청**하는 값(engine_effect)과 분리된 상한.
         #   같은 출처에서 읽으면 규칙이 절대 실패할 수 없어 집행이 아니라 장식이 된다.
@@ -94,6 +348,7 @@ def punch_config(reload=False):
     except Exception as e:
         print(f"[PUNCH][CONFIG] 로드 실패 — 기법 적용 불가: {e}")
         _CFG_CACHE = None
+_PACK_CACHE = {}
     return _CFG_CACHE
 
 
@@ -101,6 +356,7 @@ def reset_punch_caches():
     """config·spec 캐시 무효화 (값 조절 후 재판정용)."""
     global _CFG_CACHE
     _CFG_CACHE = None
+_PACK_CACHE = {}
     _PUNCH_CACHE.clear()
 
 
