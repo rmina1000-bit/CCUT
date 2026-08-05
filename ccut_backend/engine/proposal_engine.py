@@ -38,10 +38,52 @@ class ProposalEngine:
         )
         
         # 5. 저장 (generate_proposals_from_fragments는 저장을 수행하지 않으므로 여기서 수행)
-        self.bams.save_proposals(source_id, proposals)
+        # [PROPOSAL-BIND] 이 소스가 project_sources에 프로젝트로 묶여 있으면 그 program_id로
+        # 귀속 저장(main.py:3160과 동일한 검증된 경로) — 없으면 종전대로 소스 단건 저장(B-4).
+        _bound_program_id = self._lookup_program_id_for_source(source_id)
+        if _bound_program_id:
+            self.bams.save_project_proposals(_bound_program_id, proposals)
+        else:
+            self.bams.save_proposals(source_id, proposals)
         
         print(f"[PROPOSAL ENGINE] generate_proposals EXIT: {source_id}")
         return proposals
+
+    def _lookup_program_id_for_source(self, source_id):
+        """[PROPOSAL-BIND] project_sources에서 이 source_id가 묶인 program_id를 찾는다.
+        SAVE-SPINE 과 같은 기준: active project 후보가 1개일 때만 확정한다.
+        묶인 프로젝트 없으면 None(= 그동안 하던 대로 소스 단건 저장, B-4 무변)."""
+        backend_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+        db_path = os.path.join(backend_dir, "ccut_app.db")
+        rows = []
+        try:
+            con = sqlite3.connect(db_path)
+            rows = con.execute(
+                "SELECT ps.program_id FROM project_sources ps "
+                "JOIN programs p ON p.program_id = ps.program_id "
+                "WHERE ps.source_id = ? "
+                "AND p.deleted_at IS NULL "
+                "AND COALESCE(p.status, '') != 'DELETED' "
+                "ORDER BY ps.added_at, ps.id",
+                (source_id,),
+            ).fetchall()
+            con.close()
+        except Exception as exc:
+            print(f"[PROPOSAL-BIND][WARN] project_sources lookup failed: {exc}")
+            return None
+        candidate_ids = [row[0] for row in rows if row and row[0]]
+        selected = candidate_ids[0] if len(candidate_ids) == 1 else None
+        if len(candidate_ids) == 0:
+            resolution = "not_found"
+        elif selected:
+            resolution = "single_active_project"
+        else:
+            resolution = "ambiguous_active_projects"
+        print(
+            f"[PROPOSAL-BIND] source={source_id} candidates={len(candidate_ids)} "
+            f"selected={selected or 'None'} resolution={resolution}"
+        )
+        return selected
 
     def generate_proposals_from_fragments(self, project_id, source_ids, fragments, target_len=60.0, story_context=None):
         """
