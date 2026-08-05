@@ -3462,17 +3462,33 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
                   )}
                 </div>
                 );
-                  if (item.kind === "msg") return (
+                  if (item.kind === "msg") {
+                    const rawText = String(item.msg.text || "");
+                    const visibleText = rawText.replace(/\b\d{8}_\d{6}(?:_\d+)?\b/g, "");
+                    const msgTs = typeof item.msg.timestamp === "number" ? item.msg.timestamp : 0;
+                    const latestMessageTs = Math.max(
+                      0,
+                      ...(((storyPlan?.messages ?? []) as any[])
+                        .map((m: any) => typeof m?.timestamp === "number" ? m.timestamp : 0))
+                    );
+                    const isPastFailureNotice = item.msg.sender === "ai"
+                      && msgTs > 0
+                      && msgTs < latestMessageTs
+                      && (
+                        rawText === STORY_GATE_COPY.abCards.chooseFailed
+                        || rawText === STORY_GATE_COPY.chat.editBridgeFailed
+                      );
+                    return (
                 // [CHAT-SKIN 2026-08-02 국장 지시 "일단은 같게"] 참조 제품(Claude·ChatGPT) 방식.
                 //   지운 것: 줄마다 붙던 아이콘(BookOpen/List) · AI 답변의 말풍선 박스와 테두리.
                 //   AI 답변은 배경 없이 글자만 흐른다 — 저쪽이 그렇고, 박스가 매 줄 반복되면
                 //   국장 말대로 낭비다. 박스는 '내가 한 말'을 가르는 데만 쓴다.
-                <div key={item.msg.id} className={`flex ${item.msg.sender === "user" ? "justify-end" : "justify-start"} animate-in fade-in duration-300`}>
+                <div key={item.msg.id} className={`flex ${item.msg.sender === "user" ? "justify-end" : "justify-start"} animate-in fade-in duration-300 ${isPastFailureNotice ? "opacity-70" : ""}`}>
                   <div className={`flex flex-col gap-1.5 ${item.msg.sender === "user" ? "items-end max-w-[80%]" : "items-start w-full"}`}>
                       <div className={`text-body whitespace-pre-wrap break-words ${
                         item.msg.sender === "user"
                           ? "px-4 py-2.5 rounded-2xl bg-secondary/40 text-foreground"
-                          : "text-foreground"
+                          : isPastFailureNotice ? "text-muted-foreground" : "text-foreground"
                       }`}>
                         {/* [S-1] 스피너는 첫 토큰 전까지만 — say가 차오르기 시작하면 소거 */}
                         {item.msg.isInterpreting && !item.msg.text && (
@@ -3481,7 +3497,12 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
                             <span className="text-[11px] font-medium animate-pulse">듣고 있어요…</span>
                           </div>
                         )}
-                        {String(item.msg.text || "").replace(/\b\d{8}_\d{6}(?:_\d+)?\b/g, "")}
+                        {isPastFailureNotice && (
+                          <span data-past-failure-notice className="mr-2 rounded border border-border/20 px-1.5 py-0.5 text-[10px] text-muted-foreground/80">
+                            {STORY_GATE_COPY.chat.pastNotice}
+                          </span>
+                        )}
+                        {visibleText}
                       </div>
                       {(item.msg as any).kind === "story_saved_prompt" && onStartStoryEditing && (
                         <button
@@ -3523,6 +3544,7 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
                   </div>
                 </div>
                 );
+                  }
                   return renderProposalFlowCard(item.entry);
                 })}
             </div>

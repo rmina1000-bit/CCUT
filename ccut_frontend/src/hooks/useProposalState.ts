@@ -972,7 +972,7 @@ export const useProposalState = (
           ...prev,
           messages: (prev.messages ?? []).map((m: any) =>
             m.id === aiMsgId
-              ? { ...m, text: ok ? STORY_GATE_COPY.chat.editPreparing : STORY_GATE_COPY.abCards.chooseFailed, isInterpreting: false }
+              ? { ...m, text: ok ? STORY_GATE_COPY.chat.editPreparing : STORY_GATE_COPY.chat.editBridgeFailed, isInterpreting: false }
               : m
           ),
         } : prev);

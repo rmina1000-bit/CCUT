@@ -29,6 +29,8 @@ export const STORY_GATE_COPY = {
     editPreparing: "조각 경계와 소리를 살펴보는 중이에요.",
     proposalPicked: (key: "A" | "B") => `${key}안을 선택하셨어요. 이걸 바탕으로 더 세밀하게 다듬을 수 있어요.`,
     storyReturned: "이야기로 돌아왔어요. 조각을 고르고 빼는 중이에요.",
+    editBridgeFailed: "편집 시작으로 잇지 못했어요. 편집 시작 버튼으로 다시 이어볼게요.",
+    pastNotice: "지난 알림",
   },
   chatActions: {
     startEditing: "편집 시작",
