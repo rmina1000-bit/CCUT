@@ -67,6 +67,12 @@ import { rematchAnchor, toMs } from "@/utils/editContract";
 import { buildExportClipsFromResolvedFragments, type PhysicalClip } from "@/utils/exportClipBuilder";
 import { DEBUG_LOG } from "@/utils/debugFlags";
 import { closeMirrorPendingForProject, recordMirrorEvent } from "@/utils/mirrorEventLog";
+import {
+  fetchSoundRoles,
+  saveSoundRole,
+  type SoundRole,
+  type SoundRoleItem,
+} from "@/utils/soundRoleClient";
 
 type PbeContractState = Pick<
   EditStateRow,
@@ -79,6 +85,35 @@ type RoughCutPlacement = {
 };
 
 const pbeContractKey = (programId: string | null | undefined, fid: string) => `${programId ?? "local"}:${fid}`;
+
+function proposalFidsForFlow(proposal: any): string[] {
+  const keyFragments = Array.isArray(proposal?.key_fragments) ? proposal.key_fragments : [];
+  if (keyFragments.length) return keyFragments.map(String).filter(Boolean);
+  const sequence = Array.isArray(proposal?.sequence) ? proposal.sequence : [];
+  if (sequence.length) {
+    return sequence
+      .map((item: any) => item?.fragment_id ?? item?.proposal_fragment_id ?? item?.fid ?? item?.id)
+      .map(String)
+      .filter(Boolean);
+  }
+  const aliases = Array.isArray(proposal?.resolved_aliases) ? proposal.resolved_aliases : [];
+  return aliases
+    .map((item: any) => item?.fragment_id ?? item?.proposal_fragment_id ?? item?.fid ?? item?.id)
+    .map(String)
+    .filter(Boolean);
+}
+
+function sameFlowFids(left: string[], right: string[]): boolean {
+  return left.length === right.length && left.every((fid, index) => fid === right[index]);
+}
+
+function proposalPairMatchesFlowStory(pair: any, storyFids: string[]): boolean {
+  if (!pair?.A || !pair?.B || storyFids.length === 0) return false;
+  return (
+    sameFlowFids(proposalFidsForFlow(pair.A), storyFids) &&
+    sameFlowFids(proposalFidsForFlow(pair.B), storyFids)
+  );
+}
 
 // Layout constants moved to useWorkspaceLayout.ts
 
@@ -240,7 +275,7 @@ const Index: React.FC = () => {
   }, []);
 
   // [GATE-LOOP-01 2-1] 승인 후 A/B 생성기. 선언 순서(TDZ) 때문에 ref로 늦게 채운다.
-  const requestProposalsForApprovedStoryRef = useRef<(() => void) | null>(null);
+  const requestProposalsForApprovedStoryRef = useRef<(() => Promise<boolean>) | null>(null);
 
 
   const handleReopenComposition = useCallback(async () => {
@@ -291,6 +326,13 @@ const Index: React.FC = () => {
   }, [appState]);
   const [intelligenceOn, setIntelligenceOn] = useState(false);
 
+  // ── [STORY-LAYER-01 A-1] live story = program 단위 하나 ──
+  // storyFids       : 선택된 조각 + 순서 (사용자 결정 — INV-0. AI가 바꾸지 않는다)
+  // storyFragments  : 그 스토리의 구성본(좌표·분할 포함 표시용) — 구판 customEditFragments 대체
+  // 제안(A/B)은 이 하나의 스토리를 '어떻게 편집할지'이므로, 스토리를 소유하지 않는다.
+  const [storyFids, setStoryFids] = useState<string[]>([]);
+  const [storyFragments, setStoryFragments] = useState<Fragment[]>([]);
+
 // proposals, directionSnapshot moved to useProposalState
 
 
@@ -320,7 +362,8 @@ const Index: React.FC = () => {
     activeNavItem || "default_project",
     sourceEntries.length > 0
       ? sourceEntries.map(e => e.source_id)
-      : currentSourceId ? [currentSourceId] : []
+      : currentSourceId ? [currentSourceId] : [],
+    storyFids,
   );
   // [FLOW] 확정/선택 전에도 조각맵이 비지 않게 — 무대에 선 제안(기본 A)을 따라간다.
   // [STORY-LAYER-01 A-1] 이 값은 '표시 방식'(어느 편집안을 무대에 세울지)일 뿐이며,
@@ -361,12 +404,95 @@ const Index: React.FC = () => {
   }, [sourceEntries.length]);
 
 
-  // ── [STORY-LAYER-01 A-1] live story = program 단위 하나 ──
-  // storyFids       : 선택된 조각 + 순서 (사용자 결정 — INV-0. AI가 바꾸지 않는다)
-  // storyFragments  : 그 스토리의 구성본(좌표·분할 포함 표시용) — 구판 customEditFragments 대체
-  // 제안(A/B)은 이 하나의 스토리를 '어떻게 편집할지'이므로, 스토리를 소유하지 않는다.
-  const [storyFids, setStoryFids] = useState<string[]>([]);
-  const [storyFragments, setStoryFragments] = useState<Fragment[]>([]);
+  const [soundViewEnabled, setSoundViewEnabled] = useState(false);
+  const [soundRoleItems, setSoundRoleItems] = useState<SoundRoleItem[]>([]);
+  const [soundRoleLoading, setSoundRoleLoading] = useState(false);
+  const [soundRoleError, setSoundRoleError] = useState(false);
+  const [soundRoleSavingIds, setSoundRoleSavingIds] = useState<Set<string>>(new Set());
+  const soundLoadSeqRef = useRef(0);
+  const soundRoleSavingRef = useRef<Set<string>>(new Set());
+  const editFlowProposalSigRef = useRef<string | null>(null);
+  const soundProgramRef = useRef(activeNavItem);
+  soundProgramRef.current = activeNavItem;
+  const refreshSoundRoles = useCallback(async () => {
+    if (!activeNavItem || !activeNavItem.startsWith("proj_")) {
+      setSoundRoleItems([]);
+      return 0;
+    }
+    const seq = ++soundLoadSeqRef.current;
+    setSoundRoleLoading(true);
+    setSoundRoleError(false);
+    try {
+      const result = await fetchSoundRoles(activeNavItem);
+      if (seq !== soundLoadSeqRef.current) return;
+      setSoundRoleItems(result.items ?? []);
+      const count = result.items?.length ?? 0;
+      console.info("[SOUND-ROLE][EDIT-FLOW]", {
+        program_id: activeNavItem,
+        item_count: count,
+        roles: (result.items ?? []).map((item) => ({
+          ordinal: item.ordinal,
+          fragment_id: item.fragment_id,
+          detected: item.detected_role,
+          effective: item.effective_role,
+          reason: item.reason,
+        })),
+      });
+      return count;
+    } catch (error) {
+      if (seq !== soundLoadSeqRef.current) return;
+      console.warn("[SOUND-1] sound handling load failed", error);
+      setSoundRoleItems([]);
+      setSoundRoleError(true);
+      return 0;
+    } finally {
+      if (seq === soundLoadSeqRef.current) setSoundRoleLoading(false);
+    }
+  }, [activeNavItem]);
+  const handleSoundViewChange = useCallback((enabled: boolean) => {
+    setSoundViewEnabled(enabled);
+  }, []);
+  const handleSoundRoleChange = useCallback(async (item: SoundRoleItem, role: SoundRole) => {
+    if (!activeNavItem || soundRoleSavingRef.current.has(item.timeline_item_id)) return;
+    const programId = activeNavItem;
+    soundRoleSavingRef.current.add(item.timeline_item_id);
+    setSoundRoleSavingIds(new Set(soundRoleSavingRef.current));
+    try {
+      const saved = await saveSoundRole(programId, item, role);
+      if (soundProgramRef.current !== programId) return;
+      setSoundRoleItems((current) => current.map((candidate) => (
+        candidate.timeline_item_id === item.timeline_item_id
+          ? {
+              ...candidate,
+              effective_role: saved.effective_role,
+              overridden: saved.overridden,
+              revision: saved.revision,
+            }
+          : candidate
+      )));
+    } catch (error) {
+      if (soundProgramRef.current !== programId) return;
+      console.warn("[SOUND-1] sound handling save failed", error);
+      toast.error(STORY_GATE_COPY.sound.saveFailed);
+      void refreshSoundRoles();
+    } finally {
+      soundRoleSavingRef.current.delete(item.timeline_item_id);
+      setSoundRoleSavingIds(new Set(soundRoleSavingRef.current));
+    }
+  }, [activeNavItem, refreshSoundRoles]);
+  useEffect(() => {
+    soundLoadSeqRef.current += 1;
+    soundRoleSavingRef.current.clear();
+    setSoundViewEnabled(false);
+    setSoundRoleItems([]);
+    setSoundRoleError(false);
+    setSoundRoleLoading(false);
+    setSoundRoleSavingIds(new Set());
+  }, [activeNavItem]);
+  const soundStorySignature = useMemo(() => storyFids.join("|"), [storyFids]);
+  useEffect(() => {
+    if (soundViewEnabled) void refreshSoundRoles();
+  }, [refreshSoundRoles, soundStorySignature, soundViewEnabled]);
   const [roughCutData, setRoughCutData] = useState<RoughCutData | null>(null);
   const [roughCutPlacement, setRoughCutPlacement] = useState<RoughCutPlacement | null>(null);
 
@@ -903,8 +1029,7 @@ const Index: React.FC = () => {
     await storyGate.reload();
 
     if (result.body?.gate_opened) {
-      // 저장이 A/B 생성의 방아쇠다. 서버가 저장과 함께 승인 행을 적었으므로 지금이 만들 시점이다.
-      requestProposalsForApprovedStoryRef.current?.();
+      console.info("[EDIT-FLOW][AB-GENERATE][WAIT] 저장 완료 — 편집 시작 뒤 A/B 생성");
     } else {
       // 저장은 됐는데 문이 안 열렸다 — 왜인지 숨기지 않는다.
       console.warn(`[SAVE-SPINE] 편집안 생성 보류: ${result.body?.gate_reason}`);
@@ -1039,25 +1164,46 @@ const Index: React.FC = () => {
   // [GATE-LOOP-01 2-1] 승인된 스토리로 A/B를 만든다. 승인 직후 handleApproveComposition이 부른다.
   // 이 시점에만 백엔드 생성 게이트가 열린다(그 전엔 STORY_NOT_APPROVED로 거절).
   const requestProposalsForApprovedStory = useCallback(async () => {
-    if (!activeNavItem || !activeNavItem.startsWith("proj_")) return;
+    if (!activeNavItem || !activeNavItem.startsWith("proj_")) return false;
     const sourceIds = (sourceEntries ?? []).map((e) => e.source_id).filter(Boolean);
-    if (sourceIds.length === 0) return;
+    if (sourceIds.length === 0) return false;
+    const storySig = storyFids.map(String).filter(Boolean).join("|");
+    if (storySig && proposalPairMatchesFlowStory(proposals, storyFids)) {
+      console.info("[EDIT-FLOW][AB-GENERATE][SKIP] 현재 원고 A/B가 이미 준비됨", {
+        story_count: storyFids.length,
+      });
+      return true;
+    }
+    if (storySig && editFlowProposalSigRef.current === storySig) {
+      console.info("[EDIT-FLOW][AB-GENERATE][SKIP] 같은 원고 생성은 한 번만", {
+        story_count: storyFids.length,
+      });
+      return true;
+    }
     try {
+      console.info("[EDIT-FLOW][AB-GENERATE][START]", {
+        program_id: activeNavItem,
+        story_count: storyFids.length,
+      });
       const res: any = await videoService.requestProjectProposals(activeNavItem, sourceIds, 60.0);
       if (res?.status === "STORY_NOT_APPROVED") {
         console.warn("[PROPOSAL] 승인 직후인데 게이트가 아직 승인 전으로 봄 — 다음 승인에서 재시도", res);
-        return;
+        return false;
       }
       if (Array.isArray(res?.proposals) && res.proposals.length > 0) {
         setProposals(mapBackendProposals(res.proposals));
-        console.info(`[PROPOSAL] 승인 후 A/B 생성 완료 — ${res.proposals.length}건`);
+        editFlowProposalSigRef.current = storySig || null;
+        console.info(`[PROPOSAL] 편집 시작 후 A/B 생성 완료 — ${res.proposals.length}건`);
+        return true;
       } else {
         console.warn("[PROPOSAL] 승인 후 생성이 제안을 반환하지 않음", res?.status);
+        return false;
       }
     } catch (e) {
       console.error("[PROPOSAL] 승인 후 A/B 생성 실패 — 승인은 유효합니다", e);
+      return false;
     }
-  }, [activeNavItem, sourceEntries, mapBackendProposals, setProposals]);
+  }, [activeNavItem, sourceEntries, storyFids, proposals, mapBackendProposals, setProposals]);
   requestProposalsForApprovedStoryRef.current = requestProposalsForApprovedStory;
 
   // [STEP 10-I.5.27-E7-M2] Debug Log Guard
@@ -2159,8 +2305,9 @@ const Index: React.FC = () => {
     (f: Fragment) => {
       setSingleEditTarget(f);
       setSingleEditOpen(true);
+      void refreshSoundRoles();
     },
-    []
+    [refreshSoundRoles]
   );
 
   // [UI-②] 분석 후 영상 추가/제거 (모든 상태 선언 이후에 위치해야 TDZ 안전)
@@ -2376,6 +2523,15 @@ const Index: React.FC = () => {
       words: row.words,
     };
   }, [activeNavItem, modeGateOn, modeStoryTextItems, singleEditTarget]);
+  const sfeSoundRole = useMemo(() => {
+    if (!singleEditTarget) return null;
+    const fid = String(
+      (singleEditTarget as any).root_fragment_uid
+      ?? (singleEditTarget as any).fragment_id
+      ?? getUid(singleEditTarget),
+    );
+    return soundRoleItems.find((item) => item.fragment_id === fid) ?? null;
+  }, [singleEditTarget, soundRoleItems]);
 
   const handleSingleFragmentApply = useCallback(
     (payload: {
@@ -3577,49 +3733,85 @@ const Index: React.FC = () => {
     setCompositionNotice(text);
   }, []);
 
-  const handleStartStoryEditing = useCallback(() => {
+  const handleStartStoryEditing = useCallback(async () => {
     setPrecisionPaneMode("edit");
     appendStoryGateMessage("ai_edit_started", STORY_GATE_COPY.chat.editStarted);
-  }, [appendStoryGateMessage]);
+    appendStoryGateMessage("ai_edit_preparing", STORY_GATE_COPY.chat.editPreparing);
+    const roleCount = await refreshSoundRoles();
+    const ok = await requestProposalsForApprovedStoryRef.current?.();
+    console.info("[EDIT-FLOW][START-EDIT]", {
+      program_id: activeNavItem,
+      sound_roles: roleCount,
+      proposals_ready: ok === true,
+    });
+  }, [activeNavItem, appendStoryGateMessage, refreshSoundRoles]);
+
+  const handleFlowProposalCommit = useCallback((key: string, pair?: any) => {
+    const ok = handleProposalCommit(key, pair);
+    if (!ok) return false;
+    const picked = key === "A" ? "A" : "B";
+    setPrecisionPaneMode("edit");
+    appendStoryGateMessage(
+      `ai_ab_picked_${picked}`,
+      STORY_GATE_COPY.chat.proposalPicked(picked),
+    );
+    console.info("[EDIT-FLOW][AB-PICK]", {
+      program_id: activeNavItem,
+      picked,
+      precision_pane: "edit",
+    });
+    return true;
+  }, [activeNavItem, appendStoryGateMessage, handleProposalCommit]);
 
   const handleOpenProposalLarge = useCallback((key: "A" | "B", proposal: any, durationSec: number) => {
-    const rawUrl = proposal?.preview_url;
-    if (rawUrl) {
-      setMiniTarget({
-        videoUrl: toFullUrl(rawUrl) ?? rawUrl,
-        spans: [[0, Math.max(1, durationSec)]],
-        label: `${STORY_GATE_COPY.abCards.heading} ${key}`,
-      });
+    const popupWidth = 720;
+    const popupHeight = 520;
+    const escapeHtml = (value: unknown) => String(value ?? "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;");
+    const title = `${STORY_GATE_COPY.abCards.heading} ${key}`;
+    const fragments = (proposal?.key_fragments ?? []) as string[];
+    const summary = proposal?.desc || STORY_GATE_COPY.abCards.variants[key].desc;
+    const reason = proposal?.proposal_story?.story_summary || proposal?.proposal_explanation?.project_summary || "";
+    const html = `<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <title>${escapeHtml(title)}</title>
+  <style>
+    body { margin: 0; background: #101114; color: #f2f2f2; font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+    main { width: min(640px, calc(100vw - 48px)); margin: 0 auto; padding: 34px 0; }
+    h1 { margin: 0 0 14px; font-size: 28px; font-weight: 760; letter-spacing: 0; }
+    .meta { color: #b9bec8; font-size: 15px; margin-bottom: 24px; }
+    .summary { font-size: 18px; line-height: 1.65; margin: 0 0 24px; }
+    .reason { color: #c9ced8; font-size: 14px; line-height: 1.7; margin: 0 0 28px; }
+    ol { margin: 0; padding-left: 24px; display: grid; gap: 8px; }
+    li { color: #d9dde5; font-size: 14px; line-height: 1.4; }
+  </style>
+</head>
+<body>
+  <main data-ab-large-window="${escapeHtml(key)}" data-popup-width="${popupWidth}" data-popup-height="${popupHeight}">
+    <h1>${escapeHtml(title)}</h1>
+    <div class="meta">${Math.round(durationSec)}${escapeHtml(STORY_GATE_COPY.abCards.seconds)} · ${fragments.length}조각</div>
+    <p class="summary">${escapeHtml(summary)}</p>
+    ${reason ? `<p class="reason">${escapeHtml(reason)}</p>` : ""}
+    <ol>${fragments.map((fid) => `<li>${escapeHtml(fid)}</li>`).join("")}</ol>
+  </main>
+</body>
+</html>`;
+    const url = URL.createObjectURL(new Blob([html], { type: "text/html;charset=utf-8" }));
+    const win = window.open(url, `ccut_ab_${key}_${Date.now()}`, `popup=yes,width=${popupWidth},height=${popupHeight}`);
+    if (!win) {
+      URL.revokeObjectURL(url);
+      toast.error(STORY_GATE_COPY.abCards.largeBlocked);
       return;
     }
-    const aliases = (proposal?.resolved_aliases ?? proposal?.sequence ?? []) as any[];
-    const first = aliases.find((item) => item?.source_id && Number.isFinite(Number(item?.start_sec ?? item?.start)));
-    const sourceId = first?.source_id;
-    const urlMap = Object.fromEntries(
-      (sourceEntries ?? []).flatMap((e) => [[e.source_id, e.video_url], [e.label, e.video_url]]).filter(([, v]) => v),
-    ) as Record<string, string>;
-    const sourceUrl = sourceId ? urlMap[sourceId] : null;
-    if (!sourceUrl) {
-      toast.error("크게 볼 영상을 찾지 못했습니다.");
-      return;
-    }
-    const spans = aliases
-      .filter((item) => item?.source_id === sourceId)
-      .map((item) => [
-        Number(item.start_sec ?? item.start ?? 0),
-        Number(item.end_sec ?? item.end ?? item.start_sec ?? item.start ?? 0),
-      ] as [number, number])
-      .filter(([s, e]) => Number.isFinite(s) && Number.isFinite(e) && e > s);
-    if (!spans.length) {
-      toast.error("크게 볼 구간을 찾지 못했습니다.");
-      return;
-    }
-    setMiniTarget({
-      videoUrl: toFullUrl(sourceUrl) ?? sourceUrl,
-      spans,
-      label: `${STORY_GATE_COPY.abCards.heading} ${key}`,
-    });
-  }, [sourceEntries, toFullUrl]);
+    window.setTimeout(() => URL.revokeObjectURL(url), 30_000);
+    win.focus();
+    console.info(`[EDIT-FLOW][AB-LARGE] key=${key} width=${popupWidth} height=${popupHeight} fragments=${fragments.length}`);
+  }, []);
 
   const handleRestoreProposalEntry = useCallback((id: string) => {
     if (activeNavItem && activeNavItem.startsWith("proj_")) {
@@ -3813,7 +4005,7 @@ const Index: React.FC = () => {
             displayProposalId={displayProposalId}
             onPlaybackNotice={handlePlaybackNotice}
             onPreviewProposal={handleProposalPreview}
-            onCommitProposal={handleProposalCommit}
+            onCommitProposal={handleFlowProposalCommit}
             onExport={handleExport}
             onConsultation={handleOnConsultation}
             onReproposal={(dir: any) => {
@@ -3943,6 +4135,13 @@ const Index: React.FC = () => {
                   storyTextItems={modeStoryTextItems}
                   programId={activeNavItem}
                   onTextEditStateChanged={() => { refreshEditStatesRef.current(); void refreshLedgerEdl(); setStoryLedgerRefreshNonce((n) => n + 1); }}
+                  soundViewEnabled={soundViewEnabled}
+                  soundRoles={soundRoleItems}
+                  soundRoleLoading={soundRoleLoading}
+                  soundRoleError={soundRoleError}
+                  soundRoleSavingIds={soundRoleSavingIds}
+                  onSoundViewChange={handleSoundViewChange}
+                  onSoundRoleChange={handleSoundRoleChange}
                 />
               )
             ) : undefined}
@@ -4042,7 +4241,13 @@ const Index: React.FC = () => {
                    style={{ flexGrow: mapHoldSplit, flexBasis: 0 }}>
                 {/* [STORY-TRACK-A A-1/A-2/A-3] 스토리 단계 = 조각맵 자리에 텍스트조각 에디터.
                     편집 단계 = 이미지 조각맵. 같은 아이 옷만 다름(뒤 식별자 동일). */}
-                {rightStoryMode && !modeGateOn ? (
+                {modeGateOn && precisionPaneMode === "edit" ? (
+                  <div data-precision-pane="edit" className="h-full min-h-[220px] px-4 py-4 text-left">
+                    <p className="text-[13px] font-semibold text-foreground">{STORY_GATE_COPY.precisionPanel.editHeading}</p>
+                    <p className="mt-2 text-[12px] leading-relaxed text-muted-foreground">{STORY_GATE_COPY.precisionPanel.editBody}</p>
+                    <p className="mt-1 text-[12px] leading-relaxed text-muted-foreground/70">{STORY_GATE_COPY.precisionPanel.editSoon}</p>
+                  </div>
+                ) : rightStoryMode && !modeGateOn ? (
                   <LedgerPage
                     key={`rightledger_${activeNavItem}_${storyLedgerRefreshNonce}`}
                     embedded
@@ -4121,6 +4326,13 @@ const Index: React.FC = () => {
                     storyTextItems={modeStoryTextItems}
                     programId={activeNavItem}
                     onTextEditStateChanged={() => { refreshEditStatesRef.current(); void refreshLedgerEdl(); setStoryLedgerRefreshNonce((n) => n + 1); }}
+                    soundViewEnabled={soundViewEnabled}
+                    soundRoles={soundRoleItems}
+                    soundRoleLoading={soundRoleLoading}
+                    soundRoleError={soundRoleError}
+                    soundRoleSavingIds={soundRoleSavingIds}
+                    onSoundViewChange={handleSoundViewChange}
+                    onSoundRoleChange={handleSoundRoleChange}
                   />
                 )}
               </div>
@@ -4164,6 +4376,9 @@ const Index: React.FC = () => {
         projectName={projects.find(p => p.id === activeNavItem)?.name}
         contractState={sfeContractState}
         precisionContext={sfePrecisionContext}
+        soundRole={sfeSoundRole}
+        soundRoleSaving={sfeSoundRole ? soundRoleSavingIds.has(sfeSoundRole.timeline_item_id) : false}
+        onSoundRoleChange={handleSoundRoleChange}
         onApply={handleSingleFragmentApply}
       />
       {/* [STORY-TRACK-B] 조각 단위 공용 미니 플레이창 — 텍스트·이미지 클릭 공용. 창 1개. */}

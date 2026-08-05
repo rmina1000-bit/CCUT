@@ -14,7 +14,7 @@
 export const STORY_GATE_COPY = {
   actions: {
     saveStory: "스토리 저장",
-    saveStoryTitle: "지금 이야기를 저장합니다. 저장하면 A·B 제안을 만듭니다.",
+    saveStoryTitle: "지금 이야기를 저장합니다. 다음에 편집으로 넘어갈 수 있습니다.",
     saveStoryAgainTitle: "고친 이야기를 새로 저장합니다. 같은 프로젝트 안에 하나 더 남습니다.",
     saveStoryAs: "다른 이름으로 스토리 저장",
     saveStoryAsTitle: "이름을 새로 붙여 이야기를 하나 더 저장합니다.",
@@ -26,6 +26,8 @@ export const STORY_GATE_COPY = {
   chat: {
     storySaved: "이야기를 저장했어요. 이제 편집으로 가볼까요?",
     editStarted: "편집을 시작할게요. 조각을 누르면 소리와 화면을 다듬을 수 있어요.",
+    editPreparing: "조각 경계와 소리를 살펴보는 중이에요.",
+    proposalPicked: (key: "A" | "B") => `${key}안을 선택하셨어요. 이걸 바탕으로 더 세밀하게 다듬을 수 있어요.`,
     storyReturned: "이야기로 돌아왔어요. 조각을 고르고 빼는 중이에요.",
   },
   chatActions: {
