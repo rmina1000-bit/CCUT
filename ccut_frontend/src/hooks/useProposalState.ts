@@ -109,6 +109,39 @@ function hasRecentP6Fallback(messages: any[] = [], fallbackTexts = [P6_FALLBACK_
   );
 }
 
+function proposalFids(proposal: any): string[] {
+  if (!proposal) return [];
+  if (Array.isArray(proposal.key_fragments)) return proposal.key_fragments.map(String).filter(Boolean);
+  if (Array.isArray(proposal.sequence)) {
+    return proposal.sequence
+      .map((item: any) => item?.fragment_id ?? item?.proposal_fragment_id ?? item?.id)
+      .map(String)
+      .filter(Boolean);
+  }
+  return [];
+}
+
+function sameFids(a: string[], b: string[]): boolean {
+  return a.length === b.length && a.every((fid, index) => fid === b[index]);
+}
+
+function proposalPairMatchesStory(pair: any, storyFids: string[]): boolean {
+  if (!storyFids.length) return true;
+  return sameFids(proposalFids(pair?.A), storyFids) && sameFids(proposalFids(pair?.B), storyFids);
+}
+
+function visibleProposalEntries(
+  entries: Array<{ id: string; ts: number; pair: Record<"A" | "B", Proposal> }>,
+  storyFids: string[],
+): Array<{ id: string; ts: number; pair: Record<"A" | "B", Proposal> }> {
+  if (!entries?.length) return [];
+  const filtered = storyFids.length
+    ? entries.filter((entry) => proposalPairMatchesStory(entry.pair, storyFids))
+    : entries;
+  if (!storyFids.length || filtered.length <= 1) return filtered;
+  return [filtered[filtered.length - 1]];
+}
+
 // [PERSON-PALETTE] 저장된 사람 이름 — 동적 편집 어휘 (CenterPanel이 주입)
 const KNOWN_PERSON_NAMES: string[] = [];
 export function setKnownPersonNames(names: string[]) {
@@ -142,7 +175,8 @@ function isExecutableEditCommand(input: string): boolean {
 export const useProposalState = (
   sourceFragments: Fragment[],
   projectId?: string,
-  orderedSourceIds?: string[]
+  orderedSourceIds?: string[],
+  currentStoryFids: string[] = [],
 ) => {
   const [selectedProposalId, setSelectedProposalId] = useState<string | null>(null);
   const [committedProposalId, setCommittedProposalId] = useState<string | null>(null);
@@ -156,6 +190,11 @@ export const useProposalState = (
     id: string; ts: number; pair: Record<"A" | "B", Proposal>;
   }>>([]);
   const [activeProposalEntryId, setActiveProposalEntryId] = useState<string | null>(null);
+  const proposalHistoryRef = useRef(proposalHistory);
+  proposalHistoryRef.current = proposalHistory;
+  const currentStoryFidsRef = useRef<string[]>([]);
+  currentStoryFidsRef.current = currentStoryFids.map(String).filter(Boolean);
+  const currentStorySignature = currentStoryFidsRef.current.join("|");
 
   // [#49 (a) 2단 — 의도 승계] 활성 의도 = 마지막 '내용 지시'만 기억. 명령(retrigger)은 덮지 않는다.
   // 세션 수명 — 프로젝트 전환 시 초기화 (영속은 범위 밖, 한계로 보고).
@@ -180,32 +219,64 @@ export const useProposalState = (
   useEffect(() => {
     if (!proposals?.A || !proposals?.B) return;
     const sig = `${(proposals.A as any).proposal_id ?? "A"}|${(proposals.B as any).proposal_id ?? "B"}`;
+    const storyFids = currentStoryFidsRef.current;
+    if (!proposalPairMatchesStory(proposals, storyFids)) {
+      console.warn("[EDIT-FLOW][AB-FILTER] 현재 원고와 다른 A/B는 화면 이력에 올리지 않음", {
+        story_count: storyFids.length,
+        A: proposalFids(proposals.A).length,
+        B: proposalFids(proposals.B).length,
+      });
+      setActiveProposalEntryId(null);
+      return;
+    }
+    const sameStoryEntry = storyFids.length
+      ? proposalHistoryRef.current.find((entry) => proposalPairMatchesStory(entry.pair, storyFids))
+      : null;
+    const entryId = sameStoryEntry?.id ?? sig;
     // [LAB-37 B] 무대가 따라가는 경우: 첫 세대(prev 없음) / 같은 세대 스냅샷 갱신 /
     //   사용자 요청 생성분(stageFollowNextRef). 그 외(승인 후 백그라운드 도착)는
     //   카드만 쌓고 무대는 제자리 — 사용자가 새 카드를 눌러 소환한다(restoreProposalEntry).
     const follow = stageFollowNextRef.current;
     stageFollowNextRef.current = false;
-    setActiveProposalEntryId((prev) => (prev == null || prev === sig || follow) ? sig : prev);
+    setActiveProposalEntryId((prev) => (prev == null || prev === entryId || follow) ? entryId : prev);
     setProposalHistory((prev) => {
-      const i = prev.findIndex((h) => h.id === sig);
+      const i = sameStoryEntry
+        ? prev.findIndex((h) => h.id === sameStoryEntry.id)
+        : prev.findIndex((h) => h.id === sig);
       if (i >= 0) {
         const next = [...prev];
         next[i] = { ...next[i], pair: proposals };
+        console.info("[EDIT-FLOW][AB-DEDUPE] 같은 원고 지문 A/B를 새 카드로 쌓지 않고 갱신", {
+          story_count: storyFids.length,
+          entry_id: next[i].id,
+        });
         return next;
       }
       DEBUG_LOG && console.log("[FLOW] proposal generation appended:", sig);
       return [...prev, { id: sig, ts: Date.now(), pair: proposals }];
     });
-  }, [proposals]);
+  }, [proposals, currentStorySignature]);
 
   // [TIMELINE-PERSIST 2026-07-05] 저장된 제안 세대 일괄 복원 — 프로젝트 열기 시
   // chat_state에서. 프로젝트 삭제 전까지 세대가 계속 쌓이는 영속 타임라인의 절반.
   const hydrateProposalHistory = useCallback(
     (entries: Array<{ id: string; ts: number; pair: Record<"A" | "B", Proposal> }>) => {
       if (!entries?.length) return;
-      setProposalHistory(entries);
-      setActiveProposalEntryId(entries[entries.length - 1]?.id ?? null);
-      DEBUG_LOG && console.log(`[TIMELINE-PERSIST] proposal history 복원: ${entries.length}세대`);
+      const visible = visibleProposalEntries(entries, currentStoryFidsRef.current);
+      if (!visible.length) {
+        setProposalHistory([]);
+        setActiveProposalEntryId(null);
+        setProposals(null);
+        console.info(`[EDIT-FLOW][AB-FILTER] 현재 원고와 맞는 A/B 복원 없음 — ${entries.length}세대 표시 제외`);
+        return;
+      }
+      const latest = visible[visible.length - 1];
+      setProposalHistory(visible);
+      setActiveProposalEntryId(latest?.id ?? null);
+      if (latest?.pair?.A && latest?.pair?.B) {
+        setProposals(latest.pair);
+      }
+      DEBUG_LOG && console.log(`[TIMELINE-PERSIST] proposal history 복원: ${visible.length}/${entries.length}세대`);
     }, []);
 
   const restoreProposalEntry = useCallback((id: string) => {
@@ -247,17 +318,19 @@ export const useProposalState = (
     setSelectedProposalId(id);
   }, []);
 
-  const handleProposalCommit = useCallback((id: string) => {
-    if (!proposals || !proposals[id as "A" | "B"]) {
+  const handleProposalCommit = useCallback((id: string, pairOverride?: Record<"A" | "B", Proposal>) => {
+    const pair = pairOverride ?? proposals;
+    if (!pair || !pair[id as "A" | "B"]) {
       console.warn("[proposalState] commit blocked: proposals not ready", id);
-      return;
+      return false;
     }
+    if (pairOverride) setProposals(pairOverride);
     
     console.log("[proposalState] handleProposalCommit called with id:", id);
     
     // [STEP 10-K-C1-R41] Guard the sequence before committing
     const mode = id as "A" | "B";
-    const originalProposal = proposals[mode];
+    const originalProposal = pair[mode];
     
     const customFrags = (originalProposal as any).customEditFragments;
     const rawSeq = (Array.isArray(customFrags) && customFrags.length > 0)
@@ -297,11 +370,11 @@ export const useProposalState = (
       });
 
       setProposals(prev => {
-        if (!prev) return prev;
+        const base = prev ?? pair;
         return {
-          ...prev,
+          ...base,
           [mode]: {
-            ...prev[mode],
+            ...base[mode],
             key_fragments: guardedKeyFrags,
             resolved_aliases: mappedSeq,
             sequence: mappedSeq
@@ -315,9 +388,10 @@ export const useProposalState = (
     recordMirrorEvent({
       event_kind: "accept",
       project_id: projectId || "default_project",
-      proposal_id: (proposals[mode] as any)?.proposal_id,
+      proposal_id: (pair[mode] as any)?.proposal_id,
       proposal_slot: id,
     });
+    return true;
   }, [proposals, projectId]);
 
   const handleReproposal = useCallback(

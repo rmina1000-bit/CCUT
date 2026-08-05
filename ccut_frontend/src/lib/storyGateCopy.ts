@@ -74,7 +74,11 @@ export const STORY_GATE_COPY = {
   abCards: {
     heading: "편집 제안",
     large: "크게 보기",
+    largeBlocked: "새 창을 열지 못했어요.",
     choose: "고르기",
+    chooseFailed: "아직 이 안을 고를 수 없어요. 다시 열어보고 있습니다.",
+    picked: (key: "A" | "B") => `${key}안을 골랐어요.`,
+    nearMatch: "이 영상은 짧아서 두 안의 차이가 거의 없어요.",
     seconds: "초",
     variants: {
       A: {

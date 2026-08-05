@@ -25,6 +25,8 @@ import { fragmentTranscriptText, FRAGMENT_TEXT_FONT, FRAGMENT_TEXT_STYLE, FRAGME
 import type { AppState, SourceEntry } from "@/types";
 
 const AUDIO_SPLICE_FADE_MS = 8;
+const AB_NEAR_MATCH_MAX_DURATION_DIFF_SEC = 1.0;
+const AB_NEAR_MATCH_MAX_DURATION_DIFF_RATIO = 0.02;
 
 function playWithAudioRamp(video: HTMLVideoElement) {
   video.volume = 0;
@@ -52,6 +54,72 @@ function readFragmentEndSec(fragment: any): number {
 
 function readFragmentDurationSec(fragment: any): number {
   return Math.max(readFragmentEndSec(fragment) - readFragmentStartSec(fragment), 0.001);
+}
+
+function proposalDisplayFids(proposal: any): string[] {
+  if (!proposal) return [];
+  const keyFragments = Array.isArray(proposal?.key_fragments) ? proposal.key_fragments : [];
+  if (keyFragments.length) return keyFragments.map(String).filter(Boolean);
+  const sequence = Array.isArray(proposal?.sequence) ? proposal.sequence : [];
+  if (sequence.length) {
+    return sequence
+      .map((item: any) => item?.fragment_id ?? item?.proposal_fragment_id ?? item?.fid ?? item?.id)
+      .map(String)
+      .filter(Boolean);
+  }
+  const aliases = Array.isArray(proposal?.resolved_aliases) ? proposal.resolved_aliases : [];
+  if (aliases.length) {
+    return aliases
+      .map((item: any) => item?.fragment_id ?? item?.proposal_fragment_id ?? item?.fid ?? item?.id)
+      .map(String)
+      .filter(Boolean);
+  }
+  return [];
+}
+
+function sameProposalDisplayFids(a: string[], b: string[]): boolean {
+  return a.length === b.length && a.every((fid, index) => fid === b[index]);
+}
+
+function proposalEntryMatchesStoryFids(entry: any, storyFids: string[]): boolean {
+  if (!storyFids.length) return true;
+  const pair = entry?.pair ?? {};
+  return (
+    sameProposalDisplayFids(proposalDisplayFids(pair?.A), storyFids) &&
+    sameProposalDisplayFids(proposalDisplayFids(pair?.B), storyFids)
+  );
+}
+
+function proposalDisplayFragmentCount(proposal: any): number {
+  return proposalDisplayFids(proposal).length;
+}
+
+function proposalDisplayDurationSec(proposal: any): number {
+  const direct = Number(proposal?.preview_duration ?? proposal?.duration);
+  if (Number.isFinite(direct) && direct > 0) return direct;
+  const spans = Array.isArray(proposal?.resolved_aliases)
+    ? proposal.resolved_aliases
+    : Array.isArray(proposal?.sequence)
+      ? proposal.sequence
+      : [];
+  return spans.reduce((sum: number, item: any) => {
+    const start = Number(item?.start_sec ?? item?.start ?? item?.start_time ?? 0);
+    const end = Number(item?.end_sec ?? item?.end ?? item?.end_time ?? start);
+    return sum + Math.max(0, end - start);
+  }, 0);
+}
+
+function proposalPairNearMatch(pair: any): { near: boolean; diffSec: number; diffRatio: number } {
+  const a = proposalDisplayDurationSec(pair?.A);
+  const b = proposalDisplayDurationSec(pair?.B);
+  const diffSec = Math.abs(a - b);
+  const base = Math.max(a, b, 0.001);
+  const diffRatio = diffSec / base;
+  return {
+    near: diffSec <= AB_NEAR_MATCH_MAX_DURATION_DIFF_SEC && diffRatio <= AB_NEAR_MATCH_MAX_DURATION_DIFF_RATIO,
+    diffSec,
+    diffRatio,
+  };
 }
 
 /**
@@ -138,7 +206,7 @@ interface CenterPanelProps {
   // [F1 하나의 강물] 재생 불가 안내를 지휘부 채팅에 흘리는 위임 콜백 (toast 폐지 — SEE FAIL 1)
   onPlaybackNotice?: (text: string) => void;
   onPreviewProposal?: (key: string) => void;
-  onCommitProposal?: (key: string) => void;
+  onCommitProposal?: (key: string, pair?: any) => boolean;
   onOpenProposalLarge?: (key: "A" | "B", proposal: any, durationSec: number) => void;
   onPreviewNext?: () => void;
   guidanceMessage?: string;
@@ -177,7 +245,7 @@ interface CenterPanelProps {
   // [UI-⑧] 컴포저 + 버튼 → 영상 추가 파일창 열기 / 드래그된 파일 직접 추가
   onRequestAddVideos?: () => void;
   onAddVideoFiles?: (files: File[]) => void;
-  onStartStoryEditing?: () => void;
+  onStartStoryEditing?: () => void | Promise<void>;
   // [TIMELINE-PAGE 2026-08-02] 300행 절단 복구 — 서버가 has_more 를 주는데 듣는 코드가
   //   0이었다(실측: Merope 614행 중 314행 도달 불가). 서버·서비스 계층은 손대지 않고
   //   호출처만 잇는다. 버튼 방식인 이유는 아래 렌더부 주석에.
@@ -462,9 +530,43 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
   const CHAT_BOTTOM_SLACK = 120; // 하단 근접 판정(px)
   const chatAtBottomRef = useRef(true);
   const [chatHasNew, setChatHasNew] = useState(false);
+  const abDiffLoggedRef = useRef<Set<string>>(new Set());
   // [LAYER-FIX5 2026-08-05] 지금 채팅에 실제로 스크롤할 것이 있는가.
   //   '새 내용 도착'을 띄울지 가르는 사실 하나. 스크롤 판정 로직과는 별개다.
   const [chatIsScrollable, setChatIsScrollable] = useState(false);
+  const storyFidsSignature = useMemo(
+    () => (storyFids ?? []).map(String).filter(Boolean).join("|"),
+    [storyFids],
+  );
+  const visibleProposalHistory = useMemo(() => {
+    const currentFids = storyFidsSignature ? storyFidsSignature.split("|") : [];
+    if (!currentFids.length) return proposalHistory;
+    const matching = proposalHistory.filter((entry) => proposalEntryMatchesStoryFids(entry, currentFids));
+    if (import.meta.env.DEV && matching.length !== proposalHistory.length) {
+      console.log("[EDIT-FLOW][AB-DISPLAY-FILTER]", {
+        story_count: currentFids.length,
+        restored_count: proposalHistory.length,
+        visible_count: matching.length,
+      });
+    }
+    return matching.length > 1 ? [matching[matching.length - 1]] : matching;
+  }, [proposalHistory, storyFidsSignature]);
+  useEffect(() => {
+    visibleProposalHistory.forEach((entry) => {
+      const diff = proposalPairNearMatch(entry?.pair);
+      const logKey = `${entry.id}:${diff.diffSec.toFixed(3)}:${diff.diffRatio.toFixed(4)}`;
+      if (abDiffLoggedRef.current.has(logKey)) return;
+      abDiffLoggedRef.current.add(logKey);
+      console.info("[EDIT-FLOW][AB-DIFF]", {
+        entry_id: entry.id,
+        diff_sec: Number(diff.diffSec.toFixed(3)),
+        diff_ratio: Number(diff.diffRatio.toFixed(4)),
+        near_match: diff.near,
+        threshold_sec: AB_NEAR_MATCH_MAX_DURATION_DIFF_SEC,
+        threshold_ratio: AB_NEAR_MATCH_MAX_DURATION_DIFF_RATIO,
+      });
+    });
+  }, [visibleProposalHistory]);
   const isChatNearBottom = useCallback(() => {
     const el = chatScrollRef.current;
     if (!el) return true;                                   // 아직 없음 = 따라가도 무해
@@ -504,7 +606,7 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
     syncChatScrollable();
     const t = window.setTimeout(syncChatScrollable, 300);   // 늦게 오는 썸네일 반영
     return () => window.clearTimeout(t);
-  }, [syncChatScrollable, storyPlan?.messages?.length, proposalHistory.length, transcriptOpen]);
+  }, [syncChatScrollable, storyPlan?.messages?.length, visibleProposalHistory.length, transcriptOpen]);
 
   const scrollChatToBottom = useCallback(() => {
     chatAtBottomRef.current = true;
@@ -584,7 +686,8 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
   //     발화했다. IntersectionObserver 로만 판정한다.
   const FOLD_MARGIN = 1.5;                    // 감시범위 = A + 1.5A = 2.5A (국장 조정용 상수)
   const [foldedIds, setFoldedIds] = useState<Set<string>>(() => new Set());
-  const [pickedFlowCards, setPickedFlowCards] = useState<Set<string>>(() => new Set());
+  const [pickedFlowChoices, setPickedFlowChoices] = useState<Record<string, "A" | "B">>({});
+  const [proposalPickError, setProposalPickError] = useState<string | null>(null);
   const foldNodeRefs = useRef<Record<string, HTMLDivElement | null>>({});
   // 접기로 줄어든 높이를 되갚기 위한 예약 — 넉 달 싸운 '화면 튐'이 여기서 갈린다.
   const pendingFoldFixRef = useRef<{ id: string; h1: number } | null>(null);
@@ -598,89 +701,113 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
   }, []);
 
   const flowVariantDuration = useCallback((entryId: string, key: "A" | "B", proposal: any) => {
-    const base = Math.max(8, Number(proposal?.preview_duration ?? 0) || 45);
-    let seed = 0;
-    for (let i = 0; i < entryId.length; i++) seed = (seed + entryId.charCodeAt(i) * (i + 1)) % 997;
-    const spread = 5 + (seed % 7);
-    return Math.max(6, Math.round(base + (key === "A" ? -spread : spread)));
+    void entryId;
+    void key;
+    return Math.max(1, Math.round(proposalDisplayDurationSec(proposal) || 1));
   }, []);
 
   const renderProposalFlowCard = useCallback((entry: any) => {
     const pair = entry?.pair ?? {};
+    const picked = pickedFlowChoices[entry.id];
+    if (picked) {
+      return (
+        <div
+          key={`pair_${entry.id}`}
+          data-ab-choice-selected={picked}
+          className="w-full rounded-lg border border-primary/20 bg-primary/5 px-3 py-2 text-[12px] text-primary"
+        >
+          {STORY_GATE_COPY.abCards.picked(picked)}
+        </div>
+      );
+    }
+    const nearMatch = proposalPairNearMatch(pair);
     const cards = (["A", "B"] as const)
       .map((key) => {
         const proposal = pair[key];
         if (!proposal) return null;
-        if (pickedFlowCards.has(`${entry.id}:${key}`)) return null;
-        const previewUrl = proposal.preview_url ? normalizeMediaUrl(proposal.preview_url) : null;
         const durationSec = flowVariantDuration(entry.id, key, proposal);
-        return { key, proposal, previewUrl, durationSec };
+        return { key, proposal, durationSec };
       })
-      .filter(Boolean) as Array<{ key: "A" | "B"; proposal: any; previewUrl: string | null; durationSec: number }>;
+      .filter(Boolean) as Array<{ key: "A" | "B"; proposal: any; durationSec: number }>;
     if (!cards.length) return null;
     return (
       <div
         key={`pair_${entry.id}`}
         data-ab-flow-card={entry.id}
-        className="w-full grid grid-cols-2 gap-3"
+        data-ab-near-match={nearMatch.near ? "true" : "false"}
+        data-ab-duration-diff-sec={nearMatch.diffSec.toFixed(3)}
+        data-ab-duration-diff-ratio={nearMatch.diffRatio.toFixed(4)}
+        className="w-full space-y-2"
       >
-        {cards.map(({ key, proposal, previewUrl, durationSec }) => (
+        {nearMatch.near && (
           <div
-            key={`${entry.id}_${key}`}
-            data-ab-variant={key}
-            className="min-w-0 rounded-lg border border-border/12 bg-card/30 overflow-hidden"
+            data-ab-near-match-notice
+            className="rounded-md border border-border/10 bg-muted/20 px-3 py-2 text-[12px] text-muted-foreground"
           >
-            <div className="h-[180px] bg-black">
-              {previewUrl ? (
-                <video
-                  src={previewUrl}
-                  muted
-                  playsInline
-                  preload="metadata"
-                  className="h-full w-full object-contain"
-                />
-              ) : (
-                <div className="h-full w-full flex items-center justify-center text-meta text-muted-foreground/60">
-                  {key}
-                </div>
-              )}
-            </div>
-            <div className="px-3 py-2 flex items-center gap-2">
-              <div className="min-w-0 flex-1">
-                <p className="text-[12px] font-semibold text-foreground">{STORY_GATE_COPY.abCards.heading} {key}</p>
-                <p className="text-micro text-muted-foreground/70 tabular-nums">
-                  {durationSec}{STORY_GATE_COPY.abCards.seconds} · {(proposal.key_fragments ?? []).length}조각
+            {STORY_GATE_COPY.abCards.nearMatch}
+          </div>
+        )}
+        {proposalPickError && (
+          <div
+            data-ab-choose-error
+            className="rounded-md border border-destructive/20 bg-destructive/5 px-3 py-2 text-[12px] text-destructive"
+          >
+            {proposalPickError}
+          </div>
+        )}
+        <div className="grid grid-cols-2 gap-3">
+          {cards.map(({ key, proposal, durationSec }) => (
+            <div
+              key={`${entry.id}_${key}`}
+              data-ab-variant={key}
+              className="min-w-0 rounded-lg border border-border/12 bg-card/30 overflow-hidden"
+            >
+              <div className="min-h-[92px] bg-black/20 px-3 py-3 flex flex-col justify-center">
+                <p className="text-[13px] font-semibold text-foreground">
+                  {STORY_GATE_COPY.abCards.heading} {key}
+                </p>
+                <p className="mt-1 text-[12px] leading-relaxed text-muted-foreground">
+                  {proposal.desc || STORY_GATE_COPY.abCards.variants[key].desc}
                 </p>
               </div>
-              <button
-                type="button"
-                data-ab-large={key}
-                onClick={() => onOpenProposalLarge?.(key, proposal, durationSec)}
-                className="text-micro text-muted-foreground hover:text-foreground transition-colors"
-              >
-                {STORY_GATE_COPY.abCards.large}
-              </button>
-              <button
-                type="button"
-                data-ab-choose={key}
-                onClick={() => {
-                  handleProposalCommit(key);
-                  setPickedFlowCards((prev) => {
-                    const next = new Set(prev);
-                    next.add(`${entry.id}:${key}`);
-                    return next;
-                  });
-                }}
-                className="text-micro text-primary hover:text-primary/80 transition-colors"
-              >
-                {STORY_GATE_COPY.abCards.choose}
-              </button>
+              <div className="px-3 py-2 flex items-center gap-2">
+                <div className="min-w-0 flex-1">
+                  <p className="text-[12px] font-semibold text-foreground">{STORY_GATE_COPY.abCards.heading} {key}</p>
+                  <p className="text-micro text-muted-foreground/70 tabular-nums">
+                    {durationSec}{STORY_GATE_COPY.abCards.seconds} · {proposalDisplayFragmentCount(proposal)}조각
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  data-ab-large={key}
+                  onClick={() => onOpenProposalLarge?.(key, proposal, durationSec)}
+                  className="text-micro text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  {STORY_GATE_COPY.abCards.large}
+                </button>
+                <button
+                  type="button"
+                  data-ab-choose={key}
+                  onClick={() => {
+                    const committed = handleProposalCommit(key, pair);
+                    if (!committed) {
+                      setProposalPickError(STORY_GATE_COPY.abCards.chooseFailed);
+                      return;
+                    }
+                    setProposalPickError(null);
+                    setPickedFlowChoices((prev) => ({ ...prev, [entry.id]: key }));
+                  }}
+                  className="text-micro text-primary hover:text-primary/80 transition-colors"
+                >
+                  {STORY_GATE_COPY.abCards.choose}
+                </button>
+              </div>
             </div>
-          </div>
-        ))}
+          ))}
+        </div>
       </div>
     );
-  }, [flowVariantDuration, onOpenProposalLarge, pickedFlowCards]);
+  }, [flowVariantDuration, onOpenProposalLarge, pickedFlowChoices, proposalPickError]);
 
   // [CHAT-FOLD STEP 1] 높이 붕괴 보정 — ★이것이 먼저다.
   //   A 위쪽 아이템이 접히면 위 높이가 (h1-h2) 만큼 줄어 보던 화면이 그만큼 밀려 올라간다.
@@ -758,7 +885,7 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
     );
     Object.values(foldNodeRefs.current).forEach((el) => { if (el) io.observe(el); });
     return () => io.disconnect();
-  }, [foldedIds, storyPlan?.messages?.length, proposalHistory.length]);
+  }, [foldedIds, storyPlan?.messages?.length, visibleProposalHistory.length]);
   // [STORY-GATE P3] 승인 관문 — 게이트 OFF면 enabled=false로 아무것도 바뀌지 않는다 (I-4)
   // [LAB-48] programId 는 프로젝트 id 와 화면 이름("__new__"·"upload"…)을 겸한다.
   //   LAB-21 이 Index.tsx 에 같은 가드를 넣었는데 이 호출부는 빠져 있었다 — 그래서
@@ -1023,7 +1150,7 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
     const msgList = storyPlan?.messages ?? [];
     const msgs = msgList.length;
     const lastMsgId = msgs ? String((msgList[msgs - 1] as any)?.id ?? "") : null;
-    const gens = proposalHistory.length;
+    const gens = visibleProposalHistory.length;
     const activeGen = activeProposalEntryId ?? null;
     const prev = _prevChatLenRef.current;
     // 개수가 늘고 ★맨 끝이 바뀌었을 때만 새 사건이 아래에 도착한 것이다.
@@ -1056,7 +1183,7 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
       });
       setChatHasNew(true);
     }
-  }, [storyPlan?.messages?.length, proposalHistory.length, activeProposalEntryId,
+  }, [storyPlan?.messages?.length, visibleProposalHistory.length, activeProposalEntryId,
       isChatNearBottom, settleChatToBottom]);
 
   const setActivePlayerSafe = useCallback((player: "A" | "B" | null) => {
@@ -2175,14 +2302,14 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
   );
 
   const handleProposalCommit = useCallback(
-    (key: string) => {
+    (key: string, pair?: any) => {
       if (key !== committedProposalId) {
         setExportUrl(null);
         setExportError(null);
       }
 
       handleProposalPreview(key);
-      onCommitProposal?.(key);
+      return onCommitProposal?.(key, pair) ?? false;
     },
     [committedProposalId, handleProposalPreview, onCommitProposal]
   );
@@ -3129,7 +3256,7 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
         {/* [LAYER-FIX3 2026-08-04 국장 지시] 채팅이 비어 있으면 안내한다 — "소는 누가 키우나".
             분석은 끝났고 조각도 있는데 채팅만 비어 있던 자리다. 지금 할 수 있는 일을
             한 번만, 조용히 말한다. 말이 쌓이는 자리가 아니므로 원장에 쓰지 않는다(표시 전용). */}
-        {((storyPlan?.messages || []).length === 0 && proposalHistory.length === 0
+        {((storyPlan?.messages || []).length === 0 && visibleProposalHistory.length === 0
           && appState === "complete") && (
           <div className="w-full max-w-[800px] pt-6 pb-2 flex flex-col gap-2 animate-in fade-in duration-700">
             <p className="text-body text-foreground">이야기를 고르는 중이에요.</p>
@@ -3146,14 +3273,14 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
         {/* [FLOW] 중앙 타임라인 — 개략·채팅·지난 제안이 하나의 흐름으로 위로 흘러간다.
             현재(활성) 제안 pair만 아래 '무대'(플레이어 그리드)에 서고,
             지난 제안은 고스트 카드로 흐름 속에 남아 '다시 열기'로 무대 복원. */}
-        {((storyPlan?.messages || []).length > 0 || proposalHistory.length > 0) && (
+        {((storyPlan?.messages || []).length > 0 || visibleProposalHistory.length > 0) && (
           <div className="w-full max-w-[800px] flex flex-col gap-4 pt-4 pb-1 animate-in fade-in duration-700">
 
             {/* [R8 유령 5호 2026-07-20] 스토리박스 독립 — 렌더 조건에서 `storyPlan &&` 제거.
                 storyPlan(대화 원고)이 죽어도 proposalHistory>0이면 지난 원고 세대는 상주한다
                 (프로젝트 전환·확정 왕복 중 소실 0). '지난 원고 0개'(이 블록 미출현)와 '복원 실패'
                 (세대는 있는데 대화 기록만 못 불러옴)를 아래 안내로 구분한다. */}
-            {!storyPlan && proposalHistory.length > 0 && (
+            {!storyPlan && visibleProposalHistory.length > 0 && (
               <div className="text-[11px] text-muted-foreground/76 px-1">
                 이전 대화 기록은 불러오지 못했어요. 지난 원고 세대는 아래에 그대로 남아 있습니다.
               </div>
@@ -3218,7 +3345,7 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
                     return { kind: "msg" as const, ts: last, msg };
                   }).filter(Boolean) as any[];
                 })(),
-                ...proposalHistory
+                ...visibleProposalHistory
                   .map((h) => ({ kind: "pair" as const, ts: h.ts, entry: h })),
                 // [PERSON-PALETTE→FLOW] 인물 문답도 흐름 속 한 지점 — 이후 대화는 아래로
                 ...(paletteTsRef.current && (pendingPersons.length > 0 || personSavedNote)
