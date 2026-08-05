@@ -9,6 +9,7 @@ import { assignShortDisplayIds, recalcDisplayIds } from "@/lib/fragmentIdentity"
 import { storyGateEnabled } from "@/hooks/useStoryGate";  // [STORY-GATE P3/S3] 완료 문구 분기
 import { DEBUG_LOG } from "@/utils/debugFlags";
 import { recordMirrorEvent } from "@/utils/mirrorEventLog";
+import { STORY_GATE_COPY } from "@/lib/storyGateCopy";
 
 const ROUTING_PENDING_TEXT = "말씀을 확인하고 있습니다...";
 
@@ -410,12 +411,13 @@ export const useProposalState = (
 
           proposalData.proposals.forEach((p: any) => {
             const mode = p.mode === "A" ? "A" : "B";
+            const copy = STORY_GATE_COPY.abCards.variants[mode];
             generatedProposals[mode] = {
               id: mode,
               proposal_id: p.proposal_id,
               mode: p.mode === "A" ? "market" : "user",
-              title: p.mode === "A" ? "시장형 편집 (A)" : "사용자친화형 편집 (B)",
-              desc: p.proposal_reason?.mode_reason || "백엔드 분석 기반 추천 편집안입니다.",
+              title: copy.title,
+              desc: copy.desc,
               score: String(Math.round(p.confidence * 100)) + "%",
               key_fragments: p.sequence.map((s: any) => s.fragment_id),
               proposal_reason: p.proposal_reason ?? null,
@@ -1184,12 +1186,13 @@ export const useProposalState = (
 
           proposalData.proposals.forEach((p: any) => {
             const mode = p.mode === "A" ? "A" : "B";
+            const copy = STORY_GATE_COPY.abCards.variants[mode];
             generatedProposals[mode] = {
               id: mode,
               proposal_id: p.proposal_id,
               mode: p.mode === "A" ? "market" : "user",
-              title: p.mode === "A" ? "시장형 편집 (A)" : "사용자친화형 편집 (B)",
-              desc: p.proposal_reason?.mode_reason || "백엔드 분석 기반 추천 편집안입니다.",
+              title: copy.title,
+              desc: copy.desc,
               score: String(Math.round(p.confidence * 100)) + "%",
               key_fragments: p.sequence.map((s: any) => s.fragment_id),
               proposal_reason: p.proposal_reason ?? null,

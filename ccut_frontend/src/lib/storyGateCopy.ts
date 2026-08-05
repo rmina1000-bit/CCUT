@@ -45,6 +45,18 @@ export const STORY_GATE_COPY = {
     large: "크게 보기",
     choose: "고르기",
     seconds: "초",
+    variants: {
+      A: {
+        title: "알맹이만 (A)",
+        shortTitle: "알맹이만",
+        desc: "말이 살아 있는 부분을 중심으로 앞뒤 늘어짐을 덜어낸 안입니다.",
+      },
+      B: {
+        title: "여유롭게 (B)",
+        shortTitle: "여유롭게",
+        desc: "앞뒤 숨을 남겨 현장의 흐름을 편안하게 보는 안입니다.",
+      },
+    },
   },
   toast: {
     storySaved: "이야기를 저장했어요",

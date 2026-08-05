@@ -1003,12 +1003,13 @@ const Index: React.FC = () => {
     const out: Record<"A" | "B", any> = {} as any;
     (proposals || []).forEach((p: any) => {
       const mode = p.mode === "A" ? "A" : "B";
+      const copy = STORY_GATE_COPY.abCards.variants[mode];
       out[mode] = {
         id: mode,
         proposal_id: p.proposal_id,
         mode: p.mode === "A" ? "market" : "user",
-        title: p.mode === "A" ? "시장형 편집 (A)" : "사용자친화형 편집 (B)",
-        desc: p.proposal_reason?.mode_reason || "백엔드 분석 기반 추천 편집안입니다.",
+        title: copy.title,
+        desc: copy.desc,
         score: String(Math.round((p.confidence ?? 0) * 100)) + "%",
         key_fragments: (p.sequence || []).map((s: any) => s.fragment_id),
         proposal_story: p.proposal_story,
@@ -1439,12 +1440,13 @@ const Index: React.FC = () => {
                 if (proposalData && proposalData.proposals) {
                   proposalData.proposals.forEach((p: any) => {
                     const mode = p.mode === "A" ? "A" : "B";
+                    const copy = STORY_GATE_COPY.abCards.variants[mode];
                     generatedProposals[mode] = {
                       id: mode,
                       proposal_id: p.proposal_id,
                       mode: p.mode === "A" ? "market" : "user",
-                      title: p.mode === "A" ? "시장형 편집 (A)" : "사용자친화형 편집 (B)",
-                      desc: p.proposal_reason?.mode_reason || "백엔드 분석 기반 추천 편집안입니다.",
+                      title: copy.title,
+                      desc: copy.desc,
                       score: String(Math.round(p.confidence * 100)) + "%",
                       key_fragments: p.sequence.map((s: any) => s.fragment_id),
                       proposal_story: p.proposal_story,

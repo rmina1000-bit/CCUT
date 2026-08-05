@@ -2378,7 +2378,7 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
               {getProposalPoster("A") ? <img src={getProposalPoster("A")} className="w-full h-full object-cover" draggable={false} /> : <Play size={12} className="text-white/40" />}
               <span className="absolute top-0 left-0 px-1 rounded-br text-[9px] font-black leading-tight bg-primary/70 text-primary-foreground">A</span>
             </span>
-            <span className="min-w-0 flex-1 text-left text-[13px] font-bold text-foreground/85">시장형 편집 <span className="text-primary">(A)</span></span>
+            <span className="min-w-0 flex-1 text-left text-[13px] font-bold text-foreground/85">{STORY_GATE_COPY.abCards.variants.A.shortTitle} <span className="text-primary">(A)</span></span>
           </button>
           <div className="px-3 pb-3">
           <div className="flex flex-col items-center space-y-4">
@@ -2651,7 +2651,7 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
               {getProposalPoster("B") ? <img src={getProposalPoster("B")} className="w-full h-full object-cover" draggable={false} /> : <Play size={12} className="text-white/40" />}
               <span className="absolute top-0 left-0 px-1 rounded-br text-[9px] font-black leading-tight bg-ccut-indigo/80 text-white">B</span>
             </span>
-            <span className="min-w-0 flex-1 text-left text-[13px] font-bold text-foreground/85">사용자친화형 편집 <span className="text-ccut-indigo">(B)</span></span>
+            <span className="min-w-0 flex-1 text-left text-[13px] font-bold text-foreground/85">{STORY_GATE_COPY.abCards.variants.B.shortTitle} <span className="text-ccut-indigo">(B)</span></span>
           </button>
           <div className="px-3 pb-3">
           <div className="flex flex-col items-center space-y-4">

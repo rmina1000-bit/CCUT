@@ -327,6 +327,188 @@ def attach_technique_pack(proposals, program_id, reload=False):
     return proposals, pack
 
 
+def _item_bounds(item):
+    start = item.get("start")
+    if start is None:
+        start = item.get("start_sec")
+    if start is None:
+        start = item.get("start_time")
+    end = item.get("end")
+    if end is None:
+        end = item.get("end_sec")
+    if end is None:
+        end = item.get("end_time")
+    try:
+        return float(start), float(end)
+    except (TypeError, ValueError):
+        return None, None
+
+
+def _set_item_bounds(item, start, end):
+    out = dict(item)
+    start = round(float(start), 3)
+    end = round(float(end), 3)
+    duration = round(max(0.0, end - start), 3)
+    out["start"] = start
+    out["end"] = end
+    out["start_sec"] = start
+    out["end_sec"] = end
+    out["start_time"] = start
+    out["end_time"] = end
+    out["duration"] = duration
+    out["duration_sec"] = duration
+    return out
+
+
+def _subtitle_words_for_source(source_id, cache):
+    if not source_id:
+        return None
+    if source_id in cache:
+        return cache[source_id]
+    con = _connect()
+    words = []
+    try:
+        for sub in con.execute("SELECT segments FROM subtitles WHERE source_id=?", (source_id,)):
+            segs = _as_json(sub["segments"])
+            if not isinstance(segs, list):
+                continue
+            for seg in segs:
+                if not isinstance(seg, dict):
+                    continue
+                for word in seg.get("words") or []:
+                    if not isinstance(word, dict):
+                        continue
+                    try:
+                        ws, we = float(word["start"]), float(word["end"])
+                    except (KeyError, TypeError, ValueError):
+                        continue
+                    if we > ws:
+                        words.append((ws, we))
+    except sqlite3.OperationalError:
+        cache[source_id] = None
+        return None
+    finally:
+        con.close()
+    cache[source_id] = sorted(words)
+    return cache[source_id]
+
+
+def _words_for_sequence_item(item, cache):
+    source_id = item.get("source_id")
+    start, end = _item_bounds(item)
+    if not source_id or start is None or end is None or end <= start:
+        return None
+    words = _subtitle_words_for_source(source_id, cache)
+    if words is None:
+        return None
+    return [(ws, we) for ws, we in words if we > start and ws < end]
+
+
+def _apply_boundary_profile_to_item(program_id, item, variant, word_cache):
+    fid = item.get("fragment_id")
+    start, end = _item_bounds(item)
+    if not fid or start is None or end is None or end <= start:
+        return dict(item), {"changed": False, "reason": "invalid_bounds"}
+    if _has_user_edit_state(program_id, fid):
+        return dict(item), {"changed": False, "reason": "user_edit_state"}
+
+    params = (variant or {}).get("parameters") or {}
+    words = _words_for_sequence_item(item, word_cache)
+    if not words:
+        return _set_item_bounds(item, start, end), {"changed": False, "reason": "no_words"}
+
+    first_word = min(ws for ws, _ in words)
+    last_word = max(we for _, we in words)
+    padding = max(0.0, float(params.get("edge_padding_ms") or 0.0) / 1000.0)
+    max_trim = max(0.0, float(params.get("max_trim_each_edge_ms") or 0.0) / 1000.0)
+    wanted_start = max(start, first_word - padding)
+    wanted_end = min(end, last_word + padding)
+    if max_trim <= 0:
+        wanted_start, wanted_end = start, end
+    else:
+        wanted_start = min(wanted_start, start + max_trim)
+        wanted_end = max(wanted_end, end - max_trim)
+
+    # P-4 사전 차단: 조정안이 원래 겹치던 단어 하나라도 자르면 원 좌표를 유지한다.
+    preserves_words = all(wanted_start <= ws and wanted_end >= we for ws, we in words)
+    if not preserves_words:
+        return _set_item_bounds(item, start, end), {
+            "changed": False,
+            "reason": "preserve_words_guard",
+            "word_count": len(words),
+            "word_span": [round(first_word, 3), round(last_word, 3)],
+        }
+    if wanted_end <= wanted_start:
+        return _set_item_bounds(item, start, end), {"changed": False, "reason": "empty_after_adjust"}
+
+    changed = abs(wanted_start - start) > 0.0005 or abs(wanted_end - end) > 0.0005
+    out = _set_item_bounds(item, wanted_start, wanted_end)
+    return out, {
+        "changed": changed,
+        "reason": "adjusted" if changed else "no_change",
+        "word_count": len(words),
+        "word_span": [round(first_word, 3), round(last_word, 3)],
+        "before": [round(start, 3), round(end, 3)],
+        "after": [out["start"], out["end"]],
+        "trimmed_sec": round((wanted_start - start) + (end - wanted_end), 3),
+    }
+
+
+
+def apply_boundary_profiles(proposals, program_id):
+    """Apply A/B boundary profiles inside sequence items only."""
+    report = {"applied": 0, "modes": {}, "fid_mismatches": []}
+    word_cache = {}
+    for proposal in proposals or []:
+        mode = str(proposal.get("mode") or "").upper()
+        variant = proposal.get("technique_pack") or {}
+        before_seq = list(proposal.get("sequence") or [])
+        before_fids = [item.get("fragment_id") for item in before_seq]
+        new_seq = []
+        mode_report = {
+            "profile": variant.get("boundary_profile"),
+            "parameters": variant.get("parameters") or {},
+            "count": len(before_seq),
+            "changed": 0,
+            "unchanged": 0,
+            "trimmed_sec": 0.0,
+            "guarded": {},
+            "items": [],
+        }
+        for item in before_seq:
+            new_item, item_report = _apply_boundary_profile_to_item(program_id, item, variant, word_cache)
+            new_seq.append(new_item)
+            if item_report.get("changed"):
+                mode_report["changed"] += 1
+                mode_report["trimmed_sec"] += float(item_report.get("trimmed_sec") or 0.0)
+            else:
+                mode_report["unchanged"] += 1
+                reason = item_report.get("reason") or "unknown"
+                mode_report["guarded"][reason] = mode_report["guarded"].get(reason, 0) + 1
+            mode_report["items"].append({"fid": item.get("fragment_id"), **item_report})
+        after_fids = [item.get("fragment_id") for item in new_seq]
+        if after_fids != before_fids:
+            report["fid_mismatches"].append(mode)
+            proposal["sequence"] = before_seq
+        else:
+            proposal["sequence"] = new_seq
+            proposal["duration"] = round(sum(
+                float(s.get("duration_sec") or s.get("duration") or 0.0) for s in new_seq
+            ), 3)
+            proposal.setdefault("proposal_reason", {})["boundary_profile"] = mode_report
+        mode_report["duration"] = proposal.get("duration")
+        mode_report["trimmed_sec"] = round(mode_report["trimmed_sec"], 3)
+        report["modes"][mode] = mode_report
+        report["applied"] += 1
+        print(
+            f"[BOUNDARY-PROFILE] mode={mode} profile={mode_report['profile']} "
+            f"count={mode_report['count']} changed={mode_report['changed']} "
+            f"guarded={mode_report['guarded']} duration={proposal.get('duration')}",
+            flush=True,
+        )
+    return proposals, report
+
+
 def punch_config(reload=False):
     """punch_in 규칙 값 — config JSON이 유일한 출처. 없으면 지어내지 않고 None을 돌려준다."""
     global _CFG_CACHE
