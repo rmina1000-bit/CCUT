@@ -19,6 +19,9 @@ export const STORY_GATE_COPY = {
     saveStoryAs: "다른 이름으로 스토리 저장",
     saveStoryAsTitle: "이름을 새로 붙여 이야기를 하나 더 저장합니다.",
     saveStoryPrompt: "저장할 이야기 이름을 적어 주세요.",
+    // [EDIT-SAVE-1] 편집한 것을 남기는 자리. 스토리 저장과 말이 겹치지 않게 '편집본'으로 부른다.
+    saveEdit: "편집본 저장",
+    saveEditTitle: "지금 편집한 대로 하나 남깁니다. 나중에 이대로 다시 열 수 있습니다.",
   },
   versionBar: {
     label: "스토리 버전",
@@ -43,6 +46,34 @@ export const STORY_GATE_COPY = {
   },
   editVersionBar: {
     label: "편집본",
+  },
+  editSave: {
+    saved: "편집한 내용을 저장했어요.",
+    failed: "편집한 내용을 저장하지 못했어요.",
+    opened: "저장해 둔 편집본을 열었어요.",
+    openFailed: "그 편집본을 불러오지 못했어요.",
+    nothingToSave: "지금 화면에 남길 조각이 없어요.",
+    missingCoords: (n: number) => `조각 ${n}개의 자리를 찾지 못했어요. 반쪽으로 남기지 않았어요.`,
+  },
+  // [EDIT-LOCK-1] 편집 자리에서 조각을 빼거나 넣으려 할 때. ★막는 말이 아니라 길을 여는 말이다.
+  editLock: {
+    notice: "조각을 빼고 넣는 일은 이야기에서 해요. 이야기로 돌아갈까요?",
+    goStory: "이야기로 돌아가기",
+    stay: "여기 있을게요",
+  },
+  // [PROGRESS-1 2026-08-06] 진행을 사람 말로. 무엇을 → 어떻게 되었는지, 숫자와 함께 한 줄씩.
+  //   ★있는 시점에만 얹는다(새 폴링·타이머 없음). ★같은 문구는 연달아 쌓이지 않는다.
+  progress: {
+    editStarted: (n: number) => `조각 ${n}개로 편집을 시작할게요.`,
+    soundLooking: (n: number) => `조각 ${n}개의 소리를 살펴보고 있어요.`,
+    soundDone: (d: number, b: number, s: number) =>
+      `소리를 다 살펴봤어요. 대사 ${d} · 배경 ${b} · 조용함 ${s}.`,
+    abReady: "편집안 두 가지를 준비했어요. 마음에 드는 쪽을 골라 주세요.",
+    abFailed: "편집안을 준비하지 못했어요. 이야기는 그대로 있어요.",
+    fragmentTrimmed: (label: string, before: number, after: number) =>
+      `${label} 조각을 다듬었어요. ${before.toFixed(1)}초 → ${after.toFixed(1)}초.`,
+    fragmentTouched: (label: string) => `${label} 조각을 다듬었어요.`,
+    editSaved: (n: number) => `편집본을 남겼어요 — 조각 ${n}개.`,
   },
   sound: {
     action: "소리",
