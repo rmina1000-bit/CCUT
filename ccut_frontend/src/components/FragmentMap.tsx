@@ -52,6 +52,9 @@ interface FragmentMapProps {
   onPreviewEdit?: () => void;
   /** [SAVE-SPINE 2-C] 저장. askName 이면 이름을 물어 하나 더 저장한다. */
   onSaveVersion?: (options?: { askName?: boolean }) => void;
+  /** [EDIT-SAVE-1] 편집본 저장. 편집 자리에서만 넘어오므로 이 prop 이 곧 '편집 중'이다. */
+  onSaveEditVersion?: () => void;
+  editSaveBusy?: boolean;
   onReopenComposition?: () => void;
   /** [GATE-LOOP-01 1번] 승인 여부(잠금 아님). 구성 버튼 택일에만 쓴다 — 조작은 절대 막지 않는다. */
   storyApproved?: boolean;
@@ -128,6 +131,8 @@ const FragmentMap: React.FC<FragmentMapProps> = ({
   fragmentFace = "image",
   onFragmentFaceChange,
   onSaveVersion,
+  onSaveEditVersion,
+  editSaveBusy = false,
   onPreviewEdit,
   onReopenComposition,
   storyApproved = false,
@@ -751,6 +756,20 @@ const FragmentMap: React.FC<FragmentMapProps> = ({
                       ★reopen 경로(useStoryGate.reopen / POST /story/{id}/reopen)는 그대로 산다 —
                         버튼만 없애고 배관은 남긴다(다른 호출처가 쓰고, 되살릴 때 다시 필요하다). */}
                 </>
+              )}
+              {/* [EDIT-SAVE-1] 편집한 것을 남기는 자리. 편집 자리에서만 이 prop 이 넘어온다 —
+                  화면 상태를 따로 묻지 않고 '넘어왔는가'로 가린다(조건 하나, 진실 하나). */}
+              {onSaveEditVersion && (
+                <button
+                  type="button"
+                  data-save-edit-version
+                  disabled={editSaveBusy}
+                  className={`${MAP_BTN} ${MAP_BTN_OFF} disabled:opacity-50`}
+                  onClick={() => onSaveEditVersion()}
+                  title={STORY_GATE_COPY.actions.saveEditTitle}
+                >
+                  {STORY_GATE_COPY.actions.saveEdit}
+                </button>
               )}
             </div>
           )}
