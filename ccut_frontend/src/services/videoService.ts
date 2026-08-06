@@ -316,6 +316,45 @@ export const videoService = {
     listStoryVersions: async (projectId: string) => {
         return await fetcher(`/story-version/${encodeURIComponent(projectId)}`);
     },
+
+    /** [SAVE-TRUTH 2026-08-06] 편집본을 통째로 저장한다 — 원천은 ★화면이다.
+     *  구판은 items 없이 보냈고 서버가 승인 원장을 복사해, 화면이 16이든 14든
+     *  언제나 승인 원고 15행이 저장됐다(edit_version id=2·3 실측). 이제 화면이 좌표를 싣는다. */
+    saveEditVersion: async (projectId: string, payload: {
+        name?: string;
+        fids?: string[];
+        items?: Array<{
+            fid: string;
+            source_id: string;
+            anchor_start_ms: number;
+            anchor_end_ms: number;
+            trim_start_ms?: number | null;
+            trim_end_ms?: number | null;
+            hidden?: boolean;
+            sound_role?: string | null;
+            display_id?: string | null;
+            edit_values?: Record<string, unknown>;
+        }>;
+        proposal_id?: string | null;
+        parent_version_id?: number | null;
+        created_by?: string;
+    }) => {
+        const response = await fetch(`${API_BASE_URL}/edit-version/${encodeURIComponent(projectId)}`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+        });
+        const body = await response.json().catch(() => ({}));
+        return { ok: response.ok && body?.ok !== false, status: response.status, body };
+    },
+
+    listEditVersions: async (projectId: string) => {
+        return await fetcher(`/edit-version/${encodeURIComponent(projectId)}`);
+    },
+
+    getEditVersion: async (versionId: number) => {
+        return await fetcher(`/edit-version/detail/${versionId}`);
+    },
     upsertEditOverlay: async (payload: {
         source_id: string;
         fragment_id: string;

@@ -172,9 +172,28 @@ const Index: React.FC = () => {
     version_id: number; name: string; item_count: number;
     parent_version_id: number | null; created_at: string;
   }>>([]);
-  const [editVersions] = useState<Array<{ id: string; name: string }>>([]);
+  // [EDIT-SAVE-1] 저장된 편집본 목록. 8/5 까지는 setter 없는 빈 배열이라 줄이 뜬 적이 없었다.
+  const [editVersions, setEditVersions] = useState<Array<{
+    version_id: number; name: string; item_count: number;
+    parent_version_id: number | null; story_version_id: number | null;
+    proposal_id: string | null; created_by: string; created_at: string;
+  }>>([]);
+  const [activeEditVersionId, setActiveEditVersionId] = useState<number | null>(null);
+  const [editSaveBusy, setEditSaveBusy] = useState(false);
+  const lastSavedEditVersionIdRef = useRef<number | null>(null);
+  // [SAVE-TRUTH 2026-08-06] 저장 페이로드를 만드는 자리는 화면 상태 선언부 아래(:2555 부근)다.
+  //   여기서 직접 부르면 그 선언들보다 위라 TDZ 로 죽는다 — 그래서 ref 로 건네받는다
+  //   (requestProposalsForApprovedStoryRef 와 같은 관례).
+  const buildEditItemsRef = useRef<(() => {
+    items: Array<Record<string, unknown>>;
+    missing: string[];
+  }) | null>(null);
   const [activeVersionId, setActiveVersionId] = useState<number | null>(null);
   const [precisionPaneMode, setPrecisionPaneMode] = useState<"story" | "edit">("story");
+  // [EDIT-LOCK-2] 보류맵·휴지통은 이야기 자리와 편집 자리가 ★공용★이다(ReservedFragments 하나뿐).
+  //   그래서 잠금은 prop 을 갈아끼우는 것으로는 안 되고, 지금 어느 자리인지 콜백 안에서 읽어야 한다.
+  const precisionPaneModeRef = useRef<"story" | "edit">("story");
+  precisionPaneModeRef.current = precisionPaneMode;
   // [LAYER-FIX 3-A] 방금 복원한 버전의 fids. 급증 가드가 '이건 복원이다'를 알아보는 유일한 근거.
   //   ref 인 이유: 가드는 렌더 밖(saveUiStateMerged 안)에서 도므로 최신 값이 필요하다.
   const versionRestoreFidsRef = useRef<string[] | null>(null);
@@ -184,6 +203,7 @@ const Index: React.FC = () => {
   const [appDialog, setAppDialog] = useState<{
     message: string;
     cancelText?: string;
+    confirmText?: string;   // [EDIT-LOCK-2] 되돌아갈 길에 이름을 붙인다 — "OK"로는 어디로 가는지 모른다
     onConfirm?: () => void | Promise<void>;
   } | null>(null);
   // [#22 모든 편집 진입은 스토리로 2026-07-19] '다시 편집'(SNS·아카이브)로 들어온 프로젝트는
@@ -426,15 +446,29 @@ const Index: React.FC = () => {
   const [soundRoleError, setSoundRoleError] = useState(false);
   const [soundRoleSavingIds, setSoundRoleSavingIds] = useState<Set<string>>(new Set());
   const soundLoadSeqRef = useRef(0);
+  const soundRoleItemsRef = useRef<SoundRoleItem[]>([]);
+  soundRoleItemsRef.current = soundRoleItems;
   const soundRoleSavingRef = useRef<Set<string>>(new Set());
   const editFlowProposalSigRef = useRef<string | null>(null);
   const soundProgramRef = useRef(activeNavItem);
   soundProgramRef.current = activeNavItem;
-  const refreshSoundRoles = useCallback(async () => {
+  // [EDIT-LOCK-1 4-D 2026-08-06] 같은 조각 집합이면 다시 부르지 않는다.
+  //   실측: 편집 진입 한 번에 [SOUND-ROLE][EDIT-FLOW] 가 5회·7회 같은 값으로 찍혔다.
+  //   호출처 3곳(:531 · :536 · 편집 시작)이 각자 정당해서 어느 하나를 지울 수 없다 —
+  //   그래서 지우는 대신 '무엇에 대해 이미 불렀는가'를 기억한다. 사용자가 고치면(handleSoundRoleChange)
+  //   그 기억을 비우므로 강제 갱신 경로는 그대로 산다.
+  const soundLoadedKeyRef = useRef<string | null>(null);
+  const refreshSoundRoles = useCallback(async (options?: { force?: boolean }) => {
     if (!activeNavItem || !activeNavItem.startsWith("proj_")) {
       setSoundRoleItems([]);
+      soundLoadedKeyRef.current = null;
       return 0;
     }
+    const key = `${activeNavItem}|${storyFidsRef.current.join("|")}`;
+    if (!options?.force && soundLoadedKeyRef.current === key) {
+      return soundRoleItemsRef.current.length;
+    }
+    soundLoadedKeyRef.current = key;
     const seq = ++soundLoadSeqRef.current;
     setSoundRoleLoading(true);
     setSoundRoleError(false);
@@ -454,12 +488,23 @@ const Index: React.FC = () => {
           reason: item.reason,
         })),
       });
+      // [PROGRESS-1 ②] 소리를 다 살펴본 그 시점. 있는 자리에 한 줄 얹는다(새 타이머·폴링 없음).
+      //   편집 자리에서만 말한다 — 이야기 자리에서 소리를 켜 보는 것은 진행이 아니다.
+      if (precisionPaneModeRef.current === "edit" && count > 0) {
+        const roles = result.items ?? [];
+        const n = (r: string) => roles.filter((it) => it.effective_role === r).length;
+        appendStoryGateMessage(
+          "ai_progress_sound_done",
+          STORY_GATE_COPY.progress.soundDone(n("dialogue"), n("background"), n("silence")),
+        );
+      }
       return count;
     } catch (error) {
       if (seq !== soundLoadSeqRef.current) return;
       console.warn("[SOUND-1] sound handling load failed", error);
       setSoundRoleItems([]);
       setSoundRoleError(true);
+      soundLoadedKeyRef.current = null;   // 실패는 '불렀다'로 기억하지 않는다 — 다음 기회에 다시 부른다
       return 0;
     } finally {
       if (seq === soundLoadSeqRef.current) setSoundRoleLoading(false);
@@ -490,7 +535,7 @@ const Index: React.FC = () => {
       if (soundProgramRef.current !== programId) return;
       console.warn("[SOUND-1] sound handling save failed", error);
       toast.error(STORY_GATE_COPY.sound.saveFailed);
-      void refreshSoundRoles();
+      void refreshSoundRoles({ force: true });   // 사용자가 고친 뒤의 복구는 기억을 무시하고 다시 읽는다
     } finally {
       soundRoleSavingRef.current.delete(item.timeline_item_id);
       setSoundRoleSavingIds(new Set(soundRoleSavingRef.current));
@@ -498,6 +543,7 @@ const Index: React.FC = () => {
   }, [activeNavItem, refreshSoundRoles]);
   useEffect(() => {
     soundLoadSeqRef.current += 1;
+    soundLoadedKeyRef.current = null;   // 프로젝트가 바뀌면 기억도 비운다
     soundRoleSavingRef.current.clear();
     setSoundViewEnabled(false);
     setSoundRoleItems([]);
@@ -981,6 +1027,140 @@ const Index: React.FC = () => {
     } catch (e) {
       console.error("[LAYER-SPLIT] 버전 적용 실패", e);
       toast.error("그 버전을 불러오지 못했습니다.");
+    }
+  }, []);
+
+  // [EDIT-SAVE-1] 저장된 편집본 목록을 읽는다. 저장 직후·프로젝트 전환 시.
+  //   못 읽은 것을 '없다'로 위장하지 않는다 — 경고가 이유를 남긴다(스토리 버전 줄과 같은 규율).
+  const refreshEditVersions = useCallback(async (programId?: string | null) => {
+    const pid = programId ?? activeNavItem;
+    if (!pid?.startsWith("proj_")) { setEditVersions([]); return; }
+    try {
+      const res: any = await videoService.listEditVersions(pid);
+      setEditVersions(res?.data?.versions ?? []);
+    } catch (e) {
+      console.warn("[EDIT-SAVE-1] 편집본 목록을 읽지 못했습니다", e);
+      setEditVersions([]);
+    }
+  }, [activeNavItem]);
+
+  useEffect(() => { void refreshEditVersions(); }, [refreshEditVersions]);
+
+  // [EDIT-LOCK-1 2026-08-06 국장 확정] 편집 자리에서는 조각을 빼지도 넣지도 않는다.
+  //   ★막는 게 아니다. 하려던 일은 이야기에서 하는 일이므로 그리로 가는 길을 연다(헌법: 사용자를 막지 않는다).
+  //   구조적 이유(실측): 편집 pane 의 제거는 handleRoughCutStoryRemove(:3210) 로 가고
+  //   그 함수가 persistRoughCutDecision 으로 ★승인 원고 자체를 고쳤다 — 15→16→14 사건의 기계적 원인.
+  const handleEditLockedFragmentChange = useCallback((path: string, fragment?: Fragment | string) => {
+    // 경로마다 첫 인자가 다르다 — 보류맵 드롭은 fid 문자열, 조각맵은 Fragment 객체.
+    const fid = typeof fragment === "string"
+      ? fragment
+      : fragment ? String((fragment as any).fragment_id ?? getUid(fragment)) : null;
+    // ★이 한 줄이 L3 도달 증명의 재료다 — 경로 식별자와 그때의 조각 수를 함께 남긴다.
+    console.info(`[EDIT-LOCK] path=${path} fid=${fid} story_count=${storyFidsRef.current.length} `
+      + `pane=${precisionPaneModeRef.current} — 편집 자리에서는 조각을 넣고 빼지 않는다`);
+    setCompositionNotice(STORY_GATE_COPY.editLock.notice);
+    setAppDialog({
+      message: STORY_GATE_COPY.editLock.notice,
+      confirmText: STORY_GATE_COPY.editLock.goStory,
+      cancelText: STORY_GATE_COPY.editLock.stay,
+      onConfirm: () => {
+        setPrecisionPaneMode("story");
+        setCompositionNotice(null);
+        console.info(`[EDIT-LOCK] 이야기로 돌아감 from=${path}`);
+      },
+    });
+  }, []);
+
+  /** [EDIT-LOCK-2] 이야기·편집 공용 경로에 씌우는 가드.
+   *  편집 자리면 되묻고 원래 동작을 하지 않는다. 이야기 자리면 그대로 통과 — 아무것도 막지 않는다. */
+  const guardEditLock = useCallback(
+    <A extends unknown[]>(path: string, fn?: (...args: A) => unknown) =>
+      (...args: A) => {
+        if (precisionPaneModeRef.current === "edit") {
+          handleEditLockedFragmentChange(path, args[0] as Fragment | string | undefined);
+          return;
+        }
+        return fn?.(...args);
+      },
+    [handleEditLockedFragmentChange],
+  );
+
+  // [SAVE-TRUTH 2026-08-06] 편집본 저장 — 원천은 화면이다. 좌표를 서버가 다시 계산하지 않는다.
+  const handleSaveEditVersion = useCallback(async () => {
+    const programId = activeNavItem;
+    if (!programId?.startsWith("proj_")) return;
+    const built = buildEditItemsRef.current?.();
+    if (!built || built.items.length === 0) {
+      toast.error(STORY_GATE_COPY.editSave.failed, {
+        description: STORY_GATE_COPY.editSave.nothingToSave,
+      });
+      return;
+    }
+    // 좌표를 못 찾은 조각이 하나라도 있으면 저장하지 않는다 — 반쪽 편집본을 남기지 않는다.
+    if (built.missing.length > 0) {
+      console.error("[SAVE-TRUTH] 좌표 미해결 조각", built.missing);
+      toast.error(STORY_GATE_COPY.editSave.failed, {
+        description: STORY_GATE_COPY.editSave.missingCoords(built.missing.length),
+      });
+      return;
+    }
+    // fids 를 문자열로 남긴다 — 배열로 찍으면 콘솔에서 접혀 대조가 불가능하다(실측).
+    console.info(`[SAVE-TRUTH] 화면 조각 program=${programId} screen_count=${built.items.length} `
+      + `fids=${built.items.map((it) => it.fid).join(",")}`);
+    setEditSaveBusy(true);
+    try {
+      const result = await videoService.saveEditVersion(programId, {
+        items: built.items as any,
+        parent_version_id: lastSavedEditVersionIdRef.current,
+      });
+      if (!result.ok) {
+        const msg = result.body?.message || STORY_GATE_COPY.editSave.failed;
+        console.error("[EDIT-SAVE-1] 저장 실패", result.status, result.body);
+        toast.error(STORY_GATE_COPY.editSave.failed, { description: msg });
+        return;
+      }
+      const vid = result.body?.data?.version_id ?? null;
+      lastSavedEditVersionIdRef.current = vid;
+      setActiveEditVersionId(vid);
+      await refreshEditVersions(programId);
+      console.info(`[EDIT-SAVE-1] 저장됨 version_id=${vid} items=${result.body?.data?.item_count} `
+        + `origin=${result.body?.data?.origin} 화면=${built.items.length}`);
+      toast.success(STORY_GATE_COPY.editSave.saved, {
+        description: `조각 ${result.body?.data?.item_count ?? 0}개`,
+      });
+      // [PROGRESS-1 ⑤] 저장된 그 시점. 몇 개를 남겼는지 채팅에도 흘린다(토스트는 사라진다).
+      appendStoryGateMessage(
+        `ai_progress_edit_saved_${vid ?? ""}`,
+        STORY_GATE_COPY.progress.editSaved(result.body?.data?.item_count ?? built.items.length),
+      );
+    } finally {
+      setEditSaveBusy(false);
+    }
+  }, [activeNavItem, refreshEditVersions]);
+
+  // [EDIT-SAVE-1] 편집본 칩 클릭 -> 그때 저장한 조각·순서로 조각맵을 되돌린다.
+  //   ★단방향: 여기서 조각맵을 바꾸고 끝(스토리 버전 칩과 같은 규율, 설계 ⑦ 순환 금지).
+  const handleEditVersionPick = useCallback(async (versionId: number) => {
+    try {
+      const res: any = await videoService.getEditVersion(versionId);
+      const d = res?.data;
+      if (!res?.ok || !d) {
+        toast.error(STORY_GATE_COPY.editSave.openFailed);
+        return;
+      }
+      storyOriginRef.current = "user";
+      versionRestoreFidsRef.current = d.fids ?? [];
+      setStoryFids(d.fids ?? []);
+      setActiveEditVersionId(versionId);
+      lastSavedEditVersionIdRef.current = versionId;
+      setPrecisionPaneMode("edit");
+      console.info(`[EDIT-SAVE-1] 편집본 ${versionId} 적용 — 조각 ${(d.fids || []).length}개`);
+      toast.success(STORY_GATE_COPY.editSave.opened, {
+        description: `조각 ${(d.fids || []).length}개`,
+      });
+    } catch (e) {
+      console.error("[EDIT-SAVE-1] 편집본 적용 실패", e);
+      toast.error(STORY_GATE_COPY.editSave.openFailed);
     }
   }, []);
 
@@ -2473,6 +2653,44 @@ const Index: React.FC = () => {
     const preferred = preferredPbeItemIdFor(fid);
     return candidates.find((state) => state.timeline_item_id === preferred) ?? candidates[0];
   }, [preferredPbeItemIdFor]);
+  // [SAVE-TRUTH 2026-08-06] 편집본 저장 페이로드 — ★화면이 들고 있는 값 그대로.
+  //   구판(EDIT-SAVE-1)은 아무것도 안 싣고 서버가 승인 원장을 복사했다. 그래서 화면이 16이든 14든
+  //   저장된 것은 언제나 승인 원고 15행이었다(edit_version id=2·3, 전체행동일=True 실측).
+  //   ★좌표를 못 찾은 조각은 지어내지 않고 missing 으로 올린다 — 반쪽 저장을 만들지 않기 위해.
+  buildEditItemsRef.current = () => {
+    const fids = storyFidsRef.current;
+    const anchors = fidAnchorsOf(fids);
+    const labelByFid = new Map(
+      (modeStoryTextItems ?? [])
+        .filter((it) => it.fragmentId && it.label)
+        .map((it) => [String(it.fragmentId), String(it.label)]),
+    );
+    const items: Array<Record<string, unknown>> = [];
+    const missing: string[] = [];
+    for (const fid of fids) {
+      const anchor = anchors[fid];
+      if (!anchor) { missing.push(fid); continue; }
+      const preferred = preferredPbeItemIdFor(fid);
+      const candidates = Array.from(editStatesRef.current.values())
+        .filter((state) => state.parent_fragment_id === fid);
+      const state = candidates.find((s) => s.timeline_item_id === preferred) ?? candidates[0] ?? null;
+      const role = soundRoleItems.find((r) => r.fragment_id === fid) ?? null;
+      items.push({
+        fid,
+        source_id: anchor.source_id,
+        anchor_start_ms: anchor.anchor_start_ms,
+        anchor_end_ms: anchor.anchor_end_ms,
+        trim_start_ms: state ? state.trim_start_ms : anchor.anchor_start_ms,
+        trim_end_ms: state ? state.trim_end_ms : anchor.anchor_end_ms,
+        hidden: state ? !!state.removed : false,
+        sound_role: role?.effective_role ?? null,
+        display_id: labelByFid.get(fid) ?? null,
+        edit_values: { excluded_ranges: state?.excluded_ranges ?? [] },
+      });
+    }
+    return { items, missing };
+  };
+
   const playImageFragmentInMini = useCallback(async (f: Fragment) => {
     const af = f as any;
     const sid = af.source_id ?? f.source_video;
@@ -2614,6 +2832,18 @@ const Index: React.FC = () => {
             return;
           }
           const states = await refreshEditStatesRef.current();
+          // [PROGRESS-1 ④] 조각을 다듬은 그 시점. 얼마나 짧아졌는지를 초로 말한다.
+          const beforeSec = (contractSnapshot.anchor_end_ms - contractSnapshot.anchor_start_ms) / 1000;
+          const cutMs = (contractSnapshot.excluded_ranges ?? [])
+            .reduce((sum, [s, e]) => sum + Math.max(0, Number(e) - Number(s)), 0);
+          const afterSec = (contractSnapshot.trim_end_ms - contractSnapshot.trim_start_ms - cutMs) / 1000;
+          const label = String(orig?.display_id ?? "").trim();
+          appendStoryGateMessage(
+            "ai_progress_fragment_trimmed",
+            Number.isFinite(beforeSec) && Number.isFinite(afterSec) && afterSec > 0
+              ? STORY_GATE_COPY.progress.fragmentTrimmed(label || rootFid, beforeSec, afterSec)
+              : STORY_GATE_COPY.progress.fragmentTouched(label || rootFid),
+          );
           const prefer = (fid: string) => timelineItemIdFor(programId, fid, 0);
           const rebuilt = rebuildFragmentTiles(editFragments as any[], states, prefer) as typeof editFragments;
           setEditFragments(rebuilt);
@@ -3763,10 +3993,18 @@ const Index: React.FC = () => {
       source_count: sourceEntries.length,
     });
     setPrecisionPaneMode("edit");
-    appendStoryGateMessage("ai_edit_started", STORY_GATE_COPY.chat.editStarted);
-    appendStoryGateMessage("ai_edit_preparing", STORY_GATE_COPY.chat.editPreparing);
+    precisionPaneModeRef.current = "edit";   // 아래 진행 표시가 이 값을 읽는다 — 렌더를 기다리지 않는다
+    // [PROGRESS-1 ①] 편집 시작. 조각 수를 함께 말한다.
+    const startCount = storyFidsRef.current.length;
+    appendStoryGateMessage("ai_progress_edit_started", STORY_GATE_COPY.progress.editStarted(startCount));
+    appendStoryGateMessage("ai_progress_sound_looking", STORY_GATE_COPY.progress.soundLooking(startCount));
     const roleCount = await refreshSoundRoles();
     const ok = await requestProposalsForApprovedStoryRef.current?.();
+    // [PROGRESS-1 ③] A/B 가 준비됐는지. 못 만들었으면 못 만들었다고 말한다(침묵 금지).
+    appendStoryGateMessage(
+      ok === true ? "ai_progress_ab_ready" : "ai_progress_ab_failed",
+      ok === true ? STORY_GATE_COPY.progress.abReady : STORY_GATE_COPY.progress.abFailed,
+    );
     console.info("[EDIT-FLOW][START-EDIT]", {
       program_id: activeNavItem,
       sound_roles: roleCount,
@@ -3956,7 +4194,7 @@ const Index: React.FC = () => {
       <AppDialog
         open={!!appDialog}
         message={appDialog?.message ?? ""}
-        confirmText="OK"
+        confirmText={appDialog?.confirmText ?? "OK"}
         cancelText={appDialog?.cancelText}
         onCancel={() => setAppDialog(null)}
         onConfirm={async () => {
@@ -4055,17 +4293,31 @@ const Index: React.FC = () => {
             editVersionBar={editVersions.length > 0 ? (
               <div className="flex flex-row flex-nowrap items-center gap-2 overflow-x-auto no-scrollbar py-0.5">
                 <span className="flex-shrink-0 text-micro text-muted-foreground/40 pr-0.5">{STORY_GATE_COPY.editVersionBar.label}</span>
-                {editVersions.map((v) => (
-                  <button
-                    key={v.id}
-                    type="button"
-                    data-edit-version-chip={v.id}
-                    className="group flex items-center gap-1.5 h-7 flex-shrink-0 rounded-full px-2.5 text-micro text-muted-foreground/60 hover:bg-foreground/5 hover:text-foreground transition-colors"
-                  >
-                    <span className="h-1 w-1 rounded-full bg-muted-foreground/30 group-hover:bg-muted-foreground/60 transition-colors" />
-                    <span className="max-w-[130px] truncate">{v.name}</span>
-                  </button>
-                ))}
+                {editVersions.map((v) => {
+                  const active = v.version_id === activeEditVersionId;
+                  return (
+                    <button
+                      key={v.version_id}
+                      type="button"
+                      data-edit-version-chip={v.version_id}
+                      onClick={() => handleEditVersionPick(v.version_id)}
+                      title={`${v.name} · 조각 ${v.item_count}개`}
+                      className={`group flex items-center gap-1.5 h-7 flex-shrink-0 rounded-full px-2.5 text-micro transition-colors ${
+                        active
+                          ? "bg-primary/10 text-primary"
+                          : "text-muted-foreground/60 hover:bg-foreground/5 hover:text-foreground"
+                      }`}
+                    >
+                      <span
+                        className={`h-1 w-1 rounded-full transition-colors ${
+                          active ? "bg-primary" : "bg-muted-foreground/30 group-hover:bg-muted-foreground/60"
+                        }`}
+                      />
+                      <span className="max-w-[130px] truncate">{v.name}</span>
+                      <span className="tabular-nums opacity-50">{v.item_count}</span>
+                    </button>
+                  );
+                })}
               </div>
             ) : undefined}
             versionBar={savedVersions.length > 0 ? (
@@ -4131,7 +4383,8 @@ const Index: React.FC = () => {
                     fragments={roughCutMapReady ? roughCutFragmentPool : []}
                     storyFragmentIds={roughCutMapReady ? storyFids : []}
                     storyOnly
-                    onFragmentsChange={roughCutData ? handleRoughCutStoryReorder : handleFragmentsReorder}
+                    // [EDIT-LOCK-2] 순서도 이야기에서 정한다 — 편집 자리에서는 되묻는다.
+                    onFragmentsChange={guardEditLock("reorder", roughCutData ? handleRoughCutStoryReorder : handleFragmentsReorder)}
                     selectedFragmentId={selectedFragment ? String((selectedFragment as any).fragment_id ?? getUid(selectedFragment)) : null}
                     activeFragmentId={selectedFragment ? String((selectedFragment as any).fragment_id ?? getUid(selectedFragment)) : highlightedPanoramaFrag}
                     focusOrigin={fragmentFocusOrigin}
@@ -4140,11 +4393,11 @@ const Index: React.FC = () => {
                     onFragmentPlay={playImageFragmentInMini}
                     onEditFragment={handleSingleFragmentEdit}
                     onFragmentDoubleClick={handleEditFragmentDoubleClick}
-                    onExcludeFragment={roughCutData ? handleRoughCutStoryRemove : handleExcludeFromEdit}
-                    onRestoreFragment={roughCutData ? handleRoughCutStoryInsert : handleRestoreFromHold}
-                    onSourceRestore={roughCutData ? handleRoughCutStoryInsert : handleAddFromSource}
-                    onMoveToHold={roughCutData ? handleRoughCutStoryRemove : handleMoveToHold}
-                    onTrashRestore={roughCutData ? handleRoughCutStoryInsert : handleRestoreToEdit}
+                    onExcludeFragment={(f) => handleEditLockedFragmentChange("exclude", f)}
+                    onRestoreFragment={(f) => handleEditLockedFragmentChange("restore", f)}
+                    onSourceRestore={(f) => handleEditLockedFragmentChange("source_restore", f)}
+                    onMoveToHold={(f) => handleEditLockedFragmentChange("move_to_hold", f)}
+                    onTrashRestore={(f) => handleEditLockedFragmentChange("trash_restore", f)}
                     onBoundaryClick={handleOpenBoundaryEditor}
                     sourceVideoUrls={Object.fromEntries(
                       (sourceEntries ?? []).flatMap(e => [[e.source_id, e.video_url], [e.label, e.video_url]]).filter(([, v]) => v)
@@ -4315,7 +4568,8 @@ const Index: React.FC = () => {
                       fragments={roughCutMapReady ? roughCutFragmentPool : []}
                       storyFragmentIds={roughCutMapReady ? storyFids : []}
                       storyOnly
-                      onFragmentsChange={roughCutData ? handleRoughCutStoryReorder : handleFragmentsReorder}
+                      // [EDIT-LOCK-2] 순서도 이야기에서 정한다 — 편집 자리에서는 되묻는다.
+                      onFragmentsChange={guardEditLock("reorder", roughCutData ? handleRoughCutStoryReorder : handleFragmentsReorder)}
                       selectedFragmentId={selectedFragment ? String((selectedFragment as any).fragment_id ?? getUid(selectedFragment)) : null}
                       activeFragmentId={selectedFragment ? String((selectedFragment as any).fragment_id ?? getUid(selectedFragment)) : highlightedPanoramaFrag}
                       focusOrigin={fragmentFocusOrigin}
@@ -4324,11 +4578,11 @@ const Index: React.FC = () => {
                       onFragmentPlay={playImageFragmentInMini}
                       onEditFragment={handleSingleFragmentEdit}
                       onFragmentDoubleClick={handleEditFragmentDoubleClick}
-                      onExcludeFragment={roughCutData ? handleRoughCutStoryRemove : handleExcludeFromEdit}
-                      onRestoreFragment={roughCutData ? handleRoughCutStoryInsert : handleRestoreFromHold}
-                      onSourceRestore={roughCutData ? handleRoughCutStoryInsert : handleAddFromSource}
-                      onMoveToHold={roughCutData ? handleRoughCutStoryRemove : handleMoveToHold}
-                      onTrashRestore={roughCutData ? handleRoughCutStoryInsert : handleRestoreToEdit}
+                      onExcludeFragment={(f) => handleEditLockedFragmentChange("exclude", f)}
+                      onRestoreFragment={(f) => handleEditLockedFragmentChange("restore", f)}
+                      onSourceRestore={(f) => handleEditLockedFragmentChange("source_restore", f)}
+                      onMoveToHold={(f) => handleEditLockedFragmentChange("move_to_hold", f)}
+                      onTrashRestore={(f) => handleEditLockedFragmentChange("trash_restore", f)}
                       onBoundaryClick={handleOpenBoundaryEditor}
                       sourceVideoUrls={Object.fromEntries(
                         (sourceEntries ?? []).flatMap(e => [[e.source_id, e.video_url], [e.label, e.video_url]]).filter(([, v]) => v)
@@ -4340,6 +4594,9 @@ const Index: React.FC = () => {
                       textScope="selected"
                       showFaceControls
                       showCompositionActions={false}
+                      // [EDIT-SAVE-1] 편집 자리에서만 넘긴다 — 조각맵은 이 prop 하나로 판단한다.
+                      onSaveEditVersion={handleSaveEditVersion}
+                      editSaveBusy={editSaveBusy}
                       compositionNotice={STORY_GATE_COPY.precisionPanel.editMapNote}
                       sourceFragments={(sourceEntries ?? []).flatMap((e) => e.fragments ?? [])}
                       storyTextItems={modeStoryTextItems}
@@ -4459,16 +4716,19 @@ const Index: React.FC = () => {
                   fragments={reservedFragments}
                   selectedFragmentId={selectedFragment ? getUid(selectedFragment) : null}
                   onFragmentClick={handleReservedClick}
-                  onRestoreFragment={handleRestoreFromHold}
+                  // [EDIT-LOCK-2] 보류맵·휴지통은 두 자리가 공용이라 여기서 자리를 물어 가른다.
+                  //   ★국장 실측(2026-08-06)에서 조각이 안내 없이 빠진 길이 바로 hold_drop 이다 —
+                  //     EDIT-LOCK-1 은 조각맵 prop 만 갈아끼워서 이 길에 닿지 못했다.
+                  onRestoreFragment={guardEditLock("hold_restore", handleRestoreFromHold)}
                   onDeleteFragment={handleDeleteFromHold}
                   deletedFragments={deletedFragments}
                   onRestoreToHold={handleRestoreToHold}
-                  onRestoreToEdit={handleRestoreToEdit}
+                  onRestoreToEdit={guardEditLock("trash_restore_to_edit", handleRestoreToEdit)}
                   onEmptyTrash={handleEmptyTrash}
                   holdPositions={holdPositions}
                   onHoldPositionsChange={setHoldPositions}
                   onHoldPositionsCommit={handleHoldPositionsCommit}
-                  onDropToHold={roughCutData ? handleRoughCutDropToHold : handleDropToHold}
+                  onDropToHold={guardEditLock("hold_drop", roughCutData ? handleRoughCutDropToHold : handleDropToHold)}
                   compactLabels={modeGateOn}
                 />
               </div>
