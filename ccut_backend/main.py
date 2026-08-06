@@ -452,6 +452,10 @@ app.include_router(story_gate_router)
 from story_version.api import router as story_version_router
 app.include_router(story_version_router)
 
+# [EDIT-SAVE-1] 편집본 원장 — 승인 스토리 한 벌을 통째로 떠서 쌓는다(append-only).
+from edit_version.api import router as edit_version_router
+app.include_router(edit_version_router)
+
 # [SOUND-1] Sensor-derived handling labels; only user corrections are stored.
 from sound_role.api import router as sound_role_router
 app.include_router(sound_role_router)
