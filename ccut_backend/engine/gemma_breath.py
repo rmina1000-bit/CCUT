@@ -63,8 +63,19 @@ def _fmt_sec(ms):
     return f"{(ms or 0) / 1000:.0f}초"
 
 
-def world(program_id, fragment_labels=None):
-    """지금 세계 — 짧게. 매 턴 이만큼만 보인다(전 DB 를 펼치지 않는다)."""
+def world(program_id, fragment_labels=None, with_scenes=True):
+    """지금 세계 — 짧게. 매 턴 이만큼만 보인다(전 DB 를 펼치지 않는다).
+
+    [STRUCT-A② 2026-08-08] 여기에 원고 L1(장면 묶음)을 얹는다.
+      그동안 젬마가 본 것은 숫자뿐이었다("조각 15개, 247초"). 내용을 모르니
+      기준을 지어내고(정은한 사건), 되묻기 예시를 자기 지시로 되읽었다.
+      이제 하루가 몇 장면인지, 무엇이 찍혔는지 본다.
+
+    ★L0(roughCut.premise)은 일부러 쓰지 않는다 — 실측(2026-08-08):
+      Marigold premise 가 "아이와 어른 사이의 놀이와 요리"라고 말하는데
+      실제 화면은 성인 혼자의 바다·물속·낚시·집·산이다(L1 대조).
+      전사의 '[아이]' 표기를 사람으로 읽은 것으로 보인다. 틀린 요약을 주면
+      그 틀림이 젬마 입을 거쳐 사용자에게 간다. L1 은 VL·시간 관측이라 더 가깝다."""
     try:
         fids = _ep._approved_fids(program_id)
     except Exception:
@@ -73,6 +84,13 @@ def world(program_id, fragment_labels=None):
         return None
     total = _ep._story_total_ms(program_id)
     drafts = _ep._recent_drafts(program_id)
+    scenes = []
+    if with_scenes:
+        try:
+            from engine import ledger_groups as _lgp
+            scenes = _lgp.group_program(program_id, use_transcript=True)
+        except Exception as e:
+            print(f"[WORLD][WARN] 장면 묶음 실패 — 숫자만 보인다: {e}")
     label_of = {}
     for disp, fid in (fragment_labels or {}).items():
         label_of[str(fid)] = str(disp)
@@ -92,11 +110,19 @@ def world(program_id, fragment_labels=None):
         "recent_edits": recent,
         "fids": fids,
         "labels": label_of,
+        "scenes": scenes,
     }
 
 
-def _world_lines(w):
-    lines = [f"- 승인된 이야기: 조각 {w['fragment_count']}개, 전체 {w['total_text']}"]
+def _world_lines(w, scene_limit=20):
+    lines = []
+    scenes = w.get("scenes") or []
+    if scenes:
+        from engine import ledger_groups as _lgp
+        lines.append(f"[찍어 온 것 — 장면 {len(scenes)}개]")
+        lines.append(_lgp.summary_lines(scenes, limit=scene_limit))
+        lines.append("")
+    lines.append(f"- 승인된 이야기: 조각 {w['fragment_count']}개, 전체 {w['total_text']}")
     if w["recent_edits"]:
         lines.append("- 최근 내가 다듬은 것: " + ", ".join(w["recent_edits"]))
     else:

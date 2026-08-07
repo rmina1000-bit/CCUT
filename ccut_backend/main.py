@@ -5589,7 +5589,25 @@ def _chat_only_speed_bypass(input_text: str, project_id: str = None,
         from engine import gemma_breath as _gbw
         _w = _gbw.world(project_id, fragment_labels)
         if _w:
-            _r = _desk.receive(t, _gbw._world_lines(_w), recent_messages)
+            # 판단할 때는 눈이 짧다 — 장면 지도는 아래 조회 분기에서만 편다
+            #   (실측: 지도를 접수 프롬프트에 얹으면 없는 일을 조각 조작으로 읽고
+            #    없는 조각 번호를 지어낸다. STRUCT-A② 참조)
+            _w_short = dict(_w)
+            _w_short["scenes"] = []
+            _r = _desk.receive(t, _gbw._world_lines(_w_short), recent_messages)
+            # 조회다 — 이제 장면 지도를 펴고 답한다(필요할 때만 그 층을 연다)
+            if _r and _r["cap"] == "find_fragments" and _w.get("scenes"):
+                _said = _desk.look(t, _gbw._world_lines(_w), recent_messages)
+                if _said:
+                    print(f"[DESK] 조회 — 장면 지도로 답한다: {t[:30]!r}")
+                    return {
+                        "status": "OK", "action": "answer_only",
+                        "normalized_instruction": None, "reply": _said,
+                        "confidence": 0.9,
+                        "matched": {"kind": "scene_look", "gate": "desk",
+                                    "scenes": len(_w["scenes"])},
+                        "via": "desk",
+                    }
             if _r and _r["cap"] is None and _r["say"]:
                 # 없는 일 = 정직하게 못 한다고. 대화 = 편집 기계를 깨우지 않는다.
                 #   ★후자가 특히 중요하다(실측 사고): "안녕. 오늘 촬영 힘들었어"의

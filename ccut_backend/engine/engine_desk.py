@@ -208,6 +208,61 @@ def receive(user_text, world_lines="", recent_messages=None):
     return {"cap": cap, "args": args, "say": say, "reason": reason}
 
 
+def look(user_text, scene_lines, recent_messages=None):
+    """[STRUCT-A② 2026-08-08] 조회로 판정된 뒤에만 장면 지도를 펴고 답한다.
+
+    ★왜 접수 때 같이 주지 않는가(실측):
+      L1(2,228자)을 접수 프롬프트에 얹었더니 접수대가 무너졌다 —
+        '자막을 넣어줘'(없는 일) → remove_fragment 로 읽음
+        '고양이 나온 장면 있어?' → "조각 3번과 17번에서 나타납니다"(지어냄)
+      같은 질문을 짧은 world 로 물으면 각각 None(정답)·find_fragments 로 맞혔다.
+      눈앞의 목록이 앵커가 되어 조각 조작 쪽으로 기운다. 젬마 4B 에서 어제
+      호흡 회로가 겪은 것과 같은 병이다.
+    ★그래서 층을 나눈다: 판단할 때는 눈이 짧고, 답할 때 눈을 뜬다."""
+    from engine import hub
+    from engine.intent_router import _sanitize_talk
+
+    prompt = (
+        "너는 CCUT 편집실의 통역사다. 사용자가 영상에 대해 물었다.\n"
+        "아래는 이 영상을 장면 단위로 훑은 지도다. **여기 적힌 것만** 사실이다.\n"
+        "적혀 있지 않은 것은 '없다' 또는 '확인되지 않는다'고 말한다. "
+        "조각 번호를 지어내지 마라.\n\n"
+        f"[장면 지도]\n{scene_lines}\n\n"
+        f"[사용자의 물음]\n{user_text}\n\n"
+        "한국어 1~3문장으로 답한다. 장면 번호와 시간은 위에 적힌 것만 쓴다.\n"
+        'JSON만 출력: {"say":"..."}'
+    )
+    try:
+        out = hub._ollama_json(prompt, timeout=30, temperature=0.4,
+                               model=hub.VOICE_MODEL)
+        say = _sanitize_talk(str(out.get("say") or "").strip()) or None
+    except Exception as e:
+        print(f"[DESK][WARN] 조회 답변 실패: {e}")
+        return None
+    if not say:
+        return None
+    # [TIME-GUARD] 답에 적힌 시각이 지도에 있는 것인가 — 사용자는 이 시간으로
+    #   실제 영상을 찾아간다. 실측에서 '1분51초'를 '2분51초'로 옮겨 적은 예가 나왔다.
+    #   지도에 없는 시각이 섞이면 그 시각만 지우지 않고 문장을 통째로 버린다
+    #   (반쪽 사실이 더 위험하다). 숫자를 못 믿으면 시간 없이 다시 답하게 한다.
+    said = set(re.findall(r"\d+분\d+초", say))
+    known = set(re.findall(r"\d+분\d+초", scene_lines or ""))
+    bad = said - known
+    if bad:
+        print(f"[DESK][TIME-GUARD] 지도에 없는 시각 {sorted(bad)} → 시간 빼고 다시")
+        try:
+            out2 = hub._ollama_json(
+                prompt + "\n주의: 시각(N분NN초)을 적지 마라. 장면 내용만 말하라.",
+                timeout=25, temperature=0.3, model=hub.VOICE_MODEL)
+            say2 = _sanitize_talk(str(out2.get("say") or "").strip())
+            if say2 and not (set(re.findall(r"\d+분\d+초", say2)) - known):
+                return say2
+        except Exception:
+            pass
+        return re.sub(r"\s*\d+분\d+초\s*[~-]?\s*", " ", say).strip() or None
+    return say
+
+
 def explain(result_data, user_text, cap_id=None):
     """③ 통역. 엔진이 준 작업 데이터를 사용자 말로 옮긴다.
 
