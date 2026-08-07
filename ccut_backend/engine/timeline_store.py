@@ -36,7 +36,14 @@ DB_PATH = os.path.join(BACKEND_DIR, "ccut_app.db")
 #   message 만 08-02 까지 이어졌다.
 #   ※ project_timeline 에 kind CHECK 제약이 없다 — 스키마 변경 아님(DDL 0).
 _KINDS = ("message", "generation", "transcript_ref",
-          "chat_summary", "active_intent", "chat_pref")
+          "chat_summary", "active_intent", "chat_pref",
+          # [2026-08-08] 사용자가 센서를 고친 것 — VL 은 틀릴 수 있고 사람이 맞다.
+          #   국장 실화면: 14번 장면 라벨이 '산'인데 실제는 바닷가 바위였다.
+          "scene_label_fix",
+          # [2026-08-08] 아직 못 하는 일을 사용자가 부탁한 기록.
+          #   개념서 §8 "불가능하다는 말로 대화를 끝내지 않는다" —
+          #   못 한다고만 하고 잊으면 그 요구는 영영 안 만들어진다.
+          "wish")
 
 
 def _connect():

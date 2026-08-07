@@ -439,13 +439,16 @@ async def get_ledger_scenes(program_id: str, transcript: int = 1):
     try:
         from engine import ledger_groups as _lg
         groups = _lg.group_program(program_id, use_transcript=bool(transcript))
+        # 사용자가 고친 장면 이름이 센서(VL)보다 먼저다.
+        fixes = _lg.label_fixes(program_id)
     except Exception as e:
         return {"ok": False, "error": "scene_group_failed", "message": str(e)}
     out = []
     for g in groups:
         out.append({
             "group_no": g["group_no"],
-            "label": _lg.scene_label(g),
+            "label": _lg.scene_label(g, fixes),
+            "label_fixed": g["group_no"] in fixes,
             "source_id": g["source_id"],
             "start_ms": g["start_ms"],
             "end_ms": g["end_ms"],

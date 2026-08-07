@@ -245,22 +245,53 @@ def group_program(program_id, use_transcript=True, target=(12, 30)):
     return out
 
 
-def scene_label(g):
-    """사람이 읽는 장면 이름 — 장소가 있으면 장소, 없으면 대표 태그 둘."""
+def label_fixes(program_id):
+    """사용자가 고친 장면 이름 — {group_no: label}. 마지막 정정이 이긴다.
+
+    VL 은 센서라 틀린다(국장 실화면: 14번 '산' → 실제는 바닷가 바위).
+    사람이 고친 것은 센서보다 위에 있다. append-only 원장이라 역사는 남는다."""
+    out = {}
+    con = _connect()
+    try:
+        rows = con.execute(
+            "SELECT payload FROM project_timeline WHERE program_id=? "
+            "AND kind='scene_label_fix' ORDER BY entry_id", (program_id,)).fetchall()
+    except Exception:
+        rows = []
+    finally:
+        con.close()
+    for r in rows:
+        try:
+            p = json.loads(r["payload"] or "{}")
+        except Exception:
+            continue
+        no, lab = p.get("group_no"), str(p.get("label") or "").strip()
+        if isinstance(no, int) and lab:
+            out[no] = lab
+    return out
+
+
+def scene_label(g, fixes=None):
+    """사람이 읽는 장면 이름. 사용자가 고친 것이 있으면 그것이 먼저."""
+    if fixes:
+        fixed = fixes.get(g.get("group_no"))
+        if fixed:
+            return fixed
     if g.get("place"):
         return g["place"]
     tags = g.get("top_tags") or []
     return " · ".join(tags[:2]) if tags else "장면"
 
 
-def summary_lines(groups, limit=30):
-    """젬마와 사람이 함께 읽는 L1 요약 — 짧게."""
+def summary_lines(groups, limit=30, fixes=None):
+    """젬마와 사람이 함께 읽는 L1 요약 — 짧게. 사용자가 고친 이름을 우선한다."""
     lines = []
     for g in groups[:limit]:
         t0 = g["start_ms"] / 1000.0
         t1 = g["end_ms"] / 1000.0
         head = f"{g['group_no']}. {int(t0 // 60)}분{int(t0 % 60):02d}초~{int(t1 // 60)}분{int(t1 % 60):02d}초"
-        where = f" · {g['place']}" if g["place"] else ""
+        _fx = (fixes or {}).get(g["group_no"])
+        where = f" · {_fx}(사용자가 고침)" if _fx else (f" · {g['place']}" if g["place"] else "")
         tags = f" · {', '.join(g['top_tags'][:4])}" if g["top_tags"] else ""
         lines.append(f"{head}{where} · 조각 {g['item_count']}개{tags}")
         if g.get("dialogue_head"):

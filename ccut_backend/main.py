@@ -5608,6 +5608,55 @@ def _chat_only_speed_bypass(input_text: str, project_id: str = None,
                                     "scenes": len(_w["scenes"])},
                         "via": "desk",
                     }
+            # 장면 이름 정정 — 센서(VL)가 틀렸을 때 사람이 고친다. 사람이 위다.
+            if _r and _r["cap"] == "fix_scene_label":
+                _no = _r["args"].get("scene_no")
+                _lab = str(_r["args"].get("label") or "").strip()
+                try:
+                    _no = int(_no)
+                except (TypeError, ValueError):
+                    _no = None
+                if _no and _lab:
+                    from engine import timeline_store as _ts
+                    import time as _tt
+                    _ts.append_entries(project_id, [{
+                        "kind": "scene_label_fix",
+                        "client_id": f"fix_{_no}_{int(_tt.time() * 1000)}",
+                        "ts": _tt.time() * 1000,
+                        "payload": {"group_no": _no, "label": _lab,
+                                    "said": t[:120]},
+                    }])
+                    print(f"[DESK][LABEL-FIX] {_no}번 → {_lab!r}")
+                    return {
+                        "status": "OK", "action": "answer_only",
+                        "normalized_instruction": None,
+                        "reply": (_r["say"] or
+                                  f"{_no}번 장면을 '{_lab}'으로 고쳤어요. "
+                                  f"알려주셔서 고맙습니다."),
+                        "confidence": 0.92,
+                        "matched": {"kind": "scene_label_fixed", "gate": "desk",
+                                    "group_no": _no, "label": _lab},
+                        "via": "desk",
+                    }
+            # 아직 못 하는 일 — 벽이 아니라 문. 적어 두고 대화를 잇는다.
+            if _r and _r["cap"] is None and _r["reason"] == "아직":
+                from engine import timeline_store as _ts
+                import time as _tt
+                _ts.append_entries(project_id, [{
+                    "kind": "wish",
+                    "client_id": f"wish_{int(_tt.time() * 1000)}",
+                    "ts": _tt.time() * 1000,
+                    "payload": {"said": t[:200]},
+                }])
+                print(f"[DESK][WISH] 적어 뒀다: {t[:40]!r}")
+                return {
+                    "status": "OK", "action": "answer_only",
+                    "normalized_instruction": None,
+                    "reply": _r["say"] or _desk.WISH_SAY,
+                    "confidence": 0.85,
+                    "matched": {"kind": "wish_noted", "gate": "desk"},
+                    "via": "desk",
+                }
             if _r and _r["cap"] is None and _r["say"]:
                 # 없는 일 = 정직하게 못 한다고. 대화 = 편집 기계를 깨우지 않는다.
                 #   ★후자가 특히 중요하다(실측 사고): "안녕. 오늘 촬영 힘들었어"의

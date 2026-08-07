@@ -85,10 +85,12 @@ def world(program_id, fragment_labels=None, with_scenes=True):
     total = _ep._story_total_ms(program_id)
     drafts = _ep._recent_drafts(program_id)
     scenes = []
+    fixes = {}
     if with_scenes:
         try:
             from engine import ledger_groups as _lgp
             scenes = _lgp.group_program(program_id, use_transcript=True)
+            fixes = _lgp.label_fixes(program_id)
         except Exception as e:
             print(f"[WORLD][WARN] 장면 묶음 실패 — 숫자만 보인다: {e}")
     label_of = {}
@@ -111,6 +113,7 @@ def world(program_id, fragment_labels=None, with_scenes=True):
         "fids": fids,
         "labels": label_of,
         "scenes": scenes,
+        "label_fixes": fixes,
     }
 
 
@@ -120,7 +123,8 @@ def _world_lines(w, scene_limit=20):
     if scenes:
         from engine import ledger_groups as _lgp
         lines.append(f"[찍어 온 것 — 장면 {len(scenes)}개]")
-        lines.append(_lgp.summary_lines(scenes, limit=scene_limit))
+        lines.append(_lgp.summary_lines(scenes, limit=scene_limit,
+                                        fixes=w.get("label_fixes")))
         lines.append("")
     lines.append(f"- 승인된 이야기: 조각 {w['fragment_count']}개, 전체 {w['total_text']}")
     if w["recent_edits"]:
