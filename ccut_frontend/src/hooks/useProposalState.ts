@@ -871,6 +871,22 @@ export const useProposalState = (
         });
         return; // 승인 전에는 아무것도 바꾸지 않는다
       }
+      // [LIVING-DRAFT-1 2026-08-08] 초안 적용됨 — 서버가 비파괴 오버레이에 실제로
+      // 적용하고 왔다. 카드는 검수 손잡이([조금 덜]/[원래대로]/[이대로])를 단다.
+      if (route.action === "draft_applied" && (route as any).draft) {
+        setStoryPlan((prev: any) => {
+          if (!prev) return prev;
+          return {
+            ...prev,
+            messages: (prev.messages ?? []).map((m: any) =>
+              m.id === aiMsgId
+                ? { ...m, text: route.reply || "초안을 만들어 봤어요.", isInterpreting: false,
+                    kind: "edit_draft", draft: (route as any).draft }
+                : m),
+          };
+        });
+        return;
+      }
       // [#57 REVISION 도구층] 국소 수정 — 전체 재제안으로 뭉개지 않고 /revision/proposals로
       // 집행한다 (큐원=이해 op 동봉, 규칙=시퀀스 조작). 실패/미지원이면 기존 재제안 경로 폴백.
       if (route.action === "revise_current" && route.revision) {

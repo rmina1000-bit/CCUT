@@ -250,6 +250,10 @@ interface CenterPanelProps {
   //   [됐어]=무변경(카드만 접힘, 대화 지속), [되돌리기]=확보한 직전 값 RESTORE 재저장.
   onApplyEditProposal?: (proposal: any) => Promise<{ ok: boolean; before?: any; error?: string }>;
   onUndoEditProposal?: (proposal: any, before: any) => Promise<{ ok: boolean; error?: string }>;
+  // [LIVING-DRAFT-1] 초안 카드 손잡이 — [조금 덜]=폭 절반 재적용, [원래대로]=RESTORE,
+  //   [이대로]=쓰기 없음. 클릭은 짧은 CCUT 메시지로 대화에 남아 다음 턴의 맥락이 된다.
+  onReduceEditDraft?: (draft: any) => Promise<{ ok: boolean; after?: any; error?: string }>;
+  onDraftAction?: (text: string) => void;
   // [TIMELINE-PAGE 2026-08-02] 300행 절단 복구 — 서버가 has_more 를 주는데 듣는 코드가
   //   0이었다(실측: Merope 614행 중 314행 도달 불가). 서버·서비스 계층은 손대지 않고
   //   호출처만 잇는다. 버튼 방식인 이유는 아래 렌더부 주석에.
@@ -516,6 +520,8 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
   onStartStoryEditing,
   onApplyEditProposal,
   onUndoEditProposal,
+  onReduceEditDraft,
+  onDraftAction,
   timelineHasMore = false,
   timelineLoadingMore = false,
   onLoadOlderTimeline,
@@ -699,6 +705,11 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
   const [editProposalCards, setEditProposalCards] = useState<Record<string, {
     status: "idle" | "busy" | "applied" | "declined" | "undone";
     before?: any; error?: string | null;
+  }>>({});
+  // [LIVING-DRAFT-1] 초안 카드 상태 — active(적용된 채 검수 대기)/busy/reverted/kept.
+  const [editDraftCards, setEditDraftCards] = useState<Record<string, {
+    status: "active" | "busy" | "reverted" | "kept";
+    after?: any; error?: string | null;
   }>>({});
   const foldNodeRefs = useRef<Record<string, HTMLDivElement | null>>({});
   // 접기로 줄어든 높이를 되갚기 위한 예약 — 넉 달 싸운 '화면 튐'이 여기서 갈린다.
@@ -3607,6 +3618,94 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
                             )}
                             {cardState?.status === "undone" && (
                               <div className="text-[11px] text-muted-foreground/70">{cp.undone}</div>
+                            )}
+                            {cardState?.error && (
+                              <div className="text-[11px] text-destructive/80">{cardState.error}</div>
+                            )}
+                          </div>
+                        );
+                      })()}
+                      {/* [LIVING-DRAFT-1] 초안 카드 — 이미 적용된 비파괴 초안의 검수 손잡이.
+                          숫자는 전부 서버 계산값(draft payload) 직결. */}
+                      {(item.msg as any).kind === "edit_draft" && (item.msg as any).draft && (() => {
+                        const d = (item.msg as any).draft;
+                        const cardId = String(item.msg.id);
+                        const cardState = editDraftCards[cardId];
+                        const disp = d.display || {};
+                        const cp = STORY_GATE_COPY.editDraftCard;
+                        const shownAfter = cardState?.after || d.after;
+                        return (
+                          <div data-edit-draft className="px-4 py-2.5 rounded-xl bg-secondary/5 border border-primary/20 text-[12px] space-y-1.5 max-w-full">
+                            <div className="text-muted-foreground/85">
+                              {disp.label} · {disp.direction}쪽 {disp.amount_text} 다듬음 · 전체 {disp.story_before_text} → {disp.story_after_text}
+                            </div>
+                            <div className="text-[10px] text-muted-foreground/55 break-all">
+                              {d.fragment_id} · {d.source_id} · {d.before?.trim_start_ms}–{d.before?.trim_end_ms}ms → {shownAfter?.trim_start_ms}–{shownAfter?.trim_end_ms}ms
+                            </div>
+                            {(!cardState || cardState.status === "active") && (
+                              <div className="flex items-center gap-3 pt-0.5">
+                                <button
+                                  type="button"
+                                  data-draft-reduce
+                                  onClick={async () => {
+                                    if (!onReduceEditDraft) return;
+                                    setEditDraftCards((prev) => ({ ...prev, [cardId]: { status: "busy" } }));
+                                    const r = await onReduceEditDraft({ ...d, after: shownAfter });
+                                    setEditDraftCards((prev) => ({
+                                      ...prev,
+                                      [cardId]: r.ok
+                                        ? { status: "active", after: r.after, error: null }
+                                        : { status: "active", after: shownAfter, error: `${cp.reduceFailed}${r.error ? ` (${r.error})` : ""}` },
+                                    }));
+                                    if (r.ok) onDraftAction?.(cp.reducedSaid);
+                                  }}
+                                  className="text-micro text-muted-foreground hover:text-foreground transition-colors"
+                                >
+                                  {cp.reduce}
+                                </button>
+                                <button
+                                  type="button"
+                                  data-draft-revert
+                                  onClick={async () => {
+                                    if (!onUndoEditProposal) return;
+                                    setEditDraftCards((prev) => ({ ...prev, [cardId]: { status: "busy" } }));
+                                    const r = await onUndoEditProposal(d, d.before);
+                                    setEditDraftCards((prev) => ({
+                                      ...prev,
+                                      [cardId]: r.ok
+                                        ? { status: "reverted", error: null }
+                                        : { status: "active", after: shownAfter, error: `${cp.revertFailed}${r.error ? ` (${r.error})` : ""}` },
+                                    }));
+                                    if (r.ok) onDraftAction?.(cp.revertedSaid);
+                                  }}
+                                  className="text-micro text-muted-foreground hover:text-foreground transition-colors"
+                                >
+                                  {cp.revert}
+                                </button>
+                                <button
+                                  type="button"
+                                  data-draft-keep
+                                  onClick={() => {
+                                    setEditDraftCards((prev) => ({ ...prev, [cardId]: { status: "kept" } }));
+                                    onDraftAction?.(cp.keptSaid);
+                                  }}
+                                  className="text-micro text-primary hover:text-primary/80 transition-colors"
+                                >
+                                  {cp.keep}
+                                </button>
+                              </div>
+                            )}
+                            {cardState?.status === "busy" && (
+                              <div className="flex items-center gap-2 text-primary/60">
+                                <Loader2 size={12} className="animate-spin" />
+                                <span className="text-[11px]">{cp.busy}</span>
+                              </div>
+                            )}
+                            {cardState?.status === "reverted" && (
+                              <div className="text-[11px] text-muted-foreground/70">{cp.revertedSaid}</div>
+                            )}
+                            {cardState?.status === "kept" && (
+                              <div className="text-[11px] text-primary/80">{cp.keptSaid}</div>
                             )}
                             {cardState?.error && (
                               <div className="text-[11px] text-destructive/80">{cardState.error}</div>

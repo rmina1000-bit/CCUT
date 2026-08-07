@@ -38,6 +38,18 @@ export const STORY_GATE_COPY = {
   chatActions: {
     startEditing: "편집 시작",
   },
+  // [LIVING-DRAFT-1 2026-08-08] 초안 카드 — 이미 적용된 초안의 검수 손잡이.
+  editDraftCard: {
+    reduce: "조금 덜",
+    revert: "원래대로",
+    keep: "이대로",
+    busy: "고치는 중…",
+    reducedSaid: "조금 덜 다듬었어요.",
+    revertedSaid: "원래대로 되돌렸어요.",
+    keptSaid: "남겼어요.",
+    reduceFailed: "덜 다듬기에 실패했어요",
+    revertFailed: "되돌리지 못했어요",
+  },
   // [PROPOSE-1A 2026-08-07] 대화→제안 카드 — 국장 결정 어휘 [해봐]/[됐어] 그대로.
   editProposalCard: {
     apply: "해봐",

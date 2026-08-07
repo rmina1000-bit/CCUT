@@ -271,6 +271,315 @@ def _phrase(user_text, disp):
     return _fallback_sentence(disp), "server"
 
 
+# ════════════════════════════════════════════════════════════════════
+# [LIVING-DRAFT-1 2026-08-08] 말하면 해보고, 해본 것을 함께 고친다.
+#
+# PROPOSE-1A(제안→[해봐])의 다음 형태: 제안만 하지 않고 초안을 실제로
+# 적용해 보여준다. 전부 비파괴 오버레이(fragment_edit_state) 위 —
+# 원본 영상·승인 원고(story_approval)는 무접촉이고, 모든 쓰기는
+# vault_events 에 before/after 로 남아 언제든 전진 복귀된다.
+#
+# 큰 의도(막연한 어려움·늘어짐 호소) → 서버가 재고 젬마가 말한다.
+# 확정된 작은 행동(되돌리기·이대로) → 젬마 없이 결정론으로 집행한다.
+# ════════════════════════════════════════════════════════════════════
+
+# 초안 유발: 어려움 호소(기존) + 늘어짐 계열. 일부러 좁게 잡는다 —
+# "답답해"·"길다" 같은 일상어는 안 받는다(동문서답 전례). 사전이 아니라 문의 폭이다.
+_FRESH_DRAFT_RE = re.compile(
+    r"어렵|모르겠|힘들|힘드|헷갈|막막|막혔|막혀|복잡|어떡|어쩌|늘어지|늘어져|지루|밋밋|루즈")
+# 되돌림·보존 어휘 — 대상 조각 토큰 바로 뒤(10자 안)에 붙을 때만 그 조각에 적용
+_KEEP_RE = re.compile(r"그대로|되돌려|원래대로|취소")
+_ORDINAL_RE = re.compile(r"(\d{1,2})\s*번")
+_LABEL_TOKEN_RE = re.compile(r"[A-Za-z]{1,2}\d{1,3}")
+
+
+def _approved_fids(program_id):
+    from story_gate import service as _story
+    live = _story.live_approval(program_id)
+    if not live:
+        return []
+    try:
+        return json.loads(live.get("fragment_ids") or "[]")
+    except Exception:
+        return []
+
+
+def _story_total_ms(program_id):
+    """승인 원고의 현재 총 길이(ms) — edit state spans 반영, removed=0."""
+    from edit_contract import service as _edit
+    from edit_contract.time_units import to_ms
+    import ledger_r0
+    fids = _approved_fids(program_id)
+    if not fids:
+        return 0
+    states = {}
+    try:
+        for s in _edit.list_edit_states(program_id):
+            states[s["timeline_item_id"]] = s
+    except Exception:
+        pass
+    con = _connect()
+    try:
+        marks = ",".join("?" * len(fids))
+        rows = con.execute(
+            f'SELECT fragment_id, start, "end" FROM semantic_fragments '
+            f"WHERE fragment_id IN ({marks})", fids).fetchall()
+        by_fid = {r["fragment_id"]: r for r in rows}
+    finally:
+        con.close()
+    h6 = ledger_r0._hash6(program_id)
+    total = 0
+    for fid in fids:
+        st = states.get(f"ITEM_{h6}_{fid}_0")
+        if st:
+            if st.get("removed"):
+                continue
+            total += sum(int(e) - int(s) for s, e in (st.get("spans") or []))
+        else:
+            r = by_fid.get(fid)
+            if r:
+                total += to_ms(float(r["end"] or 0)) - to_ms(float(r["start"] or 0))
+    return total
+
+
+def _recent_drafts(program_id, limit=5):
+    """최근 초안들(vault_events, origin=NATURAL_LANGUAGE) — item별 최신 1건."""
+    con = _connect()
+    try:
+        rows = con.execute(
+            "SELECT event_id, fragment_id, detail FROM vault_events "
+            "WHERE event_kind='edit_command' AND program_id=? "
+            "ORDER BY event_id DESC LIMIT 40", (program_id,)).fetchall()
+    finally:
+        con.close()
+    out = {}
+    for r in rows:
+        try:
+            d = json.loads(r["detail"] or "{}")
+        except Exception:
+            continue
+        if d.get("origin") != "NATURAL_LANGUAGE":
+            continue
+        item = d.get("timeline_item_id")
+        if item and item not in out:
+            out[item] = {"event_id": r["event_id"], "fragment_id": r["fragment_id"],
+                         "detail": d}
+        if len(out) >= limit:
+            break
+    return out
+
+
+def _parse_targets(text, fragment_labels, fids):
+    """본문에서 대상 조각을 뽑는다: 'N번'(승인 순번) / 라벨(A60 등).
+    반환 [(fragment_id, keep여부, order또는None, 표시라벨), ...] — 등장 순."""
+    targets = []
+    seen = set()
+    label_map = {str(k): v for k, v in (fragment_labels or {}).items()}
+    for m in list(_ORDINAL_RE.finditer(text)) + list(_LABEL_TOKEN_RE.finditer(text)):
+        tok = m.group(0)
+        if m.re is _ORDINAL_RE:
+            order = int(m.group(1))
+            if not (1 <= order <= len(fids)):
+                continue
+            fid = fids[order - 1]
+            disp = f"{order}번"
+        else:
+            fid = label_map.get(tok) or label_map.get(tok.upper())
+            if not fid or fid not in fids:
+                continue
+            disp = tok.upper()
+        if fid in seen:
+            continue
+        seen.add(fid)
+        tail = text[m.end():m.end() + 10]
+        keep = bool(_KEEP_RE.search(tail))
+        targets.append((fid, keep, disp))
+    return targets
+
+
+def _apply_state(program_id, fid, source_id, anchor, trim, command, before_state=None):
+    """서버측 upsert — 프론트 [해봐] 핸들러와 동일 절차(현재 revision 재조회)."""
+    from edit_contract import service as _edit
+    import ledger_r0
+    item_id = f"ITEM_{ledger_r0._hash6(program_id)}_{fid}_0"
+    row = None
+    try:
+        for s in _edit.list_edit_states(program_id):
+            if s["timeline_item_id"] == item_id:
+                row = s
+                break
+    except Exception:
+        pass
+    before = ({"trim_start_ms": row["trim_start_ms"], "trim_end_ms": row["trim_end_ms"],
+               "excluded_ranges": row.get("excluded_ranges") or [],
+               "removed": bool(row.get("removed"))}
+              if row else
+              {"trim_start_ms": anchor[0], "trim_end_ms": anchor[1],
+               "excluded_ranges": [], "removed": False})
+    payload = {
+        "program_id": program_id, "timeline_item_id": item_id, "source_id": source_id,
+        "anchor_start_ms": anchor[0], "anchor_end_ms": anchor[1],
+        "trim_start_ms": trim[0], "trim_end_ms": trim[1],
+        "excluded_ranges": (before_state or before)["excluded_ranges"],
+        "removed": bool((before_state or {}).get("removed", False)),
+        "parent_fragment_id": fid, "occurrence": 0,
+        "command_type": command, "origin": "NATURAL_LANGUAGE",
+    }
+    if row:
+        payload["revision"] = row["revision"]
+    res = _edit.upsert_edit_state(payload)
+    return res, before, item_id
+
+
+def _phrase_draft(user_text, disp):
+    """초안 보고 문장 — 젬마가 말하고 서버가 검문한다(라벨·숫자·위생)."""
+    from engine import hub
+    from engine.intent_router import _sanitize_talk
+    prompt = (
+        "너는 CCUT — 영상 편집실의 동료다. 사용자가 이렇게 말했다: "
+        f"\"{(user_text or '')[:120]}\"\n"
+        "서버가 초안을 실제로 만들어 화면에 적용해 뒀다. 아래 사실을 그대로 전하는 "
+        "따뜻한 존댓말 1~2문장을 만들어라.\n"
+        f"- 한 일: {disp['label']} {disp['direction']}쪽 말 없는 구간을 다듬어 "
+        f"{disp['amount_text']} 줄였다\n"
+        f"- 전체 길이: {disp['story_before_text']} → {disp['story_after_text']}\n"
+        f"규칙: '{disp['label']}' 표기를 글자 그대로 포함하라. 숫자는 위에 적힌 것만 "
+        "그대로 써라. 이미 적용된 상태다 — 해도 되는지 묻지 말고, 보고 마음에 안 들면 "
+        "고칠 수 있다는 투로 끝내라.\n"
+        'JSON만 출력: {"say":"..."}'
+    )
+    try:
+        out = hub._ollama_json(prompt, timeout=20, temperature=0.5,
+                               model=hub.VOICE_MODEL)
+        say = _sanitize_talk(str(out.get("say") or "").strip())
+        if say and disp["label"] not in say:
+            print(f"[LIVING-DRAFT][LABEL-GUARD] 강등: {say[:60]!r}")
+            say = None
+        if say and _numbers_ok(say, [disp["label"], disp["amount_text"],
+                                     disp["story_before_text"],
+                                     disp["story_after_text"]]):
+            return say, "gemma"
+    except Exception as e:
+        print(f"[LIVING-DRAFT][WARN] 문장 실패 — 서버 문장 강등: {e}")
+    return (f"{disp['label']} {disp['direction']}쪽 말 없는 구간을 "
+            f"{disp['amount_text']} 다듬어 봤어요. 전체 {disp['story_before_text']} → "
+            f"{disp['story_after_text']}예요. 마음에 안 들면 되돌릴 수 있어요."), "server"
+
+
+def _sec_text(ms):
+    return f"{ms / 1000:.0f}초"
+
+
+def draft_gate(user_text, project_id, source_ids=None, fragment_labels=None):
+    """초안 문 — 발동 안 하면 None(사다리 계속). 발동하면 실제로 적용하고 보고한다."""
+    t = (user_text or "").strip()
+    if not t or not project_id:
+        return None
+    fresh = bool(_FRESH_DRAFT_RE.search(t))
+    fids = _approved_fids(project_id)
+    if not fids:
+        return None
+    targets = _parse_targets(t, fragment_labels, fids)
+    if not fresh and not targets:
+        return None
+    drafts_ctx = _recent_drafts(project_id)
+    # 표적 지목만 있고(어려움 호소 없음) 초안 문맥도 없으면 이 문이 아니다 —
+    # "11번 보여줘" 같은 조회를 가로채지 않는다.
+    if not fresh and targets and not drafts_ctx:
+        return None
+
+    import ledger_r0
+    h6 = ledger_r0._hash6(project_id)
+    story_before = _story_total_ms(project_id)
+    reverted = []
+    # ① 되돌림(확정된 작은 행동 — 결정론, 젬마 무경유)
+    for fid, keep, disp in targets:
+        if not keep:
+            continue
+        item_id = f"ITEM_{h6}_{fid}_0"
+        ctx = drafts_ctx.get(item_id)
+        if not ctx:
+            continue  # 초안이 없던 조각의 '그대로'는 이미 그대로다
+        b = (ctx["detail"].get("before") or {})
+        trim = b.get("trim_ms") or []
+        if len(trim) != 2:
+            continue
+        anchor = None
+        con = _connect()
+        try:
+            r = con.execute('SELECT source_id, start, "end" FROM semantic_fragments '
+                            "WHERE fragment_id=?", (fid,)).fetchone()
+        finally:
+            con.close()
+        if not r:
+            continue
+        from edit_contract.time_units import to_ms
+        anchor = (to_ms(float(r["start"] or 0)), to_ms(float(r["end"] or 0)))
+        _apply_state(project_id, fid, r["source_id"], anchor,
+                     (int(trim[0]), int(trim[1])), "RESTORE",
+                     before_state={"excluded_ranges": b.get("excluded_ranges_ms") or [],
+                                   "removed": bool(b.get("removed"))})
+        reverted.append(disp)
+
+    # ② 새 초안 — 표적이 지목됐으면 그 조각에서, 아니면 전체 최적 후보
+    draft_targets = [fid for fid, keep, _ in targets if not keep]
+    cands = find_candidates(project_id)
+    if draft_targets:
+        cands = [c for c in cands if c["fragment_id"] in draft_targets]
+    cand = cands[0] if cands else None
+
+    if not cand:
+        parts = []
+        if reverted:
+            parts.append(f"{'·'.join(reverted)}을 원래대로 되돌렸어요.")
+        if draft_targets or fresh:
+            parts.append("지금 자료에서는 더 다듬을 만한 경계를 찾지 못했어요.")
+        if not parts:
+            return None
+        return {
+            "status": "OK", "action": "answer_only", "normalized_instruction": None,
+            "reply": " ".join(parts), "confidence": 0.88,
+            "matched": {"kind": "draft_none" if not reverted else "draft_reverted",
+                        "gate": "living_draft", "reverted": reverted},
+            "via": "draft_gate",
+        }
+
+    # 초안 실제 적용 (비파괴 오버레이 — 원본·승인원고 무접촉)
+    res, before, item_id = _apply_state(
+        project_id, cand["fragment_id"], cand["source_id"],
+        (cand["anchor_start_ms"], cand["anchor_end_ms"]),
+        (cand["proposed"]["trim_start_ms"], cand["proposed"]["trim_end_ms"]), "TRIM")
+    story_after = _story_total_ms(project_id)
+
+    disp = _display_texts(cand, fragment_labels)
+    disp["story_before_text"] = _sec_text(story_before)
+    disp["story_after_text"] = _sec_text(story_after)
+    say, say_source = _phrase_draft(t, disp)
+    if reverted:
+        say = f"{'·'.join(reverted)}은 원래대로 되돌렸어요. " + say
+    return {
+        "status": "OK", "action": "draft_applied", "normalized_instruction": None,
+        "reply": say, "confidence": 0.9,
+        "matched": {"kind": "living_draft", "gate": "living_draft",
+                    "say_source": say_source, "reverted": reverted},
+        "via": "draft_gate",
+        "draft": {
+            "program_id": project_id, "timeline_item_id": item_id,
+            "fragment_id": cand["fragment_id"], "source_id": cand["source_id"],
+            "anchor_start_ms": cand["anchor_start_ms"],
+            "anchor_end_ms": cand["anchor_end_ms"],
+            "before": before,
+            "after": {"trim_start_ms": cand["proposed"]["trim_start_ms"],
+                      "trim_end_ms": cand["proposed"]["trim_end_ms"]},
+            "revision": res.get("revision"),
+            "side": cand["side"], "gap_ms": cand["gap_ms"],
+            "delta_ms": cand["delta_ms"],
+            "story": {"before_ms": story_before, "after_ms": story_after},
+            "display": disp,
+        },
+    }
+
+
 def propose_from_conflict(user_text, project_id, source_ids=None,
                           fragment_labels=None):
     """편집 충돌 분류에서 불린다. 항상 dict 를 돌려준다(제안 또는 정직한 무제안)."""

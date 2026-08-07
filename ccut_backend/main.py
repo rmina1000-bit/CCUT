@@ -5577,6 +5577,16 @@ def _chat_only_speed_bypass(input_text: str, project_id: str = None,
     t = (input_text or "").strip()
     if not t:
         return None
+    # [LIVING-DRAFT-1 2026-08-08] 초안 문 — 말하면 실제로 만들어 보인다.
+    #   어려움·늘어짐 호소(새 초안)와 초안 문맥 속 표적 지목(되돌림·재표적)만 받는다.
+    #   det 조기탈출보다 앞이어야 한다 — "11번을 봐줘"류가 사다리로 새면 문맥을 잃는다.
+    try:
+        from engine import edit_propose as _ep
+        dr = _ep.draft_gate(t, project_id, source_ids, fragment_labels)
+        if dr:
+            return dr
+    except Exception as e:
+        print(f"[LIVING-DRAFT][WARN] 초안 문 실패 — 통과: {e}")
     try:
         from engine import intent_router as _ir
         from engine import hub as _hub

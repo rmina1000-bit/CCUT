@@ -2501,9 +2501,11 @@ const Index: React.FC = () => {
     [modeGateOn, selectedFragment, sourceEntries]
   );
 
-  // [2-2b] 조각편집 진입 (단일 조각 1개).
+  // [2-2b] 정밀편집 진입 (단일 조각 1개).
   const handleSingleFragmentEdit = useCallback(
     (f: Fragment) => {
+      // [TILE-DOOR 2026-08-06] 문이 하나인지 이 한 줄로 센다 — 한 번 눌렀는데 두 줄이면 겹친 것이다.
+      console.info(`[PBE][OPEN] fid=${String((f as any).fragment_id ?? getUid(f))} door=handle`);
       setSingleEditTarget(f);
       setSingleEditOpen(true);
       void refreshSoundRoles();
@@ -2772,6 +2774,25 @@ const Index: React.FC = () => {
     return soundRoleItems.find((item) => item.fragment_id === fid) ?? null;
   }, [singleEditTarget, soundRoleItems]);
 
+  // [PBE-CLEAN 2026-08-06] 구간 목록 정규화 — ★문자열 비교 금지.
+  //   JSON.stringify 로 견주면 배열 순서·뒤집힌 구간·공백 때문에 "달라졌다"고 오판하고,
+  //   그 오판이 헛행을 만든다. 각 구간을 [작은값,큰값]으로 맞추고 시작값 기준 정렬해 값끼리 본다.
+  const normalizeRanges = useCallback((ranges?: Array<[number, number]> | null) =>
+    (ranges ?? [])
+      .map((r) => [Number(r?.[0]), Number(r?.[1])] as [number, number])
+      .filter(([s, e]) => Number.isFinite(s) && Number.isFinite(e))
+      .map(([s, e]) => [Math.min(s, e), Math.max(s, e)] as [number, number])
+      .sort((a, b) => (a[0] - b[0]) || (a[1] - b[1])), []);
+
+  const sameRanges = useCallback((
+    a?: Array<[number, number]> | null,
+    b?: Array<[number, number]> | null,
+  ) => {
+    const A = normalizeRanges(a);
+    const B = normalizeRanges(b);
+    return A.length === B.length && A.every(([s, e], i) => s === B[i][0] && e === B[i][1]);
+  }, [normalizeRanges]);
+
   const handleSingleFragmentApply = useCallback(
     (payload: {
       fragmentUid: string;
@@ -2813,6 +2834,24 @@ const Index: React.FC = () => {
         // [STORY-LAYER-01 A-1] 사용본 ID는 제안과 무관 — 어느 안을 보고 있어도 같은 스토리에 쌓인다.
         const itemId = timelineItemIdFor(programId, rootFid, 0);
         const known = editStatesRef.current.get(itemId);
+        // [PBE-CLEAN 2026-08-06] 값이 하나도 안 바뀌었으면 흔적을 남기지 않는다.
+        //   구판은 비교 없이 무조건 POST 해서, 창을 열었다 [적용]만 눌러도 행이 생겼다
+        //   (실측 ES_DD5658FA894F — trim==anchor·excluded 없음·removed 0, 아무것도 안 바뀐 행).
+        //   그 행 하나가 proposal_axis.py:841 에서 그 조각의 AB-PACK 보정을 영구히 막는다.
+        //   ★known 이 없으면(첫 편집) 비교할 게 없으므로 무조건 보낸다 — 의심스러우면 저장하는 쪽.
+        const unchanged = !!known
+          && Number(known.trim_start_ms) === Number(contractSnapshot.trim_start_ms)
+          && Number(known.trim_end_ms) === Number(contractSnapshot.trim_end_ms)
+          && !!known.removed === !!contractSnapshot.removed
+          && sameRanges(known.excluded_ranges, contractSnapshot.excluded_ranges);
+        if (unchanged) {
+          // 조용히 건너뛰면 "저장이 안 된다"는 오진을 부른다. 건너뛴 사실은 남긴다.
+          console.info(`[PBE][NO-CHANGE] fid=${rootFid} item=${itemId} `
+            + `trim=${contractSnapshot.trim_start_ms}~${contractSnapshot.trim_end_ms} `
+            + `excluded=${JSON.stringify(normalizeRanges(contractSnapshot.excluded_ranges))} `
+            + `— 값이 그대로라 남기지 않는다`);
+          return;
+        }
         postEditState({
           program_id: programId,
           timeline_item_id: itemId,
@@ -2916,7 +2955,7 @@ const Index: React.FC = () => {
       // 경계 편집(레거시 경로)도 구성본만 갱신 — 선택·순서는 사용자 결정 (INV-0).
       applyStoryComposition(next);
     },
-    [editFragments]
+    [editFragments, normalizeRanges, sameRanges]
   );
 
   const handleEditFragmentDoubleClick = useCallback((f: Fragment) => {
@@ -4100,6 +4139,51 @@ const Index: React.FC = () => {
     }
   }, []);
 
+  // [LIVING-DRAFT-1 2026-08-08] 초안 손잡이.
+  //   [조금 덜] = 다듬은 폭을 절반으로 재적용(숫자는 서버가 준 값의 정수 절반 —
+  //   프론트 산수는 이 /2 하나뿐). revision 은 클릭 시점 재조회.
+  const handleReduceEditDraft = useCallback(async (draft: any): Promise<{ ok: boolean; after?: any; error?: string }> => {
+    try {
+      const states = await fetchEditStates(String(draft.program_id));
+      const row = states.find((s) => s.timeline_item_id === draft.timeline_item_id);
+      const before = draft.before || {};
+      const cur = draft.after || {};
+      const half = (a: number, b: number) => a + Math.floor((b - a) / 2);
+      const next = draft.side === "start"
+        ? { trim_start_ms: half(Number(before.trim_start_ms), Number(cur.trim_start_ms)),
+            trim_end_ms: Number(cur.trim_end_ms) }
+        : { trim_start_ms: Number(cur.trim_start_ms),
+            trim_end_ms: half(Number(cur.trim_end_ms), Number(before.trim_end_ms)) };
+      const res = await postEditState({
+        program_id: draft.program_id,
+        timeline_item_id: draft.timeline_item_id,
+        source_id: draft.source_id,
+        anchor_start_ms: draft.anchor_start_ms,
+        anchor_end_ms: draft.anchor_end_ms,
+        trim_start_ms: next.trim_start_ms,
+        trim_end_ms: next.trim_end_ms,
+        excluded_ranges: before.excluded_ranges ?? [],
+        removed: false,
+        ...(row ? { revision: row.revision } : {}),
+        parent_fragment_id: draft.fragment_id,
+        occurrence: 0,
+        command_type: "TRIM",
+        origin: "NATURAL_LANGUAGE",
+      });
+      if (!(res as any)?.ok) return { ok: false, error: String((res as any)?.error ?? "unknown") };
+      console.info("[LIVING-DRAFT][REDUCE]", { item: draft.timeline_item_id, next, revision: (res as any).revision });
+      return { ok: true, after: next };
+    } catch (e: any) {
+      return { ok: false, error: String(e?.message ?? e) };
+    }
+  }, []);
+
+  // 손잡이 클릭을 대화에 남긴다 — "ai_draft_" 접두는 recent_messages 에 포함되어
+  // 다음 턴 젬마가 직전 결정을 안다(맥락 반영, 새 저장소 없음).
+  const handleDraftAction = useCallback((text: string) => {
+    appendStoryGateMessage("ai_draft", text);
+  }, [appendStoryGateMessage]);
+
   const handleOpenProposalLarge = useCallback((key: "A" | "B", proposal: any, durationSec: number) => {
     const popupWidth = 720;
     const popupHeight = 520;
@@ -4459,7 +4543,8 @@ const Index: React.FC = () => {
                     activeFragmentId={selectedFragment ? String((selectedFragment as any).fragment_id ?? getUid(selectedFragment)) : highlightedPanoramaFrag}
                     focusOrigin={fragmentFocusOrigin}
                     expandedFragmentId={expandedFragment}
-                    onFragmentClick={handleSingleFragmentEdit}
+                    // [TILE-DOOR 2026-08-06] 타일 몸통 클릭은 '고르기'다. 정밀편집은 손잡이 하나로만 연다.
+                    onFragmentClick={handleEditFragmentClick}
                     onFragmentPlay={playImageFragmentInMini}
                     onEditFragment={handleSingleFragmentEdit}
                     onFragmentDoubleClick={handleEditFragmentDoubleClick}
@@ -4556,6 +4641,8 @@ const Index: React.FC = () => {
             onStartStoryEditing={handleStartStoryEditing}
             onApplyEditProposal={handleApplyEditProposal}
             onUndoEditProposal={handleUndoEditProposal}
+            onReduceEditDraft={handleReduceEditDraft}
+            onDraftAction={handleDraftAction}
             onOpenProposalLarge={handleOpenProposalLarge}
             onIntake={(a) => { intakeRef.current = a; }}
             onRequestAddVideos={
@@ -4646,7 +4733,8 @@ const Index: React.FC = () => {
                       activeFragmentId={selectedFragment ? String((selectedFragment as any).fragment_id ?? getUid(selectedFragment)) : highlightedPanoramaFrag}
                       focusOrigin={fragmentFocusOrigin}
                       expandedFragmentId={expandedFragment}
-                      onFragmentClick={handleSingleFragmentEdit}
+                      // [TILE-DOOR 2026-08-06] 타일 몸통 클릭은 '고르기'다. 정밀편집은 손잡이 하나로만 연다.
+                      onFragmentClick={handleEditFragmentClick}
                       onFragmentPlay={playImageFragmentInMini}
                       onEditFragment={handleSingleFragmentEdit}
                       onFragmentDoubleClick={handleEditFragmentDoubleClick}
