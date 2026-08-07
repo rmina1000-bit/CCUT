@@ -5578,6 +5578,36 @@ def _chat_only_speed_bypass(input_text: str, project_id: str = None,
     t = (input_text or "").strip()
     if not t:
         return None
+    # [DESK-1 2026-08-08] 접수대 — 엔진에 없는 일은 여기서 정직하게 끝난다.
+    #   국장 설계: 젬마는 실행자가 아니라 통역사다. "내가 말한 그곳이 내가 지시한
+    #   것을 할 수 있는 곳인지 확인"하는 자리가 여기다.
+    #   지금은 ①확인만 붙인다 — 없는 일(자막·색보정·소리크기 등)이 A/B 재제안
+    #   절차로 흘러가던 것을 끊는다(실측: '자막을 넣어줘' → 편집 시작 절차).
+    #   ②번역·실행 배선은 다음 차수. 확인이 먼저다.
+    try:
+        from engine import engine_desk as _desk
+        from engine import gemma_breath as _gbw
+        _w = _gbw.world(project_id, fragment_labels)
+        if _w:
+            _r = _desk.receive(t, _gbw._world_lines(_w), recent_messages)
+            if _r and _r["cap"] is None and _r["say"]:
+                # 없는 일 = 정직하게 못 한다고. 대화 = 편집 기계를 깨우지 않는다.
+                #   ★후자가 특히 중요하다(실측 사고): "안녕. 오늘 촬영 힘들었어"의
+                #     '힘들'이 초안 유발 정규식(_FRESH_DRAFT_RE)에 걸려 인사말에
+                #     실제 편집이 적용됐다(DB 7→8행, 되돌림 완료). 사전은 이렇게
+                #     사람의 말을 오독한다. 접수대가 대화라고 하면 대화다.
+                if _r["reason"] in ("없는 일", "대화"):
+                    print(f"[DESK] {_r['reason']} — 편집 기계를 깨우지 않는다: {t[:30]!r}")
+                    return {
+                        "status": "OK", "action": "answer_only",
+                        "normalized_instruction": None, "reply": _r["say"],
+                        "confidence": 0.9,
+                        "matched": {"kind": "not_here" if _r["reason"] == "없는 일"
+                                    else "just_talk", "gate": "desk"},
+                        "via": "desk",
+                    }
+    except Exception as e:
+        print(f"[DESK][WARN] 접수 실패 — 기존 경로로: {e}")
     # [BREATH-1 2026-08-08] 젬마가 먼저 숨을 쉰다.
     #   정규식이 답을 정하기 전에, 젬마가 사용자 원문과 지금 세계를 보고 다음 행동을
     #   고른다(TALK/LOOK/TRY/PROPOSE/ASK). 못 고르거나 이야기가 없으면 None 을 내고
