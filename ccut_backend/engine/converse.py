@@ -137,9 +137,24 @@ def persist_decision(program_id, action, params):
         import time as _t
         ts = _t.time() * 1000
         entries = []
+        # [BREATH-1 2026-08-08] 모델의 해석을 작업 기준으로 승격하지 않는다.
+        #   실측 사고: 국장이 "이 편집버전을 보기좋게 편집해줘"라고 했는데
+        #   {"instruction": "B안"}이 기준으로 저장됐고, 이후 "정은한 나오는 장면만"이
+        #   저장돼 매 턴 프롬프트에 주입되며 새 말을 덮고 스스로 재생산했다
+        #   (2회 연속 재현 — DB 어디에도 없는 이름이다).
+        #   ★사용자 원문(source=user_original)만 기준이 된다. 모델 재작성문은 그 턴에서만
+        #     쓰고 기억에 남기지 않는다. 승격은 사용자의 말이나 실행 결과만 할 수 있다.
         if action == "run_proposal" and params.get("instruction"):
+            raw = str(params.get("user_original") or "").strip()
+            interp = str(params["instruction"]).strip()
+            if raw and interp and interp not in raw:
+                print(f"[BREATH][MEM-GUARD] 모델 해석은 기억에 싣지 않는다: "
+                      f"{interp[:40]!r} (원문 {raw[:40]!r})")
+                interp = raw
             entries.append({"kind": "active_intent", "client_id": f"ai_int_{int(ts)}",
-                            "ts": ts, "payload": {"instruction": params["instruction"]}})
+                            "ts": ts,
+                            "payload": {"instruction": raw or interp,
+                                        "source": "user_original" if raw else "model_interpretation"}})
         if action == "clear_intent":
             entries.append({"kind": "active_intent", "client_id": f"ai_int_{int(ts)}",
                             "ts": ts, "payload": {"instruction": ""}})
@@ -252,7 +267,12 @@ def load_memory_facts(program_id):
                 summary = str(p.get("summary") or "")[:600]
             elif kind == "active_intent" and intent is None:
                 # 빈 문자열은 'clear_intent'가 남긴 해제 기록이다 — 기준 없음으로 확정한다.
-                intent = str(p.get("instruction") or "")[:120]
+                # [BREATH-1] 출처가 model_interpretation 인 옛 기록은 기준으로 읽지 않는다
+                #   (기록은 원장에 그대로 남는다 — 역사를 지우지 않고 주입만 멈춘다).
+                if p.get("source") == "model_interpretation":
+                    intent = ""
+                else:
+                    intent = str(p.get("instruction") or "")[:120]
             elif kind == "chat_pref" and not pref:
                 pref = {"count": p.get("count"), "target_length": p.get("target_length")}
     except sqlite3.OperationalError:

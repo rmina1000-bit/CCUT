@@ -5573,13 +5573,24 @@ def _rubric_direct_route(input_text: str) -> dict | None:
 #   ★없다/애매하다는 서버가 직접 답한다(모델에게 지시문으로 시켜 두 번 실패했다).
 def _chat_only_speed_bypass(input_text: str, project_id: str = None,
                             source_ids: list = None,
-                            fragment_labels: dict = None) -> dict | None:
+                            fragment_labels: dict = None,
+                            recent_messages: list = None) -> dict | None:
     t = (input_text or "").strip()
     if not t:
         return None
+    # [BREATH-1 2026-08-08] 젬마가 먼저 숨을 쉰다.
+    #   정규식이 답을 정하기 전에, 젬마가 사용자 원문과 지금 세계를 보고 다음 행동을
+    #   고른다(TALK/LOOK/TRY/PROPOSE/ASK). 못 고르거나 이야기가 없으면 None 을 내고
+    #   기존 사다리가 그대로 이어받는다 — 무회귀.
+    try:
+        from engine import gemma_breath as _gb
+        br = _gb.breathe(t, project_id, recent_messages, fragment_labels)
+        if br:
+            return br
+    except Exception as e:
+        print(f"[BREATH][WARN] 호흡 실패 — 기존 경로로: {e}")
     # [LIVING-DRAFT-1 2026-08-08] 초안 문 — 말하면 실제로 만들어 보인다.
-    #   어려움·늘어짐 호소(새 초안)와 초안 문맥 속 표적 지목(되돌림·재표적)만 받는다.
-    #   det 조기탈출보다 앞이어야 한다 — "11번을 봐줘"류가 사다리로 새면 문맥을 잃는다.
+    #   호흡이 답하지 못한 자리에서만 돈다(표적 지목 되돌림 등 결정론 경로).
     try:
         from engine import edit_propose as _ep
         dr = _ep.draft_gate(t, project_id, source_ids, fragment_labels)
@@ -5697,7 +5708,7 @@ def _chat_only_speed_bypass(input_text: str, project_id: str = None,
 #       호출 시점에 뒤집는다.
 
 
-def _persist_route_memory(program_id, r):
+def _persist_route_memory(program_id, r, user_original=None):
     """route-edit 응답 하나를 기억 원장에 남긴다(active_intent · chat_pref)."""
     if not program_id or not isinstance(r, dict):
         return
@@ -5710,6 +5721,9 @@ def _persist_route_memory(program_id, r):
         # route-edit 계약은 기준을 normalized_instruction 으로 낸다(params 는 rubric 경로만).
         if not params.get("instruction") and r.get("normalized_instruction"):
             params["instruction"] = r["normalized_instruction"]
+        # [BREATH-1] 사용자 원문을 함께 넘긴다 — 기억에 오를 자격은 원문에만 있다.
+        if user_original:
+            params["user_original"] = user_original
         _cv.persist_decision(program_id, action, params)
     except Exception as e:
         print(f"[MEMORY-SPINE][WARN] route 기억 저장 실패 ({e})")
@@ -5739,7 +5753,7 @@ async def route_edit_intent_api(req: EditIntentRouteRequest):
         r = (
             _unknown_fragment_label_route(req.input_text, labels)
             or _rubric_direct_route(req.input_text)
-            or _chat_only_speed_bypass(req.input_text, req.project_id, req.source_ids, labels)
+            or _chat_only_speed_bypass(req.input_text, req.project_id, req.source_ids, labels, req.recent_messages)
             or route_edit_intent(
                 source_ids=req.source_ids, input_text=req.input_text,
                 recent_messages=req.recent_messages,
@@ -5755,7 +5769,7 @@ async def route_edit_intent_api(req: EditIntentRouteRequest):
             except Exception as _e:
                 print(f"[ROUTE-EDIT][WARN] candidate_evidence 실패 ({_e})")
         # [MEMORY-SPINE] 답을 다 만든 뒤에 남긴다 — 응답을 늦추지 않는다.
-        _persist_route_memory(req.project_id, r)
+        _persist_route_memory(req.project_id, r, req.input_text)
         _roll_route_summary(req.project_id)
         return r
 
@@ -5824,7 +5838,7 @@ async def route_edit_intent_stream_api(req: EditIntentRouteRequest, request: Req
             r = (
                 _unknown_fragment_label_route(req.input_text, labels)
                 or _rubric_direct_route(req.input_text)
-                or _chat_only_speed_bypass(req.input_text, req.project_id, req.source_ids, labels)
+                or _chat_only_speed_bypass(req.input_text, req.project_id, req.source_ids, labels, req.recent_messages)
                 or route_edit_intent(
                     source_ids=req.source_ids, input_text=req.input_text,
                     recent_messages=req.recent_messages,
@@ -5854,7 +5868,7 @@ async def route_edit_intent_stream_api(req: EditIntentRouteRequest, request: Req
                                                            "backend_assistant_text": str(r.get("reply") or "")})
                 yield _emit({"type": "final", "result": r})
                 # [MEMORY-SPINE] 응답을 다 흘린 뒤에 남긴다 — TTFT 에 얹지 않는다.
-                _persist_route_memory(req.project_id, r)
+                _persist_route_memory(req.project_id, r, req.input_text)
                 _roll_route_summary(req.project_id)
                 return
             yield _emit({"type": "meta", "action": "answer_only"})
@@ -5904,7 +5918,7 @@ async def route_edit_intent_stream_api(req: EditIntentRouteRequest, request: Req
             # [MEMORY-SPINE] 자유대화 경로도 요약 문턱을 넘으면 남긴다.
             #   (이 경로의 action 은 answer_only 라 active_intent 는 안 생긴다 — 정상이다.
             #    기준을 말한 발화는 위 direct 분기에서 run_proposal 로 빠진다.)
-            _persist_route_memory(req.project_id, r)
+            _persist_route_memory(req.project_id, r, req.input_text)
             _roll_route_summary(req.project_id)
         except GeneratorExit:
             client_aborted = True
