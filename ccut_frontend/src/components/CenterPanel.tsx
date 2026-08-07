@@ -246,6 +246,10 @@ interface CenterPanelProps {
   onRequestAddVideos?: () => void;
   onAddVideoFiles?: (files: File[]) => void;
   onStartStoryEditing?: () => void | Promise<void>;
+  // [PROPOSE-1A 2026-08-07] 대화→제안 카드 — [해봐]=적용(직전 값 확보 후 TRIM),
+  //   [됐어]=무변경(카드만 접힘, 대화 지속), [되돌리기]=확보한 직전 값 RESTORE 재저장.
+  onApplyEditProposal?: (proposal: any) => Promise<{ ok: boolean; before?: any; error?: string }>;
+  onUndoEditProposal?: (proposal: any, before: any) => Promise<{ ok: boolean; error?: string }>;
   // [TIMELINE-PAGE 2026-08-02] 300행 절단 복구 — 서버가 has_more 를 주는데 듣는 코드가
   //   0이었다(실측: Merope 614행 중 314행 도달 불가). 서버·서비스 계층은 손대지 않고
   //   호출처만 잇는다. 버튼 방식인 이유는 아래 렌더부 주석에.
@@ -510,6 +514,8 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
   onRequestAddVideos,
   onAddVideoFiles,
   onStartStoryEditing,
+  onApplyEditProposal,
+  onUndoEditProposal,
   timelineHasMore = false,
   timelineLoadingMore = false,
   onLoadOlderTimeline,
@@ -688,6 +694,12 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
   const [foldedIds, setFoldedIds] = useState<Set<string>>(() => new Set());
   const [pickedFlowChoices, setPickedFlowChoices] = useState<Record<string, "A" | "B">>({});
   const [proposalPickError, setProposalPickError] = useState<string | null>(null);
+  // [PROPOSE-1A] 제안 카드 상태 — pickedFlowChoices 와 같은 휘발 수명(F5에 초기화).
+  //   before = 적용 직전 값(되돌리기 재료). 카드별 독립이라 [됐어] 뒤에도 무장 잔류가 없다.
+  const [editProposalCards, setEditProposalCards] = useState<Record<string, {
+    status: "idle" | "busy" | "applied" | "declined" | "undone";
+    before?: any; error?: string | null;
+  }>>({});
   const foldNodeRefs = useRef<Record<string, HTMLDivElement | null>>({});
   // 접기로 줄어든 높이를 되갚기 위한 예약 — 넉 달 싸운 '화면 튐'이 여기서 갈린다.
   const pendingFoldFixRef = useRef<{ id: string; h1: number } | null>(null);
@@ -3514,6 +3526,94 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
                           {STORY_GATE_COPY.chatActions.startEditing}
                         </button>
                       )}
+                      {/* [PROPOSE-1A 2026-08-07] 대화→제안 카드 — 숫자는 전부 서버 계산값
+                          (route.proposal) 직결. [해봐]=적용, [됐어]=무변경, 적용 후 [되돌리기]. */}
+                      {(item.msg as any).kind === "edit_proposal" && (item.msg as any).proposal && (() => {
+                        const p = (item.msg as any).proposal;
+                        const cardId = String(item.msg.id);
+                        const cardState = editProposalCards[cardId];
+                        const disp = p.display || {};
+                        const cp = STORY_GATE_COPY.editProposalCard;
+                        return (
+                          <div data-edit-proposal className="px-4 py-2.5 rounded-xl bg-secondary/5 border border-border/10 text-[12px] space-y-1.5 max-w-full">
+                            <div className="text-muted-foreground/85">
+                              {disp.label} · {disp.direction}쪽 말 없는 구간 {disp.gap_text} → {disp.amount_text} 다듬기
+                            </div>
+                            <div className="text-[10px] text-muted-foreground/55 break-all">
+                              {p.fragment_id} · {p.source_id} · {p.current?.trim_start_ms}–{p.current?.trim_end_ms}ms → {p.proposed?.trim_start_ms}–{p.proposed?.trim_end_ms}ms
+                            </div>
+                            {(!cardState || cardState.status === "idle") && (
+                              <div className="flex items-center gap-3 pt-0.5">
+                                <button
+                                  type="button"
+                                  data-edit-proposal-apply
+                                  onClick={async () => {
+                                    if (!onApplyEditProposal) return;
+                                    setEditProposalCards((prev) => ({ ...prev, [cardId]: { status: "busy" } }));
+                                    const r = await onApplyEditProposal(p);
+                                    setEditProposalCards((prev) => ({
+                                      ...prev,
+                                      [cardId]: r.ok
+                                        ? { status: "applied", before: r.before, error: null }
+                                        : { status: "idle", error: `${cp.failed}${r.error ? ` (${r.error})` : ""}` },
+                                    }));
+                                  }}
+                                  className="text-micro text-primary hover:text-primary/80 transition-colors"
+                                >
+                                  {cp.apply}
+                                </button>
+                                <button
+                                  type="button"
+                                  data-edit-proposal-decline
+                                  onClick={() => setEditProposalCards((prev) => ({ ...prev, [cardId]: { status: "declined" } }))}
+                                  className="text-micro text-muted-foreground hover:text-foreground transition-colors"
+                                >
+                                  {cp.decline}
+                                </button>
+                              </div>
+                            )}
+                            {cardState?.status === "busy" && (
+                              <div className="flex items-center gap-2 text-primary/60">
+                                <Loader2 size={12} className="animate-spin" />
+                                <span className="text-[11px]">{cp.busy}</span>
+                              </div>
+                            )}
+                            {cardState?.status === "applied" && (
+                              <div className="flex items-center gap-3">
+                                <span className="text-[11px] text-primary/80">{cp.applied}</span>
+                                <button
+                                  type="button"
+                                  data-edit-proposal-undo
+                                  onClick={async () => {
+                                    if (!onUndoEditProposal || !cardState.before) return;
+                                    const keptBefore = cardState.before;
+                                    setEditProposalCards((prev) => ({ ...prev, [cardId]: { status: "busy", before: keptBefore } }));
+                                    const r = await onUndoEditProposal(p, keptBefore);
+                                    setEditProposalCards((prev) => ({
+                                      ...prev,
+                                      [cardId]: r.ok
+                                        ? { status: "undone", error: null }
+                                        : { status: "applied", before: keptBefore, error: `${cp.undoFailed}${r.error ? ` (${r.error})` : ""}` },
+                                    }));
+                                  }}
+                                  className="text-micro text-muted-foreground hover:text-foreground transition-colors"
+                                >
+                                  {cp.undo}
+                                </button>
+                              </div>
+                            )}
+                            {cardState?.status === "declined" && !cardState.error && (
+                              <div className="text-[11px] text-muted-foreground/70">{cp.declined}</div>
+                            )}
+                            {cardState?.status === "undone" && (
+                              <div className="text-[11px] text-muted-foreground/70">{cp.undone}</div>
+                            )}
+                            {cardState?.error && (
+                              <div className="text-[11px] text-destructive/80">{cardState.error}</div>
+                            )}
+                          </div>
+                        );
+                      })()}
                       {/* [관문D 2026-07-21] 큐원 판단근거(대사·장면·맥락) 얇게 표시 — 없으면 "근거 없음" */}
                       {item.msg.sender === "ai" && (item.msg as any).candidate_evidence && Object.keys((item.msg as any).candidate_evidence).length > 0 && (
                         <div className="px-4 py-2 rounded-xl bg-secondary/5 border border-border/5 text-[11px] text-muted-foreground/70 space-y-1.5 max-w-full">

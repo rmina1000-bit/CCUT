@@ -5572,7 +5572,8 @@ def _rubric_direct_route(input_text: str) -> dict | None:
 #     그래서 같은 근거를 여기에도 준다 — 사실을 두 벌 만드는 게 아니라 같은 함수를 부른다.
 #   ★없다/애매하다는 서버가 직접 답한다(모델에게 지시문으로 시켜 두 번 실패했다).
 def _chat_only_speed_bypass(input_text: str, project_id: str = None,
-                            source_ids: list = None) -> dict | None:
+                            source_ids: list = None,
+                            fragment_labels: dict = None) -> dict | None:
     t = (input_text or "").strip()
     if not t:
         return None
@@ -5606,6 +5607,23 @@ def _chat_only_speed_bypass(input_text: str, project_id: str = None,
         edit_mark = False
     if edit_mark and not meta_self_reference:
         if chat_signal:
+            # [PROPOSE-1A 2026-08-07] 되묻기 템플릿이 대화를 죽이던 자리 — 문을 낸다.
+            #   서버가 근거를 재서 경계 편집 하나를 제안하고(propose_edit), 근거가
+            #   없으면 정직하게 없다고 말한다(answer_only). 제안 생성 자체가 터지면
+            #   옛 템플릿으로 강등한다(무회귀 최후선). 특정 문장 하드코딩 없음.
+            # [R1] 문의 폭: 막연한 어려움만 제안으로. 구체 요청("숏츠로 만들어줄수
+            #   있나?" 화면 실측 동문서답)은 None 으로 사다리를 계속 태워
+            #   route_edit_intent(understand)가 답하게 한다.
+            try:
+                from engine import edit_propose as _ep
+                if not _ep.is_vague_difficulty(t):
+                    return None
+                pr = _ep.propose_from_conflict(t, project_id, source_ids,
+                                               fragment_labels)
+                if pr:
+                    return pr
+            except Exception as e:
+                print(f"[PROPOSE-1A][WARN] 제안 생성 실패 — 옛 되묻기 강등: {e}")
             return {
                 "status": "OK",
                 "action": "ask_clarification",
@@ -5711,7 +5729,7 @@ async def route_edit_intent_api(req: EditIntentRouteRequest):
         r = (
             _unknown_fragment_label_route(req.input_text, labels)
             or _rubric_direct_route(req.input_text)
-            or _chat_only_speed_bypass(req.input_text, req.project_id, req.source_ids)
+            or _chat_only_speed_bypass(req.input_text, req.project_id, req.source_ids, labels)
             or route_edit_intent(
                 source_ids=req.source_ids, input_text=req.input_text,
                 recent_messages=req.recent_messages,
@@ -5796,7 +5814,7 @@ async def route_edit_intent_stream_api(req: EditIntentRouteRequest, request: Req
             r = (
                 _unknown_fragment_label_route(req.input_text, labels)
                 or _rubric_direct_route(req.input_text)
-                or _chat_only_speed_bypass(req.input_text, req.project_id, req.source_ids)
+                or _chat_only_speed_bypass(req.input_text, req.project_id, req.source_ids, labels)
                 or route_edit_intent(
                     source_ids=req.source_ids, input_text=req.input_text,
                     recent_messages=req.recent_messages,

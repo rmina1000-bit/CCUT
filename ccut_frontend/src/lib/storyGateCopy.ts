@@ -38,6 +38,18 @@ export const STORY_GATE_COPY = {
   chatActions: {
     startEditing: "편집 시작",
   },
+  // [PROPOSE-1A 2026-08-07] 대화→제안 카드 — 국장 결정 어휘 [해봐]/[됐어] 그대로.
+  editProposalCard: {
+    apply: "해봐",
+    decline: "됐어",
+    undo: "되돌리기",
+    busy: "적용하는 중…",
+    applied: "적용했어요.",
+    declined: "알겠어요, 그대로 둘게요.",
+    undone: "되돌렸어요.",
+    failed: "적용하지 못했어요",
+    undoFailed: "되돌리지 못했어요",
+  },
   precisionPanel: {
     storyHeading: "이야기",
     editHeading: "편집",

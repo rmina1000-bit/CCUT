@@ -4030,6 +4030,76 @@ const Index: React.FC = () => {
     return true;
   }, [activeNavItem, appendStoryGateMessage, handleProposalCommit]);
 
+  // [PROPOSE-1A 2026-08-07] 대화→제안 카드의 [해봐]/[되돌리기] 집행.
+  //   적용 직전 값(before)을 GET /edit-state 에서 클릭 시점에 확보한 뒤 TRIM 을 전진
+  //   저장하고, 되돌리기는 그 before 를 RESTORE 로 재저장한다(전진 복귀 — 이력 불멸).
+  //   revision 도 클릭 시점 재조회 — 제안 시점 값을 믿지 않고, 낡으면 서버 409가 막는다.
+  const handleApplyEditProposal = useCallback(async (proposal: any): Promise<{ ok: boolean; before?: any; error?: string }> => {
+    try {
+      const states = await fetchEditStates(String(proposal.program_id));
+      const row = states.find((s) => s.timeline_item_id === proposal.timeline_item_id);
+      const before = row
+        ? { trim_start_ms: row.trim_start_ms, trim_end_ms: row.trim_end_ms,
+            excluded_ranges: row.excluded_ranges ?? [], removed: !!row.removed }
+        : { trim_start_ms: proposal.anchor_start_ms, trim_end_ms: proposal.anchor_end_ms,
+            excluded_ranges: [], removed: false };
+      const res = await postEditState({
+        program_id: proposal.program_id,
+        timeline_item_id: proposal.timeline_item_id,
+        source_id: proposal.source_id,
+        anchor_start_ms: proposal.anchor_start_ms,
+        anchor_end_ms: proposal.anchor_end_ms,
+        trim_start_ms: proposal.proposed.trim_start_ms,
+        trim_end_ms: proposal.proposed.trim_end_ms,
+        excluded_ranges: before.excluded_ranges,
+        removed: false,
+        ...(row ? { revision: row.revision } : {}),
+        parent_fragment_id: proposal.fragment_id,
+        occurrence: 0,
+        command_type: "TRIM",
+        origin: "NATURAL_LANGUAGE",
+      });
+      if (!(res as any)?.ok) return { ok: false, error: String((res as any)?.error ?? "unknown") };
+      console.info("[PROPOSE-1A][APPLY]", {
+        item: proposal.timeline_item_id, before,
+        proposed: proposal.proposed, revision: (res as any).revision,
+      });
+      return { ok: true, before };
+    } catch (e: any) {
+      return { ok: false, error: String(e?.message ?? e) };
+    }
+  }, []);
+
+  const handleUndoEditProposal = useCallback(async (proposal: any, before: any): Promise<{ ok: boolean; error?: string }> => {
+    try {
+      const states = await fetchEditStates(String(proposal.program_id));
+      const row = states.find((s) => s.timeline_item_id === proposal.timeline_item_id);
+      const res = await postEditState({
+        program_id: proposal.program_id,
+        timeline_item_id: proposal.timeline_item_id,
+        source_id: proposal.source_id,
+        anchor_start_ms: proposal.anchor_start_ms,
+        anchor_end_ms: proposal.anchor_end_ms,
+        trim_start_ms: before.trim_start_ms,
+        trim_end_ms: before.trim_end_ms,
+        excluded_ranges: before.excluded_ranges ?? [],
+        removed: !!before.removed,
+        ...(row ? { revision: row.revision } : {}),
+        parent_fragment_id: proposal.fragment_id,
+        occurrence: 0,
+        command_type: "RESTORE",
+        origin: "NATURAL_LANGUAGE",
+      });
+      if (!(res as any)?.ok) return { ok: false, error: String((res as any)?.error ?? "unknown") };
+      console.info("[PROPOSE-1A][UNDO]", {
+        item: proposal.timeline_item_id, restored: before, revision: (res as any).revision,
+      });
+      return { ok: true };
+    } catch (e: any) {
+      return { ok: false, error: String(e?.message ?? e) };
+    }
+  }, []);
+
   const handleOpenProposalLarge = useCallback((key: "A" | "B", proposal: any, durationSec: number) => {
     const popupWidth = 720;
     const popupHeight = 520;
@@ -4484,6 +4554,8 @@ const Index: React.FC = () => {
             activeProposalEntryId={activeProposalEntryId}
             onRestoreProposalEntry={handleRestoreProposalEntry}
             onStartStoryEditing={handleStartStoryEditing}
+            onApplyEditProposal={handleApplyEditProposal}
+            onUndoEditProposal={handleUndoEditProposal}
             onOpenProposalLarge={handleOpenProposalLarge}
             onIntake={(a) => { intakeRef.current = a; }}
             onRequestAddVideos={

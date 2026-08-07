@@ -853,6 +853,24 @@ export const useProposalState = (
         });
         return; // 제안 생성 없음 — 편집하라고 할 때만 편집한다
       }
+      // [PROPOSE-1A 2026-08-07] 대화→제안 — 편집 충돌로 죽던 자리에서 서버가 근거를
+      // 재서 경계 편집 하나를 제안한다(propose_edit). 카드 표시값은 route.proposal
+      // (서버 계산값) 직결 — 모델 문장에서 숫자를 파싱하지 않는다.
+      // [해봐]/[되돌리기] 배선: CenterPanel 카드 → Index 핸들러 → POST /edit-state.
+      if (route.action === "propose_edit" && (route as any).proposal) {
+        setStoryPlan((prev: any) => {
+          if (!prev) return prev;
+          return {
+            ...prev,
+            messages: (prev.messages ?? []).map((m: any) =>
+              m.id === aiMsgId
+                ? { ...m, text: route.reply || "편집 하나를 제안해요.", isInterpreting: false,
+                    kind: "edit_proposal", proposal: (route as any).proposal }
+                : m),
+          };
+        });
+        return; // 승인 전에는 아무것도 바꾸지 않는다
+      }
       // [#57 REVISION 도구층] 국소 수정 — 전체 재제안으로 뭉개지 않고 /revision/proposals로
       // 집행한다 (큐원=이해 op 동봉, 규칙=시퀀스 조작). 실패/미지원이면 기존 재제안 경로 폴백.
       if (route.action === "revise_current" && route.revision) {
