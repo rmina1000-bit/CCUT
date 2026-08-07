@@ -710,6 +710,13 @@ def _sanitize_talk(reply):
     import re
     if not reply:
         return None
+    # [VOICE 2026-08-08] 덧붙인 로마자 병기·영어 번역은 떼기만 한다 — 본문은 그대로.
+    #   말을 죽이고 고정문구로 바꾸는 것과 다르다(대화가 죽지 않는다).
+    reply = re.split(r"\n\s*Translation\s*:", reply)[0]
+    reply = re.sub(r"\([A-Z][a-z]+[A-Za-z\s\-!?,.0-9']{15,}\)", "", reply)
+    reply = re.sub(r"\n{3,}", "\n\n", reply).strip()
+    if not reply:
+        return None
     if re.search(r"[一-鿿]", reply):   # 한자/중문 — 한국어 답변만 허용
         return None
     if re.search(r"qwen|큐원|퀜|通义|阿里|알리바바|인공지능(으로|입니다)", reply, re.IGNORECASE):
@@ -741,7 +748,11 @@ def _smalltalk_prompt(input_text, recent_messages=None, facts="", plain=False):
         # [QWEN-01 2-2] "모델명·제조사 언급 금지" 삭제 → 서버 후처리에 맡긴다
         #   (:372 정체 노출 차단, :479 스트림 중단). 중국어 금지는 남긴다(실측 누출 있음).
         #   정체성 확립("너의 이름은 오직 CCUT")은 금지가 아니라 자기규정이라 남긴다.
-        "5. 반드시 한국어만(중국어·영어 문장 금지). "
+        # [VOICE 2026-08-08] 젬마용 한 줄 — 직통 방 실측: 젬마는 답 끝에 로마자 발음
+        #   병기·영어 번역을 덧붙이는 버릇이 있고, 한 번 붙으면 다음 턴이 그 형식을
+        #   물려받는다. 문패로 씨앗을 막는다(첫 턴 0/4 실측).
+        "5. 반드시 한국어만(중국어·영어 문장 금지). 로마자 발음 표기, 영어 번역, "
+        "괄호 병기, Translation 표기를 덧붙이지 않는다. 답이 끝나면 그대로 끝낸다. "
         "너의 이름은 오직 CCUT이다. 모르는 건 솔직히 모른다고 한다.\n"
         + tail
         + (f"최근 대화:\n{ctx}" if ctx else "")
@@ -926,7 +937,11 @@ def _smalltalk_chat_messages(input_text, recent_messages=None, facts=""):
         # [QWEN-01 2-2] "모델명·제조사 언급 금지" 삭제 → 서버 후처리에 맡긴다
         #   (:372 정체 노출 차단, :479 스트림 중단). 중국어 금지는 남긴다(실측 누출 있음).
         #   정체성 확립("너의 이름은 오직 CCUT")은 금지가 아니라 자기규정이라 남긴다.
-        "5. 반드시 한국어만(중국어·영어 문장 금지). "
+        # [VOICE 2026-08-08] 젬마용 한 줄 — 직통 방 실측: 젬마는 답 끝에 로마자 발음
+        #   병기·영어 번역을 덧붙이는 버릇이 있고, 한 번 붙으면 다음 턴이 그 형식을
+        #   물려받는다. 문패로 씨앗을 막는다(첫 턴 0/4 실측).
+        "5. 반드시 한국어만(중국어·영어 문장 금지). 로마자 발음 표기, 영어 번역, "
+        "괄호 병기, Translation 표기를 덧붙이지 않는다. 답이 끝나면 그대로 끝낸다. "
         "너의 이름은 오직 CCUT이다. 모르는 건 솔직히 모른다고 한다.\n"
         "답변 문장만 출력한다 — JSON·따옴표·머리말 금지.\n")
     messages = [{"role": "system", "content": system}]
@@ -955,7 +970,8 @@ def _llm_smalltalk(input_text, recent_messages=None, facts=""):
     prompt = _smalltalk_prompt(input_text, recent_messages, facts=facts)
     try:
         # temperature 0.7 — 대화는 결정성보다 자연스러움 (판사 경로와 분리)
-        out = hub._ollama_json(prompt, timeout=30, temperature=0.7)
+        out = hub._ollama_json(prompt, timeout=30, temperature=0.7,
+                               model=hub.VOICE_MODEL)
         return _sanitize_talk(str(out.get("reply") or "").strip())
     except Exception as e:
         print(f"[INTENT-ROUTER] smalltalk 실패 ({e})")
@@ -972,10 +988,11 @@ def stream_smalltalk(input_text, recent_messages=None, facts=""):
         if _chat_role_enabled():
             chunks = hub._ollama_chat_stream(
                 _smalltalk_chat_messages(input_text, recent_messages, facts=facts),
-                timeout=30, temperature=0.7)
+                timeout=30, temperature=0.7, model=hub.VOICE_MODEL)
         else:
             prompt = _smalltalk_prompt(input_text, recent_messages, facts=facts, plain=True)
-            chunks = hub._ollama_stream(prompt, timeout=30, temperature=0.7)
+            chunks = hub._ollama_stream(prompt, timeout=30, temperature=0.7,
+                                        model=hub.VOICE_MODEL)
         for chunk in chunks:
             acc += chunk
             if _re_mod.search(r"[一-鿿]", acc) or \

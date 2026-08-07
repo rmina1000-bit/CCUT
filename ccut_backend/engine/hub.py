@@ -32,6 +32,10 @@ DB_PATH = os.path.join(BACKEND_DIR, "ccut_app.db")
 
 OLLAMA_URL = os.getenv("CCUT_OLLAMA_URL", "http://127.0.0.1:11434")
 HUB_MODEL = os.getenv("CCUT_HUB_MODEL", os.getenv("CCUT_CMD_MODEL", "qwen2.5:7b-instruct"))
+# [VOICE 2026-08-08 국장 결정] 사용자와 말을 주고받는 자리의 목소리 = 젬마.
+#   큐원은 대화에서 뺀다(직통 방 실측: 기획 어조에서 중국어로 표류, 문패로도 못 막음).
+#   판사·추출·plan 등 사용자에게 안 보이는 계산은 그대로 HUB_MODEL 을 쓴다.
+VOICE_MODEL = os.getenv("CCUT_VOICE_MODEL", "gemma3:4b")
 # [QWEN ROUGH-CUT 2PASS 2026-07-31] 자유출력/JSON 단일 러너 — num_ctx 8192.
 # keep_alive 연장(콜드 재로드 +6.5s 실측 관리)은 그대로 유지한다.
 # 전 호출 단일 ctx 유지 — 요청별 num_ctx가 다르면 Ollama가 러너를 재적재한다(스왑 비용).
@@ -140,10 +144,12 @@ def _apply_context_to_bundles(bundles, context):
 
 # ---------- 거점 호출 (format:json 강제) ----------
 
-def _ollama_json(prompt: str, timeout: int = 60, temperature: float = 0) -> dict:
+def _ollama_json(prompt: str, timeout: int = 60, temperature: float = 0,
+                 model: str = None) -> dict:
     # temperature 기본 0 — 판사(judge) 결정성 불변. 대화 계열만 명시적으로 올린다.
+    # model 미지정 = HUB_MODEL (기존 호출처 전부 불변). 대화 목소리는 VOICE_MODEL.
     payload = {
-        "model": HUB_MODEL,
+        "model": model or HUB_MODEL,
         "prompt": prompt,
         "stream": False,
         "format": "json",
@@ -214,7 +220,8 @@ def _ollama_json(prompt: str, timeout: int = 60, temperature: float = 0) -> dict
 
 
 def _ollama_stream(prompt: str, timeout: int = 60, temperature: float = 0.7,
-                   num_predict: int = 512, top_p: float = None, top_k: int = None):
+                   num_predict: int = 512, top_p: float = None, top_k: int = None,
+                   model: str = None):
     """[F2 스트리밍] 토큰 단위 생성기 — /api/generate stream=true (NDJSON).
     format 미지정(자유 텍스트) — 대화 reply 전용. 판사/추출(format:json) 경로 무접촉.
     [⑥ 샘플링] 대화 프로파일(top_p/top_k)은 호출측이 명시 — 판사 결정론과 분리.
@@ -226,7 +233,7 @@ def _ollama_stream(prompt: str, timeout: int = 60, temperature: float = 0.7,
     if top_k is not None:
         opts["top_k"] = top_k
     payload = {
-        "model": HUB_MODEL,
+        "model": model or HUB_MODEL,
         "prompt": prompt,
         "stream": True,
         "keep_alive": OLLAMA_KEEP_ALIVE,

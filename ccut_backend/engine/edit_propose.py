@@ -257,7 +257,8 @@ def _phrase(user_text, disp):
         'JSON만 출력: {"say":"..."}'
     )
     try:
-        out = hub._ollama_json(prompt, timeout=20, temperature=0.5)
+        out = hub._ollama_json(prompt, timeout=20, temperature=0.5,
+                               model=hub.VOICE_MODEL)
         say = _sanitize_talk(str(out.get("say") or "").strip())
         if say and disp["label"] not in say:
             print(f"[PROPOSE-1A][LABEL-GUARD] 라벨 훼손 → 서버 문장 강등: {say[:60]!r}")
