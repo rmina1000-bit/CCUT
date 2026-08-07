@@ -5594,7 +5594,10 @@ def _chat_only_speed_bypass(input_text: str, project_id: str = None,
             #    없는 조각 번호를 지어낸다. STRUCT-A② 참조)
             _w_short = dict(_w)
             _w_short["scenes"] = []
-            _r = _desk.receive(t, _gbw._world_lines(_w_short), recent_messages)
+            # [2026-08-08 국장 지시 "모든 조정권을 젬마에게"]
+            #   젬마가 듣고·분석하고·시스템을 확인하고·고르고·지시한다. 실행만 안 한다.
+            #   판단에는 직전 대화를 넣지 않는다 — 실측 3/8 vs 7/8 (자기 문맥이 지배).
+            _r = _desk.decide(t, _gbw._world_lines(_w_short))
             # 조회다 — 이제 장면 지도를 펴고 답한다(필요할 때만 그 층을 연다)
             if _r and _r["cap"] == "find_fragments" and _w.get("scenes"):
                 _said = _desk.look(t, _gbw._world_lines(_w), recent_messages)

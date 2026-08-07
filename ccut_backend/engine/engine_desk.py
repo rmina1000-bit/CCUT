@@ -29,6 +29,7 @@ import re
 CAPABILITIES = [
     {
         "id": "trim_boundary",
+        "ways": ['앞이 늘어져', '뒤가 길어', '말 없는 데 잘라줘', '여기 좀 다듬어줘'],
         "say": "조각의 앞이나 뒤 경계를 다듬는다 (말이 없는 구간을 덜어낸다)",
         "engine": "POST /edit-state (command_type=TRIM)",
         "needs": {"fragment": "대상 조각", "side": "start 또는 end"},
@@ -36,6 +37,7 @@ CAPABILITIES = [
     },
     {
         "id": "exclude_range",
+        "ways": ['중간에 이 부분만 빼줘', '가운데 이 말만 지워줘'],
         "say": "조각 안의 특정 구간만 빼낸다",
         "engine": "POST /edit-state (command_type=EXCLUDE_RANGE)",
         "needs": {"fragment": "대상 조각"},
@@ -43,6 +45,7 @@ CAPABILITIES = [
     },
     {
         "id": "remove_fragment",
+        "ways": ['이 장면 빼줘', 'A60 빼줘', '이거 지워줘'],
         "say": "조각 하나를 통째로 뺀다 — 사용자가 조각 이름(A60 같은 것)으로 가리킬 때",
         "engine": "POST /edit-state (command_type=REMOVE)",
         "needs": {"fragment": "대상 조각 이름"},
@@ -50,6 +53,7 @@ CAPABILITIES = [
     },
     {
         "id": "restore_fragment",
+        "ways": ['아까 거 되돌려줘', '원래대로 해줘', '취소해줘'],
         "say": "뺐거나 다듬은 것을 이전 값으로 되돌린다",
         "engine": "POST /edit-state (command_type=RESTORE)",
         "needs": {"fragment": "대상 조각"},
@@ -57,6 +61,7 @@ CAPABILITIES = [
     },
     {
         "id": "remove_ordinal",
+        "ways": ['3번째 빼줘', '다섯 번째 조각 지워줘', '마지막 거 빼줘'],
         "say": "원고에서 몇 번째 조각을 뺀다 — 사용자가 순번(3번째 같은 것)으로 가리킬 때",
         "engine": "POST /revision/proposals (op=remove_ordinal)",
         "needs": {"index": "몇 번째인지 숫자 (1~40, 마지막이면 -1)"},
@@ -64,6 +69,7 @@ CAPABILITIES = [
     },
     {
         "id": "set_count",
+        "ways": ['10개로 맞춰줘', '조각 수를 줄여줘', '스무 개만 남겨줘'],
         "say": "원고의 조각 개수를 맞춘다",
         "engine": "POST /revision/proposals (op=set_count)",
         "needs": {"count": "원하는 조각 수 (1~40)"},
@@ -71,6 +77,7 @@ CAPABILITIES = [
     },
     {
         "id": "remove_theme",
+        "ways": ['바다 나오는 건 다 빼줘', '실내 장면 빼줘', '물놀이는 줄여줘'],
         "say": "어떤 주제·소재가 나오는 조각들을 원고에서 뺀다",
         "engine": "POST /revision/proposals (op=remove_theme)",
         "needs": {"theme": "뺄 소재 낱말 (20자 이내)"},
@@ -78,6 +85,7 @@ CAPABILITIES = [
     },
     {
         "id": "reorder_story",
+        "ways": ['순서 바꿔줘', '이걸 앞으로 보내줘', '뒤로 옮겨줘'],
         "say": "원고에서 조각의 순서를 바꾼다",
         "engine": "POST /projects/{id}/state (ui_state.storyFragments 순서)",
         "needs": {"from_index": "옮길 조각의 현재 자리", "to_index": "옮겨 갈 자리"},
@@ -85,6 +93,7 @@ CAPABILITIES = [
     },
     {
         "id": "find_fragments",
+        "ways": ['고양이 나온 장면 있어?', '바다 몇 개야?', '그 장면 찾아줘', '뭐가 찍혔어?'],
         "say": "말이나 장면으로 조각을 찾아본다",
         "engine": "engine.fragment_search.search",
         "needs": {"query": "찾을 말"},
@@ -92,6 +101,7 @@ CAPABILITIES = [
     },
     {
         "id": "fix_scene_label",
+        "ways": ['이건 산이 아니라 바다야', '2번 장면 이름이 틀렸어', '장면 이름 고쳐줘', '이 장면은 잠수 장면이야', '그거 이름 바꿔줘'],
         "say": "장면 이름이 틀렸을 때 사용자가 말한 이름으로 고친다 "
                "(예: '14번은 산이 아니라 바닷가 바위야')",
         "engine": "project_timeline kind=scene_label_fix (append-only)",
@@ -100,6 +110,7 @@ CAPABILITIES = [
     },
     {
         "id": "read_sound_roles",
+        "ways": ['소리가 어떻게 돼 있어?', '대사인지 배경인지 봐줘'],
         "say": "조각마다 소리가 대사인지 배경인지 조용한지 살펴본다",
         "engine": "GET /sound-role/{program_id}",
         "needs": {},
@@ -107,6 +118,7 @@ CAPABILITIES = [
     },
     {
         "id": "set_sound_role",
+        "ways": ['이건 배경음으로 해줘', '여기는 대사로 표시해줘'],
         "say": "어떤 조각의 소리 성격을 대사·배경·조용함 중 하나로 고쳐 준다",
         "engine": "POST /sound-role/{program_id}",
         "needs": {"fragment": "대상 조각",
@@ -158,6 +170,144 @@ def find(cap_id):
         if c["id"] == cap_id:
             return c
     return None
+
+
+def _cap_vectors():
+    """능력 설명을 벡터로 — 서버가 고르기 위한 재료. 프로세스당 1회."""
+    global _CAP_VECS
+    try:
+        return _CAP_VECS
+    except NameError:
+        pass
+    from engine import embedding_model as em
+    vecs = []
+    for c in CAPABILITIES:
+        # 설명 한 줄만으로는 사람 말과 안 붙는다(실측: '장면 이름 고쳐줘' 0.355).
+        # 사람이 할 법한 말 여러 각도를 함께 재고 그 중 가장 가까운 것을 쓴다.
+        texts = [c["say"]] + list(c.get("ways") or [])
+        vecs.append((c["id"], [em.encode_one(t) for t in texts]))
+    globals()["_CAP_VECS"] = vecs
+    return vecs
+
+
+def match(want_text, floor=0.45):
+    """사용자가 원하는 것(한 문장) → 능력 하나. 고르는 일은 서버가 한다.
+
+    [2026-08-08 국장 지적 "왜 자유롭게 하지 않고 구속과 속박으로"]
+      그동안 젬마에게 능력 12종·인자·규칙 2,500자를 주고 "JSON 으로 골라라"를
+      시켰다. 그건 젬마가 못하는 일이다(행동 이름 고르기 6/6 실패, 실측).
+      실제 사고: '2바다는 바다지만, 바다속 잠수장면이야' →
+                 {group_no:14, label:'바닷가 바위'} (직전 대화를 되풀이)
+      ★젬마는 이해만 한다. 고르는 일은 서버가 벡터로 한다 — 규칙이 아니라 계산이다.
+      임베딩은 이미 있는 것을 쓴다(새 모델 0)."""
+    if not (want_text or "").strip():
+        return None, 0.0
+    from engine import embedding_model as em
+    import numpy as np
+    q = em.encode_one(want_text)
+    best, score = None, -1.0
+    for cid, vs in _cap_vectors():
+        s = max(float(np.dot(q, v)) for v in vs)
+        if s > score:
+            best, score = cid, s
+    return (best if score >= floor else None), round(score, 3)
+
+
+def decide(user_text, world_lines="", recent_messages=None):
+    """[2026-08-08 국장 지시 "모든 조정권을 젬마에게"]
+
+    젬마가 듣고 · 분석하고 · 시스템을 확인하고 · 그 중에서 고르고 · 지시한다.
+    실행만 안 한다.
+
+    ★서버는 고르지 않는다. 서버는 국장 말을 알아듣지 못한다(임베딩 유사도일 뿐).
+      앞 차수에서 서버가 고르게 했더니 '바다 나오는 장면 제거'를 fix_scene_label
+      로 골랐다 — 뜻을 모르니 그렇게 된다.
+    ★프롬프트에서 판단 규칙을 걷어냈다. 초기 실측에서 젬마는 능력 매핑을 9/10
+      맞혔는데, 그 위에 규칙(없는일/아직/묻는말/시키는말/대화/모르겠음 …)을
+      2,500자 쌓으면서 4/11까지 떨어졌다. 규칙이 젬마를 묶었다.
+      남기는 것은 '무엇을 할 수 있는지'와 '무엇은 여기 없는지' 둘뿐이다.
+    서버가 하는 일: 고른 것이 실재하는 능력인지, 값이 범위 안인지 확인(실행 전 안전)."""
+    from engine import hub
+    from engine.intent_router import _sanitize_talk
+
+    # ★직전 대화를 판단에 넣지 않는다 (실측 2026-08-08):
+    #     직전 대화 있음 3/8  ·  없음 7/8
+    #   국장 실화면의 버그가 이것이었다 — "2바다는…잠수장면이야"라고 했는데
+    #   직전의 "14번 산은…바닷가 바위야"가 현재 요청을 덮어 14번을 또 고쳤다.
+    #   오늘 같은 병을 네 번째로 만났다(기억 오염 '정은한' · 젬마 로마자 물려받기 ·
+    #   ASR 반복 루프 · 이것). 자기 문맥이 자기를 지배하는 구조다.
+    #   ★판단은 지금 한 말만 본다. 맥락은 '무엇을 할까'가 아니라 '뭐라고 말할까'의 것이다.
+    prompt = (
+        "너는 CCUT 영상 편집실의 동료다. 사용자의 말을 듣고 네가 판단한다.\n\n"
+        f"[이 편집실에서 할 수 있는 일]\n{_capability_lines()}\n\n"
+        f"[이 편집실에 아예 없는 일 — 영상·소리의 성질을 바꾸는 것]\n"
+        f"{_not_here_lines()}\n\n"
+        + (f"[지금 이 이야기]\n{world_lines}\n\n" if world_lines else "")
+        + f"[사용자가 방금 한 말]\n{user_text}\n\n"
+        "할 수 있는 일이면 그 id 를 고르고 필요한 값을 채운다.\n"
+        "여기 없는 일이면 capability 는 null, reason 은 \"없는 일\".\n"
+        "목록에 없지만 만들 수 있어 보이면 capability 는 null, reason 은 \"아직\".\n"
+        "그냥 이야기면 capability 는 null, reason 은 \"대화\".\n"
+        "say 는 사용자에게 할 말이다.\n"
+        'JSON만 출력: {"capability":"id 또는 null","args":{},"reason":"...",'
+        '"say":"사용자에게 할 말"}'
+    )
+    try:
+        out = hub._ollama_json(prompt, timeout=30, temperature=0.4,
+                               model=hub.VOICE_MODEL)
+    except Exception as e:
+        print(f"[DESK][WARN] 판단 실패: {e}")
+        return None
+
+    cap = out.get("capability")
+    cap = None if cap in (None, "", "null", "none", "None") else str(cap).strip()
+    if cap and not find(cap):
+        print(f"[DESK][WARN] 없는 능력 {cap!r} → 적어만 둔다")
+        cap = None
+        out["reason"] = "아직"
+    args = out.get("args") if isinstance(out.get("args"), dict) else {}
+    say = _sanitize_talk(str(out.get("say") or "").strip()) or ""
+    leaked = [c["id"] for c in CAPABILITIES if c["id"] in say]
+    for cid in leaked:
+        say = say.replace(cid, find(cid)["say"].split(" — ")[0])
+    return {"cap": cap, "args": args, "say": re.sub(r"\s{2,}", " ", say).strip(),
+            "reason": str(out.get("reason") or "").strip()}
+
+
+def understand(user_text, world_lines="", recent_messages=None):
+    """젬마는 이해만 한다 — 사용자가 원하는 것을 한 문장으로.
+
+    능력 목록도, 판단 규칙도 주지 않는다. 자유롭게 듣고 자유롭게 말한다."""
+    from engine import hub
+    from engine.intent_router import _sanitize_talk
+
+    ctx = ""
+    for m in (recent_messages or [])[-4:]:
+        who = "사용자" if (m.get("sender") == "user") else "나"
+        txt = str(m.get("text") or "")[:80]
+        if txt:
+            ctx += f"{who}: {txt}\n"
+    prompt = (
+        "너는 CCUT 영상 편집실의 동료다. 사용자의 말을 듣고 두 가지만 한다.\n"
+        "1) 사용자가 지금 원하는 것을 한 문장으로 적는다(want).\n"
+        "   편집 부탁이 아니면 want 는 빈 문자열로 둔다.\n"
+        "2) 사용자에게 할 말을 한다(say).\n\n"
+        + (f"[지금 이 이야기]\n{world_lines}\n\n" if world_lines else "")
+        + (f"[최근 대화]\n{ctx}\n" if ctx else "")
+        + f"[사용자의 말]\n{user_text}\n\n"
+        "지난 대화가 아니라 ★방금 한 말★을 보고 판단한다.\n"
+        'JSON만 출력: {"want":"...","say":"..."}'
+    )
+    try:
+        out = hub._ollama_json(prompt, timeout=25, temperature=0.4,
+                               model=hub.VOICE_MODEL)
+    except Exception as e:
+        print(f"[DESK][WARN] 이해 실패: {e}")
+        return None
+    return {
+        "want": str(out.get("want") or "").strip(),
+        "say": _sanitize_talk(str(out.get("say") or "").strip()) or "",
+    }
 
 
 def receive(user_text, world_lines="", recent_messages=None):

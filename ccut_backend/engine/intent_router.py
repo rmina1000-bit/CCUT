@@ -619,6 +619,27 @@ def _llm_understand(input_text, recent_messages=None, source_ids=None,
         if _re_mod.search(r"[?？]|주세요|주십시오|알려|말씀해|무엇을|어떤 (부분|장면)을|"
                           r"싶으신지|시겠어요|해볼까요", instr) or len(instr) > 60:
             kind = "unclear"
+        # [GROUND-1 2026-08-08 국장 "또 17개야"] 지시문이 사용자 말에 근거가 있는가.
+        #   실측 사고: "편집이나 하자."(기준 없는 말)에 모델이 기준을 지어냈다 —
+        #   normalized='정은한 나오는 장면'. DB 어디에도 없는 이름이고 국장은 그런
+        #   말을 한 적이 없다. 그 지어낸 기준으로 조각 17개 재선별이 3분씩 돌았다.
+        #   ★기준은 사용자에게서 와야 한다. 원문에 없는 낱말로만 이뤄진 지시문은
+        #     근거가 없는 것이다 — 실행하지 않고 되묻는다(NUM-GUARD 의 낱말 판).
+        elif kind == "edit":
+            # ★낱말 '일치'가 아니라 '포함'으로 본다 (2026-08-08 실측 사고):
+            #   국장 "2바다는 바다지만, 바다속 잠수장면이야." 를 이 방어가 막았다.
+            #   지시문 '바다 속 잠수장면' 의 낱말이 원문의 '바다속'·'잠수장면이야'와
+            #   조사·띄어쓰기 때문에 集合으로는 안 맞았다. 내가 만든 방어가 사용자를
+            #   막은 것이다. 포함으로 보면 '바다'·'잠수장면'이 원문 안에 있어 통과하고,
+            #   지어낸 이름('정은한')은 여전히 원문에 없어 막힌다.
+            _src = str(input_text or "")
+            _iw = [w for w in _re_mod.findall(r"[가-힣]{2,}", instr)]
+            if _iw and not any(
+                    (w in _src) or any(w[:i] and w[:i] in _src for i in range(len(w), 1, -1))
+                    for w in _iw):
+                print(f"[GROUND-1] 근거 없는 지시문 — 사용자 말에 없는 낱말로만 "
+                      f"이뤄짐: {instr[:40]!r} ← {str(input_text)[:30]!r}")
+                kind = "unclear"
         else:
             # 애칭→풀네임 정규화·filters는 결정론 헬퍼 재사용 (LLM 분류 + 결정론 정규화 분업)
             r_extra = {}
