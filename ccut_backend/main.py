@@ -5676,6 +5676,24 @@ def _chat_only_speed_bypass(input_text: str, project_id: str = None,
                                     else "just_talk", "gate": "desk"},
                         "via": "desk",
                     }
+            # ★젬마가 고른 일인데 아직 배선이 없을 때 — 통과시키지 않는다.
+            #   [SIM-1 실측] 통과시켰더니 뒤의 옛 게이트가 가로챘다:
+            #     '순서를 바꿔줘' → 되묻기 · '보기좋게 편집해줘' → 되묻기
+            #     '안녕 오늘 촬영 힘들었어' → 초안 유발 정규식에 걸려 ★실제 편집★
+            #   젬마에게 조정권을 줬으면 그 판단이 끝까지 가야 한다. 실행만 안 한다.
+            if _r and _r["cap"]:
+                _cap = _desk.find(_r["cap"])
+                _say = _r["say"] or f"{_cap['say'].split(' — ')[0]}, 해볼까요?"
+                print(f"[DESK][HOLD] 젬마 판단 {_r['cap']} — 배선 전이라 확인만: "
+                      f"{t[:30]!r}")
+                return {
+                    "status": "OK", "action": "answer_only",
+                    "normalized_instruction": None, "reply": _say,
+                    "confidence": 0.88,
+                    "matched": {"kind": "cap_proposed", "gate": "desk",
+                                "cap": _r["cap"], "args": _r["args"]},
+                    "via": "desk",
+                }
     except Exception as e:
         print(f"[DESK][WARN] 접수 실패 — 기존 경로로: {e}")
     # [BREATH-1 2026-08-08] 젬마가 먼저 숨을 쉰다.
