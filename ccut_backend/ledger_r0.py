@@ -429,6 +429,37 @@ async def get_ledger(program_id: str):
         con.close()
 
 
+@router.get("/ledger/{program_id}/scenes")
+async def get_ledger_scenes(program_id: str, transcript: int = 1):
+    """[STRUCT-A③ 2026-08-08] 원고의 중간층 L1 — 장면 묶음.
+
+    화면이 이것을 먼저 그리고, 하나를 고르면 그 장면의 조각만 아래층에 펼친다.
+    조각맵을 없애지 않는다 — 보이는 범위만 좁힌다(개념서 §3, 국장 지침).
+    읽기 전용. 계산은 engine/ledger_groups(이미 있는 값만 읽는다)."""
+    try:
+        from engine import ledger_groups as _lg
+        groups = _lg.group_program(program_id, use_transcript=bool(transcript))
+    except Exception as e:
+        return {"ok": False, "error": "scene_group_failed", "message": str(e)}
+    out = []
+    for g in groups:
+        out.append({
+            "group_no": g["group_no"],
+            "label": _lg.scene_label(g),
+            "source_id": g["source_id"],
+            "start_ms": g["start_ms"],
+            "end_ms": g["end_ms"],
+            "item_count": g["item_count"],
+            "place": g["place"],
+            "top_tags": g["top_tags"],
+            "fragment_ids": g["fragment_ids"],
+            "dialogue_head": g.get("dialogue_head"),
+            "boundary_reason": g["boundary_reason"],
+        })
+    return {"ok": True, "program_id": program_id, "scene_count": len(out),
+            "scenes": out}
+
+
 @router.get("/ledger/{program_id}/edl")
 async def get_render_edl(program_id: str):
     """[SCRIPT-2d] 대본 편집을 반영한 최종 클립 목록(EDL) — '편집(export)에 넘기는 것'.

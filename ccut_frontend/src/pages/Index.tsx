@@ -4,6 +4,7 @@ import LeftNav from "@/components/LeftNav";
 import CenterPanel from "@/components/CenterPanel";
 import OriginalPanorama from "@/components/OriginalPanorama";
 import FragmentMap from "@/components/FragmentMap";
+import SceneStrip, { type Scene } from "@/components/SceneStrip";
 import ReservedFragments from "@/components/ReservedFragments";
 import LedgerPage from "@/pages/LedgerPage";
 import FragmentMiniPlayer from "@/components/FragmentMiniPlayer";
@@ -356,6 +357,8 @@ const Index: React.FC = () => {
   // storyFragments  : 그 스토리의 구성본(좌표·분할 포함 표시용) — 구판 customEditFragments 대체
   // 제안(A/B)은 이 하나의 스토리를 '어떻게 편집할지'이므로, 스토리를 소유하지 않는다.
   const [storyFids, setStoryFids] = useState<string[]>([]);
+  // [STRUCT-A③] 지금 펼쳐 보는 장면 (null = 전체). 화면 상태일 뿐 저장하지 않는다.
+  const [selectedScene, setSelectedScene] = useState<Scene | null>(null);
   const [storyFragments, setStoryFragments] = useState<Fragment[]>([]);
 
 // proposals, directionSnapshot moved to useProposalState
@@ -4695,6 +4698,20 @@ const Index: React.FC = () => {
               패딩 제거해 보류맵이 창 밑변에 dock되게 한다(상·좌·우 패딩은 유지). */}
           <div className="flex-1 flex flex-col gap-2 p-2 pb-0 overflow-hidden min-w-0">
             <input ref={appendInputRef} type="file" accept="video/*" multiple className="hidden" onChange={handleAppendFiles} />
+            {/* [STRUCT-A③ 2026-08-08] 원고의 읽는 층 — 하루가 장면 열몇 개로 보인다.
+                하나를 고르면 아래 원본맵이 그 장면의 조각만 그린다(보이는 범위만 좁힘).
+                실패하거나 장면이 없으면 띠가 사라지고 종전대로 전체가 보인다. */}
+            <SceneStrip
+              programId={activeNavItem}
+              selected={selectedScene?.group_no ?? null}
+              onSelect={(s) => {
+                setSelectedScene(s);
+                console.info("[SCENE-STRIP][PICK]", s ? {
+                  no: s.group_no, label: s.label, items: s.item_count,
+                } : "전체 보기");
+              }}
+              className="px-3 pt-2"
+            />
             <OriginalPanorama
               activeSource={activeSource}
               onSourceChange={setActiveSource}
@@ -4714,11 +4731,17 @@ const Index: React.FC = () => {
               onRemoveSource={handleRemoveSource}
               onRenameSource={handleRenameSource}
               compactLabels={modeGateOn}
-              sourceFragments={
-                sourceEntries.length > 0
+              sourceFragments={(() => {
+                const all = sourceEntries.length > 0
                   ? sourceEntries.find((e) => e.label === activeSource)?.fragments ?? []
-                  : sourceFragments
-              }
+                  : sourceFragments;
+                // [STRUCT-A③] 장면을 고르면 그 장면의 조각만 펼친다. 안 고르면 종전대로 전체.
+                if (!selectedScene) return all;
+                const want = new Set(selectedScene.fragment_ids.map(String));
+                const picked = (all ?? []).filter((f: any) =>
+                  want.has(String(f.fragment_id ?? f.fragment_uid ?? "")));
+                return picked.length > 0 ? picked : all;   // 못 맞추면 숨기지 않는다
+              })()}
               sources={
                 sourceEntries.length > 0
                   ? sourceEntries.map((e) => ({

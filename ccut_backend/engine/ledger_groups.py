@@ -245,6 +245,14 @@ def group_program(program_id, use_transcript=True, target=(12, 30)):
     return out
 
 
+def scene_label(g):
+    """사람이 읽는 장면 이름 — 장소가 있으면 장소, 없으면 대표 태그 둘."""
+    if g.get("place"):
+        return g["place"]
+    tags = g.get("top_tags") or []
+    return " · ".join(tags[:2]) if tags else "장면"
+
+
 def summary_lines(groups, limit=30):
     """젬마와 사람이 함께 읽는 L1 요약 — 짧게."""
     lines = []
