@@ -8,14 +8,19 @@ type Msg = { role: "user" | "assistant" | "system"; content: string };
 
 // [문패 실험] '프롬프트 없음'은 존재하지 않는다 — 아무것도 안 보내면 올라마가
 // 알리바바의 공장 한 줄("You are Qwen, created by Alibaba Cloud...")을 깐다(실측).
-// 그래서 선택지는 문패의 유무가 아니라 누구의 문패냐다. 이 한 줄은 사전도 게이트도
+// 그래서 선택지는 문패의 유무가 아니라 누구의 문패냐다. 이 문패는 사전도 게이트도
 // 인격도 아니다 — 방이 쓰는 언어 하나만 정한다.
-const ROOM_LINE = "여기는 한국어로 대화하는 방이다. 어떤 경우에도 한국어로만 말한다.";
+// ★강도가 관건(2026-08-07 실측, 국장 발견 유발 문장 기준): 약한 한 줄 3/4 혼입,
+//   강화판 0/4. 예방은 문패, 치료는 NG 재촬영 — 오염 역사에선 강화판도 1/4 뚫린다.
+const ROOM_LINE =
+  "여기는 한국어로 대화하는 방이다. 어떤 경우에도 한국어로만 말한다. " +
+  "중국어 글자는 한 글자도 쓰지 않는다. 예시를 들 때도 한국어 예시만 든다.";
 
 // [NG 재촬영] 실측(2026-08-07): 주범은 역사 오염 — 중국어가 한 번 역사에 실리면
-// 문패로도 못 막는다(오염 역사에서 민낯 2/3·문패 1/3 혼입). ASR max-context 루프와
-// 같은 구조. 해법도 같다: 오염을 문맥에 싣지 않는 것. 답을 죽이고 템플릿을 꽂는 게
-// 아니라 같은 질문을 다시 — NG 컷은 본편(역사)에 안 싣는다. 최악 조건 5/5 성공 실측.
+// 문패로도 못 막는다. ASR max-context 루프와 같은 구조. 해법도 같다: 오염을 문맥에
+// 싣지 않는 것. 답을 죽이고 템플릿을 꽂는 게 아니라 같은 질문을 다시 — NG 컷은
+// 본편(역사)에 안 싣고, 재촬영 때는 지적 한 줄을 얹는다(눈먼 재샘플보다 회수율 높음).
+const NUDGE_LINE = "주의: 직전 시도에 중국어가 섞여 폐기됐다. 이번에는 한국어로만 답하라.";
 const CJK_RE = /[一-鿿]/;
 
 const QwenDirect = () => {
@@ -83,13 +88,17 @@ const QwenDirect = () => {
         : history;
       const maxTakes = ngRetake ? 3 : 1;
       let accum = "";
+      let currentOutbound = outbound;
       for (let take = 1; take <= maxTakes; take++) {
-        accum = await streamOnce(outbound);
+        accum = await streamOnce(currentOutbound);
         if (!ngRetake || !CJK_RE.test(accum)) break;
         if (take < maxTakes) {
-          // NG 컷은 본편(역사)에 싣지 않는다 — 같은 질문을 다시. 문맥은 그대로다.
+          // NG 컷은 본편(역사)에 싣지 않는다 — 지적 한 줄을 얹고 같은 질문을 다시.
           setNgNote(`NG ${take}회 — 중국어 혼입, 다시 찍는 중`);
           setMessages([...history, { role: "assistant", content: "" }]);
+          currentOutbound = koreanRoom
+            ? [{ role: "system", content: ROOM_LINE }, { role: "system", content: NUDGE_LINE }, ...history]
+            : [{ role: "system", content: NUDGE_LINE }, ...history];
         } else {
           setNgNote("NG 한도(3테이크) 도달 — 마지막 테이크를 그대로 보입니다");
         }
