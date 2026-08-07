@@ -734,9 +734,17 @@ def _smalltalk_prompt(input_text, recent_messages=None, facts="", plain=False):
             ctx += f"{who}: {txt}\n"
     tail = ("답변 문장만 출력한다 — JSON·따옴표·머리말 금지.\n" if plain
             else 'JSON만 출력: {"reply":"..."}\n')
+    # [VOICE 2026-08-08 국장 지시] 소개서를 준다 — 지금까지 목소리는 CCUT을 한 줄로만
+    #   알고 대답해 왔다. 사실(무엇을 할 수 있고 없는지)이지 말투 지시가 아니다.
+    try:
+        from engine.ccut_manual import manual_block
+        manual = manual_block()
+    except Exception:
+        manual = ""
     return (
         "너는 CCUT — 영상 편집을 돕는 다정한 동료다. 사용자의 말에 따뜻한 존댓말 "
         "한국어 1~3문장으로 '실제로' 대답한다.\n"
+        + manual
         + facts +
         "대화 규칙 (어기면 실격):\n"
         "1. 사용자의 마지막 말에 직접 반응한다. 화제를 네 맘대로 바꾸지 않는다 — "
@@ -923,9 +931,15 @@ def _estimate_chat_tokens(text):
 
 def _smalltalk_chat_messages(input_text, recent_messages=None, facts=""):
     budget = int(os.getenv("CCUT_CHAT_ROLE_HISTORY_TOKENS", "2048"))
+    try:
+        from engine.ccut_manual import manual_block
+        manual = manual_block()
+    except Exception:
+        manual = ""
     system = (
         "너는 CCUT — 영상 편집을 돕는 다정한 동료다. 사용자의 말에 따뜻한 존댓말 "
         "한국어 1~3문장으로 '실제로' 대답한다.\n"
+        + manual
         + facts +
         "대화 규칙 (어기면 실격):\n"
         "1. 사용자의 마지막 말에 직접 반응한다. 화제를 네 맘대로 바꾸지 않는다 — "
