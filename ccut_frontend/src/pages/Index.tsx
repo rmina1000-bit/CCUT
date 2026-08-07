@@ -4049,6 +4049,14 @@ const Index: React.FC = () => {
       sound_roles: roleCount,
       proposals_ready: ok === true,
     });
+    // [BREATH-2 2026-08-08 국장 지적 "다구리"] 성공/실패를 정직하게 돌려준다.
+    //   이 함수는 아무것도 return 하지 않았다(undefined). 그런데 채팅 브리지는
+    //   useProposalState:1004 `const ok = await onStartApprovedStoryEditing("chat")`
+    //   로 받아 falsy 면 "편집 시작으로 잇지 못했어요"를 띄운다.
+    //   → 편집이 ★실제로 성공해도 항상 실패 문구가 먼저 뜨고, 그 뒤에 성공 방송
+    //     넷(시작·소리보는중·소리끝·A/B준비)이 쏟아졌다. 국장 화면의 그 장면이다.
+    //   실패를 말하려면 실패여야 한다. 거짓 실패 + 성공 방송은 사용자를 때린다.
+    return ok === true;
   }, [activeNavItem, appendStoryGateMessage, refreshSoundRoles, sourceEntries.length]);
   startApprovedStoryEditingBridgeRef.current = async (source: "chat") => handleStartStoryEditing(source);
 

@@ -5881,8 +5881,15 @@ async def route_edit_intent_stream_api(req: EditIntentRouteRequest, request: Req
                     speed_trace.mark(trace_id, "t3_5")
                     speed_trace.mark(trace_id, "t4")
                     speed_trace.mark(trace_id, "t5")
-                partial_text = "응, "
-                yield _emit({"type": "token", "text": partial_text})
+                # [BREATH-2 2026-08-08 국장 지적] "응, " 강제 주입을 걷어낸다.
+                #   국장: "답변이 나오는데 항상 '응 …'을 먼저 했다가 급하게 지우고
+                #          다른 말을 해. 모든 답변에 공통인 증상이야."
+                #   정체: 체감 속도용으로 서버가 첫 토큰에 "응, "을 흘렸다.
+                #   모델은 이 접두를 모르고 자기 문장을 처음부터 시작하고,
+                #   done 이 주는 final_text(=acc.strip(), intent_router:1025)에는
+                #   "응, "이 없다. 프론트는 최종에 stream_text 로 교체하므로
+                #   화면에 그려졌던 "응, "이 사라진다 — '썼다가 지우는' 것처럼 보인다.
+                #   ★서버가 사용자에게 모델인 척 말을 거는 자리였다. 말은 젬마가 한다.
             speed_trace.set_current(trace_id)
             for kind, payload in stream_smalltalk(req.input_text, req.recent_messages,
                                                   facts=sc.get("facts") or ""):
