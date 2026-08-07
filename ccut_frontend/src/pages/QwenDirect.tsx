@@ -4,13 +4,28 @@
 // 여기서 관찰한 맨몸 큐원이 본선 채팅 구조(사다리 역전)의 실측 근거가 된다.
 import { useEffect, useRef, useState } from "react";
 
-type Msg = { role: "user" | "assistant"; content: string };
+type Msg = { role: "user" | "assistant" | "system"; content: string };
+
+// [문패 실험] '프롬프트 없음'은 존재하지 않는다 — 아무것도 안 보내면 올라마가
+// 알리바바의 공장 한 줄("You are Qwen, created by Alibaba Cloud...")을 깐다(실측).
+// 그래서 선택지는 문패의 유무가 아니라 누구의 문패냐다. 이 한 줄은 사전도 게이트도
+// 인격도 아니다 — 방이 쓰는 언어 하나만 정한다.
+const ROOM_LINE = "여기는 한국어로 대화하는 방이다. 어떤 경우에도 한국어로만 말한다.";
+
+// [NG 재촬영] 실측(2026-08-07): 주범은 역사 오염 — 중국어가 한 번 역사에 실리면
+// 문패로도 못 막는다(오염 역사에서 민낯 2/3·문패 1/3 혼입). ASR max-context 루프와
+// 같은 구조. 해법도 같다: 오염을 문맥에 싣지 않는 것. 답을 죽이고 템플릿을 꽂는 게
+// 아니라 같은 질문을 다시 — NG 컷은 본편(역사)에 안 싣는다. 최악 조건 5/5 성공 실측.
+const CJK_RE = /[一-鿿]/;
 
 const QwenDirect = () => {
   const [messages, setMessages] = useState<Msg[]>([]);
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [koreanRoom, setKoreanRoom] = useState(false);
+  const [ngRetake, setNgRetake] = useState(false);
+  const [ngNote, setNgNote] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -25,11 +40,13 @@ const QwenDirect = () => {
     const history: Msg[] = [...messages, { role: "user", content: text }];
     setMessages([...history, { role: "assistant", content: "" }]);
     setBusy(true);
-    try {
+    setNgNote(null);
+
+    const streamOnce = async (outbound: Msg[]): Promise<string> => {
       const res = await fetch("/api/qwen/direct/stream", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ messages: history }),
+        body: JSON.stringify({ messages: outbound }),
       });
       if (!res.ok || !res.body) throw new Error(`HTTP ${res.status}`);
       const reader = res.body.getReader();
@@ -56,7 +73,30 @@ const QwenDirect = () => {
           }
         }
       }
-      if (!accum) {
+      return accum;
+    };
+
+    try {
+      // 한국어 방 ON = 우리 문패가 공장 문패를 대체한다 (화면에는 안 그린다)
+      const outbound: Msg[] = koreanRoom
+        ? [{ role: "system", content: ROOM_LINE }, ...history]
+        : history;
+      const maxTakes = ngRetake ? 3 : 1;
+      let accum = "";
+      for (let take = 1; take <= maxTakes; take++) {
+        accum = await streamOnce(outbound);
+        if (!ngRetake || !CJK_RE.test(accum)) break;
+        if (take < maxTakes) {
+          // NG 컷은 본편(역사)에 싣지 않는다 — 같은 질문을 다시. 문맥은 그대로다.
+          setNgNote(`NG ${take}회 — 중국어 혼입, 다시 찍는 중`);
+          setMessages([...history, { role: "assistant", content: "" }]);
+        } else {
+          setNgNote("NG 한도(3테이크) 도달 — 마지막 테이크를 그대로 보입니다");
+        }
+      }
+      if (accum) {
+        setMessages([...history, { role: "assistant", content: accum }]);
+      } else {
         setMessages(history); // 빈 답이면 빈 말풍선을 남기지 않는다
         setError("답이 비었습니다 (모델이 아무 토큰도 내지 않음)");
       }
@@ -71,11 +111,44 @@ const QwenDirect = () => {
   return (
     <div className="min-h-screen bg-background text-foreground flex flex-col items-center">
       <div className="w-full max-w-2xl flex flex-col h-screen">
-        <header className="px-4 py-3 border-b border-border/20 flex items-baseline gap-3">
+        <header className="px-4 py-3 border-b border-border/20 flex items-center gap-3 flex-wrap">
           <h1 className="text-base font-semibold">큐원 직통</h1>
           <span className="text-[11px] text-muted-foreground/70">
-            게이트 없음 · 프롬프트 없음 · 필터 없음 · 저장 없음 — 있는 그대로의 모델
+            게이트 없음 · 필터 없음 · 저장 없음
           </span>
+          <div className="ml-auto flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setKoreanRoom((v) => !v)}
+              className={
+                koreanRoom
+                  ? "px-3 py-1 rounded-lg text-[11px] bg-primary/25 border border-primary/40 transition-colors"
+                  : "px-3 py-1 rounded-lg text-[11px] bg-secondary/10 border border-border/20 text-muted-foreground hover:text-foreground transition-colors"
+              }
+              title={koreanRoom ? ROOM_LINE : "지금은 알리바바 공장 문패(You are Qwen...)가 깔려 있다"}
+            >
+              {koreanRoom ? "문패: 한국어 방" : "문패: 공장(민낯)"}
+            </button>
+            <button
+              type="button"
+              onClick={() => setNgRetake((v) => !v)}
+              className={
+                ngRetake
+                  ? "px-3 py-1 rounded-lg text-[11px] bg-primary/25 border border-primary/40 transition-colors"
+                  : "px-3 py-1 rounded-lg text-[11px] bg-secondary/10 border border-border/20 text-muted-foreground hover:text-foreground transition-colors"
+              }
+              title="중국어가 섞인 테이크는 역사에 싣지 않고 같은 질문을 다시 한다 (최대 3테이크)"
+            >
+              {ngRetake ? "NG 재촬영: ON" : "NG 재촬영: OFF"}
+            </button>
+            <button
+              type="button"
+              onClick={() => { setMessages([]); setError(null); setNgNote(null); }}
+              className="px-3 py-1 rounded-lg text-[11px] bg-secondary/10 border border-border/20 text-muted-foreground hover:text-foreground transition-colors"
+            >
+              새로 만나기
+            </button>
+          </div>
         </header>
         <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 py-4 space-y-3">
           {messages.length === 0 && (
@@ -96,6 +169,9 @@ const QwenDirect = () => {
               </div>
             </div>
           ))}
+          {ngNote && (
+            <div className="text-[11px] text-primary/70 text-center">{ngNote}</div>
+          )}
           {error && (
             <div className="text-[11px] text-destructive/80 text-center">{error}</div>
           )}
