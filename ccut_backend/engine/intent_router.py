@@ -590,7 +590,10 @@ def _llm_understand(input_text, recent_messages=None, source_ids=None,
         + (f"최근 대화:\n{ctx}" if ctx else "")
         + f"사용자: {input_text}\n")
     try:
-        out = hub._ollama_json(prompt, timeout=45)
+        # [LIVING-DRAFT-1] 이해도 젬마로 — 채팅 턴 안에서 큐원·젬마를 오가면
+        #   GPU 모델 스왑이 회당 ~10초(실측)라 반복 수정 루프가 죽는다.
+        #   지시서 분담: 숫자=서버, 판단과 말=젬마. 큐원은 루프 밖(판사·plan)에만.
+        out = hub._ollama_json(prompt, timeout=45, model=hub.VOICE_MODEL)
     except Exception as e:
         print(f"[INTENT-ROUTER] llm understand 실패 ({e})")
         return None

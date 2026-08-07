@@ -825,10 +825,12 @@ def maybe_roll_summary(program_id, hist):
             continue
     if not lines:
         return
+    # [LIVING-DRAFT-1] 요약도 젬마로 — 채팅 턴 꼬리에서 큐원을 부르면 다음 턴이
+    #   모델 스왑(~10초 실측)을 문다. 루프 안은 젬마 하나로 통일한다.
     out = hub._ollama_json(
         "다음 편집실 대화 기록을 5문장 이내 한국어로 요약하라. 사용자가 준 기준·결정·"
         "선호를 우선 보존한다.\n" + "\n".join(lines[-100:]) +
-        '\nJSON만: {"summary":"..."}', timeout=45)
+        '\nJSON만: {"summary":"..."}', timeout=45, model=hub.VOICE_MODEL)
     s = str(out.get("summary") or "").strip()
     if s:
         import time as _t
