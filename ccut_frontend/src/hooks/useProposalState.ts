@@ -990,6 +990,12 @@ export const useProposalState = (
       if (
         route?.action === "run_proposal" &&
         options.onStartApprovedStoryEditing &&
+        // ★[BREATH-3 2026-08-08 국장 지적 "왜 같은 패턴으로만"]
+        //   이미 편집이 시작돼 A/B 가 화면에 있으면 '시작'을 되풀이하지 않는다.
+        //   실측(국장 화면): 무슨 말을 해도 이 문으로 들어와 같은 방송 넷이 나갔고,
+        //   A/B 는 이미 있어 새로 만들지도 않으면서 "준비했어요"라고 말했다.
+        //   요청한 일(스토리 정리)은 하나도 하지 않았다. 그 뒤부터는 대화가 받는다.
+        !(proposals?.A && proposals?.B) &&
         (
           route?.matched?.kind === "open_theme" ||
           currentStoryFidsRef.current.length > 0 ||
