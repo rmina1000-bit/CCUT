@@ -12,16 +12,39 @@ type Msg = { role: "user" | "assistant" | "system"; content: string };
 // 인격도 아니다 — 방이 쓰는 언어 하나만 정한다.
 // ★강도가 관건(2026-08-07 실측, 국장 발견 유발 문장 기준): 약한 한 줄 3/4 혼입,
 //   강화판 0/4. 예방은 문패, 치료는 NG 재촬영 — 오염 역사에선 강화판도 1/4 뚫린다.
+// ★젬마판(2026-08-07 실측): 젬마의 표류는 중국어가 아니라 로마자 발음 표기·영어
+//   번역 덧붙임이다. 첫 턴 씨앗 1/5 → 한 번 붙으면 4/4로 계속 물려받는다(큐원의
+//   중국어와 같은 역사 오염 구조). 결정적 차이 — 젬마는 문패가 듣는다: 첫 턴 0/4,
+//   오염 역사에서도 4/4→1/4. 그래서 이 방은 문패를 기본으로 켜고 시작한다.
 const ROOM_LINE =
-  "여기는 한국어로 대화하는 방이다. 어떤 경우에도 한국어로만 말한다. " +
-  "중국어 글자는 한 글자도 쓰지 않는다. 예시를 들 때도 한국어 예시만 든다.";
+  "너는 한국어 사용자와 대화한다. 오직 한국어 문장만 출력한다. " +
+  "로마자 발음 표기, 영어 번역, 괄호 병기, Translation 표기를 절대 덧붙이지 않는다. " +
+  "중국어 글자도 쓰지 않는다. 답이 끝나면 그대로 끝낸다.";
 
 // [NG 재촬영] 실측(2026-08-07): 주범은 역사 오염 — 중국어가 한 번 역사에 실리면
 // 문패로도 못 막는다. ASR max-context 루프와 같은 구조. 해법도 같다: 오염을 문맥에
 // 싣지 않는 것. 답을 죽이고 템플릿을 꽂는 게 아니라 같은 질문을 다시 — NG 컷은
 // 본편(역사)에 안 싣고, 재촬영 때는 지적 한 줄을 얹는다(눈먼 재샘플보다 회수율 높음).
-const NUDGE_LINE = "주의: 직전 시도에 중국어가 섞여 폐기됐다. 이번에는 한국어로만 답하라.";
+const NUDGE_LINE =
+  "주의: 직전 시도에 군더더기(중국어 또는 로마자·번역 덧붙임)가 섞여 폐기됐다. " +
+  "이번에는 한국어 문장만 답하라.";
+
+// 검문 — 한자만 보던 것을 넓혔다(제 측정 구멍이었다: 젬마 0/13 통과는 로마자·번역을
+// 안 세었기 때문). 기술어·코드는 정상이므로 'Translation' 표기와 긴 로마자 괄호만 본다.
 const CJK_RE = /[一-鿿]/;
+const ROMAJI_RE = /\([A-Z][a-z]+[A-Za-z\s\-!?,.0-9']{15,}\)/;
+const isDirty = (t: string) =>
+  CJK_RE.test(t) || /\bTranslation\s*:/.test(t) || ROMAJI_RE.test(t);
+
+// [꼬리 자르기] 덧붙인 군더더기(로마자 병기·영어 번역)만 뗀다 — 모델의 한국어 본문은
+// 한 글자도 건드리지 않는다. 말을 죽이고 템플릿을 꽂는 필터와 다르다.
+// 이 잘린 답이 그대로 역사가 되므로 다음 턴이 형식을 물려받지 않는다(실측: 5턴 대화
+// 3회 반복에서 현행 1/5 → 위생 0/5. 오염 역사에선 문패+재촬영도 4/5 실패했다).
+const trimTail = (t: string) =>
+  t.split(/\n\s*Translation\s*:/)[0]
+    .replace(new RegExp(ROMAJI_RE.source, "g"), "")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
 
 // [VOICE 2026-08-07] 국장 결정: 대화창에서 큐원 퇴출, 젬마로 간다.
 //   실측 근거 — 큐원2.5는 기획·목록 어조에서 중국어로 표류하고(독립 재현 3회),
@@ -40,8 +63,11 @@ const QwenDirect = () => {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [voice, setVoice] = useState(VOICES[0].id);
-  const [koreanRoom, setKoreanRoom] = useState(false);
-  const [ngRetake, setNgRetake] = useState(false);
+  // 문패·재촬영 기본 ON — 젬마에는 둘 다 듣는다(실측). 국장이 방에 들어오자마자
+  // 한국어만 나오는 것이 기본값이어야 한다. 끄면 민낯 그대로 볼 수 있다.
+  const [koreanRoom, setKoreanRoom] = useState(true);
+  const [ngRetake, setNgRetake] = useState(true);
+  const [hygiene, setHygiene] = useState(true);
   const [ngNote, setNgNote] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
 
@@ -103,7 +129,7 @@ const QwenDirect = () => {
       let currentOutbound = outbound;
       for (let take = 1; take <= maxTakes; take++) {
         accum = await streamOnce(currentOutbound);
-        if (!ngRetake || !CJK_RE.test(accum)) break;
+        if (!ngRetake || !isDirty(accum)) break;
         if (take < maxTakes) {
           // NG 컷은 본편(역사)에 싣지 않는다 — 지적 한 줄을 얹고 같은 질문을 다시.
           setNgNote(`NG ${take}회 — 중국어 혼입, 다시 찍는 중`);
@@ -116,7 +142,8 @@ const QwenDirect = () => {
         }
       }
       if (accum) {
-        setMessages([...history, { role: "assistant", content: accum }]);
+        // 화면에도 역사에도 '꼬리 뗀' 본문이 들어간다 — 다음 턴이 물려받을 것이 없다.
+        setMessages([...history, { role: "assistant", content: hygiene ? trimTail(accum) : accum }]);
       } else {
         setMessages(history); // 빈 답이면 빈 말풍선을 남기지 않는다
         setError("답이 비었습니다 (모델이 아무 토큰도 내지 않음)");
@@ -171,6 +198,18 @@ const QwenDirect = () => {
               title="중국어가 섞인 테이크는 역사에 싣지 않고 같은 질문을 다시 한다 (최대 3테이크)"
             >
               {ngRetake ? "NG 재촬영: ON" : "NG 재촬영: OFF"}
+            </button>
+            <button
+              type="button"
+              onClick={() => setHygiene((v) => !v)}
+              className={
+                hygiene
+                  ? "px-3 py-1 rounded-lg text-[11px] bg-primary/25 border border-primary/40 transition-colors"
+                  : "px-3 py-1 rounded-lg text-[11px] bg-secondary/10 border border-border/20 text-muted-foreground hover:text-foreground transition-colors"
+              }
+              title="덧붙인 로마자 병기·영어 번역만 떼고 본문은 그대로 둔다. 잘린 답이 역사가 되어 다음 턴이 형식을 물려받지 않는다"
+            >
+              {hygiene ? "꼬리 자르기: ON" : "꼬리 자르기: OFF"}
             </button>
             <button
               type="button"
