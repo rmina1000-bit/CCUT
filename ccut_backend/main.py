@@ -5910,6 +5910,43 @@ async def route_edit_intent_stream_api(req: EditIntentRouteRequest, request: Req
     return StreamingResponse(gen(), media_type="text/event-stream")
 
 
+# [QWEN-DIRECT 2026-08-07] 국장↔큐원 직통 — 게이트·앵커·인격·위생·사전 전부 없음.
+#   "큐원과 내가 그냥 직접 만나게 해줘"(국장). 모델을 있는 그대로 만나는 방.
+#   요청 몸통의 messages 가 대화의 전부다 — 저장 없음, 원장 무접촉, 프롬프트 무주입.
+#   위생(_sanitize_talk)도 일부러 안 건다: 중국어 혼입·정체 자백까지 그대로 보는 것이
+#   이 방의 목적이다(직통에서 관찰한 것이 본선 구조 설계의 실측 근거가 된다).
+class QwenDirectRequest(BaseModel):
+    messages: list = []
+
+
+@app.post("/qwen/direct/stream")
+async def qwen_direct_stream(req: QwenDirectRequest):
+    from fastapi.responses import StreamingResponse  # 이 파일 관례: 지역 import
+
+    def gen():
+        from engine import hub
+        msgs = [
+            {"role": m.get("role"), "content": m.get("content")}
+            for m in (req.messages or [])
+            if isinstance(m, dict) and m.get("role") in ("user", "assistant", "system")
+            and isinstance(m.get("content"), str) and m.get("content").strip()
+        ][-40:]  # 폭주 방지 하한선 하나만: 최근 40메시지
+        if not msgs:
+            yield "data: " + json.dumps({"type": "error", "message": "빈 대화"}) + "\n\n"
+            return
+        try:
+            for chunk in hub._ollama_chat_stream(msgs, timeout=120,
+                                                 temperature=0.7, num_predict=1024):
+                if chunk:
+                    yield ("data: " + json.dumps({"type": "token", "text": chunk},
+                                                 ensure_ascii=False) + "\n\n")
+            yield "data: " + json.dumps({"type": "done"}) + "\n\n"
+        except Exception as e:
+            yield ("data: " + json.dumps({"type": "error", "message": str(e)},
+                                         ensure_ascii=False) + "\n\n")
+    return StreamingResponse(gen(), media_type="text/event-stream")
+
+
 class ConverseRequest(BaseModel):
     project_id: Optional[str] = None
     source_ids: list = []

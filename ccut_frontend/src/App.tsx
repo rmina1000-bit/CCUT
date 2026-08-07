@@ -9,6 +9,7 @@ import TrashPortal from "./pages/TrashPortal.tsx";
 import AdminIndex from "./pages/AdminIndex.tsx";
 import BasketPortal from "./pages/BasketPortal.tsx";
 import NotFound from "./pages/NotFound.tsx";
+import QwenDirect from "./pages/QwenDirect.tsx";
 
 const queryClient = new QueryClient();
 
@@ -32,6 +33,8 @@ const App = () => (
           <Route path="/admin/*" element={<AdminIndex />} />
           {/* [바구니 새창 C] 작업대 바구니 전용창 — BroadcastChannel 동기화 */}
           <Route path="/basket-portal" element={<BasketPortal />} />
+          {/* [QWEN-DIRECT] 국장↔큐원 직통 — 게이트·프롬프트·필터·저장 없음 */}
+          <Route path="/qwen" element={<QwenDirect />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
         </Routes>
