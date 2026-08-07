@@ -23,11 +23,23 @@ const ROOM_LINE =
 const NUDGE_LINE = "주의: 직전 시도에 중국어가 섞여 폐기됐다. 이번에는 한국어로만 답하라.";
 const CJK_RE = /[一-鿿]/;
 
+// [VOICE 2026-08-07] 국장 결정: 대화창에서 큐원 퇴출, 젬마로 간다.
+//   실측 근거 — 큐원2.5는 기획·목록 어조에서 중국어로 표류하고(독립 재현 3회),
+//   문패·재촬영 어느 것도 그 자리를 못 막았다(강화 문패 3/4 혼입). 프롬프트 층의
+//   병이 아니라 모델 성질이라 목소리를 바꾼다. 이해·판단(비가시 JSON)은 별건.
+//   젬마 실측(2026-08-07, 큐원이 무너진 세 자리 + 오염 역사): 중국어 0/13. 문패도
+//   NG 재촬영도 없이 민낯으로. 두 스위치는 이제 비교·역사 보존용이다.
+const VOICES = [
+  { id: "gemma3:4b", label: "젬마" },
+  { id: "qwen2.5:7b-instruct", label: "큐원(퇴출 예정)" },
+];
+
 const QwenDirect = () => {
   const [messages, setMessages] = useState<Msg[]>([]);
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [voice, setVoice] = useState(VOICES[0].id);
   const [koreanRoom, setKoreanRoom] = useState(false);
   const [ngRetake, setNgRetake] = useState(false);
   const [ngNote, setNgNote] = useState<string | null>(null);
@@ -51,7 +63,7 @@ const QwenDirect = () => {
       const res = await fetch("/api/qwen/direct/stream", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ messages: outbound }),
+        body: JSON.stringify({ messages: outbound, model: voice }),
       });
       if (!res.ok || !res.body) throw new Error(`HTTP ${res.status}`);
       const reader = res.body.getReader();
@@ -121,11 +133,21 @@ const QwenDirect = () => {
     <div className="min-h-screen bg-background text-foreground flex flex-col items-center">
       <div className="w-full max-w-2xl flex flex-col h-screen">
         <header className="px-4 py-3 border-b border-border/20 flex items-center gap-3 flex-wrap">
-          <h1 className="text-base font-semibold">큐원 직통</h1>
+          <h1 className="text-base font-semibold">목소리 직통</h1>
           <span className="text-[11px] text-muted-foreground/70">
             게이트 없음 · 필터 없음 · 저장 없음
           </span>
           <div className="ml-auto flex items-center gap-2">
+            <select
+              value={voice}
+              onChange={(e) => setVoice(e.target.value)}
+              className="px-2 py-1 rounded-lg text-[11px] bg-secondary/10 border border-border/20 outline-none"
+              title="대화 목소리 모델"
+            >
+              {VOICES.map((v) => (
+                <option key={v.id} value={v.id}>{v.label}</option>
+              ))}
+            </select>
             <button
               type="button"
               onClick={() => setKoreanRoom((v) => !v)}
@@ -163,6 +185,8 @@ const QwenDirect = () => {
           {messages.length === 0 && (
             <div className="text-[12px] text-muted-foreground/60 pt-8 text-center">
               첫 마디를 건네 보세요. 여기서는 아무도 끼어들지 않습니다.
+              <br />
+              목소리는 젬마입니다 — 큐원은 비교용으로만 남겨 뒀습니다.
             </div>
           )}
           {messages.map((m, i) => (
@@ -196,7 +220,7 @@ const QwenDirect = () => {
               }
             }}
             rows={1}
-            placeholder="큐원에게 그대로 전달됩니다"
+            placeholder="그대로 전달됩니다"
             className="flex-1 resize-none rounded-xl bg-secondary/10 border border-border/20 px-3 py-2 text-[13px] outline-none focus:border-primary/40"
           />
           <button

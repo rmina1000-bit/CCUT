@@ -439,7 +439,11 @@ def _ollama_chat_tools(messages: list[dict], tools: list[dict], run_tool,
 
 
 def _ollama_chat_stream(messages: list[dict], timeout: int = 60, temperature: float = 0.7,
-                        num_predict: int = 512, top_p: float = None, top_k: int = None):
+                        num_predict: int = 512, top_p: float = None, top_k: int = None,
+                        model: str = None):
+    # [VOICE-AUDITION 2026-08-07] model 인자 — 대화 목소리 오디션·교체용.
+    #   기본 None = HUB_MODEL 그대로라 기존 호출처 전부 불변.
+    mdl = model or HUB_MODEL
     opts = {"temperature": temperature, "num_predict": num_predict,
             "num_ctx": OLLAMA_NUM_CTX}
     if top_p is not None:
@@ -447,7 +451,7 @@ def _ollama_chat_stream(messages: list[dict], timeout: int = 60, temperature: fl
     if top_k is not None:
         opts["top_k"] = top_k
     payload = {
-        "model": HUB_MODEL,
+        "model": mdl,
         "messages": messages,
         "stream": True,
         "keep_alive": OLLAMA_KEEP_ALIVE,
@@ -467,7 +471,7 @@ def _ollama_chat_stream(messages: list[dict], timeout: int = 60, temperature: fl
         call_idx = _speed_trace.append_ollama_call(trace_id, {
             "kind": "chat_stream",
             "purpose": "generation",
-            "model": HUB_MODEL,
+            "model": mdl,
             "prompt_chars": prompt_chars,
             "message_count": len(messages or []),
             "message_roles": [str((m or {}).get("role") or "") for m in messages or []],

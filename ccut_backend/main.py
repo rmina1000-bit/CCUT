@@ -5917,6 +5917,9 @@ async def route_edit_intent_stream_api(req: EditIntentRouteRequest, request: Req
 #   이 방의 목적이다(직통에서 관찰한 것이 본선 구조 설계의 실측 근거가 된다).
 class QwenDirectRequest(BaseModel):
     messages: list = []
+    # [VOICE 2026-08-07] 목소리 모델 — 국장 결정으로 대화창은 큐원 퇴출, 젬마로 간다.
+    #   방에서 나란히 세워 비교할 수 있게 요청별 지정을 받는다(미지정=기본 목소리).
+    model: str = None
 
 
 @app.post("/qwen/direct/stream")
@@ -5936,7 +5939,8 @@ async def qwen_direct_stream(req: QwenDirectRequest):
             return
         try:
             for chunk in hub._ollama_chat_stream(msgs, timeout=120,
-                                                 temperature=0.7, num_predict=1024):
+                                                 temperature=0.7, num_predict=1024,
+                                                 model=(req.model or None)):
                 if chunk:
                     yield ("data: " + json.dumps({"type": "token", "text": chunk},
                                                  ensure_ascii=False) + "\n\n")
