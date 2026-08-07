@@ -134,6 +134,8 @@ export const STORY_GATE_COPY = {
     heading: "편집 제안",
     large: "크게 보기",
     largeBlocked: "새 창을 열지 못했어요.",
+    // [AB-LARGE-FIX 2026-08-08] 미리보기 영상이 아직 없을 때 — 빈 화면 대신 이유를 말한다.
+    largeNoVideo: "이 편집안의 미리보기 영상이 아직 만들어지지 않았어요. 아래 내용으로 먼저 확인하시고, 영상으로 보시려면 편집안을 고른 뒤 재생해 주세요.",
     choose: "고르기",
     chooseFailed: "아직 이 안을 고를 수 없어요. 다시 열어보고 있습니다.",
     picked: (key: "A" | "B") => `${key}안을 골랐어요.`,

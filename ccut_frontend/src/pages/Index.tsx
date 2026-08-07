@@ -4185,8 +4185,18 @@ const Index: React.FC = () => {
   }, [appendStoryGateMessage]);
 
   const handleOpenProposalLarge = useCallback((key: "A" | "B", proposal: any, durationSec: number) => {
-    const popupWidth = 720;
-    const popupHeight = 520;
+    // [AB-LARGE-FIX 2026-08-08 국장 보고] '크게 보기'가 영상 대신 글만 띄웠다.
+    //   이름 그대로 크게 보는 것은 편집안의 영상이다. 미리보기가 있으면 그것을 틀고,
+    //   글(요약·조각 목록)은 영상 아래로 내린다. 미리보기가 아직 없으면 종전대로 글만
+    //   보이되 왜 없는지 한 줄 알린다 — 빈 화면으로 속이지 않는다.
+    const rawPreview: string | null = proposal?.preview_url ?? null;
+    const previewUrl = rawPreview
+      ? (rawPreview.startsWith("http://") || rawPreview.startsWith("https://")
+          ? rawPreview
+          : `${videoService.API_BASE_URL}${rawPreview.startsWith("/") ? "" : "/"}${rawPreview}`)
+      : null;
+    const popupWidth = previewUrl ? 960 : 720;
+    const popupHeight = previewUrl ? 720 : 520;
     const escapeHtml = (value: unknown) => String(value ?? "")
       .replace(/&/g, "&amp;")
       .replace(/</g, "&lt;")
@@ -4210,12 +4220,18 @@ const Index: React.FC = () => {
     .reason { color: #c9ced8; font-size: 14px; line-height: 1.7; margin: 0 0 28px; }
     ol { margin: 0; padding-left: 24px; display: grid; gap: 8px; }
     li { color: #d9dde5; font-size: 14px; line-height: 1.4; }
+    video { width: 100%; border-radius: 12px; background: #000; margin-bottom: 22px; display: block; }
+    .novideo { color: #c9ced8; font-size: 13px; background: #17181c; border: 1px solid #24262c;
+               border-radius: 10px; padding: 12px 14px; margin-bottom: 22px; line-height: 1.6; }
   </style>
 </head>
 <body>
   <main data-ab-large-window="${escapeHtml(key)}" data-popup-width="${popupWidth}" data-popup-height="${popupHeight}">
     <h1>${escapeHtml(title)}</h1>
     <div class="meta">${Math.round(durationSec)}${escapeHtml(STORY_GATE_COPY.abCards.seconds)} · ${fragments.length}조각</div>
+    ${previewUrl
+      ? `<video src="${escapeHtml(previewUrl)}" controls autoplay playsinline data-ab-large-video></video>`
+      : `<div class="novideo" data-ab-large-novideo>${escapeHtml(STORY_GATE_COPY.abCards.largeNoVideo)}</div>`}
     <p class="summary">${escapeHtml(summary)}</p>
     ${reason ? `<p class="reason">${escapeHtml(reason)}</p>` : ""}
     <ol>${fragments.map((fid) => `<li>${escapeHtml(fid)}</li>`).join("")}</ol>
