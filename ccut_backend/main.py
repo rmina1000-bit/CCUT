@@ -5598,17 +5598,40 @@ def _chat_only_speed_bypass(input_text: str, project_id: str = None,
             # [2026-08-08 국장 지시 "모든 조정권을 젬마에게"]
             #   젬마가 듣고·분석하고·시스템을 확인하고·고르고·지시한다. 실행만 안 한다.
             #   판단에는 직전 대화를 넣지 않는다 — 실측 3/8 vs 7/8 (자기 문맥이 지배).
-            _r = _desk.decide(t, _gbw._world_lines(_w_short), recent_messages)
+            _r = _desk.decide(t, _gbw._world_lines(_w_short), recent_messages,
+                              project_id=project_id)
             # 젬마가 장면 하나를 펴 보려 한다 — 그 안을 보여주고 다시 말하게 한다.
             if _r and _r["cap"] == "look_scene" and _w.get("scenes"):
                 try:
                     _sn = int(_r["args"].get("scene_no"))
                 except (TypeError, ValueError):
                     _sn = None
+                # ★[SCENE-GROUND 2026-08-08] 사용자가 말한 적 없는 장면은 열지
+                #   않는다. 실측: '안녕? 넌 누구야?' 에 16번 장면이 열려
+                #   "27분45초~28분05초 바다 장면을 보셨죠?" 가 나갔다. 세계에
+                #   장면이 16개라 마지막 번호를 집은 것이다. 옛 TARGET-GUARD 와
+                #   같은 병 — 눈앞의 목록이 앵커가 된다.
+                #   번호는 사용자 입이나 방금 나눈 이야기에 있어야 한다.
+                if _sn is not None:
+                    # ★[2026-08-08 국장 화면] 근거는 ★사용자가 한 말★뿐이다.
+                    #   전에는 대화 기록 전체를 봤다. 그랬더니 결이가 한 번 16번을
+                    #   꺼내면 그 답이 기록에 남고, 다음 턴에 그것이 근거가 되어
+                    #   또 16번을 열고… 자기 말이 자기 근거가 되는 고리가 됐다.
+                    #   실측: 아무도 16번을 말한 적 없는데 "16번 장면은 원고에
+                    #   들어가 있지 않아요"가 토씨 하나 안 틀리고 반복됐다.
+                    _said_nums = str(t) + " " + " ".join(
+                        str(m.get("text") or "") for m in (recent_messages or [])[-6:]
+                        if m.get("sender") == "user")
+                    if str(_sn) not in _said_nums:
+                        print(f"[DESK][SCENE-GROUND] {_sn}번은 아무도 말한 적 "
+                              f"없다 → 장면을 열지 않는다: {t[:30]!r}")
+                        _sn = None
+                        _r = {**_r, "cap": None}
                 _det = _desk.scene_detail(_w["scenes"], _sn,
                                           _w.get("label_fixes")) if _sn else None
                 if _det:
-                    _said = _desk.look(t, _det, recent_messages) or _r["say"]
+                    _said = _desk.look(t, _det, recent_messages,
+                                      project_id=project_id) or _r["say"]
                     if _said:
                         print(f"[DESK] 장면 {_sn}번을 펴 본다: {t[:26]!r}")
                         return {
@@ -5619,19 +5642,27 @@ def _chat_only_speed_bypass(input_text: str, project_id: str = None,
                                         "scene_no": _sn},
                             "via": "desk",
                         }
-            # 조회다 — 이제 장면 지도를 펴고 답한다(필요할 때만 그 층을 연다)
-            if _r and _r["cap"] == "find_fragments" and _w.get("scenes"):
-                _said = _desk.look(t, _gbw._world_lines(_w), recent_messages)
-                if _said:
-                    print(f"[DESK] 조회 — 장면 지도로 답한다: {t[:30]!r}")
-                    return {
-                        "status": "OK", "action": "answer_only",
-                        "normalized_instruction": None, "reply": _said,
-                        "confidence": 0.9,
-                        "matched": {"kind": "scene_look", "gate": "desk",
-                                    "scenes": len(_w["scenes"])},
-                        "via": "desk",
-                    }
+            # ★[제거 1호 2026-08-08 국장 지시 "잔재를 걷는다"]
+            #   여기 있던 것: find_fragments 면 장면 지도 전체를 펴고 look() 으로
+            #   ★답을 다시 만들던★ 분기. 그게 국장 말을 가로챘다.
+            #   실측(Clover 화면): "안녕,,,, 니가 누군지 궁금해" → "1번 장면
+            #   0분00초~0분51초에서 은한이가 장난감을…", "넌 이름이 뭐야?" →
+            #   "2번 장면, 0분51초부터…". 국장이 "너희끼리 하는 대화를 내게 하면
+            #   안되는데?"라고 짚은 것이 정확히 이 자리다 — 결이의 답이 버려지고
+            #   지도가 만든 문장이 결이 입인 척 나갔다.
+            #
+            #   왜 이제 필요 없나: 결이의 세계(scene_names)에 장면 번호·이름·
+            #   시각이 이미 들어 있다(gemma_breath._world_lines). 답을 두 번
+            #   만들 이유가 없다. 번호를 콕 집어 물으면 아래 look_scene 이 편다.
+            if _r and _r["cap"] == "find_fragments" and _r["say"]:
+                print(f"[DESK] 조회 — 결이가 직접 답한다: {t[:30]!r}")
+                return {
+                    "status": "OK", "action": "answer_only",
+                    "normalized_instruction": None, "reply": _r["say"],
+                    "confidence": 0.9,
+                    "matched": {"kind": "gyeol_answer", "gate": "desk"},
+                    "via": "desk",
+                }
             # 장면 이름 정정 — 센서(VL)가 틀렸을 때 사람이 고친다. 사람이 위다.
             if _r and _r["cap"] == "fix_scene_label":
                 _no = _r["args"].get("scene_no")
@@ -5662,7 +5693,22 @@ def _chat_only_speed_bypass(input_text: str, project_id: str = None,
                 #   fix_scene_label 이 골라져 ★장면 이름이 실제로 바뀌었다★.
                 #   고칠 이름은 사용자 입에서 나온 것이어야 한다 — 두 글자 이상이
                 #   원문에 실제로 있어야 통과시킨다(조사 때문에 부분 포함으로 본다).
-                if _lab and len(_lab) >= 2 and _lab[:2] not in t:
+                # ★[실측 2026-08-08] 한 글자 라벨이 이 검문을 그냥 통과했다.
+                #   "나랑 대화를 해야지... 너희끼리 하는 대화를 내게 하면
+                #    안되는데?" 에 2번 장면 이름이 '집'으로 ★실제로★ 바뀌었다.
+                #   len>=2 조건이 구멍이었다 — 한 글자도 사용자 입에서 나와야 한다.
+                # 장면 번호도 사용자 입에서 나와야 한다 — 이름만 검문하던 자리.
+                #   실측: "ㅋㅋ ccut도 대화를 같이 하고 싶어 하는구나?" 에
+                #   fix_scene_label{scene_no:16, label:'바다'} 가 잡혔다.
+                if _no is not None:
+                    _user_said = str(t) + " " + " ".join(
+                        str(m.get("text") or "") for m in (recent_messages or [])[-6:]
+                        if m.get("sender") == "user")
+                    if str(_no) not in _user_said:
+                        print(f"[DESK][SCENE-GROUND] {_no}번을 아무도 말한 적 "
+                              f"없다 → 이름 안 고친다")
+                        _no, _lab = None, ""
+                if _lab and _lab[:2] not in t:
                     print(f"[DESK][LABEL-GROUND] 사용자가 말한 적 없는 이름 "
                           f"{_lab!r} → 고치지 않는다")
                     _no, _lab = None, ""
@@ -5713,13 +5759,56 @@ def _chat_only_speed_bypass(input_text: str, project_id: str = None,
                 #   일 때만 쓰고 나머지는 통과시켰는데, 통과하면 자유대화가 젬마를
                 #   ★한 번 더★ 부른다. '안녕' 한 마디에 11.8초가 걸린 이유다.
                 #   말이 있는데 다시 묻지 않는다 — 편집 기계도 깨우지 않는다.
+                # [NIGHT-1 2026-08-09] 결이 "없는 일"이라고 정직하게 답한 것도
+                #   wish 로 남긴다. 지금까지는 답만 하고 흘렀다 — 다음에 뭘 만들지
+                #   근거가 안 쌓였다(밤 실측: 20건 가까이 있었는데 목록엔 0건).
+                if _r["reason"] == "없는 일":
+                    try:
+                        from engine import timeline_store as _ts2
+                        import time as _tt2
+                        _ts2.append_entries(project_id, [{
+                            "kind": "wish",
+                            "client_id": f"wish_{int(_tt2.time() * 1000)}",
+                            "ts": _tt2.time() * 1000,
+                            "payload": {"said": t[:200]},
+                        }])
+                    except Exception as _e:
+                        print(f"[DESK][WARN] wish 기록 실패: {_e}")
+                # [NIGHT-1 2026-08-09] 도구 선택과 말은 따로 판단한다(병렬).
+                #   도구 쪽은 "없는 일"이라고 정확히 골랐는데 말 쪽은 그걸 모른
+                #   채 "알겠습니다, 2배속으로 설정하겠습니다" 라고 답한 사고가
+                #   밤에 여러 건 났다 — 결의 두 판단이 서로 어긋난 것이다.
+                #   내용을 새로 막는 게 아니라, 결이 이미 스스로 정한 것(없는
+                #   일이다)과 결이 한 말이 다를 때만 결의 원래 정직한 기본
+                #   문구로 맞춘다.
+                _say_out = _r["say"]
+                if _r["reason"] == "없는 일" and not re.search(
+                        r"못|없어요|없습니다|안 돼|안돼|어려|손이 없|아직|불가|모르",
+                        _say_out or ""):
+                    print(f"[DESK][일관성] 손 없다고 골랐는데 말은 다르다 → 정직한 "
+                          f"말로 맞춘다: {t[:26]!r}")
+                    _say_out = _desk.WISH_SAY
                 print(f"[DESK] 젬마가 답했다({_r['reason'] or '대화'}): {t[:30]!r}")
                 return {
                     "status": "OK", "action": "answer_only",
-                    "normalized_instruction": None, "reply": _r["say"],
+                    "normalized_instruction": None, "reply": _say_out,
                     "confidence": 0.9,
                     "matched": {"kind": "not_here" if _r["reason"] == "없는 일"
                                 else "just_talk", "gate": "desk"},
+                    "via": "desk",
+                }
+            # [NIGHT-1 2026-08-09] 결이 도구도 안 고르고 말도 비었을 때(say="").
+            #   전엔 여기서 그냥 통과시켰다 — 그러면 옛 free_chat 경로가 대신
+            #   답했다(밤 실측 15턴: 내부 id 누출·정체성 흔들림이 여기서 났다).
+            #   결이 대답을 못 찾았다고 옛 것으로 넘기지 않고, 결이 이어 말한다.
+            if _r and _r["cap"] is None and not _r["say"]:
+                print(f"[DESK] 말이 비어 다시 잇는다: {t[:30]!r}")
+                return {
+                    "status": "OK", "action": "answer_only",
+                    "normalized_instruction": None,
+                    "reply": "음, 뭐라고 답할지 잠깐 헷갈렸어요. 편하게 다시 말씀해 주실래요?",
+                    "confidence": 0.7,
+                    "matched": {"kind": "just_talk", "gate": "desk"},
                     "via": "desk",
                 }
             # ★젬마가 고른 일인데 아직 배선이 없을 때 — 통과시키지 않는다.
@@ -5745,10 +5834,22 @@ def _chat_only_speed_bypass(input_text: str, project_id: str = None,
             #   편집이 일어났고, 정작 시킨 일은 하나도 안 됐다.
             #   개념서 §9 — AI 가 독단으로 이야기를 정하지 않는다.
             #   답은 그대로 하고 손만 멈춘다. 되묻지 않는다.
+            #   ★[2026-08-08 추가] 물음표만으로는 부족했다. 실측: "고마워" 한
+            #     마디에 keep_theme 이 돌아 17→6 조각이 됐다. 그래서 '아주 짧고
+            #     편집을 시키는 낱말이 하나도 없는 말'도 손을 멈춘다.
+            #     낱말 목록이 아니라 길이+시킴 여부다 — "다시 살려줘"('살려')는
+            #     그대로 통과하고, "고마워"·"응"·"그래"는 멈춘다.
+            #     ★경계는 좁게. 처음에 10자로 잡았더니 "먹는 장면만 남겨줘"(정확히
+            #       10자)가 걸려 오늘 국장이 기뻐한 기능이 죽었다. 인사·감사는
+            #       6자면 충분하다("고마워" 3 · "응 그래" 4 · "좋아" 2).
+            #       활용형도 함께 본다('남기'만 넣어 '남겨줘'를 놓쳤다).
+            _tiny_ack = (len(t.strip()) <= 6 and not re.search(
+                r"빼|지워|남기|남겨|줄여|늘려|다시|살려|되돌|바꿔|고쳐|만들|편집|잘라|골라", t))
             if (_r and _r["cap"] in _hands.HANDS
                     and _r["cap"] not in _hands.READ_ONLY
-                    and re.search(r"[?？]", t)):
-                print(f"[DESK][ASK-GUARD] 묻는 말이라 {_r['cap']} 실행 안 함: {t[:34]!r}")
+                    and (re.search(r"[?？]", t) or _tiny_ack)):
+                print(f"[DESK][ASK-GUARD] {'짧은 말' if _tiny_ack else '묻는 말'}이라 "
+                      f"{_r['cap']} 실행 안 함: {t[:34]!r}")
                 _say = _r["say"] or _desk.say_for(_r["cap"], _r["args"], t)
                 return {
                     "status": "OK", "action": "answer_only",
@@ -5761,6 +5862,31 @@ def _chat_only_speed_bypass(input_text: str, project_id: str = None,
             if _r and _r["cap"] in _hands.HANDS:
                 _f = _hands.do(_r["cap"], _r["args"], project_id,
                                fragment_labels, _w.get("scenes"), t)
+                # 손이 못 했는데 사용자가 편집을 시킨 것도 아니면, 손 이야기를
+                #   꺼내지 않는다. 실측: "오늘 진짜 힘들었다" → "16번 장면은
+                #   원고에 들어가 있지 않아요". 동문서답이다 — 결이가 이미 만든
+                #   말이 있으면 그게 맞다.
+                #   ★같은 실패를 두 번 방송하지 않는다. 실측(국장 화면): "CCUT이
+                #     그건 못 한대요 — 16번 장면은 원고에 들어가 있지 않아요"가
+                #     토씨 하나 안 틀리고 반복돼 무슨 말을 해도 끼어들었다.
+                #     한 번 말했으면 그 다음은 결이가 정한다.
+                _why = str(_f.get("why") or "")
+                _already = bool(_why) and any(
+                    _why[:14] in str(m.get("text") or "")
+                    for m in (recent_messages or [])[-4:]
+                    if m.get("sender") != "user")
+                if (not _f.get("ok") and _r["say"] and (_already or not re.search(
+                        r"빼|지워|남기|남겨|줄여|늘려|살려|되돌|바꿔|고쳐|편집|잘라|골라", t))):
+                    print(f"[DESK][HANDS] {_r['cap']} 못 했고 "
+                          f"{'이미 말했다' if _already else '편집 부탁이 아니다'} "
+                          f"→ 결이 말로: {t[:26]!r}")
+                    return {
+                        "status": "OK", "action": "answer_only",
+                        "normalized_instruction": None, "reply": _r["say"],
+                        "confidence": 0.88,
+                        "matched": {"kind": "just_talk", "gate": "desk"},
+                        "via": "desk",
+                    }
                 _say = _desk.say_done(_f, t, recent_messages)
                 print(f"[DESK][HANDS] {_r['cap']} → "
                       f"{'했다' if _f.get('ok') else '못 했다: ' + str(_f.get('why'))}")
@@ -7540,6 +7666,28 @@ async def get_human_watch_logs():
         return {"status": "ERROR", "message": str(e)}
 
 
+# ── [FOYER-1 2026-08-08] 현관 채팅 ────────────────────────────────────
+#   국장 지시: "CCUT을 켜면 처음 만나는 화면에 입력창은 있는데 뒤에 아무도 없다."
+#   프로젝트를 열기 전에도 결이가 받는다. 안쪽 편집은 기존 회로가 이어받는다.
+class FoyerChatRequest(BaseModel):
+    input_text: str
+    recent_messages: list = []
+
+
+@app.post("/foyer/chat")
+async def foyer_chat(req: FoyerChatRequest):
+    from engine import foyer as _foyer
+    try:
+        r = _foyer.answer(req.input_text, req.recent_messages)
+    except Exception as e:
+        print(f"[FOYER][WARN] 실패: {e}")
+        r = None
+    if not r:
+        return {"status": "OK", "reply": "", "kind": "foyer_none"}
+    return {"status": "OK", **r}
+
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="127.0.0.1", port=8011)
+

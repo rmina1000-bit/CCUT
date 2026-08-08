@@ -226,17 +226,46 @@ export const useProposalState = (
     activeIntentRef.current = null; // [#49 (a)] 의도도 프로젝트 수명
   }, [projectId]);
 
+  // [HOUSE-1 2026-08-08 국장 지시 "고자질이 아니라 수다"]
+  //   시스템이 조용히 한 일을 원장에 적는다. 지금까지 이런 건 console.warn 으로만
+  //   남아서 콘솔을 연 개발자만 알았다 — 국장도, 같은 집에 사는 결이도 몰랐다.
+  //   ★여기서 무엇을 적을지 고르되, 결이가 무엇을 말할지는 고르지 않는다.
+  const noteHouse = useCallback((what: string, code: string, detail?: any) => {
+    if (!projectId) return;
+    void fetch(`${videoService.API_BASE_URL}/projects/${projectId}/timeline`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        entries: [{
+          kind: "system_event",
+          client_id: `sys_${code}_${Date.now()}`,
+          ts: Date.now(),
+          payload: { what, code, detail: detail ?? {} },
+        }],
+      }),
+    }).catch((e) => console.warn("[HOUSE] 적기 실패:", e?.message));
+  }, [projectId]);
+
   // proposals가 바뀔 때마다 세대 기록 갱신 — 새 pair면 append, 같은 pair면 스냅샷만 갱신
   useEffect(() => {
     if (!proposals?.A || !proposals?.B) return;
     const sig = `${(proposals.A as any).proposal_id ?? "A"}|${(proposals.B as any).proposal_id ?? "B"}`;
     const storyFids = currentStoryFidsRef.current;
     if (!proposalPairMatchesStory(proposals, storyFids)) {
+      const aN = proposalFids(proposals.A).length;
+      const bN = proposalFids(proposals.B).length;
       console.warn("[EDIT-FLOW][AB-FILTER] 현재 원고와 다른 A/B는 화면 이력에 올리지 않음", {
-        story_count: storyFids.length,
-        A: proposalFids(proposals.A).length,
-        B: proposalFids(proposals.B).length,
+        story_count: storyFids.length, A: aN, B: bN,
       });
+      // ★사실만 적는다. "다시 만들면 된다" 같은 제안을 섞었더니 결이가 그걸
+      //   "CCUT이 다시 만들고 있어요"로 읽어 없는 일을 말했다(실측).
+      //   무엇을 할지 제안하는 건 결이 몫이다.
+      noteHouse(
+        `지금 원고는 ${storyFids.length}조각인데 편집안 A는 ${aN}조각, B는 ${bN}조각이라 ` +
+        "서로 안 맞는다. 그래서 CCUT이 그 편집안 둘을 화면에서 내려 뒀다.",
+        "AB_FILTER",
+        { story: storyFids.length, A: aN, B: bN },
+      );
       setActiveProposalEntryId(null);
       return;
     }

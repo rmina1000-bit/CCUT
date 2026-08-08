@@ -156,9 +156,12 @@ def _theme_key(theme):
     for w in words:
         # 한국어 활용 어미를 떼어 어간만 남긴다 ('먹는'→'먹', '요리하는'→'요리')
         k = re.sub(r"(하는|해서|하고|한|해|는|은|을|를|이|가|의|도|만)$", "", w)
-        if len(k) >= 1:
+        # ★숫자·기호는 소재가 아니다. 실측: 젬마가 theme='4' 를 채워 보냈고
+        #   '4' 가 대사에 우연히 든 조각만 남아 17→1조각이 됐다.
+        #   소재는 뜻이 있는 글자여야 한다.
+        if k and not re.fullmatch(r"[\d\W_]+", k):
             keys.append(k)
-    return [k for k in keys if k]
+    return keys
 
 
 def _theme_fids(program_id, theme, live):

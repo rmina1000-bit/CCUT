@@ -180,6 +180,8 @@ interface StoryLedgerResponse {
 }
 
 interface CenterPanelProps {
+  /** [FOYER-1 2026-08-08] 현관에서 결이가 프로젝트를 열 때. */
+  onOpenProject?: (id: string) => void;
   selectedFragment: Fragment | null;
   selectedSource: string;
   onAnalyze?: (file?: File, extraFiles?: File[]) => Promise<boolean>;
@@ -468,6 +470,7 @@ const SearchResultCards: React.FC<{ results: any[] }> = ({ results }) => {
 };
 
 const CenterPanel: React.FC<CenterPanelProps> = ({
+  onOpenProject,
   selectedFragment,
   selectedSource,
   sourceFragments,
@@ -1100,6 +1103,36 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
     const raw = rawInput.trim();
     if (!raw) return;
 
+    // ★[FOYER-1 2026-08-08 국장 지시 "현관에서도 말이 통하게"]
+    //   프로젝트를 열기 전 화면 — 여기 입력창은 뒤에 아무도 없었다. 말을 걸어도
+    //   갈 곳이 없으니 첫인상이 "말 안 듣는 물건"이 된다. 이제 결이가 받는다.
+    //   안쪽 편집은 아래 기존 회로가 그대로 이어받는다.
+    if (!programId || !programId.startsWith("proj_")) {
+      const mine = { who: "user" as const, text: raw };
+      setFoyerLog((prev) => [...prev, mine]);
+      try {
+        const res = await fetch(`${videoService.API_BASE_URL}/foyer/chat`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            input_text: raw,
+            recent_messages: [...foyerLogRef.current, mine].slice(-8).map((m) => ({
+              sender: m.who === "user" ? "user" : "ai", text: m.text,
+            })),
+          }),
+        });
+        const d = await res.json();
+        console.info("[FOYER]", { kind: d?.kind, open: d?.open_project_id });
+        if (d?.reply) setFoyerLog((prev) => [...prev, { who: "ai", text: d.reply }]);
+        if (d?.open_project_id) onOpenProject?.(d.open_project_id);
+      } catch (e: any) {
+        console.warn("[FOYER] 실패:", e?.message);
+        setFoyerLog((prev) => [...prev,
+          { who: "ai", text: "지금은 제가 대답을 못 가져왔어요. 잠시 뒤에 다시 말 걸어 주세요." }]);
+      }
+      return;
+    }
+
     // "start"는 분석 시작 (비컨설팅 한정 — 컨설팅 흐름 보존)
     if (!storyPlan && raw.toLowerCase() === "start") {
       if (onAnalyze) await onAnalyze();
@@ -1221,6 +1254,10 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
   const [isSrcLoadingB, setIsSrcLoadingB] = useState(false);
   const [isPlayingB, setIsPlayingB] = useState(false);
   const [chatValue, setChatValue] = useState("");
+  // [FOYER-1] 현관 대화. 프로젝트를 열면 화면이 통째로 바뀌니 여기서만 산다.
+  const [foyerLog, setFoyerLog] = useState<Array<{ who: "user" | "ai"; text: string }>>([]);
+  const foyerLogRef = useRef<Array<{ who: "user" | "ai"; text: string }>>([]);
+  foyerLogRef.current = foyerLog;
   // [FRAGMENT-SEARCH] 채팅 자연어 조각 검색 결과
   const [fragSearch, setFragSearch] = useState<{
     query: string;
@@ -3802,6 +3839,20 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
         </div>
       ) : null}
 
+      {(!programId || !programId.startsWith("proj_")) && foyerLog.length > 0 && (
+        <div className="px-4 pb-3 space-y-2 max-h-[46vh] overflow-y-auto">
+          {foyerLog.map((m, i) => (
+            <div key={i} className={m.who === "user" ? "flex justify-end" : "flex justify-start"}>
+              <div className={
+                "max-w-[80%] rounded-2xl px-4 py-2 text-sm whitespace-pre-wrap " +
+                (m.who === "user"
+                  ? "bg-neutral-700/70 text-neutral-100"
+                  : "bg-neutral-800/60 text-neutral-200")
+              }>{m.text}</div>
+            </div>
+          ))}
+        </div>
+      )}
       <ComposerSection
         storyPlan={storyPlan}
         appState={appState}

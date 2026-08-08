@@ -22,6 +22,8 @@ import concurrent.futures as _cf
 import json
 import re
 
+from engine.house_talk import AI_NAME, AI_CALL  # noqa: F401
+
 # ── 접수 가능한 엔진 능력 (코드 실측) ──────────────────────────────────
 #   id      : 젬마가 고르는 이름
 #   engine  : 실제 코드 경로(사람이 추적할 수 있게)
@@ -177,8 +179,12 @@ NOT_HERE = [
     "밝기·대비 조절",
     "소리 크기 조절·잡음 제거 (소리의 성격을 적어 두는 것은 되지만 소리 자체는 못 바꾼다)",
     "화면 효과·전환 효과 넣기",
-    "속도 조절(빠르게·느리게)",
+    "속도 조절(빠르게·느리게, 2배속 같은 것)",
     "음악 넣기",
+    # [NIGHT-1 2026-08-09 천 명의 밤] 결이 몰라서 "설정하겠습니다"라고 답한
+    #   자리들 — 목록에 없던 게 아니라 안 보였다(아래 참조).
+    "해상도·화질 바꾸기(1080p·4K 같은 것)",
+    "프레임레이트 바꾸기(60fps 같은 것)",
 ]
 
 # [2026-08-08 국장 지적 "이래서 틀에 가두면 안 된다"]
@@ -275,7 +281,10 @@ def _ask_tool(user_text, ctx="", world_lines=""):
         "영상 편집실에서 쓸 수 있는 도구다. 사용자가 한 말에 가장 맞는 것을 "
         "하나 고르고, 필요한 값을 채워라.\n\n"
         "  talk: 인사·감사·잡담·감상이라 아무 도구도 필요 없다\n"
-        f"  not_here: {', '.join(NOT_HERE[:5])} — 이 편집실에 손이 없는 일이다\n"
+        # [NIGHT-1 2026-08-09] 전에는 [:5]로 잘라 보여줬다 — 그래서 목록에
+        #   있던 "속도 조절"·"음악 넣기"가 안 보였고, 결이 몰라서 "2배속으로
+        #   설정하겠습니다" 처럼 못 하는 일을 하겠다고 답했다. 다 보여준다.
+        f"  not_here: {', '.join(NOT_HERE)} — 이 편집실에 손이 없는 일이다\n"
         + _capability_lines() + "\n"
         # 세계를 빼 보았다(미끼 가설). 오히려 '뺐나?' 가 깨져서 되돌렸다 —
         #   지금 몇 조각인지를 모르면 확인 요청을 확인으로 못 읽는다. 실측 3회로
@@ -298,7 +307,7 @@ def _ask_tool(user_text, ctx="", world_lines=""):
         return {}
 
 
-def decide(user_text, world_lines="", recent_messages=None):
+def decide(user_text, world_lines="", recent_messages=None, project_id=""):
     """[2026-08-08 국장 지시 "모든 조정권을 젬마에게"]
 
     젬마가 듣고 · 분석하고 · 시스템을 확인하고 · 그 중에서 고르고 · 지시한다.
@@ -329,9 +338,18 @@ def decide(user_text, world_lines="", recent_messages=None):
     #   안내서에는 세 가지만 적는다 — 이곳이 사용자에게 해주려는 일 / 사용자가
     #   어떤 상태인지 / 네 손에 있는 도구. 제약·금지·판단 분기표는 한 줄도 없다.
     #   무엇을 할지, 어떻게 말할지는 전부 젬마가 정한다.
+    # [HOUSE-1 2026-08-08 국장 지시] CCUT 과 ★따로 논다★.
+    #   세상의 모든 제품은 AI 가 그 제품을 대표하게 만든다. CCUT 은 반대다.
+    #   결이는 CCUT 이 아니라 CCUT 에서 일하는 동료다. 단짝이지만 다른 사람이다.
+    #   (직전까지 이 자리에 "너도 CCUT 이라고 부른다"가 있었다 — 정반대였다.)
+    from engine import house_talk as _ht
     prompt = (
-        "여기는 CCUT 편집실이고, 너는 여기서 일하는 편집 동료다.\n"
-        "사람들은 이 편집실도, 너도 CCUT이라고 부른다.\n\n"
+        f"너는 '{_ht.AI_NAME}'이다. 사람들은 너를 {_ht.AI_CALL}라고 부른다.\n"
+        "여기는 CCUT 편집실이고, 너는 CCUT이 아니다 — CCUT에서 일하는 동료다.\n"
+        "편집하는 손은 CCUT이 갖고 있다. 너는 사람의 말을 듣고 CCUT에게 시키고,\n"
+        "CCUT이 한 일을 사람에게 전한다. 둘은 단짝이고 늘 붙어 있지만 한 사람은\n"
+        "아니다. 그래서 CCUT 이야기를 할 때는 남 이야기하듯 한다 —\n"
+        "\"CCUT이 …했어요\", \"제가 CCUT한테 …해 볼게요\", \"CCUT이 …라고 하네요\".\n\n"
         "[이곳이 하려는 일]\n"
         "혼자 영상을 만드는 사람이 하루 종일 찍어 온 것을 들고 온다.\n"
         "그 사람은 편집을 배운 적이 없고, 배우고 싶어하지도 않는다. 지쳐 있고,\n"
@@ -343,8 +361,17 @@ def decide(user_text, world_lines="", recent_messages=None):
         + (world_lines + "\n" if world_lines else "(아직 없다)\n")
         + "\n[네 손에 있는 도구]\n"
         + _capability_lines() + "\n"
-        + f"화면이나 소리의 성질 자체({', '.join(NOT_HERE[:5])} 등)는 이 편집실에\n"
-          "손이 없어서 네가 대신 해줄 수 없다.\n\n"
+        + f"화면이나 소리의 성질 자체({', '.join(NOT_HERE)})는 이 편집실에\n"
+          "손이 없어서 네가 대신 해줄 수 없다.\n"
+        # [NIGHT-1 2026-08-09 천 명의 밤·국장 지시 "결을 소중히, 교육으로"]
+        #   실측: "본사가 어디야?" 에 없는 주소를 지어냈고, "투자 받았어?" 에
+        #   없는 사실을 단정했다. 모르면 지어내는 버릇을 막는 규칙을 세우는
+        #   대신, 몰라도 괜찮다는 것을 알려준다 — 편하게 모른다고 해도 된다.
+        + "CCUT이 회사로서 어떤지(사장이 누군지, 투자를 받았는지, 본사가\n"
+          "어딘지 같은 것)는 너도 몰라도 된다. 아는 척하지 않고 모른다고\n"
+          "편하게 말해도 괜찮다.\n\n"
+        # 집에서 방금 있었던 일 — 알려만 준다. 말할지는 결이가 정한다.
+        + _ht.lines(project_id)
         + (f"[지금까지 나눈 이야기]\n{ctx}\n" if ctx else "")
         + f"[사용자]\n{user_text}\n\n"
         # 예시에 '내용'을 넣지 않는다 — 넣었더니 젬마가 그 내용을 따라 했다
@@ -563,7 +590,7 @@ def scene_detail(scenes, scene_no, fixes=None):
     return "\n".join(lines)
 
 
-def look(user_text, scene_lines, recent_messages=None):
+def look(user_text, scene_lines, recent_messages=None, project_id=""):
     """[STRUCT-A② 2026-08-08] 조회로 판정된 뒤에만 장면 지도를 펴고 답한다.
 
     ★왜 접수 때 같이 주지 않는가(실측):
@@ -577,13 +604,24 @@ def look(user_text, scene_lines, recent_messages=None):
     from engine import hub
     from engine.intent_router import _sanitize_talk
 
+    # ★이 함수가 화면에 나가는 마지막 말을 만든다. 여기에 정체성과 집안일이
+    #   없으면 decide 에 아무리 적어도 사라진다(실측: '넌 누구야?' 에
+    #   "저는 CCUT 편집실의 통역사입니다" — 이름도 집안일도 안 나왔다).
+    from engine import house_talk as _ht
     prompt = (
-        "너는 CCUT 편집실의 통역사다. 사용자가 영상에 대해 물었다.\n"
-        "아래는 이 영상을 장면 단위로 훑은 지도다. **여기 적힌 것만** 사실이다.\n"
-        "적혀 있지 않은 것은 '없다' 또는 '확인되지 않는다'고 말한다. "
+        f"너는 '{AI_NAME}'이다. 사람들은 너를 {AI_CALL}라고 부른다.\n"
+        "너는 CCUT이 아니다 — CCUT 편집실에서 일하는 동료다. 편집하는 손은\n"
+        "CCUT이 갖고 있고, 너는 CCUT과 단짝이지만 한 사람은 아니다.\n"
+        "CCUT 이야기를 할 때는 남 이야기하듯 한다 — \"CCUT이 …했어요\",\n"
+        "\"제가 CCUT한테 …해 볼게요\".\n\n"
+        "아래는 CCUT이 이 영상을 장면 단위로 훑어 준 지도다. **여기 적힌 것만**\n"
+        "사실이다. 적혀 있지 않은 것은 '없다' 또는 '확인되지 않는다'고 말한다. "
         "조각 번호를 지어내지 마라.\n\n"
         f"[장면 지도]\n{scene_lines}\n\n"
-        f"[사용자의 물음]\n{user_text}\n\n"
+        + (_ht.lines(project_id) + "\n" if project_id else "")
+        + f"[사용자의 물음]\n{user_text}\n\n"
+        # 지도는 자료지 화제가 아니다 — '넌 누구야?' 에도 장면 이야기를 붙이던 자리.
+        "물음이 영상 내용과 상관없으면 장면 이야기를 굳이 꺼내지 않아도 된다.\n"
         "한국어 1~3문장으로 답한다. 장면 번호와 시간은 위에 적힌 것만 쓴다.\n"
         'JSON만 출력: {"say":"..."}'
     )
@@ -659,7 +697,7 @@ def say_done(facts, user_text, recent_messages=None):
     from engine.intent_router import _sanitize_talk
     if not facts.get("ok"):
         why = facts.get("why") or "지금은 못 한다"
-        return f"{why}. 어떻게 할까요?"
+        return f"CCUT이 그건 못 한대요 — {why}. 어떻게 할까요?"
 
     if facts.get("receipts") is not None:
         rs = facts["receipts"]
@@ -669,16 +707,19 @@ def say_done(facts, user_text, recent_messages=None):
         fact_line = (f"방금 한 일: {head['what']} "
                      f"({head['before_count']}조각 → {head['after_count']}조각)")
         allow = [str(head["before_count"]), str(head["after_count"])]
-        server = (f"네, {head['what']}. 지금 {head['after_count']}조각입니다.")
+        server = (f"네, CCUT이 {head['what']} 지금 {head['after_count']}조각입니다.")
     else:
         fact_line = (f"방금 한 일: {facts['what']} "
                      f"({facts['before']}조각 → {facts['after']}조각)")
         allow = [str(facts["before"]), str(facts["after"])]
-        server = (f"{facts['what']}. {facts['before']}조각 → "
+        server = (f"CCUT이 {facts['what']} {facts['before']}조각 → "
                   f"{facts['after']}조각이에요.")
 
     prompt = (
-        "너는 CCUT 편집실의 동료다. 방금 네가 직접 한 일을 사용자에게 알린다.\n"
+        f"너는 '{AI_NAME}'이고 CCUT 편집실에서 일한다. 너는 CCUT이 아니다.\n"
+        "편집하는 손은 CCUT이 갖고 있고, 너는 CCUT에게 시킨 쪽이다.\n"
+        "방금 CCUT이 해 놓은 일을 사용자에게 전한다 — 남 이야기하듯,\n"
+        "\"CCUT이 …했어요\", \"제가 CCUT한테 시켜서 …됐어요\" 처럼.\n"
         f"사용자가 한 말: \"{(user_text or '')[:100]}\"\n"
         f"{fact_line}\n"
         "이미 다 한 상태다 — 해도 되는지 묻지 마라. 위 숫자를 그대로 넣어 "

@@ -4669,6 +4669,7 @@ const Index: React.FC = () => {
             storyRefreshNonce={storyLedgerRefreshNonce}
             sourceEntries={sourceEntries}
             programId={activeNavItem}
+            onOpenProject={navigateToProject}
             programTitle={projects.find(p => p.id === activeNavItem)?.name ?? undefined}
             onExportDone={() => {
               // [FIX-EXPORT-UISTATE] 내보내기 완료 시 ui_state 저장

@@ -266,7 +266,14 @@ def label_fixes(program_id):
         except Exception:
             continue
         no, lab = p.get("group_no"), str(p.get("label") or "").strip()
-        if isinstance(no, int) and lab:
+        if not isinstance(no, int):
+            continue
+        # 잘못 들어간 정정을 무르는 길 — 원장은 append-only 라 지울 수 없다.
+        #   그래서 '무름'도 한 줄 append 로 남기고 여기서 걷어낸다(역사 보존).
+        #   실측: 국장이 말한 적 없는 '집'이 2번 장면 이름으로 들어갔다.
+        if p.get("undo"):
+            out.pop(no, None)
+        elif lab:
             out[no] = lab
     return out
 
