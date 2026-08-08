@@ -102,8 +102,9 @@ CAPABILITIES = [
     {
         "id": "fix_scene_label",
         "ways": ['이건 산이 아니라 바다야', '2번 장면 이름이 틀렸어', '장면 이름 고쳐줘', '이 장면은 잠수 장면이야', '그거 이름 바꿔줘'],
-        "say": "장면 이름이 틀렸을 때 사용자가 말한 이름으로 고친다 "
-               "(예: '14번은 산이 아니라 바닷가 바위야')",
+        "say": "장면 이름을 사용자가 말한 이름으로 고친다. 사용자가 어떤 장면이 "
+               "무엇이라고 말하면(부정이 없어도) 그것은 이름을 고쳐 달라는 뜻이다 "
+               "(예: '14번은 산이 아니라 바닷가 바위야', '7번은 낚시 장면이야')",
         "engine": "project_timeline kind=scene_label_fix (append-only)",
         "needs": {"scene_no": "장면 번호", "label": "사용자가 말한 올바른 이름"},
         "scope": "story",
@@ -266,12 +267,53 @@ def decide(user_text, world_lines="", recent_messages=None):
         cap = None
         out["reason"] = "아직"
     args = out.get("args") if isinstance(out.get("args"), dict) else {}
+    # [TARGET-GUARD 2026-08-08] 대상 조각은 사용자 말에서 와야 한다.
+    #   실측(국장 화면): '그래 그 물속장면만으로 편집해줘' → fragment=A115,
+    #   '그래 편집해줘' → A59. 사용자가 말한 적 없는 이름을 세계에서 집어 왔다.
+    #   원문에 없는 조각 이름은 버린다 — 대상이 없으면 물어보게 둔다.
+    _f = str(args.get("fragment") or "").strip()
+    if _f and _f.upper() not in (user_text or "").upper():
+        print(f"[DESK][TARGET-GUARD] 사용자가 말하지 않은 조각 {_f!r} → 버린다")
+        args = {k: v for k, v in args.items() if k != "fragment"}
     say = _sanitize_talk(str(out.get("say") or "").strip()) or ""
     leaked = [c["id"] for c in CAPABILITIES if c["id"] in say]
     for cid in leaked:
         say = say.replace(cid, find(cid)["say"].split(" — ")[0])
     return {"cap": cap, "args": args, "say": re.sub(r"\s{2,}", " ", say).strip(),
             "reason": str(out.get("reason") or "").strip()}
+
+
+def say_for(cap_id, args, user_text):
+    """젬마가 say 를 비웠을 때 대신 할 말 — 사람 말로.
+
+    [2026-08-08] 예전엔 능력 설명문을 그대로 썼다. 그래서 국장 화면에
+    '조각 안의 특정 구간만 빼낸다, 해볼까요?' 같은 내부 문장이 나갔다.
+    설명문은 나와 엔진 사이의 말이지 사용자에게 할 말이 아니다."""
+    from engine import hub
+    from engine.intent_router import _sanitize_talk
+    cap = find(cap_id)
+    if not cap:
+        return None
+    what = cap["say"].split(" — ")[0].split("(")[0].strip()
+    need = [k for k in (cap.get("needs") or {}) if not args.get(k)]
+    prompt = (
+        "너는 CCUT 편집실의 동료다. 사용자에게 할 말 한 문장만 만든다.\n"
+        f"사용자가 한 말: \"{(user_text or '')[:100]}\"\n"
+        f"내가 하려는 일: {what}\n"
+        + (f"아직 모르는 것: {', '.join(need)}\n" if need else "")
+        + "모르는 것이 있으면 그것만 자연스럽게 묻고, 없으면 해도 될지 묻는다.\n"
+        "영어 낱말이나 내부 용어를 쓰지 마라.\n"
+        'JSON만 출력: {"say":"..."}'
+    )
+    try:
+        out = hub._ollama_json(prompt, timeout=20, temperature=0.5,
+                               model=hub.VOICE_MODEL)
+        s = _sanitize_talk(str(out.get("say") or "").strip())
+        if s:
+            return s
+    except Exception as e:
+        print(f"[DESK][WARN] 확인 문장 실패: {e}")
+    return f"{what}, 해볼까요?"
 
 
 def understand(user_text, world_lines="", recent_messages=None):

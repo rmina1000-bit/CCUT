@@ -5619,6 +5619,23 @@ def _chat_only_speed_bypass(input_text: str, project_id: str = None,
                     _no = int(_no)
                 except (TypeError, ValueError):
                     _no = None
+                # [SCENE-NO-GUARD 2026-08-08] 장면 번호가 실재하는가.
+                #   실측(국장 화면): '2바다는…' → 17번, 'a69는…' → 69번 장면으로
+                #   고치려 했다. 장면은 16개뿐이고 a69 는 조각 라벨이지 장면이 아니다.
+                #   범위 밖이면 고치지 않고 되묻는다 — 없는 장면을 고쳤다고 말하면
+                #   그 순간부터 원고와 화면이 어긋난다.
+                _scene_max = len(_w.get("scenes") or [])
+                if _no and _scene_max and not (1 <= _no <= _scene_max):
+                    print(f"[DESK][SCENE-NO-GUARD] {_no}번은 없다(장면 {_scene_max}개) → 되묻는다")
+                    return {
+                        "status": "OK", "action": "answer_only",
+                        "normalized_instruction": None,
+                        "reply": (f"장면은 1번부터 {_scene_max}번까지 있어요. "
+                                  f"몇 번 장면을 고칠까요?"),
+                        "confidence": 0.85,
+                        "matched": {"kind": "scene_no_unknown", "gate": "desk"},
+                        "via": "desk",
+                    }
                 if _no and _lab:
                     from engine import timeline_store as _ts
                     import time as _tt
@@ -5682,8 +5699,9 @@ def _chat_only_speed_bypass(input_text: str, project_id: str = None,
             #     '안녕 오늘 촬영 힘들었어' → 초안 유발 정규식에 걸려 ★실제 편집★
             #   젬마에게 조정권을 줬으면 그 판단이 끝까지 가야 한다. 실행만 안 한다.
             if _r and _r["cap"]:
-                _cap = _desk.find(_r["cap"])
-                _say = _r["say"] or f"{_cap['say'].split(' — ')[0]}, 해볼까요?"
+                # 젬마가 말을 비웠으면 사람 말로 다시 받는다 —
+                #   내부 능력 설명문을 그대로 내보내던 자리(국장 화면 실측).
+                _say = _r["say"] or _desk.say_for(_r["cap"], _r["args"], t)
                 print(f"[DESK][HOLD] 젬마 판단 {_r['cap']} — 배선 전이라 확인만: "
                       f"{t[:30]!r}")
                 return {

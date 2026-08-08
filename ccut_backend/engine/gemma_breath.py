@@ -63,6 +63,11 @@ def _fmt_sec(ms):
     return f"{(ms or 0) / 1000:.0f}초"
 
 
+def _scene_name(g, fixes):
+    from engine import ledger_groups as _lgp
+    return _lgp.scene_label(g, fixes)
+
+
 def world(program_id, fragment_labels=None, with_scenes=True):
     """지금 세계 — 짧게. 매 턴 이만큼만 보인다(전 DB 를 펼치지 않는다).
 
@@ -114,6 +119,11 @@ def world(program_id, fragment_labels=None, with_scenes=True):
         "labels": label_of,
         "scenes": scenes,
         "label_fixes": fixes,
+        # 판단 자리에도 남는 짧은 목록 (scenes 를 비워도 이 줄은 유지된다)
+        "scene_count": len(scenes),
+        "scene_names": (" · ".join(
+            f"{g['group_no']} {_scene_name(g, fixes)}" for g in scenes[:30])
+            if scenes else ""),
     }
 
 
@@ -126,9 +136,19 @@ def _world_lines(w, scene_limit=20):
         lines.append(_lgp.summary_lines(scenes, limit=scene_limit,
                                         fixes=w.get("label_fixes")))
         lines.append("")
+    # 장면은 '번호와 이름'만 한 줄로 — 상세(시간·태그·대사)가 없어도 사용자가
+    #   '2바다'처럼 번호로 가리킬 때 읽을 수 있다. 조각 이름은 넣지 않는다
+    #   (그것이 지어내기의 재료였다). 판단 자리에도 이 한 줄은 들어간다.
+    if w.get("scene_names"):
+        lines.append(f"- 장면 {w['scene_count']}개: {w['scene_names']}")
     lines.append(f"- 승인된 이야기: 조각 {w['fragment_count']}개, 전체 {w['total_text']}")
+    # [2026-08-08 국장 화면 진단] 최근 다듬은 '조각 이름'을 판단 자리에 두지 않는다.
+    #   실측: 세계에 보이는 구체적 이름이 A59·A69·A115 셋뿐이라, 대상을 지목해야
+    #   할 때 젬마가 그중 아무거나 집었다 — 국장이 '물속장면'이라 했는데 A115 가,
+    #   '그래 편집해줘'에 A59 가 나왔다. 사용자가 말한 적 없는 조각이다.
+    #   ★대상은 사용자 말에서 와야 한다. 세계는 '얼마나 했는지'만 알려준다.
     if w["recent_edits"]:
-        lines.append("- 최근 내가 다듬은 것: " + ", ".join(w["recent_edits"]))
+        lines.append(f"- 지금까지 {len(w['recent_edits'])}곳을 다듬었다")
     else:
         lines.append("- 아직 다듬은 곳 없음")
     return "\n".join(lines)
