@@ -18,6 +18,7 @@
 실측 근거(2026-08-08): 젬마는 추상적 행동 이름 고르기는 6/6 실패했지만
 사람 말 → 구체적 엔진 능력 매핑은 9/10 맞혔다. 이 자리가 젬마에게 맞는 일이다.
 """
+import concurrent.futures as _cf
 import json
 import re
 
@@ -44,8 +45,18 @@ CAPABILITIES = [
         "scope": "fragment",
     },
     {
+        "id": "remove_scene",
+        "ways": ['이 장면은 굳이 넣을 필요 없을 것 같아', '3번 장면 빼줘',
+                 '거긴 없어도 될 것 같아', '그 장면 빼자'],
+        "say": "장면 하나를 원고에서 뺀다 — 사용자가 장면을 가리킬 때. "
+               "'이 장면'처럼 가리키면 바로 앞에서 이야기하던 장면이다",
+        "engine": "engine.desk_hands (REMOVE, 비파괴)",
+        "needs": {"scene_no": "몇 번 장면"},
+        "scope": "story",
+    },
+    {
         "id": "remove_fragment",
-        "ways": ['이 장면 빼줘', 'A60 빼줘', '이거 지워줘'],
+        "ways": ['A60 빼줘', '이 조각 지워줘'],
         "say": "조각 하나를 통째로 뺀다 — 사용자가 조각 이름(A60 같은 것)으로 가리킬 때",
         "engine": "POST /edit-state (command_type=REMOVE)",
         "needs": {"fragment": "대상 조각 이름"},
@@ -76,6 +87,17 @@ CAPABILITIES = [
         "scope": "story",
     },
     {
+        "id": "keep_theme",
+        "ways": ['먹는 장면만 남겨줘', '바다 나오는 것만 편집해줘',
+                 '낚시하는 데만 쓰자', '요리하는 것만 있는 조각들로 만들어줘',
+                 '다른 장면은 모두 빼줘'],
+        "say": "어떤 소재가 나오는 조각만 남기고 나머지를 원고에서 뺀다 "
+               "('~만', '~만 남기고 다 빼줘' 처럼 남길 것을 말할 때)",
+        "engine": "engine.desk_hands (REMOVE, 비파괴)",
+        "needs": {"theme": "남길 소재 낱말 (20자 이내)"},
+        "scope": "story",
+    },
+    {
         "id": "remove_theme",
         "ways": ['바다 나오는 건 다 빼줘', '실내 장면 빼줘', '물놀이는 줄여줘'],
         "say": "어떤 주제·소재가 나오는 조각들을 원고에서 뺀다",
@@ -100,6 +122,15 @@ CAPABILITIES = [
         "scope": "read",
     },
     {
+        "id": "look_scene",
+        "ways": ['6번이 뭐야?', '그 장면 자세히 알려줘', '거기 무슨 얘기 나와?',
+                 '어떤 장면인지 볼래', '내용 좀 보여줘'],
+        "say": "장면 하나를 자세히 펴 본다 — 그 안의 대사와 보이는 것을 읽는다",
+        "engine": "engine.ledger_groups (해당 묶음 상세)",
+        "needs": {"scene_no": "몇 번 장면"},
+        "scope": "read",
+    },
+    {
         "id": "fix_scene_label",
         "ways": ['이건 산이 아니라 바다야', '2번 장면 이름이 틀렸어', '장면 이름 고쳐줘', '이 장면은 잠수 장면이야', '그거 이름 바꿔줘'],
         "say": "장면 이름을 사용자가 말한 이름으로 고친다. 사용자가 어떤 장면이 "
@@ -108,6 +139,15 @@ CAPABILITIES = [
         "engine": "project_timeline kind=scene_label_fix (append-only)",
         "needs": {"scene_no": "장면 번호", "label": "사용자가 말한 올바른 이름"},
         "scope": "story",
+    },
+    {
+        "id": "read_receipt",
+        "ways": ['뺐나?', '방금 뭐 했어?', '했어?', '지금 몇 조각이야?',
+                 '아까 그거 됐나?'],
+        "say": "방금 무엇을 했는지, 지금 원고가 몇 조각인지 확인한다",
+        "engine": "engine.desk_hands.recent_receipts (원장)",
+        "needs": {},
+        "scope": "read",
     },
     {
         "id": "read_sound_roles",
@@ -155,13 +195,17 @@ WISH_SAY = ("그건 아직 제가 못 해요. 다만 적어 뒀으니 만들 수
 
 
 def _capability_lines(labels_hint=""):
-    # [2026-08-08] 인자 설명(필요한 값 …)을 뺐다 — 그것까지 읽히면 프롬프트가
-    #   1,000자를 넘고 젬마가 느려지고 헤맨다. 무엇을 해줄 수 있는지만 알면 된다.
+    # [2026-08-08 국장 지시 "도구 사용설명"] 도구마다 '무엇을 하는지 · 어떤 말에
+    #   쓰는지 · 무슨 값이 필요한지'를 한 줄로. 이건 답변 예시가 아니라 사용설명이다.
+    #   (답변 예시를 넣었더니 젬마가 그 내용을 따라 했고, 빼면 도구를 안 잡았다.
+    #    설명은 남기고 예시는 두지 않는 자리가 여기다.)
     lines = []
     for c in CAPABILITIES:
-        say = c["say"].split(" — ")[0]
-        keys = "·".join(c["needs"].keys())
-        lines.append(f"  {c['id']}: {say}" + (f" ({keys})" if keys else ""))
+        say = c["say"].split(" — ")[0].split(" (예:")[0].strip()
+        keys = ", ".join(c["needs"].keys())
+        w = c.get("ways") or []
+        when = f"  ← \"{w[0]}\" 같은 말" if w else ""
+        lines.append(f"  {c['id']}({keys}): {say}{when}")
     return "\n".join(lines)
 
 
@@ -217,6 +261,43 @@ def match(want_text, floor=0.45):
     return (best if score >= floor else None), round(score, 3)
 
 
+def _ask_tool(user_text, ctx="", world_lines=""):
+    """도구만 고른다 — 말은 안 만든다. 격리 실측 10/10 이 나온 형태.
+
+    말과 함께 물으면 도구 칸이 빈다. 그래서 이 물음에는 도구밖에 없다.
+    """
+    from engine import hub
+    # ★'없음'도 고를 수 있는 항목으로 준다. null 로 비우라고만 하면 젬마는
+    #   늘 무언가를 골랐다(실측: '고마워' → remove_scene, '자막 넣어줄 수 있나' →
+    #   fix_scene_label). 젬마는 비우는 것보다 고르는 것을 잘한다 — 그러면
+    #   고를 것을 주는 게 맞다.
+    prompt = (
+        "영상 편집실에서 쓸 수 있는 도구다. 사용자가 한 말에 가장 맞는 것을 "
+        "하나 고르고, 필요한 값을 채워라.\n\n"
+        "  talk: 인사·감사·잡담·감상이라 아무 도구도 필요 없다\n"
+        f"  not_here: {', '.join(NOT_HERE[:5])} — 이 편집실에 손이 없는 일이다\n"
+        + _capability_lines() + "\n"
+        # 세계를 빼 보았다(미끼 가설). 오히려 '뺐나?' 가 깨져서 되돌렸다 —
+        #   지금 몇 조각인지를 모르면 확인 요청을 확인으로 못 읽는다. 실측 3회로
+        #   이 지점은 프롬프트로 안 잡힌다는 것이 드러났고, 남은 사고는 실행 문
+        #   앞 검문으로 막는다(main.py LABEL-GROUND).
+        + (f"[방금 나눈 이야기]\n{ctx}\n" if ctx else "")
+        + (f"[지금 영상]\n{world_lines}\n" if world_lines else "")
+        + f"\n[사용자가 한 말]\n{user_text}\n\n"
+        "말한 것을 실제로 해주려면 어떤 도구가 필요한가. 가리키는 말('이 장면', "
+        "'그거', '아까 그것')은 방금 나눈 이야기에서 무엇을 가리키는지 찾아 "
+        "번호나 이름을 채워라.\n"
+        '{"capability": 위에서 고른 이름, "args": {필요한 값}}'
+    )
+    try:
+        out = hub._ollama_json(prompt, timeout=30, temperature=0.2,
+                               model=hub.VOICE_MODEL)
+        return out if isinstance(out, dict) else {}
+    except Exception as e:
+        print(f"[DESK][WARN] 도구 선택 실패: {e}")
+        return {}
+
+
 def decide(user_text, world_lines="", recent_messages=None):
     """[2026-08-08 국장 지시 "모든 조정권을 젬마에게"]
 
@@ -234,41 +315,69 @@ def decide(user_text, world_lines="", recent_messages=None):
     from engine import hub
     from engine.intent_router import _sanitize_talk
 
-    # ★직전 대화를 판단에 넣지 않는다 (실측 2026-08-08):
-    #     직전 대화 있음 3/8  ·  없음 7/8
-    #   국장 실화면의 버그가 이것이었다 — "2바다는…잠수장면이야"라고 했는데
-    #   직전의 "14번 산은…바닷가 바위야"가 현재 요청을 덮어 14번을 또 고쳤다.
-    #   오늘 같은 병을 네 번째로 만났다(기억 오염 '정은한' · 젬마 로마자 물려받기 ·
-    #   ASR 반복 루프 · 이것). 자기 문맥이 자기를 지배하는 구조다.
-    #   ★판단은 지금 한 말만 본다. 맥락은 '무엇을 할까'가 아니라 '뭐라고 말할까'의 것이다.
-    # [2026-08-08 국장 지시] "모두 걷어내줘. 젬마를 제약하지 말고, 읽을 것만,
-    #   안내·메뉴얼만 아주 간단히. 그것도 꼭 읽으라는 게 아니고 젬마 맘대로."
-    #   → 규칙·형식 지시·판단 분기표를 전부 뺐다. 남은 것은 안내 한 장과 사용자 말뿐.
-    #     무엇을 할지는 젬마가 정한다. 서버는 젬마가 적어 준 것을 집행할 뿐이다.
+    # [2026-08-08] 직전 대화를 돌려준다 — 매 턴 처음 만난 사람이 되지 않게.
+    #   한때 이것을 뺐다(판단 오염 3/8 vs 7/8). 그때는 프롬프트가 2,500자였고
+    #   규칙표에 눌려 젬마가 직전 것을 되풀이했다. 안내서만 남은 지금 다시 넣고
+    #   실측한다 — 나빠지면 그때 다시 판단한다.
+    ctx = ""
+    for m in (recent_messages or [])[-8:]:
+        who = "사용자" if (m.get("sender") == "user") else "나"
+        txt = str(m.get("text") or "")[:160]
+        if txt:
+            ctx += f"{who}: {txt}\n"
+    # [2026-08-08 국장 지시 "젬마를 풀어준다"]
+    #   안내서에는 세 가지만 적는다 — 이곳이 사용자에게 해주려는 일 / 사용자가
+    #   어떤 상태인지 / 네 손에 있는 도구. 제약·금지·판단 분기표는 한 줄도 없다.
+    #   무엇을 할지, 어떻게 말할지는 전부 젬마가 정한다.
     prompt = (
-        "너는 CCUT 영상 편집실의 동료다. 사용자와 편하게 이야기한다.\n\n"
-        "[편집실 안내]\n"
-        + (world_lines + "\n" if world_lines else "")
-        + f"- 부탁하면 해줄 수 있는 일:\n{_capability_lines()}\n"
-        + f"- 여기서는 못 하는 일: {', '.join(NOT_HERE)}\n\n"
-        + f"사용자: {user_text}\n\n"
-        "사람으로서 답하고(say), 무언가 해 달라는 말이면 위에서 골라 적는다.\n"
-        '  "3번째 조각 빼줘" → {"say":"네, 3번째 조각 빼드릴게요.",'
-        '"capability":"remove_ordinal","args":{"index":3}}\n'
-        '  "7번은 낚시 장면이야" → {"say":"7번 이름을 낚시 장면으로 고칠게요.",'
-        '"capability":"fix_scene_label","args":{"scene_no":7,"label":"낚시 장면"}}\n'
-        '  "고마워" → {"say":"천만에요!","capability":null,"args":{}}\n'
-        "이 형식으로만 답한다."
+        "여기는 CCUT 편집실이고, 너는 여기서 일하는 편집 동료다.\n"
+        "사람들은 이 편집실도, 너도 CCUT이라고 부른다.\n\n"
+        "[이곳이 하려는 일]\n"
+        "혼자 영상을 만드는 사람이 하루 종일 찍어 온 것을 들고 온다.\n"
+        "그 사람은 편집을 배운 적이 없고, 배우고 싶어하지도 않는다. 지쳐 있고,\n"
+        "빨리 결과를 보고 싶어한다. 버튼을 찾아다니는 대신 너에게 말한다 —\n"
+        "\"여기가 늘어져\", \"이 부분 어색해\", \"물속 장면만 쓰자\" 처럼.\n"
+        "편집 기술은 CCUT이 갖고 있다. 너는 그 사람과 이야기하고, 무엇을 원하는지\n"
+        "알아내고, 대신 해주는 쪽이다. 결과를 함께 보며 고쳐 나간다.\n\n"
+        "[지금 이 사람의 영상]\n"
+        + (world_lines + "\n" if world_lines else "(아직 없다)\n")
+        + "\n[네 손에 있는 도구]\n"
+        + _capability_lines() + "\n"
+        + f"화면이나 소리의 성질 자체({', '.join(NOT_HERE[:5])} 등)는 이 편집실에\n"
+          "손이 없어서 네가 대신 해줄 수 없다.\n\n"
+        + (f"[지금까지 나눈 이야기]\n{ctx}\n" if ctx else "")
+        + f"[사용자]\n{user_text}\n\n"
+        # 예시에 '내용'을 넣지 않는다 — 넣었더니 젬마가 그 내용을 따라 했다
+        #   ('고마워'에 "6번 집 조각을 빼드릴게요", 답에 JSON 조각 유출. 실측).
+        #   형식만 알려주고 무엇을 말할지는 젬마가 정한다.
+        "편하게 답해라.\n"
+        '답 모양: {"say": 사용자에게 할 말}'
     )
+    # ★[HANDS-1 2026-08-08] 말과 도구를 갈라 ★동시에★ 묻는다.
+    #   실측: 하나의 JSON 에 say + capability + args 를 함께 담게 했더니
+    #   대화가 자연스러워질수록 도구 칸이 비었다(36발화 중 15건 just_talk,
+    #   '뺐나?' 조차 도구 없이 되물음). 젬마 4B 에게 한 번에 두 일은 무겁다.
+    #   격리에서 도구만 물었을 때는 10/10 이었다 — 그 형태를 그대로 쓴다.
+    #   순차로 두 번 부르면 11.8초가 됐다(실측). 그래서 병렬이다.
     try:
-        out = hub._ollama_json(prompt, timeout=30, temperature=0.4,
-                               model=hub.VOICE_MODEL)
+        with _cf.ThreadPoolExecutor(max_workers=2) as ex:
+            f_say = ex.submit(hub._ollama_json, prompt, timeout=30,
+                              temperature=0.4, model=hub.VOICE_MODEL)
+            f_cap = ex.submit(_ask_tool, user_text, ctx, world_lines)
+            out = f_say.result() or {}
+            picked = f_cap.result() or {}
     except Exception as e:
         print(f"[DESK][WARN] 판단 실패: {e}")
         return None
+    out["capability"] = picked.get("capability")
+    out["args"] = picked.get("args")
 
     cap = out.get("capability")
     cap = None if cap in (None, "", "null", "none", "None") else str(cap).strip()
+    if cap == "talk":
+        cap, out["reason"] = None, "대화"
+    elif cap == "not_here":
+        cap, out["reason"] = None, "없는 일"
     if cap and not find(cap):
         print(f"[DESK][WARN] 없는 능력 {cap!r} → 적어만 둔다")
         cap = None
@@ -432,6 +541,28 @@ def receive(user_text, world_lines="", recent_messages=None):
     return {"cap": cap, "args": args, "say": say, "reason": reason}
 
 
+def scene_detail(scenes, scene_no, fixes=None):
+    """[2026-08-08] 젬마가 장면 하나를 펴 볼 때 받는 것 — 그 묶음의 실제 내용.
+
+    국장 실화면: '6번 집 조각? 이 뭐지? 상세하게 알려줄 수 있나?' 에
+    짧은 목록만 있어 되물었다. 도구를 쥐면 안을 볼 수 있어야 한다."""
+    from engine import ledger_groups as _lg
+    g = next((x for x in (scenes or []) if x["group_no"] == scene_no), None)
+    if not g:
+        return None
+    t0, t1 = g["start_ms"] / 1000.0, g["end_ms"] / 1000.0
+    lines = [
+        f"{g['group_no']}번 장면 — {_lg.scene_label(g, fixes)}",
+        f"{int(t0 // 60)}분{int(t0 % 60):02d}초 ~ {int(t1 // 60)}분{int(t1 % 60):02d}초, "
+        f"조각 {g['item_count']}개",
+    ]
+    if g.get("top_tags"):
+        lines.append("보이는 것: " + ", ".join(g["top_tags"]))
+    if g.get("dialogue_head"):
+        lines.append(f"들리는 말: \"{g['dialogue_head']}\"")
+    return "\n".join(lines)
+
+
 def look(user_text, scene_lines, recent_messages=None):
     """[STRUCT-A② 2026-08-08] 조회로 판정된 뒤에만 장면 지도를 펴고 답한다.
 
@@ -515,3 +646,54 @@ def explain(result_data, user_text, cap_id=None):
     except Exception as e:
         print(f"[DESK][WARN] 통역 실패: {e}")
         return None
+
+
+def say_done(facts, user_text, recent_messages=None):
+    """한 일을 젬마가 국장에게 말한다 — 되돌아오는 숨.
+
+    ★서버가 사실을 만들고 젬마가 문장을 만든다. 반대로 하면 젬마가 숫자를
+      지어낸다(실측: 뺀 적 없는 조각을 뺐다고 말했다).
+      그래서 숫자는 아래 목록에 있는 것만 통과시킨다.
+    """
+    from engine import hub
+    from engine.intent_router import _sanitize_talk
+    if not facts.get("ok"):
+        why = facts.get("why") or "지금은 못 한다"
+        return f"{why}. 어떻게 할까요?"
+
+    if facts.get("receipts") is not None:
+        rs = facts["receipts"]
+        if facts.get("nothing"):
+            return f"아직 손댄 건 없어요. 지금 {facts['after']}조각입니다."
+        head = rs[0]
+        fact_line = (f"방금 한 일: {head['what']} "
+                     f"({head['before_count']}조각 → {head['after_count']}조각)")
+        allow = [str(head["before_count"]), str(head["after_count"])]
+        server = (f"네, {head['what']}. 지금 {head['after_count']}조각입니다.")
+    else:
+        fact_line = (f"방금 한 일: {facts['what']} "
+                     f"({facts['before']}조각 → {facts['after']}조각)")
+        allow = [str(facts["before"]), str(facts["after"])]
+        server = (f"{facts['what']}. {facts['before']}조각 → "
+                  f"{facts['after']}조각이에요.")
+
+    prompt = (
+        "너는 CCUT 편집실의 동료다. 방금 네가 직접 한 일을 사용자에게 알린다.\n"
+        f"사용자가 한 말: \"{(user_text or '')[:100]}\"\n"
+        f"{fact_line}\n"
+        "이미 다 한 상태다 — 해도 되는지 묻지 마라. 위 숫자를 그대로 넣어 "
+        "1~2문장으로 알리고, 마음에 안 들면 되돌릴 수 있다는 걸 알려라.\n"
+        'JSON만 출력: {"say":"..."}'
+    )
+    try:
+        out = hub._ollama_json(prompt, timeout=20, temperature=0.5,
+                               model=hub.VOICE_MODEL)
+        say = _sanitize_talk(str(out.get("say") or "").strip())
+        nums = set(re.findall(r"\d+", say or ""))
+        if say and nums <= set(allow):
+            return say
+        if say:
+            print(f"[DESK][NUM-GUARD] 없는 숫자 — 서버 문장으로: {say[:50]!r}")
+    except Exception as e:
+        print(f"[DESK][WARN] 보고 문장 실패: {e}")
+    return server

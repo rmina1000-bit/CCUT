@@ -40,6 +40,14 @@ VOICE_MODEL = os.getenv("CCUT_VOICE_MODEL", "gemma3:4b")
 # keep_alive 연장(콜드 재로드 +6.5s 실측 관리)은 그대로 유지한다.
 # 전 호출 단일 ctx 유지 — 요청별 num_ctx가 다르면 Ollama가 러너를 재적재한다(스왑 비용).
 OLLAMA_NUM_CTX = int(os.getenv("CCUT_OLLAMA_NUM_CTX", "8192"))
+# [2026-08-08 국장 지시 "젬마가 움직일 공간 넓게"] 목소리 모델은 따로 넓게 쓴다.
+#   gemma3:4b 는 131,072 까지 받는데 8,192 로 묶여 있었다 — 대화를 기억할 방이
+#   없으면 매 턴 처음 만난 사람이 된다. 러너는 모델별이라 큐원 쪽 ctx 는 그대로다.
+VOICE_NUM_CTX = int(os.getenv("CCUT_VOICE_NUM_CTX", "16384"))
+
+
+def _ctx_for(model):
+    return VOICE_NUM_CTX if (model or HUB_MODEL) == VOICE_MODEL else OLLAMA_NUM_CTX
 OLLAMA_KEEP_ALIVE = os.getenv("CCUT_OLLAMA_KEEP_ALIVE", "30m")
 # [⑨ 투기 연결부 — OFF 고정(국장 결정)] Ollama는 draft 미지원(B 실측: 효과 0)이라
 # 이 플래그는 연결부일 뿐 동작하지 않는다. llama-server 전환 시 이 지점에서 배선.
@@ -155,7 +163,7 @@ def _ollama_json(prompt: str, timeout: int = 60, temperature: float = 0,
         "format": "json",
         "keep_alive": OLLAMA_KEEP_ALIVE,
         "options": {"temperature": temperature, "num_predict": 2048,
-                    "num_ctx": OLLAMA_NUM_CTX},
+                    "num_ctx": _ctx_for(model)},
     }
     body = json.dumps(payload).encode("utf-8")
     req = urllib.request.Request(
@@ -227,7 +235,7 @@ def _ollama_stream(prompt: str, timeout: int = 60, temperature: float = 0.7,
     [⑥ 샘플링] 대화 프로파일(top_p/top_k)은 호출측이 명시 — 판사 결정론과 분리.
     [⑧ 직렬화] 스트림 전체가 락 구간 — 생성 중 판사/추출이 끼어들지 않는다."""
     opts = {"temperature": temperature, "num_predict": num_predict,
-            "num_ctx": OLLAMA_NUM_CTX}
+            "num_ctx": _ctx_for(model)}
     if top_p is not None:
         opts["top_p"] = top_p
     if top_k is not None:
@@ -452,7 +460,7 @@ def _ollama_chat_stream(messages: list[dict], timeout: int = 60, temperature: fl
     #   기본 None = HUB_MODEL 그대로라 기존 호출처 전부 불변.
     mdl = model or HUB_MODEL
     opts = {"temperature": temperature, "num_predict": num_predict,
-            "num_ctx": OLLAMA_NUM_CTX}
+            "num_ctx": _ctx_for(mdl)}
     if top_p is not None:
         opts["top_p"] = top_p
     if top_k is not None:

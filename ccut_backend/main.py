@@ -5586,6 +5586,7 @@ def _chat_only_speed_bypass(input_text: str, project_id: str = None,
     #   ②번역·실행 배선은 다음 차수. 확인이 먼저다.
     try:
         from engine import engine_desk as _desk
+        from engine import desk_hands as _hands
         from engine import gemma_breath as _gbw
         _w = _gbw.world(project_id, fragment_labels)
         if _w:
@@ -5597,7 +5598,27 @@ def _chat_only_speed_bypass(input_text: str, project_id: str = None,
             # [2026-08-08 국장 지시 "모든 조정권을 젬마에게"]
             #   젬마가 듣고·분석하고·시스템을 확인하고·고르고·지시한다. 실행만 안 한다.
             #   판단에는 직전 대화를 넣지 않는다 — 실측 3/8 vs 7/8 (자기 문맥이 지배).
-            _r = _desk.decide(t, _gbw._world_lines(_w_short))
+            _r = _desk.decide(t, _gbw._world_lines(_w_short), recent_messages)
+            # 젬마가 장면 하나를 펴 보려 한다 — 그 안을 보여주고 다시 말하게 한다.
+            if _r and _r["cap"] == "look_scene" and _w.get("scenes"):
+                try:
+                    _sn = int(_r["args"].get("scene_no"))
+                except (TypeError, ValueError):
+                    _sn = None
+                _det = _desk.scene_detail(_w["scenes"], _sn,
+                                          _w.get("label_fixes")) if _sn else None
+                if _det:
+                    _said = _desk.look(t, _det, recent_messages) or _r["say"]
+                    if _said:
+                        print(f"[DESK] 장면 {_sn}번을 펴 본다: {t[:26]!r}")
+                        return {
+                            "status": "OK", "action": "answer_only",
+                            "normalized_instruction": None, "reply": _said,
+                            "confidence": 0.9,
+                            "matched": {"kind": "scene_look", "gate": "desk",
+                                        "scene_no": _sn},
+                            "via": "desk",
+                        }
             # 조회다 — 이제 장면 지도를 펴고 답한다(필요할 때만 그 층을 연다)
             if _r and _r["cap"] == "find_fragments" and _w.get("scenes"):
                 _said = _desk.look(t, _gbw._world_lines(_w), recent_messages)
@@ -5636,6 +5657,15 @@ def _chat_only_speed_bypass(input_text: str, project_id: str = None,
                         "matched": {"kind": "scene_no_unknown", "gate": "desk"},
                         "via": "desk",
                     }
+                # [LABEL-GROUND 2026-08-08] 사용자가 말하지 않은 이름으로 고치지
+                #   않는다. 실측(국장 왕복): '자막도 넣어줄 수 있나?' 에
+                #   fix_scene_label 이 골라져 ★장면 이름이 실제로 바뀌었다★.
+                #   고칠 이름은 사용자 입에서 나온 것이어야 한다 — 두 글자 이상이
+                #   원문에 실제로 있어야 통과시킨다(조사 때문에 부분 포함으로 본다).
+                if _lab and len(_lab) >= 2 and _lab[:2] not in t:
+                    print(f"[DESK][LABEL-GROUND] 사용자가 말한 적 없는 이름 "
+                          f"{_lab!r} → 고치지 않는다")
+                    _no, _lab = None, ""
                 if _no and _lab:
                     from engine import timeline_store as _ts
                     import time as _tt
@@ -5704,6 +5734,49 @@ def _chat_only_speed_bypass(input_text: str, project_id: str = None,
                     and not _r["args"].get("fragment")):
                 print(f"[DESK] 대상 없는 다듬기 → 초안 회로로: {t[:30]!r}")
                 _r = None
+            # ★[HANDS-1 2026-08-08] 젬마의 선택이 실제 실행이 된다.
+            #   여기가 국장이 말한 "말만 하고 딴짓하는 것으로 보이는" 자리였다.
+            #   젬마가 도구를 골라도 [HOLD]라 아무 일도 안 일어났다.
+            #   이제 손이 실제로 하고(비파괴 Edit State), 그 결과를 사실로
+            #   젬마에게 돌려주고, 젬마가 그것을 국장에게 말한다.
+            # ★[ASK-GUARD 2026-08-08] 묻는 말로는 세상을 바꾸지 않는다.
+            #   실측(국장 화면·Receipt): "그 장면들만 스토리로 만들 수 있나?" 라는
+            #   ★질문★에 6번 장면이 실제로 빠졌다(17→14). 국장이 시키지도 않은
+            #   편집이 일어났고, 정작 시킨 일은 하나도 안 됐다.
+            #   개념서 §9 — AI 가 독단으로 이야기를 정하지 않는다.
+            #   답은 그대로 하고 손만 멈춘다. 되묻지 않는다.
+            if (_r and _r["cap"] in _hands.HANDS
+                    and _r["cap"] not in _hands.READ_ONLY
+                    and re.search(r"[?？]", t)):
+                print(f"[DESK][ASK-GUARD] 묻는 말이라 {_r['cap']} 실행 안 함: {t[:34]!r}")
+                _say = _r["say"] or _desk.say_for(_r["cap"], _r["args"], t)
+                return {
+                    "status": "OK", "action": "answer_only",
+                    "normalized_instruction": None, "reply": _say,
+                    "confidence": 0.88,
+                    "matched": {"kind": "asked_not_done", "gate": "desk",
+                                "cap": _r["cap"]},
+                    "via": "desk",
+                }
+            if _r and _r["cap"] in _hands.HANDS:
+                _f = _hands.do(_r["cap"], _r["args"], project_id,
+                               fragment_labels, _w.get("scenes"), t)
+                _say = _desk.say_done(_f, t, recent_messages)
+                print(f"[DESK][HANDS] {_r['cap']} → "
+                      f"{'했다' if _f.get('ok') else '못 했다: ' + str(_f.get('why'))}")
+                return {
+                    "status": "OK", "action": "answer_only",
+                    "normalized_instruction": None, "reply": _say,
+                    "confidence": 0.92,
+                    # ★남은 원고를 함께 보낸다 — 화면이 이걸 받아야 조각맵이
+                    #   실제로 줄어든다. 없으면 DB 만 바뀌고 화면은 그대로여서
+                    #   국장 눈에는 여전히 "말만 하는" 것으로 보인다.
+                    "story_fids": _f.get("live") or None,
+                    "matched": {"kind": "hand_done" if _f.get("ok")
+                                else "hand_blocked", "gate": "desk",
+                                "cap": _r["cap"], "facts": _f},
+                    "via": "desk",
+                }
             if _r and _r["cap"]:
                 # 젬마가 말을 비웠으면 사람 말로 다시 받는다 —
                 #   내부 능력 설명문을 그대로 내보내던 자리(국장 화면 실측).

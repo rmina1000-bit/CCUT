@@ -298,6 +298,10 @@ const Index: React.FC = () => {
   // [GATE-LOOP-01 2-1] 승인 후 A/B 생성기. 선언 순서(TDZ) 때문에 ref로 늦게 채운다.
   const requestProposalsForApprovedStoryRef = useRef<(() => Promise<boolean>) | null>(null);
   const startApprovedStoryEditingBridgeRef = useRef<((source: "chat") => Promise<boolean>) | null>(null);
+  // [HANDS-1 2026-08-08] 젬마가 실제로 원고를 고쳤을 때 화면을 맞추는 선.
+  //   applyStory / roughCutFragmentsForFids 는 여기보다 한참 아래에서 정의된다.
+  //   그래서 ref 로 받아 둔다 — 직접 참조하면 TDZ 다.
+  const handApplyRef = useRef<(fids: string[]) => void>(() => {});
   const startApprovedStoryEditingFromChat = useCallback(
     async (source: "chat") => startApprovedStoryEditingBridgeRef.current?.(source) ?? false,
     [],
@@ -396,6 +400,7 @@ const Index: React.FC = () => {
       approvedStoryReady: storyGate.story?.story_state === "story_approved" && (storyGate.story?.item_count ?? 0) > 0,
       approvedStoryCount: storyGate.story?.item_count ?? storyFids.length,
       onStartApprovedStoryEditing: startApprovedStoryEditingFromChat,
+      onHandApplied: (fids: string[]) => handApplyRef.current(fids),
     },
   );
   // [FLOW] 확정/선택 전에도 조각맵이 비지 않게 — 무대에 선 제안(기본 A)을 따라간다.
@@ -3124,6 +3129,17 @@ const Index: React.FC = () => {
     }
     return out;
   }, [roughCutFragmentPool]);
+
+  // ★젬마의 손이 원고를 고쳤다 → 조각맵을 그 결과로 맞춘다.
+  //   실측(국장 화면): 이 선이 없어서 DB 는 17→14 로 바뀌는데 화면 조각맵은
+  //   그대로였다. 젬마는 "뺐어요"라고 말하고 화면은 안 변하니, 국장 눈에는
+  //   말만 하고 딴짓하는 것으로 보였다. 사용자 말로 일어난 변경이라 applyStory
+  //   (사용자 행위 표식)를 쓴다.
+  handApplyRef.current = (fids: string[]) => {
+    console.info("[HANDS][SCREEN]", { before: storyFidsRef.current.length,
+                                      after: fids.length });
+    applyStory(roughCutFragmentsForFids(fids), fids);
+  };
 
   // [STORY-ANCHOR 2026-08-01] 치유: 복원된 원고에 현행 조각에 없는 fid 가 있으면
   //   저장해 둔 좌표로 **현 세대 fid 로 갈아 끼운다.** 프로젝트당 한 번만.

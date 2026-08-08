@@ -94,6 +94,10 @@ type UseProposalStateOptions = {
   approvedStoryReady?: boolean;
   approvedStoryCount?: number;
   onStartApprovedStoryEditing?: (source: "chat") => Promise<boolean>;
+  /** [HANDS-1 2026-08-08] 젬마가 실제로 원고를 고쳤을 때 남은 조각 목록.
+   *  이걸 화면에 반영하지 않으면 DB 만 바뀌고 조각맵은 그대로다 — 국장 눈에는
+   *  여전히 "말만 하고 딴짓"으로 보인다. 실행과 화면을 잇는 유일한 선이다. */
+  onHandApplied?: (fids: string[]) => void;
 };
 
 const LEGACY_NARRATIVE_ENABLED =
@@ -987,6 +991,15 @@ export const useProposalState = (
         approved_story_ready: !!options.approvedStoryReady,
         bridge_ready: !!options.onStartApprovedStoryEditing,
       });
+      // ★젬마의 손이 실제로 원고를 고쳤다 — 화면을 그 결과에 맞춘다.
+      if (route?.matched?.kind === "hand_done" && Array.isArray(route?.story_fids)) {
+        console.info("[HANDS][APPLY]", {
+          cap: route?.matched?.cap,
+          before: route?.matched?.facts?.before,
+          after: route?.story_fids.length,
+        });
+        options.onHandApplied?.(route.story_fids as string[]);
+      }
       if (
         route?.action === "run_proposal" &&
         options.onStartApprovedStoryEditing &&

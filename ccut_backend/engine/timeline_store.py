@@ -40,6 +40,11 @@ _KINDS = ("message", "generation", "transcript_ref",
           # [2026-08-08] 사용자가 센서를 고친 것 — VL 은 틀릴 수 있고 사람이 맞다.
           #   국장 실화면: 14번 장면 라벨이 '산'인데 실제는 바닷가 바위였다.
           "scene_label_fix",
+          # [HANDS-1 2026-08-08] 젬마의 손이 실제로 한 일 — Receipt.
+          #   ★이 줄이 없어서 또 조용히 버려졌다(실측: 17→14 로 실제 뺐는데
+          #     '뺐나?' 에 답할 기록이 0건). 위 주석의 사고를 그대로 반복했다.
+          #     그래서 아래에 미등록 kind 경고를 붙였다 — 다음엔 안 조용하게.
+          "hand_done",
           # [2026-08-08] 아직 못 하는 일을 사용자가 부탁한 기록.
           #   개념서 §8 "불가능하다는 말로 대화를 끝내지 않는다" —
           #   못 한다고만 하고 잊으면 그 요구는 영영 안 만들어진다.
@@ -77,6 +82,9 @@ def append_entries(program_id, entries):
     for e in entries or []:
         kind, cid = e.get("kind"), e.get("client_id")
         if kind not in _KINDS or not cid:
+            # 조용히 버리지 않는다 — 이 침묵이 같은 사고를 두 번 냈다.
+            print(f"[TIMELINE][DROP] 등록 안 된 kind={kind!r} — _KINDS 에 넣어야 "
+                  f"기록된다 (program={program_id})")
             continue
         cur = con.execute(
             "INSERT OR IGNORE INTO project_timeline "
