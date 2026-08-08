@@ -121,9 +121,12 @@ def world(program_id, fragment_labels=None, with_scenes=True):
         "label_fixes": fixes,
         # 판단 자리에도 남는 짧은 목록 (scenes 를 비워도 이 줄은 유지된다)
         "scene_count": len(scenes),
+        # 시간도 함께 준다 — 조회에 답할 때 '몇 분쯤'을 말할 수 있어야 한다
+        #   (없으면 이름만 보고 엉뚱한 번호를 댄다, 실측).
         "scene_names": (" · ".join(
-            f"{g['group_no']} {_scene_name(g, fixes)}" for g in scenes[:30])
-            if scenes else ""),
+            f"{g['group_no']} {_scene_name(g, fixes)}"
+            f"({int(g['start_ms'] // 60000)}:{int(g['start_ms'] % 60000 // 1000):02d})"
+            for g in scenes[:30]) if scenes else ""),
     }
 
 

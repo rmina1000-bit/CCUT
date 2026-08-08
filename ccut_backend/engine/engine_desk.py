@@ -155,10 +155,13 @@ WISH_SAY = ("그건 아직 제가 못 해요. 다만 적어 뒀으니 만들 수
 
 
 def _capability_lines(labels_hint=""):
+    # [2026-08-08] 인자 설명(필요한 값 …)을 뺐다 — 그것까지 읽히면 프롬프트가
+    #   1,000자를 넘고 젬마가 느려지고 헤맨다. 무엇을 해줄 수 있는지만 알면 된다.
     lines = []
     for c in CAPABILITIES:
-        need = ", ".join(f"{k}({v})" for k, v in c["needs"].items()) or "없음"
-        lines.append(f"- {c['id']}: {c['say']} / 필요한 값: {need}")
+        say = c["say"].split(" — ")[0]
+        keys = "·".join(c["needs"].keys())
+        lines.append(f"  {c['id']}: {say}" + (f" ({keys})" if keys else ""))
     return "\n".join(lines)
 
 
@@ -238,20 +241,24 @@ def decide(user_text, world_lines="", recent_messages=None):
     #   오늘 같은 병을 네 번째로 만났다(기억 오염 '정은한' · 젬마 로마자 물려받기 ·
     #   ASR 반복 루프 · 이것). 자기 문맥이 자기를 지배하는 구조다.
     #   ★판단은 지금 한 말만 본다. 맥락은 '무엇을 할까'가 아니라 '뭐라고 말할까'의 것이다.
+    # [2026-08-08 국장 지시] "모두 걷어내줘. 젬마를 제약하지 말고, 읽을 것만,
+    #   안내·메뉴얼만 아주 간단히. 그것도 꼭 읽으라는 게 아니고 젬마 맘대로."
+    #   → 규칙·형식 지시·판단 분기표를 전부 뺐다. 남은 것은 안내 한 장과 사용자 말뿐.
+    #     무엇을 할지는 젬마가 정한다. 서버는 젬마가 적어 준 것을 집행할 뿐이다.
     prompt = (
-        "너는 CCUT 영상 편집실의 동료다. 사용자의 말을 듣고 네가 판단한다.\n\n"
-        f"[이 편집실에서 할 수 있는 일]\n{_capability_lines()}\n\n"
-        f"[이 편집실에 아예 없는 일 — 영상·소리의 성질을 바꾸는 것]\n"
-        f"{_not_here_lines()}\n\n"
-        + (f"[지금 이 이야기]\n{world_lines}\n\n" if world_lines else "")
-        + f"[사용자가 방금 한 말]\n{user_text}\n\n"
-        "할 수 있는 일이면 그 id 를 고르고 필요한 값을 채운다.\n"
-        "여기 없는 일이면 capability 는 null, reason 은 \"없는 일\".\n"
-        "목록에 없지만 만들 수 있어 보이면 capability 는 null, reason 은 \"아직\".\n"
-        "그냥 이야기면 capability 는 null, reason 은 \"대화\".\n"
-        "say 는 사용자에게 할 말이다.\n"
-        'JSON만 출력: {"capability":"id 또는 null","args":{},"reason":"...",'
-        '"say":"사용자에게 할 말"}'
+        "너는 CCUT 영상 편집실의 동료다. 사용자와 편하게 이야기한다.\n\n"
+        "[편집실 안내]\n"
+        + (world_lines + "\n" if world_lines else "")
+        + f"- 부탁하면 해줄 수 있는 일:\n{_capability_lines()}\n"
+        + f"- 여기서는 못 하는 일: {', '.join(NOT_HERE)}\n\n"
+        + f"사용자: {user_text}\n\n"
+        "사람으로서 답하고(say), 무언가 해 달라는 말이면 위에서 골라 적는다.\n"
+        '  "3번째 조각 빼줘" → {"say":"네, 3번째 조각 빼드릴게요.",'
+        '"capability":"remove_ordinal","args":{"index":3}}\n'
+        '  "7번은 낚시 장면이야" → {"say":"7번 이름을 낚시 장면으로 고칠게요.",'
+        '"capability":"fix_scene_label","args":{"scene_no":7,"label":"낚시 장면"}}\n'
+        '  "고마워" → {"say":"천만에요!","capability":null,"args":{}}\n'
+        "이 형식으로만 답한다."
     )
     try:
         out = hub._ollama_json(prompt, timeout=30, temperature=0.4,
@@ -267,18 +274,18 @@ def decide(user_text, world_lines="", recent_messages=None):
         cap = None
         out["reason"] = "아직"
     args = out.get("args") if isinstance(out.get("args"), dict) else {}
-    # [TARGET-GUARD 2026-08-08] 대상 조각은 사용자 말에서 와야 한다.
-    #   실측(국장 화면): '그래 그 물속장면만으로 편집해줘' → fragment=A115,
-    #   '그래 편집해줘' → A59. 사용자가 말한 적 없는 이름을 세계에서 집어 왔다.
-    #   원문에 없는 조각 이름은 버린다 — 대상이 없으면 물어보게 둔다.
+    # 남긴 검문은 둘뿐이다 — 사용자가 말하지 않은 조각을 집는 것(실측 사고)과
+    # 내부 id 가 화면에 새는 것. 나머지 규칙은 프롬프트에서 걷어냈다.
     _f = str(args.get("fragment") or "").strip()
     if _f and _f.upper() not in (user_text or "").upper():
-        print(f"[DESK][TARGET-GUARD] 사용자가 말하지 않은 조각 {_f!r} → 버린다")
         args = {k: v for k, v in args.items() if k != "fragment"}
     say = _sanitize_talk(str(out.get("say") or "").strip()) or ""
-    leaked = [c["id"] for c in CAPABILITIES if c["id"] in say]
-    for cid in leaked:
-        say = say.replace(cid, find(cid)["say"].split(" — ")[0])
+    # 내부 id 가 섞인 문장은 그 문장만 통째로 버린다. 낱말만 지우면
+    #   '3번째 조각을 빼드릴게요. 사용하겠습니다.' 같은 잔재가 남는다(실측).
+    if any(c["id"] in say for c in CAPABILITIES):
+        keep = [s for s in re.split(r"(?<=[.!?])\s+", say)
+                if not any(c["id"] in s for c in CAPABILITIES)]
+        say = " ".join(keep).strip()
     return {"cap": cap, "args": args, "say": re.sub(r"\s{2,}", " ", say).strip(),
             "reason": str(out.get("reason") or "").strip()}
 

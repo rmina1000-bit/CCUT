@@ -5678,26 +5678,32 @@ def _chat_only_speed_bypass(input_text: str, project_id: str = None,
                     "via": "desk",
                 }
             if _r and _r["cap"] is None and _r["say"]:
-                # 없는 일 = 정직하게 못 한다고. 대화 = 편집 기계를 깨우지 않는다.
-                #   ★후자가 특히 중요하다(실측 사고): "안녕. 오늘 촬영 힘들었어"의
-                #     '힘들'이 초안 유발 정규식(_FRESH_DRAFT_RE)에 걸려 인사말에
-                #     실제 편집이 적용됐다(DB 7→8행, 되돌림 완료). 사전은 이렇게
-                #     사람의 말을 오독한다. 접수대가 대화라고 하면 대화다.
-                if _r["reason"] in ("없는 일", "대화"):
-                    print(f"[DESK] {_r['reason']} — 편집 기계를 깨우지 않는다: {t[:30]!r}")
-                    return {
-                        "status": "OK", "action": "answer_only",
-                        "normalized_instruction": None, "reply": _r["say"],
-                        "confidence": 0.9,
-                        "matched": {"kind": "not_here" if _r["reason"] == "없는 일"
-                                    else "just_talk", "gate": "desk"},
-                        "via": "desk",
-                    }
+                # [2026-08-08 국장 지적 "3초 5초 후에 말이 나와"]
+                #   젬마가 이미 답했으면 그 말을 쓴다. 예전엔 reason 이 '대화'/'없는 일'
+                #   일 때만 쓰고 나머지는 통과시켰는데, 통과하면 자유대화가 젬마를
+                #   ★한 번 더★ 부른다. '안녕' 한 마디에 11.8초가 걸린 이유다.
+                #   말이 있는데 다시 묻지 않는다 — 편집 기계도 깨우지 않는다.
+                print(f"[DESK] 젬마가 답했다({_r['reason'] or '대화'}): {t[:30]!r}")
+                return {
+                    "status": "OK", "action": "answer_only",
+                    "normalized_instruction": None, "reply": _r["say"],
+                    "confidence": 0.9,
+                    "matched": {"kind": "not_here" if _r["reason"] == "없는 일"
+                                else "just_talk", "gate": "desk"},
+                    "via": "desk",
+                }
             # ★젬마가 고른 일인데 아직 배선이 없을 때 — 통과시키지 않는다.
             #   [SIM-1 실측] 통과시켰더니 뒤의 옛 게이트가 가로챘다:
             #     '순서를 바꿔줘' → 되묻기 · '보기좋게 편집해줘' → 되묻기
             #     '안녕 오늘 촬영 힘들었어' → 초안 유발 정규식에 걸려 ★실제 편집★
             #   젬마에게 조정권을 줬으면 그 판단이 끝까지 가야 한다. 실행만 안 한다.
+            # 대상 없는 다듬기 부탁('여기가 늘어져', '앞뒤가 안 맞아')은
+            #   되묻지 말고 초안 회로에 넘긴다 — 서버가 자리를 찾아 초안을 만든다.
+            #   젬마가 "어디요?"라고 되묻던 자리(실측 6건)가 여기였다.
+            if (_r and _r["cap"] in ("trim_boundary", "exclude_range")
+                    and not _r["args"].get("fragment")):
+                print(f"[DESK] 대상 없는 다듬기 → 초안 회로로: {t[:30]!r}")
+                _r = None
             if _r and _r["cap"]:
                 # 젬마가 말을 비웠으면 사람 말로 다시 받는다 —
                 #   내부 능력 설명문을 그대로 내보내던 자리(국장 화면 실측).
@@ -5994,7 +6000,17 @@ async def route_edit_intent_stream_api(req: EditIntentRouteRequest, request: Req
                     print(f"[ROUTE-EDIT][WARN] candidate_evidence 실패 ({_e})")
             sc = r.pop("_stream_chat", None)
             if not sc:
-                # 결정론/편집 분류 — 완성 응답이 이미 있다. 즉답 1건 (스트리밍 불요 경로)
+                # [2026-08-08 국장 지적] "항상 '말씀을 확인하고 있습니다…'가 나오고
+                #   3~5초 후에 말이 나와." — 완성 응답을 final 1건으로 보내니 그동안
+                #   화면에 placeholder 만 서 있었다. 이미 만들어진 말이라도 글자를
+                #   흘려 보내면 기다림이 사라진다(새 모델 호출 0, 지연 0).
+                _done = str(r.get("reply") or "")
+                if _done:
+                    _step = 12
+                    for _i in range(0, len(_done), _step):
+                        yield _emit({"type": "token", "text": _done[_i:_i + _step]})
+                    r["stream_text"] = _done
+                    r["stream_complete"] = True
                 print(f"[F2-TTFT] path=direct first_out_ms={int((_time.time() - t0) * 1000)} "
                       f"action={r.get('action')}")
                 if trace_id:
