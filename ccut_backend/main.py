@@ -5634,6 +5634,31 @@ def _user_named_scene(no, said: str) -> bool:
     return False
 
 
+# ★[WISH-1 2026-08-12] wish 원장 writer — ★한 자리★.
+#   전에는 이 append 가 두 곳에 복사돼 있었다(reason "아직" · reason "없는 일").
+#   세 번째 길이 생기는 지금 복사를 하나 더 만들면, 다음 사람이 세 벌을 읽고
+#   언젠가 한 벌만 고친다(이 저장소가 반복해서 겪은 부채: 액션 이름 두 벌·fid 13곳).
+#   ★kind 는 timeline_store._KINDS 에 이미 있는 "wish" 그대로다 — 새 kind 를 안 만든다.
+def _note_wish(program_id: str, said: str, by: str) -> bool:
+    """못 하는 일을 부탁받았다 — 벽이 아니라 문. 적어 두면 그것이 다음에 만들 목록이 된다."""
+    try:
+        from engine import timeline_store as _ts_w
+        import time as _tt_w
+        _ts_w.append_entries(program_id, [{
+            "kind": "wish",
+            "client_id": f"wish_{int(_tt_w.time() * 1000)}",
+            "ts": _tt_w.time() * 1000,
+            # by = 어느 길로 들어온 줄인가. 원장을 읽는 사람이 두 길을 갈라 볼 수 있게
+            #   남긴다(결이 골랐나 · 사용자 원문이 닿았나).
+            "payload": {"said": str(said)[:200], "by": by},
+        }])
+        print(f"[DESK][WISH] 적어 뒀다({by}): {str(said)[:40]!r}")
+        return True
+    except Exception as _e:
+        print(f"[DESK][WARN] wish 기록 실패: {_e}")
+        return False
+
+
 def _chat_only_speed_bypass(input_text: str, project_id: str = None,
                             source_ids: list = None,
                             fragment_labels: dict = None,
@@ -5693,6 +5718,23 @@ def _chat_only_speed_bypass(input_text: str, project_id: str = None,
                   f"decide={int((_tseg.time() - _seg_d1) * 1000)}ms "
                   f"since_bypass_start={int((_tseg.time() - _seg_b0) * 1000)}ms",
                   flush=True)
+            # ★[WISH-1 2026-08-12] wish 원장에 닿는 ★읽는 쪽★ 길 — 여기가 초크포인트다.
+            #   원장은 지금까지 ★결이 고른 것★(reason "없는 일"/"아직")에만 달려 있었다.
+            #   그래서 결이 다르게 고른 턴은 한 줄도 안 남았다. 실측(2026-08-12, seed 7):
+            #     C=tools  '2배속'  도구 0건·산문으로 정직하게 거절   → 원장 0행
+            #     C=json   '2배속'  set_count 를 골랐다가 손이 못 닿음 → 원장 0행
+            #                       ("알겠습니다. 2배속으로 설정해 드릴게요" — 거짓 약속까지)
+            #   ★결이 무엇을 골랐든 사용자가 무엇을 부탁했는지는 사용자의 원문에 있다.
+            #     그래서 결의 선택을 기다리지 않고 원문을 읽는다(_route_by_words 와 같은 규율).
+            #     결에게 검문을 세우지 않는다 — 결의 말도, 고른 손도, kind 도 안 건드린다.
+            #     ★건드리는 것은 원장 한 줄뿐이다.★
+            #   ★보수적이다: engine_desk.not_here_words 는 화제어 + 부탁하는 말투가
+            #     둘 다 있어야 참이다. 오검이 나면 로드맵 숫자가 오염된다.
+            _wish_word = _desk.not_here_words(t)
+            _wish_noted = False
+            if _wish_word:
+                _wish_noted = _note_wish(project_id, t, f"사용자 원문({_wish_word})")
+                _n2.reach("WISH-WORDS/" + _wish_word)
             # ★[FIX-CORRECT 2026-08-11] "아니야, 그거 말고 A60이야" — 정정.
             #   여기가 단일 초크포인트다. 착수 실측에서 정정은 ★두 모양★으로
             #   깨졌다: (가) 결이 remove_fragment 를 골라 새 것만 빼고 잘못 뺀
@@ -5890,15 +5932,10 @@ def _chat_only_speed_bypass(input_text: str, project_id: str = None,
                               "reason": "장면 번호 근거 없음"}
             # 아직 못 하는 일 — 벽이 아니라 문. 적어 두고 대화를 잇는다.
             if _r and _r["cap"] is None and _r["reason"] == "아직":
-                from engine import timeline_store as _ts
-                import time as _tt
-                _ts.append_entries(project_id, [{
-                    "kind": "wish",
-                    "client_id": f"wish_{int(_tt.time() * 1000)}",
-                    "ts": _tt.time() * 1000,
-                    "payload": {"said": t[:200]},
-                }])
-                print(f"[DESK][WISH] 적어 뒀다: {t[:40]!r}")
+                # [WISH-1] 원문이 이미 적어 뒀으면 두 번 적지 않는다(원장이 부풀면
+                #   그 숫자로 순위를 매길 수 없다).
+                if not _wish_noted:
+                    _wish_noted = _note_wish(project_id, t, "결이 아직이라고 골랐다")
                 return {
                     "status": "OK", "action": "answer_only",
                     "normalized_instruction": None,
@@ -5916,18 +5953,10 @@ def _chat_only_speed_bypass(input_text: str, project_id: str = None,
                 # [NIGHT-1 2026-08-09] 결이 "없는 일"이라고 정직하게 답한 것도
                 #   wish 로 남긴다. 지금까지는 답만 하고 흘렀다 — 다음에 뭘 만들지
                 #   근거가 안 쌓였다(밤 실측: 20건 가까이 있었는데 목록엔 0건).
-                if _r["reason"] == "없는 일":
-                    try:
-                        from engine import timeline_store as _ts2
-                        import time as _tt2
-                        _ts2.append_entries(project_id, [{
-                            "kind": "wish",
-                            "client_id": f"wish_{int(_tt2.time() * 1000)}",
-                            "ts": _tt2.time() * 1000,
-                            "payload": {"said": t[:200]},
-                        }])
-                    except Exception as _e:
-                        print(f"[DESK][WARN] wish 기록 실패: {_e}")
+                # [WISH-1] 원문이 이미 적어 뒀으면 두 번 적지 않는다.
+                if _r["reason"] == "없는 일" and not _wish_noted:
+                    _wish_noted = _note_wish(project_id, t,
+                                             "결이 없는 일이라고 골랐다")
                 # [NIGHT-1 2026-08-09] 도구 선택과 말은 따로 판단한다(병렬).
                 #   도구 쪽은 "없는 일"이라고 정확히 골랐는데 말 쪽은 그걸 모른
                 #   채 "알겠습니다, 2배속으로 설정하겠습니다" 라고 답한 사고가

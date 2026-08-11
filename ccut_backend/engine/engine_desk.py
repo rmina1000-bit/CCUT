@@ -265,6 +265,59 @@ WISH_SAY = ("그건 아직 제가 못 해요. 다만 적어 뒀으니 만들 수
             "지금 할 수 있는 일로 도와드릴까요?")
 
 
+# ★[WISH-1 2026-08-12] 읽는 쪽 — 사용자의 ★원문★이 위 NOT_HERE 계열에 닿는가.
+#
+# 왜 필요한가(실측 2026-08-11 · 일곱 점):
+#   C=json  (gemma3:4b)      '2배속으로 해줘'·'1080p로 뽑아줘' → 결이 not_here 를 골라
+#                            reason="없는 일" → main.py 가 wish 원장에 적는다.
+#   C=tools (젬마4 네이티브)  같은 말에 도구를 ★안 부르고★ 산문으로 정직하게 거절한다.
+#                            그러면 cap=None·reason="" 이라 원장에 한 줄도 안 남는다(kind 0/3).
+#   ★결이 틀린 게 아니다. 도구가 필요 없는 말에 도구를 안 부른 것이고, 거짓 약속도
+#     안 했다. 억지로 not_here 를 부르게 강제하면 지금 없는 병(거짓 약속)이 되살아난다.
+#   그런데 이 원장이 로드맵 순위의 유일한 근거다(자막 12·BGM 9·색보정 7 = 천 명의 밤).
+#   C=tools 를 제품에 넣으면 그 근거가 통째로 사라진다.
+#
+# ★그래서 결에게 검문을 세우지 않는다 — ★읽는 쪽★을 넓힌다.
+#   결이 무엇을 골랐든, 사용자가 무엇을 부탁했는지는 사용자의 원문에 있다.
+#   desk_hands._route_by_words 가 손을 바로잡을 때 쓴 것과 같은 규율이고,
+#   이쪽은 손도 말도 안 건드린다 — ★원장에만 적는다.★
+#
+# ★보수적이다(오검이 로드맵 숫자를 오염시킨다):
+#   화제어 하나만으로는 안 적는다. '부탁하는 말투'가 함께 있어야 한다.
+#   ('이 장면 음악 좋다' 같은 감상에 wish 가 쌓이면 이 원장은 못 믿을 물건이 된다.)
+#   ★목록 자체는 NOT_HERE 하나에서 온다 — 여기 있는 것은 그 목록을 사용자 말투로
+#     읽는 눈이지, 두 번째 목록이 아니다.
+_NH_TOPIC = [
+    ("자막", r"자막"),
+    ("색 보정", r"색\s*보정|색감|색온도|색깔|채도|화이트\s*밸런스"),
+    ("밝기·대비", r"밝기|대비|명암"),
+    ("소리", r"볼륨|음량|소리\s*크기|소리\s*좀|소리를?\s*(?:키|줄|높|낮)|잡음|노이즈"),
+    ("효과", r"전환\s*효과|화면\s*효과|이펙트"),
+    ("속도", r"배속|재생\s*속도|속도\s*(?:조절|를|좀)|느리게\s*재생|빠르게\s*재생"),
+    ("음악", r"음악|브금|bgm|배경음"),
+    ("해상도", r"해상도|화질|\d{3,4}\s*p(?![a-z])|4k|8k"),
+    ("프레임레이트", r"프레임\s*레이트|프레임률|fps"),
+]
+_NH_ASK = re.compile(
+    r"해\s*줘|해줄|해\s*주세|해\s*드|넣어|넣을|넣고|바꿔|바꿀|바꾸|올려|높여|낮춰|"
+    r"줄여|키워|조절|제거|없애|맞춰|뽑아|만들어|적용|가능(?:해|한|할)|되나|될까|"
+    r"할\s*수\s*있|하고\s*싶|부탁", re.I)
+
+
+def not_here_words(text):
+    """사용자 원문이 '이 편집실에 손이 없는 일'에 닿는가 → 닿으면 이름, 아니면 None.
+
+    ★판단하지 않는다. 세지도 않는다. 원장에 적을지만 고른다.
+    """
+    t = str(text or "")
+    if not _NH_ASK.search(t):
+        return None
+    for name, pat in _NH_TOPIC:
+        if re.search(pat, t, re.I):
+            return name
+    return None
+
+
 def _voice_model():
     """[GEMMA4 2026-08-11] 결의 목소리 모델. 축(CCUT_NIGHT2_MODEL)이 없으면
     hub.VOICE_MODEL 그대로다 — 이 파일의 모든 결 호출이 이 한 자리를 본다.
@@ -350,6 +403,70 @@ def _voice_blocks(v):
 #   (틀리면 죽이지 않는다 — ★시끄럽게 말한다.★ 밤 실험이 조용히 오염되는 것보다
 #    로그 한 줄이 낫다.)
 _VOICE_KEEP_SHA = "7d8c4b9c5e0640dd"
+_VOICE_KEEP_LOOK_DONE_SHA = "85247dde450087c1"     # [WISH-1] look·say_done 머리
+
+
+# ★[WISH-1 2026-08-12] V축이 물리는 자리가 ★셋★이 됐다.
+#
+#   decide      (_voice_blocks)     결이 무엇을 할지 정하고 말하는 머리
+#   look        (_voice_look_head)  장면 지도를 펴고 답하는 머리
+#   say_done    (_voice_done_head)  한 일을 국장에게 전하는 머리   ← 화면의 마지막 말
+#
+# 왜 셋이어야 하나(국장 판정 2026-08-12): V=hands 가 반쪽이었다. decide 에서만
+#   "손은 네 손"이라고 배우고, 정작 손이 ★실행된 뒤★ 화면에 나가는 문장은
+#   say_done 이 만드는데 그 머리는 여전히 "편집하는 손은 CCUT이 갖고 있고,
+#   너는 CCUT에게 시킨 쪽이다"라고 가르쳤다. 그래서 V=hands 로 돌려도 화면에는
+#   "CCUT이 말씀하신 대로 마지막 조각을 빼서…" 가 나갔다.
+#
+# ★국장 판정: "CCUT과 나는 다르다"는 남기고 "손은 CCUT이 갖고 있다"만 뺀다.
+#   정체성과 능력은 다른 것이고, 결이 후자를 "나는 못 한다"로 배웠다.
+#   → 이름(결)·"너는 CCUT이 아니다, CCUT에서 일하는 동료다"는 세 값 모두 남는다.
+#
+# ★줄을 늘리지 않고 ★바꾼다.★ 프롬프트 줄은 4B 에 누적으로 누른다
+#   (실측: 목소리 머리 1,600자 → 도구 호출 0/12 · 능력 설명 199자 추가 → 옆 손 사망).
+#   hands 머리는 keep 보다 ★짧다.★
+def _voice_look_head(v):
+    """장면 지도 답(look)의 정체성 머리. keep = 옛 문자열 그대로."""
+    if v == "hands":
+        return (
+            f"너는 '{AI_NAME}'이다. 사람들은 너를 {AI_CALL}라고 부른다.\n"
+            "너는 CCUT이 아니다 — CCUT 편집실에서 일하는 동료다.\n"
+            "편집하는 손은 네 손이다. 네가 한 일은 네가 했다고 말한다.\n\n")
+    if v == "bare":
+        return "영상 편집실이다. 사용자의 물음에 답해라.\n\n"
+    return (
+        f"너는 '{AI_NAME}'이다. 사람들은 너를 {AI_CALL}라고 부른다.\n"
+        "너는 CCUT이 아니다 — CCUT 편집실에서 일하는 동료다. 편집하는 손은\n"
+        "CCUT이 갖고 있고, 너는 CCUT과 단짝이지만 한 사람은 아니다.\n"
+        "CCUT 이야기를 할 때는 남 이야기하듯 한다 — \"CCUT이 …했어요\",\n"
+        "\"제가 CCUT한테 …해 볼게요\".\n\n")
+
+
+def _voice_done_head(v):
+    """한 일 보고(say_done)의 정체성 머리. keep = 옛 문자열 그대로."""
+    if v == "hands":
+        return (
+            f"너는 '{AI_NAME}'이고 CCUT 편집실에서 일한다. 너는 CCUT이 아니다.\n"
+            "편집하는 손은 네 손이다. 방금 네가 해 놓은 일을 사용자에게 전한다 —\n"
+            "\"…했어요\" 처럼 네가 한 일로 말한다.\n")
+    if v == "bare":
+        return "방금 한 일을 사용자에게 전한다.\n"
+    return (
+        f"너는 '{AI_NAME}'이고 CCUT 편집실에서 일한다. 너는 CCUT이 아니다.\n"
+        "편집하는 손은 CCUT이 갖고 있고, 너는 CCUT에게 시킨 쪽이다.\n"
+        "방금 CCUT이 해 놓은 일을 사용자에게 전한다 — 남 이야기하듯,\n"
+        "\"CCUT이 …했어요\", \"제가 CCUT한테 시켜서 …됐어요\" 처럼.\n")
+
+
+def _done_subject(v):
+    """서버가 대신 말할 때의 주어. ★이것도 화면에 나가는 문장이다.★
+
+    say_done 의 LLM 답이 실패하거나 NUM-GUARD 에 강등되면 서버 문장이 그대로
+    화면에 나간다. 머리만 바꾸고 여기를 안 바꾸면 V=hands 인데 화면에는
+    "CCUT이 …했어요" 가 남는다 — 반쪽이 그대로다.
+    keep = "CCUT이 " (옛 문자열 그대로) / hands·bare = 결 자신이 한 일로.
+    """
+    return "CCUT이 " if v == "keep" else ""
 
 
 def _voice_keep_selfcheck():
@@ -361,7 +478,15 @@ def _voice_keep_selfcheck():
         print(f"[GEMMA4][★주의★] V=keep 목소리 머리가 달라졌다 — 박아 둔 값 "
               f"{_VOICE_KEEP_SHA} ≠ 지금 {h}. 기본 동작이 바뀌었다는 뜻이다.",
               flush=True)
-    return h
+    # ★[WISH-1] 새로 축에 물린 두 머리도 같은 방식으로 못 박는다.
+    #   (여기서 조용히 한 글자가 바뀌면 V=keep 이 '현행'이 아니게 된다.)
+    h2 = hashlib.sha1(
+        (_voice_look_head("keep") + _voice_done_head("keep")
+         + _done_subject("keep")).encode("utf-8")).hexdigest()[:16]
+    if h2 != _VOICE_KEEP_LOOK_DONE_SHA:
+        print(f"[WISH-1][★주의★] V=keep 의 장면지도·보고 머리가 달라졌다 — 박아 둔 값 "
+              f"{_VOICE_KEEP_LOOK_DONE_SHA} ≠ 지금 {h2}.", flush=True)
+    return h, h2
 
 
 # ★import 때 한 번 — "정의는 있는데 호출처 0건"을 만들지 않는다(CLAUDE.md).
@@ -946,13 +1071,12 @@ def look(user_text, scene_lines, recent_messages=None, project_id=""):
     #   없으면 decide 에 아무리 적어도 사라진다(실측: '넌 누구야?' 에
     #   "저는 CCUT 편집실의 통역사입니다" — 이름도 집안일도 안 나왔다).
     from engine import house_talk as _ht
+    # ★[WISH-1 2026-08-12] V축 — 정체성 머리만 갈아 끼운다. keep 은 옛 문자열 그대로라
+    #   기본에서 이 프롬프트가 한 바이트도 안 달라진다(_voice_keep_selfcheck 가 확인).
+    from engine import night2_probe as _n2v
     prompt = (
-        f"너는 '{AI_NAME}'이다. 사람들은 너를 {AI_CALL}라고 부른다.\n"
-        "너는 CCUT이 아니다 — CCUT 편집실에서 일하는 동료다. 편집하는 손은\n"
-        "CCUT이 갖고 있고, 너는 CCUT과 단짝이지만 한 사람은 아니다.\n"
-        "CCUT 이야기를 할 때는 남 이야기하듯 한다 — \"CCUT이 …했어요\",\n"
-        "\"제가 CCUT한테 …해 볼게요\".\n\n"
-        "아래는 CCUT이 이 영상을 장면 단위로 훑어 준 지도다. **여기 적힌 것만**\n"
+        _voice_look_head(_n2v.axis_v())
+        + "아래는 CCUT이 이 영상을 장면 단위로 훑어 준 지도다. **여기 적힌 것만**\n"
         "사실이다. 적혀 있지 않은 것은 '없다' 또는 '확인되지 않는다'고 말한다. "
         "조각 번호를 지어내지 마라.\n\n"
         f"[장면 지도]\n{scene_lines}\n\n"
@@ -1037,9 +1161,16 @@ def say_done(facts, user_text, recent_messages=None):
     """
     from engine import hub
     from engine.intent_router import _sanitize_talk
+    # ★[WISH-1 2026-08-12] V축 — 이 함수가 ★손이 움직인 뒤 화면에 나가는 말★을 만든다.
+    #   keep 은 아래 문자열 전부 옛 것 그대로다(_voice_keep_selfcheck 가 못 박는다).
+    from engine import night2_probe as _n2v
+    _v = _n2v.axis_v()
+    _sub = _done_subject(_v)                    # keep="CCUT이 " / hands·bare=""
     if not facts.get("ok"):
         why = facts.get("why") or "지금은 못 한다"
-        return f"CCUT이 그건 못 한대요 — {why}. 어떻게 할까요?"
+        if _v == "keep":
+            return f"CCUT이 그건 못 한대요 — {why}. 어떻게 할까요?"
+        return f"그건 못 해요 — {why}. 어떻게 할까요?"
 
     # [EXPORT-1 2026-08-09] 내보내기 승인 문구·완료 Receipt은 그대로 말한다.
     #   LLM 의역을 거치지 않는다 — 안전벨트①③이 요구하는 숫자(조각 수·길이·
@@ -1062,7 +1193,7 @@ def say_done(facts, user_text, recent_messages=None):
         _ac = head.get("after_count", facts.get("after"))
         fact_line = (f"방금 한 일: {head.get('what')} "
                      f"({_bc}조각 → {_ac}조각)")
-        server = (f"네, CCUT이 {head.get('what')} 지금 {_ac}조각입니다.")
+        server = (f"네, {_sub}{head.get('what')} 지금 {_ac}조각입니다.")
     elif facts.get("op") == "reorder":
         # [HANDS-2 2026-08-09] 순서를 바꾸면 조각 수는 안 변한다.
         #   "5조각 → 5조각"이라고 대면 결이 '아무것도 안 됐다'로 읽고
@@ -1072,7 +1203,7 @@ def say_done(facts, user_text, recent_messages=None):
             _mv = f", {facts['from_pos']}번째에 있던 것이 {facts['to_pos']}번째로"
         fact_line = (f"방금 한 일: {facts['what']} "
                      f"(조각 수는 {facts['after']}개 그대로, 순서만 바뀜{_mv})")
-        server = f"CCUT이 {facts['what']}"
+        server = f"{_sub}{facts['what']}"
     elif facts.get("op") == "correct":
         # ★[FIX-CORRECT 2026-08-11] 정정은 두 일이 한 턴에 일어난다(무르기+새로
         #   빼기). 조각 수는 대개 그대로라, 순서 손과 같은 함정이 있다 —
@@ -1081,7 +1212,7 @@ def say_done(facts, user_text, recent_messages=None):
         fact_line = (f"방금 한 일: {facts['what']} "
                      f"(잘못 뺀 것은 원고로 돌아왔고 대신 다른 조각이 빠졌다 — "
                      f"지금 {facts['after']}조각)")
-        server = f"CCUT이 {facts['what']} 지금 {facts['after']}조각이에요."
+        server = f"{_sub}{facts['what']} 지금 {facts['after']}조각이에요."
     elif facts.get("op") in ("trim", "exclude", "edit_undo"):
         # [HANDS-2 2026-08-09] 좌표를 건드리는 손도 조각 수가 안 변한다.
         #   순서 손과 같은 자리 — 바뀐 것은 수가 아니라 길이다. 길이를 사실로 준다.
@@ -1089,11 +1220,11 @@ def say_done(facts, user_text, recent_messages=None):
         fact_line = (f"방금 한 일: {facts['what']} "
                      f"(그 조각 길이 {facts.get('len_before_text')} → "
                      f"{facts.get('len_after_text')}, 조각 수는 {facts['after']}개 그대로)")
-        server = f"CCUT이 {facts['what']}"
+        server = f"{_sub}{facts['what']}"
     else:
         fact_line = (f"방금 한 일: {facts['what']} "
                      f"({facts['before']}조각 → {facts['after']}조각)")
-        server = (f"CCUT이 {facts['what']} {facts['before']}조각 → "
+        server = (f"{_sub}{facts['what']} {facts['before']}조각 → "
                   f"{facts['after']}조각이에요.")
     # ★[HANDS-2 2026-08-09] NUM-GUARD 의 allow 를 손으로 나열하지 않는다.
     #   before/after 두 개만 허용하던 탓에, 손이 새 숫자를 사실로 준
@@ -1120,11 +1251,8 @@ def say_done(facts, user_text, recent_messages=None):
                 pass
 
     prompt = (
-        f"너는 '{AI_NAME}'이고 CCUT 편집실에서 일한다. 너는 CCUT이 아니다.\n"
-        "편집하는 손은 CCUT이 갖고 있고, 너는 CCUT에게 시킨 쪽이다.\n"
-        "방금 CCUT이 해 놓은 일을 사용자에게 전한다 — 남 이야기하듯,\n"
-        "\"CCUT이 …했어요\", \"제가 CCUT한테 시켜서 …됐어요\" 처럼.\n"
-        f"사용자가 한 말: \"{(user_text or '')[:100]}\"\n"
+        _voice_done_head(_v)
+        + f"사용자가 한 말: \"{(user_text or '')[:100]}\"\n"
         f"{fact_line}\n"
         "이미 다 한 상태다 — 해도 되는지 묻지 마라. 위 숫자를 그대로 넣어 "
         "1~2문장으로 알리고, 마음에 안 들면 되돌릴 수 있다는 걸 알려라.\n"
