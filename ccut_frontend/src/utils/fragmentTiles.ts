@@ -122,3 +122,37 @@ export function rebuildFragmentTiles<T extends Record<string, any>>(
   }
   return out;
 }
+
+/**
+ * // [HANDS-3 2026-08-10] 조각 **풀**에 편집 좌표만 입힌다 — 빠진 조각도 남긴다.
+ *
+ * rebuildFragmentTiles 와 하는 일이 같되 딱 한 가지가 다르다: tilesForRoot 가
+ * removed 뿌리를 배열에서 **지우는데**(:56), 풀에서 지우면 되살리기가 깨진다.
+ * 국장 조각맵(FragmentMap storyOnly)은 풀을 fid → 조각 사전으로 쓰고
+ * storyFragmentIds 로 골라 그린다(FragmentMap.tsx:174-180). 되살린 fid 가
+ * 풀에 없으면 그 타일은 화면에 못 돌아온다 — "되살렸어요"라고 말해 놓고
+ * 화면은 그대로인 바로 그 모양이다.
+ *
+ * 무엇을 빼고 무엇을 넣을지(선택·순서)는 storyFragmentIds 가 이미 정한다.
+ * 여기서는 **길이와 잘린 자리**만 진실로 맞춘다 — 층을 안 넘는다.
+ */
+export function applyEditGeometry<T extends Record<string, any>>(
+  fragments: T[],
+  states: EditStateRow[],
+  preferredItemIdFor?: (rootFid: string) => string,
+): T[] {
+  const seen = new Set<string>();
+  const out: T[] = [];
+  for (const fr of fragments) {
+    const fid = rootFidOf(fr);
+    if (!fid) { out.push(fr); continue; }
+    if (seen.has(fid)) continue;
+    seen.add(fid);
+    const st = stateForRoot(fid, fr, states, preferredItemIdFor);
+    const rep = rootRepOf(fr, st);
+    const tiles = tilesForRoot(rep, st);
+    // removed / spans 0 → tilesForRoot 는 [] 를 준다. 풀에서는 뿌리를 남긴다.
+    out.push(...(tiles.length ? tiles : [rep]));
+  }
+  return out;
+}

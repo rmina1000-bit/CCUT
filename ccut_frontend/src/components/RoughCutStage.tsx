@@ -34,6 +34,8 @@ const RETRY_DELAYS_MS = [5000, 10000, 20000, 40000, 60000];
 
 const ANALYZING_MESSAGE = "지금은 분석 중입니다. 영상에서 조각을 만들고 있어요.";
 const NO_TRANSCRIPT_MESSAGE = "이 영상은 전사가 부족해 가편집을 만들 수 없습니다.";
+/** [SPEED-P0 2026-08-09] 아직 만든 적 없는 프로젝트. 자동으로 만들지 않는다 — 아래 사유. */
+const NEEDS_BUILD_MESSAGE = "아직 거친 편집본이 없습니다.";
 
 /** 응답을 '아직(전사 미완)'과 '진짜 없음'으로 가른다.
  *  서버의 422 insufficient_text 판정은 건드리지 않는다 — 읽는 시점만 옮긴다. */
@@ -76,12 +78,17 @@ const RoughCutStage: React.FC<RoughCutStageProps> = ({
   // [FIRST-RUN 2026-08-04] 재시도 상태. 프로젝트가 바뀌면 전부 처음으로 돌아간다.
   const [exhausted, setExhausted] = useState(false);
   const [manualRetryTick, setManualRetryTick] = useState(0);
+  // [SPEED-P0 2026-08-09] 거친 편집본을 '만들' 권한은 국장 손에만 있다. 0 = 아직 안 눌렀다.
+  const [buildTick, setBuildTick] = useState(0);
+  const [needsBuild, setNeedsBuild] = useState(false);
   const loadedForRef = useRef<string | null>(null);
   const attemptRef = useRef(0);
   useEffect(() => {
     loadedForRef.current = null;
     attemptRef.current = 0;
     setExhausted(false);
+    setBuildTick(0);        // [SPEED-P0] 프로젝트가 바뀌면 '만들기' 승인도 따라가지 않는다.
+    setNeedsBuild(false);
   }, [projectId]);
 
   // [TRANSCRIPT-FOLD 2026-08-01] 전사 제목 + 접기.
@@ -125,6 +132,19 @@ const RoughCutStage: React.FC<RoughCutStageProps> = ({
           `/api/rough-cut/project/${encodeURIComponent(projectId)}`,
         );
         if (response.status === 404) {
+          // ★[SPEED-P0 2026-08-09] 여기서 자동으로 POST 하던 자리다. 끊는다.
+          //   POST 는 rough-cut 2pass = qwen2.5:7b@8192(4.8GiB)를 기동시킨다.
+          //   RX 6600M 8.0GiB 에서는 대화 목소리 gemma3:4b@16384(5.8GiB)와 공존이
+          //   불가능해 서로 축출한다(실측 2026-08-09: 축출 사슬 13:26:19→13:36:29,
+          //   로드마다 6~9s). 그 대가가 국장 화면의 first_out_ms=69664 였다.
+          //   격리 재현: 대화 단독 2.6s → qwen 동시 기동 20.5s (8배).
+          //   국장이 사이드바에서 프로젝트를 여는 것은 "가편집을 만들어라"가 아니다.
+          //   만드는 것은 버튼으로 옮긴다 — 이미 만든 프로젝트는 GET 200(161ms)이라 무영향.
+          if (buildTick === 0) {
+            if (active) { setNeedsBuild(true); setError(NEEDS_BUILD_MESSAGE); }
+            return;
+          }
+          if (active) setNeedsBuild(false);
           response = await fetch(
             `/api/rough-cut/project/${encodeURIComponent(projectId)}`,
             { method: "POST" },
@@ -194,7 +214,7 @@ const RoughCutStage: React.FC<RoughCutStageProps> = ({
     // [FIRST-RUN 2026-08-04] analysisReady 가 deps 에 있다 = 조각화가 끝나는 순간 자동 재발사.
     //   이것이 주 경로이고 RETRY_DELAYS_MS 백오프는 신호가 안 올 때의 안전망이다.
     //   manualRetryTick 은 상한 도달 뒤 사용자가 '다시 시도'를 눌렀을 때만 움직인다.
-  }, [onData, projectId, analysisReady, manualRetryTick]);
+  }, [onData, projectId, analysisReady, manualRetryTick, buildTick]);
 
   useEffect(() => {
     let active = true;
@@ -341,6 +361,23 @@ const RoughCutStage: React.FC<RoughCutStageProps> = ({
         data-rough-cut-error={error || "empty"}
       >
         <span>{error || "전사를 불러오지 못했습니다."}</span>
+        {/* [SPEED-P0 2026-08-09] 만들기는 국장이 누른다. 프로젝트를 여는 것만으로
+            qwen2.5:7b 가 GPU 를 잡아 대화를 8배 느리게 만들던 자동 발사를 대체한다. */}
+        {needsBuild ? (
+          <button
+            type="button"
+            data-rough-cut-build="idle"
+            className="rounded-md border border-border px-3 py-1 text-[12px] text-foreground/80 hover:bg-muted"
+            onClick={() => {
+              setError(null);
+              setNeedsBuild(false);
+              loadedForRef.current = null;
+              setBuildTick((n) => n + 1);
+            }}
+          >
+            거친 편집본 만들기
+          </button>
+        ) : null}
         {/* [FIRST-RUN 2026-08-04] 자동 재시도 상한에 닿았을 때만 나온다. 평소엔 사람 손이 필요 없다. */}
         {exhausted ? (
           <button

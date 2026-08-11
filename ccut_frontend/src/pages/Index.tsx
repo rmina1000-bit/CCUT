@@ -63,7 +63,7 @@ import {
   type EditStateRow,
 } from "@/utils/editContractClient";
 // [R2] 조각맵 분할 표시 = 상태의 순수 파생 — Apply 경로와 재수화 경로가 같은 함수를 쓴다
-import { rebuildFragmentTiles } from "@/utils/fragmentTiles";
+import { rebuildFragmentTiles, applyEditGeometry } from "@/utils/fragmentTiles";  // [HANDS-3]
 import { rematchAnchor, toMs } from "@/utils/editContract";
 import { buildExportClipsFromResolvedFragments, type PhysicalClip } from "@/utils/exportClipBuilder";
 import { DEBUG_LOG } from "@/utils/debugFlags";
@@ -3048,6 +3048,21 @@ const Index: React.FC = () => {
   // [STORY-ANCHOR] 위쪽 fidAnchorsOf 가 읽는 ref — 풀이 바뀔 때마다 채운다.
   useEffect(() => { roughCutFragmentPoolRef.current = roughCutFragmentPool; }, [roughCutFragmentPool]);
 
+  // [HANDS-3 2026-08-10] 국장이 보는 조각맵에 편집 상태를 입힌다.
+  //   실측한 자리: modeGate 조각맵은 roughCutFragmentPool 을 그대로 받는데,
+  //   그 풀은 rebuildFragmentTiles 를 통과하지 않는다(editFragments ∪ 소스 조각).
+  //   그래서 trim·exclude 로 DB 는 바뀌어도 타일 길이는 그대로였다 — 결은
+  //   "2초 덜어냈어요"라고 말하고 화면은 안 변하는 상태.
+  //   ★rebuildFragmentTiles 대신 applyEditGeometry 를 쓴 이유:
+  //     tilesForRoot 가 removed 뿌리를 배열에서 지우는데(fragmentTiles.ts:56),
+  //     풀에서 지우면 FragmentMap 이 fid 로 못 찾아 **되살리기가 깨진다**
+  //     (FragmentMap.tsx:174-180 이 풀을 fid 사전으로 쓴다).
+  //     선택·순서는 storyFids 가 이미 정하니, 풀에는 좌표만 입힌다.
+  const roughCutFragmentPoolEdited = useMemo(() => {
+    if (!editContractV2 || editStatesList.length === 0) return roughCutFragmentPool;
+    return applyEditGeometry(roughCutFragmentPool as any[], editStatesList, preferredPbeItemIdFor) as typeof roughCutFragmentPool;
+  }, [roughCutFragmentPool, editContractV2, editStatesList, preferredPbeItemIdFor]);
+
   const roughCutFragmentForSpan = useCallback((span: RoughCutSpan): Fragment | null => {
     const spanStart = span.start_ms / 1000;
     const spanEnd = span.end_ms / 1000;
@@ -3139,6 +3154,15 @@ const Index: React.FC = () => {
     console.info("[HANDS][SCREEN]", { before: storyFidsRef.current.length,
                                       after: fids.length });
     applyStory(roughCutFragmentsForFids(fids), fids);
+    // [HANDS-3 2026-08-10] 수가 안 변하는 손(trim·exclude·되돌리기)은 위 한 줄로는
+    //   아무것도 안 바뀐다 — before==after 이고 fids 도 같으니 어떤 state 도 안
+    //   움직인다. 그래서 국장 화면에서 "2초 덜어냈어요"만 뜨고 타일은 그대로였다.
+    //   조각맵이 읽는 진실(edit_state)과 결과화면이 읽는 진실(EDL)을 함께 다시
+    //   읽는다 — PBE 경로(:2881-2900)·텍스트편집 경로가 이미 쓰는 세 줄과 같은 모양.
+    void refreshEditStatesRef.current?.()
+      .catch((e) => console.error("[HANDS][SCREEN] edit-state 재조회 실패", e));
+    refreshLedgerEdlRef.current?.();
+    setStoryLedgerRefreshNonce((n) => n + 1);
   };
 
   // [STORY-ANCHOR 2026-08-01] 치유: 복원된 원고에 현행 조각에 없는 fid 가 있으면
@@ -3251,10 +3275,21 @@ const Index: React.FC = () => {
     }
     if (fids.length === 0) return;
 
+    // [HANDS-3 2026-08-10] 배치 표식은 언제나 남긴다. 여기서 통짜로 return 하면
+    //   roughCutPlacement 가 안 세워져 이 effect 가 계속 재발화하고 ui_state 에도
+    //   안 남는다 — 가편집 기능을 죽이는 길이다.
     setRoughCutPlacement({
       inputHash: roughCutData.input_hash ?? null,
       selectedSpanIds: roughCutData.ordered_span_ids,
     });
+    // ★씨앗은 **원고가 비어 있을 때만** 깐다. 국장 조건(ui_state.story.fids 가
+    //   이미 있고 승인 원장과 다름)에서 이 세 줄이 그대로 돌면, 사용자가 말로
+    //   만들어 놓은 원고를 전사 순서 씨앗이 덮어쓴다 — 손이 바꾼 것이 화면에서
+    //   되돌아가는 모양이다. 보호 패턴은 :3640-3657 과 같다(storyFidsRef 확인).
+    if (storyFidsRef.current.length > 0) {
+      console.info(`[ROUGH-CUT-PLACEMENT] ${activeNavItem}: 이미 원고 ${storyFidsRef.current.length}조각이 있어 씨앗을 안 깐다 (배치 표식만 남김)`);
+      return;
+    }
     setStoryFragments(fragments);
     setStoryFids(fids);
     storyFidsRef.current = fids;
@@ -4788,7 +4823,9 @@ const Index: React.FC = () => {
                 {modeGateOn && precisionPaneMode === "edit" ? (
                   <div data-precision-pane="edit" className="h-full min-h-[220px] text-left">
                     <FragmentMap
-                      fragments={roughCutMapReady ? roughCutFragmentPool : []}
+                      /* [HANDS-3] 편집 좌표를 입힌 풀 — 되살리기를 안 깨뜨리려고
+                         removed 뿌리는 남긴다(applyEditGeometry). */
+                      fragments={roughCutMapReady ? roughCutFragmentPoolEdited : []}
                       storyFragmentIds={roughCutMapReady ? storyFids : []}
                       storyOnly
                       // [EDIT-LOCK-2] 순서도 이야기에서 정한다 — 편집 자리에서는 되묻는다.
