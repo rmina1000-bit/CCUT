@@ -54,7 +54,16 @@ _KINDS = ("message", "generation", "transcript_ref",
           #   지금까지 이런 건 콘솔에만 찍혀서 개발자만 알았다. 같은 집에 사는
           #   AI 도 몰랐다. 이제 같은 관에 태워 AI 의 귀에 들어가게 한다.
           #   ★말할지 말지는 AI 가 정한다. 여기서 거르지 않는다.
-          "system_event")
+          "system_event",
+          # [EXPORT-1 2026-08-09] "편집한 대로 결과가 나온다" 관통 — 내보내기.
+          #   export_propose: 승인 문구를 보이기 직전, 그 순간의 편집 상태
+          #     지문(snapshot)을 적어 둔다. confirm 시 이걸 다시 읽어 실행 직전
+          #     상태와 비교한다(안전벨트②) — 없으면 "승인한 것"이 무엇인지
+          #     아무도 증명할 수 없다.
+          #   export_done: 렌더가 끝난 뒤의 Receipt — 산출물 경로·크기·길이·
+          #     조각수. 등록을 빠뜨리면 위 hand_done 사고가 그대로 반복된다
+          #     (조용히 drop, append_entries 의 `if kind not in _KINDS: continue`).
+          "export_propose", "export_done")
 
 
 def _connect():

@@ -397,8 +397,25 @@ def _parse_targets(text, fragment_labels, fids):
     return targets
 
 
-def _apply_state(program_id, fid, source_id, anchor, trim, command, before_state=None):
-    """서버측 upsert — 프론트 [해봐] 핸들러와 동일 절차(현재 revision 재조회)."""
+def _apply_state(program_id, fid, source_id, anchor, trim, command, before_state=None,
+                 excluded_ranges=None):
+    """서버측 upsert — 프론트 [해봐] 핸들러와 동일 절차(현재 revision 재조회).
+
+    ★[HANDS-2 2026-08-09] before_state 는 '치환'이 아니라 '부분 덮어쓰기'다.
+      전에는 before_state 를 주면 그 dict 가 통째로 이겼다(:423) — 그래서
+      _mark 가 보내는 {"excluded_ranges": [], "removed": …} 한 줄이 사용자가
+      화면에서 건 excluded_ranges 를 **빈 리스트로 확정**해 지웠다.
+      trim 도 인자를 무조건 덮어써서, _mark 가 anchor 를 trim 자리에 넣는 순간
+      사용자 trim 이 사라졌다. 실측(수리 전, proj_sim_hands2):
+        trim=(634000,648000) excluded=[[640000,642000]] 인 조각을
+        remove_ordinal 로 뺐더니 → trim=(632000,650000) excluded=[]
+        되살려도 안 돌아온다(값 자체가 없어졌다).
+      그래서 두 가지를 정의한다:
+        · trim=None            → "현재 값 유지"
+        · excluded_ranges=None → "현재 값 유지"(명시하면 그 값으로 교체)
+        · before_state         → 준 키만 덮어쓴다(안 준 키는 현재 값)
+      removed 는 여전히 명시값으로 간다 — REMOVE/RESTORE 무력화 없음.
+    """
     from edit_contract import service as _edit
     import ledger_r0
     item_id = f"ITEM_{ledger_r0._hash6(program_id)}_{fid}_0"
@@ -416,12 +433,15 @@ def _apply_state(program_id, fid, source_id, anchor, trim, command, before_state
               if row else
               {"trim_start_ms": anchor[0], "trim_end_ms": anchor[1],
                "excluded_ranges": [], "removed": False})
+    merged = {**before, **(before_state or {})}      # [HANDS-2] 부분 덮어쓰기
+    tr = tuple(trim) if trim else (before["trim_start_ms"], before["trim_end_ms"])
     payload = {
         "program_id": program_id, "timeline_item_id": item_id, "source_id": source_id,
         "anchor_start_ms": anchor[0], "anchor_end_ms": anchor[1],
-        "trim_start_ms": trim[0], "trim_end_ms": trim[1],
-        "excluded_ranges": (before_state or before)["excluded_ranges"],
-        "removed": bool((before_state or {}).get("removed", False)),
+        "trim_start_ms": tr[0], "trim_end_ms": tr[1],                 # [HANDS-2]
+        "excluded_ranges": (excluded_ranges if excluded_ranges is not None
+                            else merged["excluded_ranges"]),          # [HANDS-2]
+        "removed": bool(merged["removed"]),                           # [HANDS-2]
         "parent_fragment_id": fid, "occurrence": 0,
         "command_type": command, "origin": "NATURAL_LANGUAGE",
     }

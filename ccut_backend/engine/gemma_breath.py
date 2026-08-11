@@ -101,6 +101,28 @@ def world(program_id, fragment_labels=None, with_scenes=True):
     label_of = {}
     for disp, fid in (fragment_labels or {}).items():
         label_of[str(fid)] = str(disp)
+    # ★[GHOST-16 2026-08-09 국장 화면] 결이 몰랐던 사실 하나를 지도에 적는다.
+    #   실측(Daffodil): 화면 "장면 16개 · 조각 135개", 원고는 14조각. 장면은
+    #   ★촬영분 전체★ 위에서 묶이고 원고는 그 중 고른 것이라, 원고에 한 조각도
+    #   안 들어간 장면이 실제로 있다(16장면 중 8). 그런데 지도에는 번호와 이름만
+    #   있었다 — 결이 보기에 16개 장면은 전부 '지금 이야기의 장면'이었다.
+    #   그래서 대상 없는 말에 목록 끝 번호(16)를 집었고, 손은 "16번 장면은
+    #   원고에 들어가 있지 않아요"만 되풀이했다. 결은 그 사실을 몰랐다.
+    #   ★금지도 검문도 아니다. 결이 알아야 할 것을 알려 주는 것뿐이다.
+    story_set = set(fids)
+    try:
+        from engine import desk_hands as _dh
+        _live, _ = _dh._live_fids(program_id)
+        if _live:
+            story_set = set(_live)
+    except Exception as e:
+        print(f"[WORLD][WARN] 원고 조각 확인 실패 — 승인본으로 본다: {e}")
+    in_story = {}
+    for g in scenes:
+        in_story[g.get("group_no")] = len(
+            [f for f in (g.get("fragment_ids") or []) if f in story_set])
+    story_nos = [str(n) for n, c in sorted(in_story.items(),
+                                           key=lambda kv: kv[0] or 0) if c]
     recent = []
     for item, d in list(drafts.items())[:3]:
         det = d.get("detail") or {}
@@ -126,7 +148,11 @@ def world(program_id, fragment_labels=None, with_scenes=True):
         "scene_names": (" · ".join(
             f"{g['group_no']} {_scene_name(g, fixes)}"
             f"({int(g['start_ms'] // 60000)}:{int(g['start_ms'] % 60000 // 1000):02d})"
+            f"{'' if in_story.get(g['group_no']) else '[원고밖]'}"
             for g in scenes[:30]) if scenes else ""),
+        # 원고에 실제로 들어간 장면 번호 — 없으면 빈 목록.
+        "story_scene_nos": story_nos,
+        "scene_in_story": in_story,
     }
 
 
@@ -142,8 +168,29 @@ def _world_lines(w, scene_limit=20):
     # 장면은 '번호와 이름'만 한 줄로 — 상세(시간·태그·대사)가 없어도 사용자가
     #   '2바다'처럼 번호로 가리킬 때 읽을 수 있다. 조각 이름은 넣지 않는다
     #   (그것이 지어내기의 재료였다). 판단 자리에도 이 한 줄은 들어간다.
+    # ★[GHOST-16 2026-08-09] 장면 목록은 ★찍어 온 것 전체★의 목록이지
+    #   지금 이야기(원고)의 목록이 아니다. 그 한 줄을 안 적어서 결이
+    #   원고에 없는 장면(16번)을 매 턴 이야기의 장면처럼 꺼냈다.
     if w.get("scene_names"):
-        lines.append(f"- 장면 {w['scene_count']}개: {w['scene_names']}")
+        _snos = w.get("story_scene_nos") or []
+        lines.append(f"- 찍어 온 것 전체의 장면 {w['scene_count']}개: {w['scene_names']}")
+        lines.append(
+            "  ([원고밖] 표시는 찍기만 하고 지금 이야기에는 안 들어간 장면이다. "
+            "이야기에 대해 말할 때 쓸 수 있는 장면은 "
+            + (f"{'·'.join(_snos)}번뿐이고, 나머지는 지금 이야기에 없다."
+               if _snos else "지금 없다.")
+            + ")")
+        # ★[도달 증명 2026-08-09] "방어는 존재가 아니라 도달로 증명한다"(CLAUDE.md).
+        #   지도 한 줄은 조용히 붙어서, 붙었는지 아닌지 로그로 확인할 길이
+        #   없었다 — 등록만 있고 호출처 0건이던 사고와 같은 모양이다.
+        #   실제로 결의 눈앞에 들어간 턴마다 한 줄 소리를 낸다.
+        _outs = [str(n) for n, c in sorted(
+            (w.get("scene_in_story") or {}).items(),
+            key=lambda kv: kv[0] or 0) if not c]
+        if _outs:
+            print(f"[WORLD][지도] 장면 {w['scene_count']}개 중 원고밖 "
+                  f"{len(_outs)}개({'·'.join(_outs[:10])}) → 지도에 [원고밖] 병기 "
+                  f"· 이야기용 {len(_snos)}개({'·'.join(_snos[:10])})")
     lines.append(f"- 승인된 이야기: 조각 {w['fragment_count']}개, 전체 {w['total_text']}")
     # [2026-08-08 국장 화면 진단] 최근 다듬은 '조각 이름'을 판단 자리에 두지 않는다.
     #   실측: 세계에 보이는 구체적 이름이 A59·A69·A115 셋뿐이라, 대상을 지목해야

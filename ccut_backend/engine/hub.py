@@ -47,7 +47,85 @@ VOICE_NUM_CTX = int(os.getenv("CCUT_VOICE_NUM_CTX", "16384"))
 
 
 def _ctx_for(model):
+    # ★[GEMMA4 2026-08-11] num_ctx 축 — 미설정이면 아래 세 줄이 ★없는 것과 같다★.
+    #   있는 이유: 이 함수는 '모델이 VOICE_MODEL 이냐'로만 갈라서, 목소리 모델을
+    #   갈아끼우는 순간 조용히 8192 로 떨어진다(젬마4 첫 로드 실측 4096).
+    #   조합끼리 ctx 가 다르면 그 비교는 무효다 — 여기 한 자리에서만 강제한다.
+    _n = _n2_num_ctx()
+    if _n:
+        return _n
     return VOICE_NUM_CTX if (model or HUB_MODEL) == VOICE_MODEL else OLLAMA_NUM_CTX
+
+
+def _n2_num_ctx():
+    try:
+        from engine import night2_probe as _p
+        return _p.num_ctx()
+    except Exception:
+        return None
+
+
+def voice_model():
+    """[GEMMA4] 결의 목소리 모델 — 축이 없으면 VOICE_MODEL 그대로다.
+
+    상수 VOICE_MODEL 을 지우지 않는다. 되돌아갈 자리이고, 이 함수가 그 자리를
+    가리키는 유일한 화살표다(두 벌을 만들지 않는다).
+    """
+    try:
+        from engine import night2_probe as _p
+        return _p.model() or VOICE_MODEL
+    except Exception:
+        return VOICE_MODEL
+
+
+# [NIGHT-2 2026-08-10] 결정론 고정 — 밤 실험에서 같은 입력이 같은 답을 내야
+#   축을 하나 껐을 때 달라진 것이 ★축 때문★이라고 말할 수 있다.
+#   ★환경변수가 미설정이면 options 에 키 자체를 안 넣는다 = payload 바이트 동일.
+#     (seed 를 넣고 싶어 기본값 0 을 박으면 그 순간 현행이 바뀐다 — 안 한다.)
+#   동시성 비결정성은 없다: hub 경유 호출은 _OLLAMA_LOCK 에 직렬화된다(:60).
+def _n2_options(opts):
+    seed = (os.getenv("CCUT_LLM_SEED") or "").strip()
+    if seed:
+        try:
+            opts["seed"] = int(seed)
+        except ValueError:
+            print(f"[NIGHT-2][WARN] CCUT_LLM_SEED={seed!r} 가 정수가 아니다 → 무시",
+                  flush=True)
+    temp = (os.getenv("CCUT_LLM_TEMPERATURE") or "").strip()
+    if temp:
+        try:
+            opts["temperature"] = float(temp)
+        except ValueError:
+            print(f"[NIGHT-2][WARN] CCUT_LLM_TEMPERATURE={temp!r} 가 실수가 아니다 → 무시",
+                  flush=True)
+    # ★[GEMMA4 2026-08-11] top_p·top_k — 모델을 갈아끼우며 재려면 ★샘플링도★
+    #   같아야 한다. 젬마 계열 권장값(temp 1 · top_p 0.95 · top_k 64)을 조합
+    #   전체에 똑같이 걸기 위한 자리다. ★미설정이면 키 자체를 안 넣는다★ =
+    #   payload 바이트 동일 = 현행 그대로(seed·temperature 와 같은 규칙).
+    for env, key, cast in (("CCUT_LLM_TOP_P", "top_p", float),
+                           ("CCUT_LLM_TOP_K", "top_k", int)):
+        v = (os.getenv(env) or "").strip()
+        if not v:
+            continue
+        try:
+            opts[key] = cast(v)
+        except ValueError:
+            print(f"[GEMMA4][WARN] {env}={v!r} 를 못 읽는다 → 무시", flush=True)
+    return opts
+
+
+def _n2_llm(purpose, model, prompt_chars, data):
+    """[NIGHT-2] 프롬프트 토큰을 기록만 한다 — 기본(PROBE 미설정) 무동작."""
+    try:
+        from engine import night2_probe as _p
+        if not _p.enabled():
+            return
+        _p.rec("llm", purpose=purpose, model=model, prompt_chars=prompt_chars,
+               prompt_eval_count=(data or {}).get("prompt_eval_count"),
+               eval_count=(data or {}).get("eval_count"),
+               total_duration_ns=(data or {}).get("total_duration"))
+    except Exception:
+        pass
 OLLAMA_KEEP_ALIVE = os.getenv("CCUT_OLLAMA_KEEP_ALIVE", "30m")
 # [⑨ 투기 연결부 — OFF 고정(국장 결정)] Ollama는 draft 미지원(B 실측: 효과 0)이라
 # 이 플래그는 연결부일 뿐 동작하지 않는다. llama-server 전환 시 이 지점에서 배선.
@@ -56,6 +134,7 @@ SPECULATIVE_DRAFT = os.getenv("CCUT_SPECULATIVE", "0") in ("1", "true", "True")
 # 세운다 (기본 ON, CCUT_OLLAMA_SERIALIZE=0 가역). VL 워커(qwen_vl_visual_worker)는
 # 별도 모듈 호출이라 이 락 밖 — 스왑 겹침은 판사/대화 쪽을 세워서 완화한다.
 import threading as _threading
+import time as _t
 _OLLAMA_LOCK = _threading.Lock()
 _SERIALIZE = os.getenv("CCUT_OLLAMA_SERIALIZE", "1") not in ("0", "false", "False")
 _SINGLE_CONFIRM_PROMPT_VERSION = "judge_lean_v3_scene_speech_context"
@@ -152,19 +231,77 @@ def _apply_context_to_bundles(bundles, context):
 
 # ---------- 거점 호출 (format:json 강제) ----------
 
+def _n2_parse_loose(text, fmt):
+    """[NIGHT-2 C축] format 을 풀었을 때의 응답 해석. fmt='json' 은 이 함수를 안 탄다.
+
+    ★언제나 dict 를 낸다 — 못 읽어도 예외를 던지지 않는다. 던지면 desk 가 통째로
+      None 이 되어 '형식을 못 읽었다'와 '모델이 아무 말도 안 했다'가 한 칸에
+      뭉개진다. 대신 _fmt_hit 로 어떻게 읽었는지를 남긴다(hit 분포 = format tax).
+    """
+    import re as _re
+    t = (text or "").strip()
+    out = {}
+    # 형식을 안 시켜도 모델이 JSON 을 뱉는 일이 잦다 — 있으면 그게 가장 정확하다.
+    m = _re.search(r"\{.*\}", t, _re.S)
+    if m:
+        try:
+            o = json.loads(m.group(0))
+            if isinstance(o, dict):
+                o.setdefault("_raw", t)
+                o["_fmt_hit"] = "json_in_text"
+                return o
+        except Exception:
+            pass
+    if fmt == "xml":
+        def _tags(s, depth=0):
+            d = {}
+            for tag, val in _re.findall(r"<([A-Za-z_][\w\-]*)>(.*?)</\1>", s, _re.S):
+                v = val.strip()
+                inner = _tags(v, depth + 1) if (depth < 4 and "<" in v) else {}
+                d[tag] = inner if inner else v
+            return d
+        out = _tags(t)
+        # ★<tool>…</tool> · <answer>…</answer> 같은 겉봉투를 벗긴다 —
+        #   호출처는 capability/say 를 ★맨 위에서★ 찾는다. 봉투를 남기면
+        #   형식은 맞았는데 값이 안 보이는 가짜 실패가 난다.
+        while len(out) == 1:
+            only = next(iter(out.values()))
+            if isinstance(only, dict) and only:
+                out = only
+            else:
+                break
+        hit = "xml" if out else "xml_miss"
+        out["_fmt_hit"] = hit
+    else:
+        for line in t.splitlines():
+            mm = _re.match(r"\s*[-*]?\s*([A-Za-z_][\w\-]*)\s*[:：]\s*(.+?)\s*$", line)
+            if mm:
+                out[mm.group(1).strip()] = mm.group(2).strip()
+        out["_fmt_hit"] = "kv" if out else "text"
+    out["_raw"] = t
+    return out
+
+
 def _ollama_json(prompt: str, timeout: int = 60, temperature: float = 0,
-                 model: str = None) -> dict:
+                 model: str = None, fmt: str = "json") -> dict:
     # temperature 기본 0 — 판사(judge) 결정성 불변. 대화 계열만 명시적으로 올린다.
     # model 미지정 = HUB_MODEL (기존 호출처 전부 불변). 대화 목소리는 VOICE_MODEL.
+    # ★[NIGHT-2 2026-08-10] fmt 는 C축 전용 인자다. 기본 "json" = 현행 그대로 —
+    #   payload 의 키 순서까지 예전과 같게 넣는다(bytes 동일). 밤 실험의 두
+    #   호출처(engine_desk 의 도구 물음·say 물음)만 xml/free 를 준다.
     payload = {
         "model": model or HUB_MODEL,
         "prompt": prompt,
         "stream": False,
-        "format": "json",
-        "keep_alive": OLLAMA_KEEP_ALIVE,
-        "options": {"temperature": temperature, "num_predict": 2048,
-                    "num_ctx": _ctx_for(model)},
     }
+    if fmt == "json":
+        payload["format"] = "json"
+    payload.update({
+        "keep_alive": OLLAMA_KEEP_ALIVE,
+        # [NIGHT-2] env 미설정이면 _n2_options 는 받은 dict 를 그대로 돌려준다.
+        "options": _n2_options({"temperature": temperature, "num_predict": 2048,
+                                "num_ctx": _ctx_for(model)}),
+    })
     body = json.dumps(payload).encode("utf-8")
     req = urllib.request.Request(
         OLLAMA_URL + "/api/generate", data=body,
@@ -189,15 +326,41 @@ def _ollama_json(prompt: str, timeout: int = 60, temperature: float = 0,
             "t_queue_enter": _speed_trace.now_ms(),
         }
         call_idx = _speed_trace.append_ollama_call(trace_id, call)
+    # [TTFT-SEG 계측 2026-08-09] 락 대기 vs 실제 생성 — 기능 무변경, 로그만.
+    _seg_t0 = _t.time()
     if _SERIALIZE:
         with _OLLAMA_LOCK:
+            _seg_lock = int((_t.time() - _seg_t0) * 1000)
             if trace_id and _speed_trace and _speed_trace.enabled():
                 _speed_trace.mark(trace_id, "t3_5", None)
                 _speed_trace.update_ollama_call(trace_id, call_idx, t_queue_exit=_speed_trace.now_ms())
                 _speed_trace.mark(trace_id, "t4", None)
                 _speed_trace.update_ollama_call(trace_id, call_idx, t_request=_speed_trace.now_ms())
+            _seg_t1 = _t.time()
             with urllib.request.urlopen(req, timeout=timeout) as resp:
                 data = json.loads(resp.read().decode("utf-8"))
+            # [TTFT-SEG 2026-08-09 정리] 매 호출 찍던 것을 ★아픈 때만★ 찍게 좁힌다.
+            #   지우지 않는 이유: 오늘 69.7초 사고의 범인(모델 로드 load_ns)을
+            #   집어낸 유일한 계측이다. 상시로 두면 소음이 되어 다음에 아무도 안 본다.
+            #   조건 = 진짜 모델 로드가 일어났거나(축출 사슬의 지문),
+            #          락에서 5초 넘게 기다렸거나, 생성이 8초를 넘겼을 때.
+            #     (lock_wait 은 평상시에도 1~4s 나온다 — 같은 턴의 두 호출이
+            #      _OLLAMA_LOCK 에 직렬화되기 때문. 그건 사고가 아니라 현 설계다.)
+            #   ★load_ns 문턱이 0 이 아니라 2초인 이유(실측 2026-08-09): 상주 중인
+            #     모델도 ollama 는 load_duration 을 ~0.4s 로 보고한다. 0 으로 걸면
+            #     매 호출 찍혀 좁힌 의미가 없다. 진짜 축출 재로드는 6~9s 였다.
+            #   CCUT_TTFT_SEG=1 이면 예전처럼 전부 찍는다.
+            _seg_gen = int((_t.time() - _seg_t1) * 1000)
+            _seg_load_ns = data.get("load_duration") or 0
+            if (os.getenv("CCUT_TTFT_SEG", "0") in ("1", "true", "True")
+                    or _seg_load_ns > 2e9 or _seg_lock > 5000 or _seg_gen > 8000):
+                print(f"[TTFT-SEG][ollama_json] model={payload['model']} "
+                      f"lock_wait={_seg_lock}ms gen={_seg_gen}ms "
+                      f"prompt_chars={len(prompt)} "
+                      f"eval={data.get('eval_count')} "
+                      f"load_ns={_seg_load_ns} "
+                      f"prompt_eval_ns={data.get('prompt_eval_duration')} "
+                      f"eval_ns={data.get('eval_duration')}", flush=True)
     else:
         if trace_id and _speed_trace and _speed_trace.enabled():
             _speed_trace.mark(trace_id, "t3_5", None)
@@ -224,6 +387,9 @@ def _ollama_json(prompt: str, timeout: int = 60, temperature: float = 0,
             last_normal_chunk=str(data.get("response") or ""),
             connection_closed_by="ollama" if data.get("done") else "backend",
         )
+    _n2_llm(fmt, payload["model"], len(prompt), data)          # [NIGHT-2]
+    if fmt != "json":                                          # [NIGHT-2] C축
+        return _n2_parse_loose(data.get("response") or "", fmt)
     return json.loads(data.get("response", "{}") or "{}")
 
 
@@ -245,7 +411,7 @@ def _ollama_stream(prompt: str, timeout: int = 60, temperature: float = 0.7,
         "prompt": prompt,
         "stream": True,
         "keep_alive": OLLAMA_KEEP_ALIVE,
-        "options": opts,
+        "options": _n2_options(opts),                          # [NIGHT-2]
     }
     body = json.dumps(payload).encode("utf-8")
     req = urllib.request.Request(
@@ -396,8 +562,9 @@ def _ollama_chat_tools(messages: list[dict], tools: list[dict], run_tool,
             "tools": tools,
             "stream": False,
             "keep_alive": OLLAMA_KEEP_ALIVE,
-            "options": {"temperature": temperature, "num_predict": num_predict,
-                        "num_ctx": OLLAMA_NUM_CTX},
+            "options": _n2_options({"temperature": temperature,   # [NIGHT-2]
+                                    "num_predict": num_predict,
+                                    "num_ctx": OLLAMA_NUM_CTX}),
         })
         msg = data.get("message") or {}
         calls = msg.get("tool_calls") or []
@@ -446,11 +613,67 @@ def _ollama_chat_tools(messages: list[dict], tools: list[dict], run_tool,
     data = _post({
         "model": HUB_MODEL, "messages": msgs, "stream": False,
         "keep_alive": OLLAMA_KEEP_ALIVE,
-        "options": {"temperature": temperature, "num_predict": num_predict,
-                    "num_ctx": OLLAMA_NUM_CTX},
+        "options": _n2_options({"temperature": temperature,    # [NIGHT-2]
+                                "num_predict": num_predict,
+                                "num_ctx": OLLAMA_NUM_CTX}),
     })
     trace["text"] = str((data.get("message") or {}).get("content") or "").strip()
     return trace
+
+
+# ★[GEMMA4 2026-08-11] /api/chat 한 번 — ★왕복하지 않는다.★
+#   위 _ollama_chat_tools 와 다른 물건이다: 저것은 도구를 ★자기가 실행하고★
+#   결과를 다시 모델에게 먹이는 조사원용 루프(run_tool)다. CCUT 의 손은 모델이
+#   아니라 desk_hands 가 쥔다 — 승인·검문·Receipt 가 전부 그 뒤에 붙어 있다.
+#   그래서 여기서는 ★한 번 묻고, 모델이 고른 것을 그대로 돌려준다.★
+#   (저 함수를 고쳐 쓰지 않는 이유: max_rounds·failure_note·admin.ai_tools 의존이
+#    통째로 딸려 온다. 두 물건은 목적이 다르다.)
+def _ollama_chat_native(messages: list[dict], tools: list[dict] = None,
+                        model: str = None, temperature: float = 0.4,
+                        num_predict: int = 1024, timeout: int = 60,
+                        think=None, purpose: str = "tools") -> dict:
+    """돌려주는 것: ollama 응답 원문 dict (message.content · message.tool_calls).
+
+    해석하지 않는다 — 해석은 engine.gemma4_tools 가 한다. 이 층은 배관이다.
+    """
+    mdl = model or voice_model()
+    payload = {
+        "model": mdl,
+        "messages": messages,
+        "stream": False,
+        "keep_alive": OLLAMA_KEEP_ALIVE,
+        "options": _n2_options({"temperature": temperature,
+                                "num_predict": num_predict,
+                                "num_ctx": _ctx_for(mdl)}),
+    }
+    if tools:
+        payload["tools"] = tools
+    # ★think 는 ★준 적이 있을 때만★ 넣는다. 안 준 것과 끈 것은 다르다.
+    if think is not None:
+        payload["think"] = bool(think)
+    body = json.dumps(payload).encode("utf-8")
+    req = urllib.request.Request(
+        OLLAMA_URL + "/api/chat", data=body,
+        headers={"Content-Type": "application/json"})
+    _t0 = _t.time()
+    if _SERIALIZE:
+        with _OLLAMA_LOCK:
+            _tlock = int((_t.time() - _t0) * 1000)
+            _t1 = _t.time()
+            with urllib.request.urlopen(req, timeout=timeout) as resp:
+                data = json.loads(resp.read().decode("utf-8"))
+    else:
+        _tlock, _t1 = 0, _t.time()
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+    _prompt_chars = sum(len(str(m.get("content") or "")) for m in messages)
+    print(f"[GEMMA4][CHAT] model={mdl} think={think} num_ctx={_ctx_for(mdl)} "
+          f"lock_wait={_tlock}ms gen={int((_t.time() - _t1) * 1000)}ms "
+          f"prompt_chars={_prompt_chars} tools={len(tools or [])} "
+          f"eval={data.get('eval_count')} load_ns={data.get('load_duration')}",
+          flush=True)
+    _n2_llm(purpose, mdl, _prompt_chars, data)
+    return data
 
 
 def _ollama_chat_stream(messages: list[dict], timeout: int = 60, temperature: float = 0.7,
@@ -470,7 +693,7 @@ def _ollama_chat_stream(messages: list[dict], timeout: int = 60, temperature: fl
         "messages": messages,
         "stream": True,
         "keep_alive": OLLAMA_KEEP_ALIVE,
-        "options": opts,
+        "options": _n2_options(opts),                          # [NIGHT-2]
     }
     body = json.dumps(payload).encode("utf-8")
     req = urllib.request.Request(

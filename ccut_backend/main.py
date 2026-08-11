@@ -199,6 +199,37 @@ async def _startup_watchdog():
     except Exception as _wd_e:
         print(f"[WATCHDOG] 초기 진단 실패 (non-blocking): {_wd_e}")
 
+    # ★[SPEED-P2 2026-08-09] 목소리 예열 1발. 국장이 콜드 로드를 맞지 않게 한다.
+    #   실측: 유휴 뒤 첫 발화 12.9~14.5s vs 상주 2.6s — 차이는 전부 모델 로드다.
+    #   기동 직후 백그라운드로 1토큰만 뽑아 gemma3:4b 를 GPU 에 올려 둔다.
+    #   요청 처리를 막지 않는다(스레드), 실패해도 조용히 지나간다(예열은 의무가 아니다).
+    def _warm_voice():
+        import time as _wt
+        try:
+            from engine import hub as _hub
+            _t0 = _wt.time()
+            # _ollama_stream 은 생성기다 — 끝까지 돌려야 실제로 호출되고,
+            #   중간에 break 하면 finally 의 _OLLAMA_LOCK.release() 가 GC 시점에
+            #   달린다. num_predict=1 이라 다 받아도 순간이다 — 그냥 끝까지 받는다.
+            # ★[GEMMA4 2026-08-11] 예열도 ★실제로 쓸 모델★을 예열한다.
+            #   축이 없으면 hub.voice_model() == VOICE_MODEL 이라 현행 그대로다.
+            #   축을 켰을 때 여기서 gemma3 를 올리면, 첫 발화가 gemma4 를 부르며
+            #   축출 → 재로드가 돈다(8GiB VRAM 에서 둘은 공존이 안 된다, 실측).
+            #   예열이 오히려 콜드 로드를 만드는 자리가 된다.
+            _vm = _hub.voice_model()
+            _n = sum(1 for _ in _hub._ollama_stream(
+                "안녕", model=_vm, num_predict=1, timeout=120))
+            print(f"[WARM] 목소리 예열 완료 {_vm} "
+                  f"{int((_wt.time() - _t0) * 1000)}ms", flush=True)
+        except Exception as _we:
+            print(f"[WARM] 목소리 예열 실패 (무시하고 계속): {_we}", flush=True)
+
+    try:
+        import threading as _wth
+        _wth.Thread(target=_warm_voice, name="warm-voice", daemon=True).start()
+    except Exception as _we:
+        print(f"[WARM] 예열 스레드 기동 실패: {_we}")
+
 
 def _run_db_migrations():
     """export_results 테이블에 program_id/program_title 컬럼 추가 (SQLite ALTER TABLE)"""
@@ -5571,10 +5602,43 @@ def _rubric_direct_route(input_text: str) -> dict | None:
 #   ★_llm_understand 쪽(intent_router)의 근거 주입은 이 게이트를 지나온 말에는 닿지 않는다.
 #     그래서 같은 근거를 여기에도 준다 — 사실을 두 벌 만드는 게 아니라 같은 함수를 부른다.
 #   ★없다/애매하다는 서버가 직접 답한다(모델에게 지시문으로 시켜 두 번 실패했다).
+# ★[SCENE-GROUND 판정 수리 2026-08-09 — 라이브 실측에서 실제 편집이 났다]
+#   SCENE-GROUND 세 자리(look_scene·fix_scene_label·remove_scene)는 근거를
+#   `str(번호) not in 사용자가_한_말` 로 봤다. 그냥 부분문자열이다. 실측:
+#     t2 국장 "흠... 그렇군 14★개★고, 여러 내용이 같이 있어."   ← 조각 수 이야기
+#     t3 국장 "ccut은 빼고 너와 둘이서만 대화하자."             ← 장면 이야기 아님
+#     → remove_scene{scene_no:14} 통과 · [HANDS] 14번 장면을 뺐어요: 15→14조각
+#   아무도 14"번 장면"을 말한 적 없는데 "14개"의 14 가 근거가 되어 조각이 실제로
+#   빠졌다(비파괴지만 시키지 않은 편집 — 개념서 §9 위반).
+#   구멍이 하나 더 있다: 자릿수 경계가 없어 1번은 "14"·"16"·"2015년" 어디에나
+#   들어 있다 → 1번 장면은 사실상 늘 통과였다.
+#   ★검문을 새로 만드는 게 아니다. 있던 검문이 '14개'와 '14번 장면'을 구별하지
+#     못한 것을 구별하게 한다 — 숫자 뒤에 붙은 단위를 읽는다.
+#   ★[HANDS-2 2026-08-09] "번째" 가 없어 "2번째 빼줘"가 이 문을 통과했다.
+#     "번째로"(=갈 자리)만 막혀 있었다. 결이 remove_scene 을 고르는 회차에는
+#     ★2번 장면이 실제로 빠진다★ — 사용자는 2번째 조각을 말한 것인데.
+#     새 검문이 아니라, 있던 검문이 '2번째'와 '2번 장면'을 구별하게 하는 것이다.
+_NOT_SCENE_UNIT = ("개", "조각", "초", "분", "시간", "배", "퍼센트", "%",
+                   "번째", "년", "월", "일", "명")
+
+
+def _user_named_scene(no, said: str) -> bool:
+    """사용자가 그 번호를 ★장면으로★ 부른 적이 있나 (단위를 읽는다)."""
+    import re as _re
+    n = str(no)
+    for m in _re.finditer(r"(?<![0-9])" + _re.escape(n) + r"(?![0-9])", said or ""):
+        tail = (said[m.end():m.end() + 3] or "")
+        if any(tail.startswith(u) for u in _NOT_SCENE_UNIT):
+            continue        # "14개"·"14조각"·"14초" 는 장면 번호가 아니다
+        return True
+    return False
+
+
 def _chat_only_speed_bypass(input_text: str, project_id: str = None,
                             source_ids: list = None,
                             fragment_labels: dict = None,
-                            recent_messages: list = None) -> dict | None:
+                            recent_messages: list = None,
+                            on_progress=None) -> dict | None:
     t = (input_text or "").strip()
     if not t:
         return None
@@ -5588,7 +5652,13 @@ def _chat_only_speed_bypass(input_text: str, project_id: str = None,
         from engine import engine_desk as _desk
         from engine import desk_hands as _hands
         from engine import gemma_breath as _gbw
+        from engine import night2_probe as _n2      # [NIGHT-2] 기본값=현행
+        import time as _tseg
+        _seg_b0 = _tseg.time()
         _w = _gbw.world(project_id, fragment_labels)
+        _seg_world = int((_tseg.time() - _seg_b0) * 1000)
+        print(f"[TTFT-SEG][bypass] world={_seg_world}ms "
+              f"scenes={len((_w or {}).get('scenes') or [])}", flush=True)
         if _w:
             # 판단할 때는 눈이 짧다 — 장면 지도는 아래 조회 분기에서만 편다
             #   (실측: 지도를 접수 프롬프트에 얹으면 없는 일을 조각 조작으로 읽고
@@ -5598,8 +5668,51 @@ def _chat_only_speed_bypass(input_text: str, project_id: str = None,
             # [2026-08-08 국장 지시 "모든 조정권을 젬마에게"]
             #   젬마가 듣고·분석하고·시스템을 확인하고·고르고·지시한다. 실행만 안 한다.
             #   판단에는 직전 대화를 넣지 않는다 — 실측 3/8 vs 7/8 (자기 문맥이 지배).
-            _r = _desk.decide(t, _gbw._world_lines(_w_short), recent_messages,
+            _seg_d0 = _tseg.time()
+            _wl_short = _gbw._world_lines(_w_short)
+            # ★[NIGHT-2 2026-08-10] A축 — 세계를 얼마나 주는가.
+            #   on(기본) = ★현행 그대로★. 현행은 이미 절반이 꺼진 상태다
+            #     (바로 위 _w_short["scenes"] = []) — 실측 632자.
+            #   off      = 세계를 아예 안 준다.
+            #   full     = 장면 지도까지 통째로(실측 2,960자).
+            #   ★full 을 세 번째 값으로 둔 이유: on 이 이미 반쪽이라 on/off 둘로는
+            #     '세계를 줄이면'만 재고 '세계를 늘리면'을 못 잰다. 정찰이 잰
+            #     632 vs 2,960 의 간극이 통째로 안 재진 채 남는다. 그리고 이
+            #     자리에는 "지도를 접수 프롬프트에 얹으면 없는 조각 번호를
+            #     지어낸다"(STRUCT-A②)는 앞선 실측이 붙어 있다 — 그 판정이
+            #     지금도 맞는지 확인할 값이 full 이다.
+            _n2a = _n2.axis_a()
+            if _n2a != "on":
+                _wl_short = "" if _n2a == "off" else _gbw._world_lines(_w)
+                print(f"[NIGHT-2][A축] {_n2a} → 세계 {len(_wl_short)}자", flush=True)
+            _seg_wl = int((_tseg.time() - _seg_d0) * 1000)
+            _seg_d1 = _tseg.time()
+            _r = _desk.decide(t, _wl_short, recent_messages,
                               project_id=project_id)
+            print(f"[TTFT-SEG][bypass] world_lines={_seg_wl}ms "
+                  f"decide={int((_tseg.time() - _seg_d1) * 1000)}ms "
+                  f"since_bypass_start={int((_tseg.time() - _seg_b0) * 1000)}ms",
+                  flush=True)
+            # ★[FIX-CORRECT 2026-08-11] "아니야, 그거 말고 A60이야" — 정정.
+            #   여기가 단일 초크포인트다. 착수 실측에서 정정은 ★두 모양★으로
+            #   깨졌다: (가) 결이 remove_fragment 를 골라 새 것만 빼고 잘못 뺀
+            #   것은 안 돌아옴 (나) 결이 도구를 아예 안 골라(cap=None) "빼드릴게요"
+            #   라고 말만 하고 세상 무변. 두 모양이 갈라지는 자리가 여기 위쪽
+            #   (decide 의 반환)이라, 아래 한 곳에서 받으면 둘 다 잡힌다.
+            #   ★결에게 검문을 세우는 것이 아니다 — 결이 뭘 골랐든 사용자가
+            #     "앞말을 고친다"고 한 것은 사용자의 원문에 있다. 읽는 쪽을
+            #     넓힌다(_resolve_label·_route_by_words 와 같은 규율).
+            #   ★correcting() 은 셋이 다 있을 때만 참이다(고치는 말 · 새 대상 ·
+            #     되돌릴 직전 실행). 하나라도 없으면 손대지 않는다 — 그래서
+            #     '그거 말고 앞에꺼'(되묻기가 정답인 자리)는 그대로 흘러간다.
+            if (_r and _r["cap"] not in _hands.READ_ONLY
+                    and _hands.correcting(t, project_id, fragment_labels)
+                    and _n2.guard("CORRECT-ROUTE", cap_in=_r["cap"],
+                                  args_in=_r["args"], user_text=t[:100],
+                                  cap_out="correct_last")):
+                print(f"[DESK][FIX-CORRECT] 앞말을 고치는 말이다 → "
+                      f"{_r['cap']} → correct_last: {t[:34]!r}")
+                _r = {**_r, "cap": "correct_last"}
             # 젬마가 장면 하나를 펴 보려 한다 — 그 안을 보여주고 다시 말하게 한다.
             if _r and _r["cap"] == "look_scene" and _w.get("scenes"):
                 try:
@@ -5622,7 +5735,9 @@ def _chat_only_speed_bypass(input_text: str, project_id: str = None,
                     _said_nums = str(t) + " " + " ".join(
                         str(m.get("text") or "") for m in (recent_messages or [])[-6:]
                         if m.get("sender") == "user")
-                    if str(_sn) not in _said_nums:
+                    if not _user_named_scene(_sn, _said_nums) and _n2.guard(
+                            "SCENE-GROUND/look", scene_no=_sn, user_text=t[:100],
+                            said_nums=_said_nums[:200]):
                         print(f"[DESK][SCENE-GROUND] {_sn}번은 아무도 말한 적 "
                               f"없다 → 장면을 열지 않는다: {t[:30]!r}")
                         _sn = None
@@ -5677,7 +5792,10 @@ def _chat_only_speed_bypass(input_text: str, project_id: str = None,
                 #   범위 밖이면 고치지 않고 되묻는다 — 없는 장면을 고쳤다고 말하면
                 #   그 순간부터 원고와 화면이 어긋난다.
                 _scene_max = len(_w.get("scenes") or [])
-                if _no and _scene_max and not (1 <= _no <= _scene_max):
+                if (_no and _scene_max and not (1 <= _no <= _scene_max)
+                        and _n2.guard("SCENE-NO-GUARD", scene_no=_no,
+                                      scene_max=_scene_max, user_text=t[:100],
+                                      label=_lab)):
                     print(f"[DESK][SCENE-NO-GUARD] {_no}번은 없다(장면 {_scene_max}개) → 되묻는다")
                     return {
                         "status": "OK", "action": "answer_only",
@@ -5704,11 +5822,14 @@ def _chat_only_speed_bypass(input_text: str, project_id: str = None,
                     _user_said = str(t) + " " + " ".join(
                         str(m.get("text") or "") for m in (recent_messages or [])[-6:]
                         if m.get("sender") == "user")
-                    if str(_no) not in _user_said:
+                    if not _user_named_scene(_no, _user_said) and _n2.guard(
+                            "SCENE-GROUND/fix", scene_no=_no, label=_lab,
+                            user_text=t[:100], user_said=_user_said[:200]):
                         print(f"[DESK][SCENE-GROUND] {_no}번을 아무도 말한 적 "
                               f"없다 → 이름 안 고친다")
                         _no, _lab = None, ""
-                if _lab and _lab[:2] not in t:
+                if _lab and _lab[:2] not in t and _n2.guard(
+                        "LABEL-GROUND", scene_no=_no, label=_lab, user_text=t[:100]):
                     print(f"[DESK][LABEL-GROUND] 사용자가 말한 적 없는 이름 "
                           f"{_lab!r} → 고치지 않는다")
                     _no, _lab = None, ""
@@ -5734,6 +5855,39 @@ def _chat_only_speed_bypass(input_text: str, project_id: str = None,
                                     "group_no": _no, "label": _lab},
                         "via": "desk",
                     }
+            # ★[SCENE-GROUND 2026-08-09 — 장면 선택 기억] remove_scene 도
+            #   look_scene·fix_scene_label 과 같은 병에 걸릴 수 있다: ctx(직전
+            #   8메시지, 결 자신의 대답 포함)에 남은 옛 장면 번호가 이번 발화와
+            #   무관하게 다시 근거가 될 수 있다 — "그 장면 얘기 좋았어" 처럼
+            #   장면을 고른 적 없는 말에도 옛 번호가 되살아나 조용히 지워질 수
+            #   있다(REMOVE 는 비파괴지만, 시키지 않은 편집은 §9 위반이다).
+            #   look_scene 에 쓴 처방을 그대로 옮긴다: 근거는 ★사용자가 한 말★
+            #   뿐이다 — 이번 turn + 최근 사용자 발화 6개. 결 자신의 말은
+            #   근거에서 뺀다(자기 말이 자기 근거가 되는 고리를 끊는다).
+            #   번호가 그 안에 없으면 이번 turn 에서는 "소멸"한 것으로 보고
+            #   실행하지 않는다 — 다음 turn 에 사용자가 다시 부르면 그때 산다.
+            # ★[배선 수리 2026-08-09] 이 블록은 어제 아래(HANDS 실행문 바로 앞,
+            #   옛 5838줄)에 있었다. 거기서는 cap=None 이 되어도 그것을 받는
+            #   분기가 하나도 없어서 if _w: 블록을 그냥 빠져나갔고, 그러면
+            #   gemma_breath.breathe() 가 그 턴을 대신 답했다 — 결이 이미 만든
+            #   say 가 버려졌다. look_scene 쌍둥이(위 5626줄)는 say 분기 위에
+            #   있어서 결의 말이 살아 나간다. 같은 자리로 올린다.
+            if _r and _r["cap"] == "remove_scene":
+                try:
+                    _rsn = int(_r["args"].get("scene_no"))
+                except (TypeError, ValueError):
+                    _rsn = None
+                if _rsn is not None:
+                    _said_scene_nums = str(t) + " " + " ".join(
+                        str(m.get("text") or "") for m in (recent_messages or [])[-6:]
+                        if m.get("sender") == "user")
+                    if not _user_named_scene(_rsn, _said_scene_nums) and _n2.guard(
+                            "SCENE-GROUND/remove", scene_no=_rsn, user_text=t[:100],
+                            said_nums=_said_scene_nums[:200]):
+                        print(f"[DESK][SCENE-GROUND] remove_scene {_rsn}번은 아무도 "
+                              f"말한 적 없다 → 실행하지 않는다(옛 선택 소멸): {t[:30]!r}")
+                        _r = {**_r, "cap": None, "args": {},
+                              "reason": "장면 번호 근거 없음"}
             # 아직 못 하는 일 — 벽이 아니라 문. 적어 두고 대화를 잇는다.
             if _r and _r["cap"] is None and _r["reason"] == "아직":
                 from engine import timeline_store as _ts
@@ -5782,9 +5936,12 @@ def _chat_only_speed_bypass(input_text: str, project_id: str = None,
                 #   일이다)과 결이 한 말이 다를 때만 결의 원래 정직한 기본
                 #   문구로 맞춘다.
                 _say_out = _r["say"]
-                if _r["reason"] == "없는 일" and not re.search(
+                if (_r["reason"] == "없는 일" and not re.search(
                         r"못|없어요|없습니다|안 돼|안돼|어려|손이 없|아직|불가|모르",
-                        _say_out or ""):
+                        _say_out or "")
+                        and _n2.guard("CONSISTENCY", say=_say_out,
+                                      user_text=t[:100],
+                                      replaced_with=_desk.WISH_SAY)):
                     print(f"[DESK][일관성] 손 없다고 골랐는데 말은 다르다 → 정직한 "
                           f"말로 맞춘다: {t[:26]!r}")
                     _say_out = _desk.WISH_SAY
@@ -5819,9 +5976,16 @@ def _chat_only_speed_bypass(input_text: str, project_id: str = None,
             # 대상 없는 다듬기 부탁('여기가 늘어져', '앞뒤가 안 맞아')은
             #   되묻지 말고 초안 회로에 넘긴다 — 서버가 자리를 찾아 초안을 만든다.
             #   젬마가 "어디요?"라고 되묻던 자리(실측 6건)가 여기였다.
+            # ★[HANDS-2 2026-08-09] 여기가 뒤집혀 있었다. 조건이
+            #   `not args.get("fragment")` 하나뿐이라 — 조각을 ★지목하면★
+            #   손이 없어 [DESK][HOLD](세상 무변), 지목 ★안 하면★ 서버가 알아서
+            #   자리를 골라 실제로 TRIM. 역전된 모양이었다.
+            #   이제 손이 있으니 짚을 수 있으면 손이 한다. 초안 회로는 그대로
+            #   살려 둔다 — 짚을 데도 분량도 없는 말('여기가 늘어져')의 주인이다.
             if (_r and _r["cap"] in ("trim_boundary", "exclude_range")
-                    and not _r["args"].get("fragment")):
-                print(f"[DESK] 대상 없는 다듬기 → 초안 회로로: {t[:30]!r}")
+                    and not _hands.can_reach(_r["cap"], _r["args"], t,
+                                             fragment_labels)):
+                print(f"[DESK] 짚을 자리도 분량도 없는 다듬기 → 초안 회로로: {t[:30]!r}")
                 _r = None
             # ★[HANDS-1 2026-08-08] 젬마의 선택이 실제 실행이 된다.
             #   여기가 국장이 말한 "말만 하고 딴짓하는 것으로 보이는" 자리였다.
@@ -5847,7 +6011,11 @@ def _chat_only_speed_bypass(input_text: str, project_id: str = None,
                 r"빼|지워|남기|남겨|줄여|늘려|다시|살려|되돌|바꿔|고쳐|만들|편집|잘라|골라", t))
             if (_r and _r["cap"] in _hands.HANDS
                     and _r["cap"] not in _hands.READ_ONLY
-                    and (re.search(r"[?？]", t) or _tiny_ack)):
+                    and (re.search(r"[?？]", t) or _tiny_ack)
+                    and _n2.guard("ASK-GUARD", cap=_r["cap"], args=_r["args"],
+                                  user_text=t[:100],
+                                  why=("tiny_ack" if _tiny_ack else "question"),
+                                  say=_r["say"])):
                 print(f"[DESK][ASK-GUARD] {'짧은 말' if _tiny_ack else '묻는 말'}이라 "
                       f"{_r['cap']} 실행 안 함: {t[:34]!r}")
                 _say = _r["say"] or _desk.say_for(_r["cap"], _r["args"], t)
@@ -5861,7 +6029,8 @@ def _chat_only_speed_bypass(input_text: str, project_id: str = None,
                 }
             if _r and _r["cap"] in _hands.HANDS:
                 _f = _hands.do(_r["cap"], _r["args"], project_id,
-                               fragment_labels, _w.get("scenes"), t)
+                               fragment_labels, _w.get("scenes"), t,
+                               on_progress=on_progress)
                 # 손이 못 했는데 사용자가 편집을 시킨 것도 아니면, 손 이야기를
                 #   꺼내지 않는다. 실측: "오늘 진짜 힘들었다" → "16번 장면은
                 #   원고에 들어가 있지 않아요". 동문서답이다 — 결이가 이미 만든
@@ -5875,8 +6044,23 @@ def _chat_only_speed_bypass(input_text: str, project_id: str = None,
                     _why[:14] in str(m.get("text") or "")
                     for m in (recent_messages or [])[-4:]
                     if m.get("sender") != "user")
-                if (not _f.get("ok") and _r["say"] and (_already or not re.search(
-                        r"빼|지워|남기|남겨|줄여|늘려|살려|되돌|바꿔|고쳐|편집|잘라|골라", t))):
+                # ★[HANDS-2 2026-08-09] '옮기다' 계열이 이 목록에 없었다.
+                #   그래서 "마지막 조각을 맨 앞으로 옮겨줘"에서 손이 실패해도
+                #   '편집 부탁이 아니다'로 읽혀 실패가 통째로 삼켜지고, 결의
+                #   잡담("옮겨드릴게요")만 나갔다 — 실측 3회 중 2회. 사용자는
+                #   실패했다는 것조차 몰랐다. CCUT 에서 가장 나쁜 모양이다.
+                # ★[FIX-CORRECT 2026-08-11] 정정만은 삼키지 않는다.
+                #   정정 문장에는 편집을 시키는 낱말이 하나도 없다("아니야,
+                #   두번째조각은 a60이야"). 그래서 아래 정규식이 '편집 부탁이
+                #   아니다'로 읽고 결의 말로 갈아 끼웠는데, 그 말이 하필
+                #   "수정해 드릴게요"였다 — 세상은 무변인데 했다고 말하는,
+                #   CCUT 이 제일 싫어하는 모양이다(마른 경로 실측 S2).
+                #   무를 게 없으면 없다고 손이 말하게 둔다.
+                if (not _f.get("ok") and _r["say"]
+                        and _r["cap"] != "correct_last"
+                        and (_already or not re.search(
+                            r"빼|지워|남기|남겨|줄여|늘려|살려|되돌|바꿔|고쳐|편집|잘라|골라"
+                            r"|옮겨|옮기|이동|보내|앞으로|뒤로|순서", t))):
                     print(f"[DESK][HANDS] {_r['cap']} 못 했고 "
                           f"{'이미 말했다' if _already else '편집 부탁이 아니다'} "
                           f"→ 결이 말로: {t[:26]!r}")
@@ -5919,6 +6103,30 @@ def _chat_only_speed_bypass(input_text: str, project_id: str = None,
                 }
     except Exception as e:
         print(f"[DESK][WARN] 접수 실패 — 기존 경로로: {e}")
+    # ★[NIGHT-2 2026-08-10] 폴백 차단 게이트 — 기본 OFF(현행 그대로).
+    #   여기까지 왔다 = desk 가 답을 못 냈다(모든 답 경로는 위에서 return 한다).
+    #   ★정찰로 전제가 바뀐 자리: 지시서는 "여기서 큐원(qwen2.5)이 깨어나 8GB
+    #     VRAM 축출이 난다"였는데, 이 사다리의 LLM 호출은 ★전부 gemma3:4b★다
+    #     (grep 실측 — night2_probe.no_fallback 주석에 근거 목록).
+    #     qwen2.5 를 부르는 converse.decide_stream 은 /chat/converse/stream 전용.
+    #   그래도 끊는 이유는 측정이다 — 뒷사다리가 대신 답하면 그 조합의 숫자가
+    #   'desk 가 낸 답'이 아니게 되어 축을 못 가른다. 실패로 기록하고 넘어간다.
+    try:
+        from engine import night2_probe as _n2f
+        if _n2f.no_fallback():
+            _n2f.desk_none("bypass_fallthrough", user_text=t[:80])
+            print(f"[NIGHT-2][NO-FALLBACK] desk 무응답 → 뒷사다리 차단: {t[:30]!r}",
+                  flush=True)
+            return {
+                "status": "OK", "action": "answer_only",
+                "normalized_instruction": None,
+                "reply": "(NIGHT-2: desk 무응답 — 폴백 차단)",
+                "confidence": 0.0,
+                "matched": {"kind": "desk_none", "gate": "night2"},
+                "via": "night2_no_fallback",
+            }
+    except Exception as _e:
+        print(f"[NIGHT-2][WARN] 폴백 게이트 실패 — 통과: {_e}")
     # [BREATH-1 2026-08-08] 젬마가 먼저 숨을 쉰다.
     #   정규식이 답을 정하기 전에, 젬마가 사용자 원문과 지금 세계를 보고 다음 행동을
     #   고른다(TALK/LOOK/TRY/PROPOSE/ASK). 못 고르거나 이야기가 없으면 None 을 내고
@@ -6179,13 +6387,75 @@ async def route_edit_intent_stream_api(req: EditIntentRouteRequest, request: Req
             r = (
                 _unknown_fragment_label_route(req.input_text, labels)
                 or _rubric_direct_route(req.input_text)
-                or _chat_only_speed_bypass(req.input_text, req.project_id, req.source_ids, labels, req.recent_messages)
-                or route_edit_intent(
+            )
+            if r is None:
+                # ★[EXPORT-2 2026-08-09] confirm_export 는 안에서 ffmpeg 를 블로킹으로
+                #   돈다(정찰 확인: 진행률 파이프 없음). 그 사이 결이 침묵하면 국장은
+                #   고장으로 읽는다. _chat_only_speed_bypass 를 별도 스레드에서 돌리고
+                #   이 자리에서 진행 이벤트 큐를 폴링해 실시간으로 흘린다 — 나머지
+                #   경로(위 두 함수·route_edit_intent)는 순간에 끝나 그대로 동기 호출.
+                # ★[SPEED-P5 2026-08-09 정정] 위 스레딩이 EXPORT 전용이 아니었다.
+                #   `if r is None:` 은 "안녕.." 을 포함한 ★모든★ 채팅이 지나는 자리라
+                #   한 마디마다 Queue + 스레드가 생겼다(내가 낸 누수다 — 자백한다).
+                #   지연 자체는 0 이었지만(센티널이 get 을 즉시 깨움, 실측),
+                #   스트리밍 채팅 1건이 스레드 2개를 잡아 anyio 40슬롯이 2배 빨리 마른다.
+                #   진짜 EXPORT 경로에서만 켠다. 게이트 근거:
+                #   진행 이벤트를 내는 손은 desk_hands._do_confirm_export 하나뿐이고
+                #   (grep 전수 389/411/416/454/459/501/508/535), 그 함수는 살아있는
+                #   propose 가 없으면 ffmpeg 앞에서 즉시 반환한다(desk_hands.py:428-433).
+                #   즉 pending 이 없으면 오래 걸릴 일 자체가 없다 → 동기로 안전하다.
+                _export_pending = False
+                try:
+                    from engine.desk_hands import (
+                        _last_export_propose as _lep, _EXPORT_STALE_MS as _stale)
+                    _p = _lep(req.project_id) if req.project_id else None
+                    _export_pending = bool(_p) and (
+                        _time.time() * 1000 - float(_p.get("ts") or 0)) <= _stale
+                except Exception as _e:
+                    print(f"[F2][WARN] export pending 확인 실패 ({_e}) — 동기 경로")
+
+                if not _export_pending:
+                    # 평상시 대화 — 원래의 동기 경로 그대로. 스레드 0개.
+                    r = _chat_only_speed_bypass(
+                        req.input_text, req.project_id, req.source_ids, labels,
+                        req.recent_messages)
+                else:
+                    print("[F2][EXPORT-STREAM] 살아있는 내보내기 승인 대기 — "
+                          "진행 스트리밍 경로로 간다")
+                    import queue as _queue
+                    import threading as _threading
+                    _prog_q = _queue.Queue()
+                    _box = {}
+
+                    def _run_bypass():
+                        try:
+                            _box["r"] = _chat_only_speed_bypass(
+                                req.input_text, req.project_id, req.source_ids, labels,
+                                req.recent_messages, on_progress=_prog_q.put)
+                        except Exception as _e:
+                            _box["err"] = _e
+                        finally:
+                            _prog_q.put(None)  # 끝 신호
+
+                    _th = _threading.Thread(target=_run_bypass, daemon=True)
+                    _th.start()
+                    while True:
+                        try:
+                            _evt = _prog_q.get(timeout=1.0)
+                        except _queue.Empty:
+                            continue
+                        if _evt is None:
+                            break
+                        yield _emit(_evt)
+                    _th.join()
+                    if "err" in _box:
+                        raise _box["err"]
+                    r = _box.get("r")
+            r = r or route_edit_intent(
                     source_ids=req.source_ids, input_text=req.input_text,
                     recent_messages=req.recent_messages,
                     selected_proposal_id=req.selected_proposal_id,
                     fragment_labels=labels, defer_chat=True, project_id=req.project_id)
-            )
             if trace_id:
                 speed_trace.update(trace_id, route_action=r.get("action"), route_via=r.get("via"),
                                    route_matched=r.get("matched"))
@@ -7685,6 +7955,48 @@ async def foyer_chat(req: FoyerChatRequest):
     if not r:
         return {"status": "OK", "reply": "", "kind": "foyer_none"}
     return {"status": "OK", **r}
+
+
+# ── [NIGHT-2 2026-08-10] 측정 창구 ────────────────────────────────────
+#   서버 안에서만 보이던 것(프롬프트 길이·토큰 수·검문 판정)을 하네스가
+#   턴마다 가져간다. read-and-clear 라 쌓이지 않는다.
+#   ★기록이 꺼져 있으면(CCUT_NIGHT2_PROBE 미설정) 빈 것을 돌려줄 뿐이다.
+@app.get("/night2/probe/drain")
+async def night2_probe_drain():
+    from engine import night2_probe as _n2
+    return {"status": "OK", **_n2.drain(), "default": _n2.default_axes(),
+            "is_default": _n2.is_default()}
+
+
+class Night2ResetRequest(BaseModel):
+    program_id: str
+
+
+@app.post("/night2/reset")
+async def night2_reset(req: Night2ResetRequest):
+    """조합 사이 프로세스 메모리 청소 — house_talk._HANDED.
+
+    ★DB 로는 닿을 수 없는 유일한 원복 결손이다(프로세스 안에만 있다).
+      이게 없으면 밤 실행 절차에 "조합 사이 백엔드 재기동"이 들어가야 했다.
+      ★시뮬 프로젝트에만 허용한다 — 실 프로젝트의 '이미 건넨 소식' 표를
+      지우면 국장이 같은 소식을 두 번 듣는다.
+    """
+    pid = str(req.program_id or "")
+    if not pid.startswith("proj_sim"):
+        return {"status": "REFUSED", "reason": "시뮬 프로젝트가 아니다",
+                "program_id": pid}
+    from engine import house_talk as _ht
+    n = len(_ht._HANDED.pop(pid, ()) or ())
+    print(f"[NIGHT-2][RESET] {pid} · _HANDED {n}건 비움")
+    return {"status": "OK", "program_id": pid, "handed_cleared": n}
+
+
+@app.get("/night2/probe/axes")
+async def night2_probe_axes():
+    """지금 무엇이 켜져 있나 — 밤 실행 전에 '기본값 그대로인가'를 눈으로 본다."""
+    from engine import night2_probe as _n2
+    return {"status": "OK", "axes": _n2.axes(), "default": _n2.default_axes(),
+            "is_default": _n2.is_default(), "reach": _n2.reach_counts()}
 
 
 if __name__ == "__main__":

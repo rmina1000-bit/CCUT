@@ -51,24 +51,66 @@ def note(program_id, what, code="", detail=None):
         print(f"[HOUSE][WARN] 적기 실패: {e}")
 
 
-def recent(program_id, limit=3, fresh_ms=FRESH_MS):
-    """방금 집에서 있었던 일 — 최근 것 몇 개. 거르지 않는다."""
+# ★[GHOST-16 2026-08-09] 이미 건넨 소식 — 같은 말을 두 번 귀에 넣지 않는다.
+#   실측(Daffodil, 국장 화면 22:07~22:11): 45분 창 안에 문구가 완전히 같은
+#   AB_FILTER 소식이 여러 행(entry 532·533·544·545·546…) 쌓여 있었고,
+#   recent() 는 거를 것이 없어 매 턴 같은 소식을 그대로 다시 건넸다.
+#   결의 답 "CCUT이 화면에서 내려 뒀기 때문입니다" 는 이 payload 문자열 그대로다.
+#   ★사건을 고르는 표가 아니다(그건 이 파일이 금지한 것이다). 한 번 건넨 것을
+#     또 건네지 않는 배관 수리다 — 무엇을 말할지는 여전히 전부 결이 정한다.
+#   프로세스 안에만 둔다(새 kind·새 테이블·쓰기 0). 재기동하면 다시 한 번은 건넨다.
+_HANDED = {}
+
+
+def recent(program_id, limit=3, fresh_ms=FRESH_MS, mark=True):
+    """방금 집에서 있었던 일 — 최근 것 몇 개. 거르지 않는다.
+
+    거르는 것은 '무엇을 말할지'가 아니라 '이미 건넨 것'뿐이다.
+    """
     from engine import timeline_store as _ts
     try:
         rows = _ts.fetch(program_id, limit=200) or []
     except Exception:
         return []
     now = time.time() * 1000
-    out = []
+    handed = _HANDED.setdefault(str(program_id), set())
+    out, keys, twins = [], [], []
+    seen_what = set()
+    skipped = 0
     for r in rows:
         if r.get("kind") != EVENT_KIND:
             continue
         if fresh_ms and (now - float(r.get("ts") or 0)) > fresh_ms:
             continue
         p = r.get("payload") or {}
-        if isinstance(p, dict) and p.get("what"):
-            out.append(p["what"])
-    return out[-limit:][::-1]
+        if not (isinstance(p, dict) and p.get("what")):
+            continue
+        what = p["what"]
+        cid = str(r.get("client_id") or r.get("entry_id") or what)
+        # ① 이 한 번의 전달 안에서 같은 문구가 여러 행으로 쌓인 것 → 한 번만
+        #    (실측 532·533 은 문구가 완전히 같은 두 행이었다)
+        if what in seen_what:
+            skipped += 1
+            twins.append(cid)       # 같은 말이니 이 행도 '건넨 것'으로 친다
+            continue                #   (안 그러면 다음 턴에 쌍둥이 행이 대신 들어간다)
+        # ② 이미 결의 귀에 들어간 행 → 다시 넣지 않는다. 표식은 행(client_id)
+        #    이라, 나중에 진짜로 다시 일어난 일은 새 행이므로 그때 또 건넨다.
+        if cid in handed:
+            skipped += 1
+            continue
+        seen_what.add(what)
+        out.append(what)
+        keys.append(cid)
+    out, keys = out[-limit:][::-1], keys[-limit:][::-1]
+    if mark:
+        handed.update(keys)
+        handed.update(twins)
+    # ★도달 증명용 한 줄 — "방어를 만들면 발동한 사례를 하나 확보한다"(CLAUDE.md).
+    #   등록만 하고 호출처 0건이던 사고를 반복하지 않으려고 소리를 낸다.
+    if skipped:
+        print(f"[HOUSE][이미 건넸다] {skipped}건은 다시 안 넣는다 "
+              f"(건넨 것 {len(handed)}건)")
+    return out
 
 
 def lines(program_id):

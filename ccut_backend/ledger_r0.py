@@ -605,9 +605,30 @@ async def save_ledger_order(program_id: str, payload: dict):
         selected_order = [str(x) for x in (payload.get("selected") or []) if x]
         all_fids = set(_all_program_fids(con, program_id))
         if not full_order:
-            return {"ok": False, "error": "empty_order"}
+            # [HANDS-2 2026-08-09] 무엇을 기대하는지 말한다. 전에는 payload 키를
+            #   틀리게 줘도(예: {"fids": [...]}) 그냥 empty_order 만 돌아와서,
+            #   부르는 쪽이 "왜 순서가 안 바뀌지"를 알 길이 없었다(검증에서 실제로 밟음).
+            print(f"[LEDGER][ORDER] order 가 비었다 — 받은 키={sorted(payload.keys())} "
+                  f"기대={{'order': [...], 'selected': [...]}} program={program_id}")
+            return {"ok": False, "error": "empty_order",
+                    "got_keys": sorted(str(k) for k in payload.keys()),
+                    "expected_keys": ["order", "selected"]}
+        # [HANDS-2] 이 프로그램 것이 아닌 fid 는 걸러진다 — 걸러졌다는 사실을
+        #   조용히 삼키지 않는다(CLAUDE.md 증거 원칙: 조용한 변경 금지).
+        _full_in, _sel_in = len(full_order), len(selected_order)
         full_order = [fid for fid in full_order if fid in all_fids]
         selected_order = [fid for fid in selected_order if fid in all_fids]
+        if len(full_order) != _full_in or len(selected_order) != _sel_in:
+            print(f"[LEDGER][ORDER][DROP] 모르는 fid 를 버렸다 "
+                  f"order {_full_in}→{len(full_order)} · "
+                  f"selected {_sel_in}→{len(selected_order)} program={program_id}")
+        if _sel_in and not selected_order:
+            # [HANDS-2] 고르라고 준 fid 가 하나도 이 프로그램 것이 아니다 → 그대로 두면
+            #   story.fids 를 빈 배열로 덮어써 원고가 통째로 사라진다. 거절한다.
+            print(f"[LEDGER][ORDER] selected {_sel_in}개가 전부 이 프로그램 것이 "
+                  f"아니다 — 원고를 비우지 않고 거절한다 program={program_id}")
+            return {"ok": False, "error": "selected_all_unknown",
+                    "selected_in": _sel_in}
         ui.pop("storyOrder", None)   # [TRUTH-SINGLE-01] 낡은 사본 소거
         story = ui.get("story") if isinstance(ui.get("story"), dict) else {}
         story["fids"] = selected_order
