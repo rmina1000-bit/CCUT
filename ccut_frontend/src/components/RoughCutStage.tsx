@@ -131,7 +131,27 @@ const RoughCutStage: React.FC<RoughCutStageProps> = ({
         let response = await fetch(
           `/api/rough-cut/project/${encodeURIComponent(projectId)}`,
         );
-        if (response.status === 404) {
+        // [MAP-1 2026-08-12] 새 계약: "아직 안 만들었다" = 200 + status:"not_generated".
+        //   404 는 더 이상 이 뜻으로 오지 않는다(main.py:7161) — 콘솔 빨간 줄이 사라진다.
+        //   body 를 여기서 한 번만 읽고 아래로 넘긴다(Response 는 두 번 못 읽는다).
+        let prefetched: any = null;
+        if (response.ok) {
+          prefetched = await response.json().catch(() => null);
+          // 200 인데 본문이 JSON 이 아니다 = 계약 위반. 아래에서 다시 읽을 수 없으므로
+          // (스트림은 한 번뿐) 여기서 사실 그대로 끊는다.
+          if (prefetched === null) throw new Error("rough_cut_bad_response");
+        }
+        // OK 도 not_generated 도 아닌 상태(예: no_sources) — 만들 수 있는 것이 없다.
+        //   화면에는 이유를 적고 조용히 멈춘다. 빨간 줄도, 만들기 버튼도 남기지 않는다.
+        if (prefetched?.status && prefetched.status !== "OK"
+            && prefetched.status !== "not_generated") {
+          if (active) { setNeedsBuild(false); setError(String(prefetched.message || prefetched.status)); }
+          return;
+        }
+        const notGenerated =
+          response.status === 404             // 구판 백엔드 호환(계약 바뀌기 전 배포본)
+          || (response.ok && prefetched?.status === "not_generated");
+        if (notGenerated) {
           // ★[SPEED-P0 2026-08-09] 여기서 자동으로 POST 하던 자리다. 끊는다.
           //   POST 는 rough-cut 2pass = qwen2.5:7b@8192(4.8GiB)를 기동시킨다.
           //   RX 6600M 8.0GiB 에서는 대화 목소리 gemma3:4b@16384(5.8GiB)와 공존이
@@ -149,6 +169,7 @@ const RoughCutStage: React.FC<RoughCutStageProps> = ({
             `/api/rough-cut/project/${encodeURIComponent(projectId)}`,
             { method: "POST" },
           );
+          prefetched = null;   // POST 응답은 아직 안 읽었다
         }
         if (!response.ok) {
           const { insufficientText, message } = await classifyError(response);
@@ -178,7 +199,7 @@ const RoughCutStage: React.FC<RoughCutStageProps> = ({
           }
           throw new Error(message);
         }
-        const result = await response.json();
+        const result = prefetched ?? await response.json();
         if (active) {
           loadedForRef.current = projectId;
           attemptRef.current = 0;

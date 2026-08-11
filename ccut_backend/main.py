@@ -2025,20 +2025,48 @@ async def get_punch_specs(program_id: str):
     같은 punch_spec을 프론트에 그대로 넘겨 화면 변환으로 걸면 재생·렌더·export가
     같은 시각·같은 배율을 쓴다 — 기법 진실은 여전히 하나(proposal_axis.punch_spec).
     """
+    # [MAP-1 2026-08-12] 조각의 출처를 **원고(ui_state.story.fids)** 로 옮긴다.
+    #   HANDS-3 이 백엔드의 단일 진실을 story.fids 로 세웠는데(desk_hands._full_story_fids)
+    #   프론트 punch 경로만 아직 승인 원장을 보고 있었다 — 실측 proj_sim_n2_a 에서
+    #   원고 8 · 승인 17 이라 화면이 "17개"를 근거로 사전을 만들고 있었다.
+    #   ★live_approval_snapshot 자체는 안 고친다 — main.py:3209(제안 재구성)가 그 함수를
+    #     '승인'의 뜻으로 쓴다. 여기서 **받을 값만** 바꾼다.
+    #   ★원고가 비면 승인으로 폴백한다(구판 동작 보존). approval_id 는 계속 싣는다.
     try:
         from story_gate import proposal_axis as _axis
+        from story_gate.service import _connect as _sg_connect, resolve_sequence as _sg_resolve
         _appr_id, _appr_fids = _axis.live_approval_snapshot(program_id)
-        if _appr_id is None or not _appr_fids:
-            return {"ok": True, "program_id": program_id, "approval_id": None, "specs": {}}
+        _story_fids, _story_src = [], "none"
+        try:
+            _con = _sg_connect()
+            try:
+                _mode, _story_fids, _story_src = _sg_resolve(_con, program_id)
+            finally:
+                _con.close()
+        except Exception as _re:
+            print(f"[PUNCH] 원고 읽기 실패 — 승인으로 폴백: {_re}")
+        _fids = list(_story_fids or [])
+        # resolve_sequence 가 답한 그 출처를 그대로 싣는다(ui_state | proposals | fragments).
+        #   "ui_state" 로 뭉뚱그리면 서버 폴백으로 뜬 원고를 사용자가 고른 것처럼 읽힌다.
+        _source = (_story_src or "unknown") if _fids else "approval"
+        if not _fids:
+            _fids = list(_appr_fids or [])
+        if not _fids:
+            return {
+                "ok": True, "program_id": program_id, "approval_id": _appr_id,
+                "source": "none", "story_count": 0, "count": 0, "specs": {},
+            }
         _axis.reset_punch_caches()      # config가 바뀌었을 수 있다 — 매 요청 최신값을 읽는다
         _cfg = _axis.punch_config()
         specs, rules = {}, {}
-        for _f in _appr_fids:
+        for _f in _fids:
             sp = _axis.punch_spec(_f)
             if sp:
                 specs[_f] = {"at": sp["at"], "zoom": sp["zoom"], "basis": sp["basis"]}
         return {
             "ok": True, "program_id": program_id, "approval_id": _appr_id,
+            # [MAP-1] 어디서 조각을 셌는가 — 화면이 무엇을 근거로 그렸는지 콘솔에서 읽힌다.
+            "source": _source, "story_count": len(_fids),
             # [RULE-1 R4] 규칙 값의 출처는 config JSON 하나. 프론트도 그 값을 그대로 쓴다.
             "config": _cfg,
             "ramp_sec": (_cfg or {}).get("ramp_sec"),
@@ -7137,19 +7165,43 @@ async def get_rough_cut(
     program_id: str,
     db: Session = Depends(get_db),
 ):
-    """현재 전사와 소유권 지문이 일치하는 가편집안만 조회한다."""
+    """현재 전사와 소유권 지문이 일치하는 가편집안만 조회한다.
+
+    [MAP-1 2026-08-12] "아직 안 만들었다"는 **정상 응답**이다 — 200 + status.
+      구판은 404 를 던졌고 그것이 국장 devtools 에 빨간 줄로 남았다. 빨간 줄이 늘면
+      진짜 에러를 가린다(전사 84% 소실이 스물두 시간 숨어 있던 것과 같은 구조).
+      HTTP 404 자체는 프론트 코드로 못 지운다 — 계약을 바꾸는 것이 유일한 길이다.
+      status: "OK" | "not_generated"  (project_not_found 는 진짜 오류라 404 유지)
+      ★구판 프론트 호환: 404 를 보던 분기는 그대로 둬도 이 200 이 먼저 걸린다.
+    """
     pg = db.query(ProgramTable).filter_by(program_id=program_id).first()
     if not pg:
         raise HTTPException(status_code=404, detail="project_not_found")
     try:
         transcript, _, _, record = _load_current_rough_cut(program_id, pg)
     except Exception as exc:
+        # [MAP-1 2026-08-12] "아직 소스가 안 붙었다"도 오류가 아니라 상태다 — 업로드 직후
+        #   프로젝트가 여기로 온다. 나머지 예외는 종전대로 409(진짜 이상).
+        if "project_sources_not_found" in str(exc):
+            return {
+                "status": "no_sources",
+                "project_id": program_id,
+                "reason": "project_sources_not_found",
+                "eligible_count": 0,
+                "message": "아직 이 프로젝트에 영상이 없습니다.",
+            }
         raise HTTPException(
             status_code=409,
             detail=f"rough_cut_transcript_unavailable:{exc}",
         ) from exc
     if record is None:
-        raise HTTPException(status_code=404, detail="rough_cut_not_generated")
+        return {
+            "status": "not_generated",
+            "project_id": program_id,
+            "reason": "rough_cut_not_generated",
+            "eligible_count": len(transcript.spans),
+            "message": "아직 거친 편집본이 없습니다.",
+        }
     return _rough_cut_response(record, transcript)
 
 

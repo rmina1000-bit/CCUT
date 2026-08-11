@@ -1579,7 +1579,11 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
   const [punchRampSec, setPunchRampSec] = useState(0.12);
   const [punchScaleA, setPunchScaleA] = useState(1);
   useEffect(() => {
-    if (!programId) return;
+    // [MAP-1 2026-08-12] 프로젝트가 아닌 것으로는 묻지 않는다.
+    //   CenterPanel 은 key={activeNavItem} 로 재마운트되는데(Index.tsx:4489) 초기값이
+    //   "projects" 라 이 effect 가 /punch/projects 를 한 번 때렸다 — 응답은 {specs:{}} 이고
+    //   콘솔에는 count: undefined 로 남아 [PUNCH] 로그가 늘 두 번 찍혔다(헛호출 1 + 진짜 1).
+    if (!programId || !programId.startsWith("proj_")) return;
     let dead = false;
     (async () => {
       try {
@@ -1587,7 +1591,9 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
         if (dead || !r?.ok) return;
         setPunchSpecs(r.specs || {});
         if (typeof r.ramp_sec === "number") setPunchRampSec(r.ramp_sec);
-        console.log("[PUNCH] specs 수신", { count: r.count, approval_id: r.approval_id, mode_technique: r.mode_technique });
+        // [MAP-1] source 는 백엔드가 어디서 조각을 셌는지다 — ui_state(원고) / approval(승인).
+        console.log("[PUNCH] specs 수신", { count: r.count, source: r.source, story_count: r.story_count, approval_id: r.approval_id });
+        // source: ui_state(사용자 원고) | proposals | fragments(서버 폴백) | approval | none
       } catch (e) {
         console.log("[PUNCH] specs 수신 실패 (비차단)", e);
       }

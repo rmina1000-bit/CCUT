@@ -571,7 +571,20 @@ const Index: React.FC = () => {
   const [roughCutData, setRoughCutData] = useState<RoughCutData | null>(null);
   const [roughCutPlacement, setRoughCutPlacement] = useState<RoughCutPlacement | null>(null);
 
-  const roughCutMapReady = storyStage.key !== "scanned" && roughCutData !== null;
+  // [MAP-1 2026-08-12] 조각맵은 **원고**가 진실이다. 가편집(roughCutData)은 그 원고를
+  //   만드는 여러 길 중 하나일 뿐이라 조각맵 렌더까지 묶으면 안 된다.
+  //   실측(proj_sim_n2_a): ui_state.story.fids=8 · 조각 풀 135 인데 GET /rough-cut 404 →
+  //   roughCutData=null → 이 값이 false → FragmentMap 입력이 [] → 조각맵 0.
+  //   결은 "지금 8조각입니다"라고 정확히 답하는데 화면만 비어 있었다.
+  //   ★이 상수는 조각맵(FragmentMap) 4곳에서만 쓴다(:4615 :4661 :4828 :4912). 전사 패널
+  //     (RoughCutStage)은 roughCutData 를 직접 쓰므로 여기 손대도 안 바뀐다.
+  //   ★storyStage.key !== "scanned" 는 남긴다 — "scanned" 는 storyStageBadge 의 default 분기,
+  //     즉 story_state 가 아직 없다(재료 없음)는 뜻이다(storyMode.ts:78). 원고 상태기계가
+  //     시작도 안 한 프로젝트에 조각맵을 그리면 '분석 중'과 '고를 것 있음'이 섞인다.
+  //   ★가편집을 자동 생성하지 않는다 — 자동 POST 는 되살리지 않는다(SPEED-P0 69초 사고).
+  //     여기는 **이미 있는 원고를 그리는** 길이다.
+  const roughCutMapReady =
+    storyStage.key !== "scanned" && (roughCutData !== null || storyFids.length > 0);
   // [TIMELINE-PAGE 2026-08-02] 300행 절단 복구용 커서.
   //   서버는 limit 을 넘으면 has_more=true 와 함께 최신 N행만 준다(main.py:6467).
   //   구판은 이 사실을 DEBUG_LOG 문자열 안에서만 읽어 사용자에게 0으로 도달했다.
@@ -3571,7 +3584,12 @@ const Index: React.FC = () => {
     (reorderedFrags: Fragment[]) => {
       setEditFragments(reorderedFrags);
       // 순서는 사용자 결정 그 자체 — 제안 확정 여부와 무관하게 스토리에 남는다.
-      applyStory(reorderedFrags, reorderedFrags.map((f) => f.fragment_id));
+      // [MAP-1 2026-08-12] f.fragment_id → getUid(f). 이 줄만 다른 식별자를 썼다
+      //   (나머지 손 전부 getUid: :3509 :3521 :3610 :3634 :3674). getUid 는
+      //   fragment_uid ?? fragment_id 라 uid 가 없으면 값이 같다 — 있을 때만 달라진다.
+      //   지금까지는 modeGate 조각맵에서 이 손이 닿을 수 없었다(roughCutData 가 null 이면
+      //   맵이 비어 있었으니까). 위 게이트를 풀면 닿는다 — 닿기 전에 맞춘다.
+      applyStory(reorderedFrags, reorderedFrags.map((f) => getUid(f)));
     },
     [applyStory]
   );
