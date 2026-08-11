@@ -102,8 +102,15 @@ def encoded_cut_points(export_input_id, workdir=None):
 
     workdir = Path(workdir or (BACKEND_DIR / "storage" / "_probe_tmp" / "encode"))
     workdir.mkdir(parents=True, exist_ok=True)
-    vf = ("scale=1920:1080:force_original_aspect_ratio=decrease,"
-          "pad=1920:1080:(ow-iw)/2:(oh-ih)/2,setsar=1")
+    # [RENDER-1 2026-08-09] 옛 1920x1080/30fps 상수는 본선과 어긋나 오판을 낸다.
+    #   본선과 **같은 함수**로 규격을 계산한다.
+    from engine.render_engine import (choose_target_spec, build_scale_pad_vf,
+                                      probe_source_spec)
+    _target = choose_target_spec(clips, paths)
+    _t_fps = str(_target["fps"])
+    _t_gop = str(max(1, int(round(float(_target["fps_val"])))))
+    _t_ar = str(int(_target["sample_rate"]))
+    _t_ac = str(int(_target["channels"]))
     durations, elapsed, cuts = [], 0.0, []
     for i, clip in enumerate(clips):
         tmp = workdir / f"probe_clip_{i:04d}.mp4"
@@ -111,10 +118,12 @@ def encoded_cut_points(export_input_id, workdir=None):
             "ffmpeg", "-y", "-loglevel", "error",
             "-ss", str(clip["start"]), "-to", str(clip["end"]),
             "-i", paths[clip["source_id"]],
-            "-vf", vf, "-r", "30", "-fps_mode", "cfr",
-            "-g", "30", "-keyint_min", "30", "-sc_threshold", "0",
+            "-vf", build_scale_pad_vf(
+                _target, probe_source_spec(paths[clip["source_id"]])),
+            "-r", _t_fps, "-fps_mode", "cfr",
+            "-g", _t_gop, "-keyint_min", _t_gop, "-sc_threshold", "0",
             "-c:v", "libx264", "-preset", "ultrafast", "-crf", "23",
-            "-c:a", "aac", "-b:a", "128k", "-ar", "48000", "-ac", "2",
+            "-c:a", "aac", "-b:a", "128k", "-ar", _t_ar, "-ac", _t_ac,
             str(tmp),
         ]
         subprocess.run(cmd, capture_output=True, text=True,

@@ -2,7 +2,10 @@
 [PREVIEW_RENDER_ENGINE] proposal_preview_engine.py
 목적: Proposal key_fragments → 하나의 preview mp4 렌더
 구조:
-  1. clips → 각 clip을 -ss/-to로 임시 re-encode (720p/30fps/veryfast)
+  1. clips → 각 clip을 -ss/-to로 임시 re-encode
+     ([RENDER-1 2026-08-09] 규격은 소스 상속 — 장변만 1280 캡, fps·오디오 rate 상속.
+      옛 문장 "720p/30fps" 는 1280x720 상수 시절 것이라 지웠다.
+      계산은 render_engine.choose_target_spec / preview_target_spec 한 곳)
   2. concat demuxer로 하나의 preview mp4 합성
   3. -movflags +faststart
   4. 이미 존재하면 재사용 (idempotent)
@@ -131,6 +134,20 @@ def ensure_proposal_preview(
     if not valid_clips:
         return _fail(proposal_id, variant, preview_url, "NO_VALID_CLIPS")
 
+    # [RENDER-1] 미리보기 규격도 소스에서 상속한다 — 계산은 render_engine 한 곳.
+    #   preview clip 은 source_id 대신 source_path 를 들고 다니므로 경로 자체를
+    #   키로 넘긴다(choose_target_spec 은 {키: 경로} 이면 된다).
+    from engine.render_engine import choose_target_spec as _cts
+    _prev_target = _cts(
+        [{"source_id": c["source_path"], "start": c["start"], "end": c["end"]}
+         for c in valid_clips],
+        {c["source_path"]: c["source_path"] for c in valid_clips})
+    from engine.render_engine import preview_target_spec as _pts
+    _pv = _pts(_prev_target)
+    _pv_gop = max(1, int(round(float(_pv["fps_val"]))))
+    print(f"[PREVIEW_RENDER][SPEC] {_pv['w']}x{_pv['h']}@{_pv['fps']} "
+          f"(소스 {_prev_target['w']}x{_prev_target['h']})")
+
     # ── 임시 디렉터리에서 작업 ─────────────────────────────────────
     with tempfile.TemporaryDirectory(prefix="ccut_prev_") as tmpdir:
         temp_clips = []
@@ -141,13 +158,19 @@ def ensure_proposal_preview(
             temp_out = os.path.join(tmpdir, f"clip_{idx:04d}.mp4")
             # [PUNCH-1 P4] 기법 필터. 렌더 경로(render_engine)와 **같은 함수**를 부른다 —
             #   기법 구현이 두 벌로 갈리면 미리보기와 내보내기가 달라진다(INV-3).
-            _vf = "scale=1280:720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=30"
+            # [RENDER-1 2026-08-09] 1280x720 상수 폐기 — 소스 종횡비를 상속하고
+            #   장변만 1280 으로 캡한다(세로면 720x1280). 구판은 미리보기와
+            #   결과물의 기하가 서로 달라 A/B 로 본 그림과 뽑은 mp4 가 달랐다.
+            #   규격 계산은 render_engine 한 곳에서만 한다(두 벌로 갈리면 INV-3).
+            from engine.render_engine import build_scale_pad_vf
+            _vf = build_scale_pad_vf(_pv, None) + f",fps={_pv['fps']}"
             try:
                 from story_gate.proposal_axis import punch_filter, technique_for_mode
                 # [LAB-43] program_id 동반 — 없으면 경계 veto 가 영원히 UNKNOWN.
                 from story_gate.proposal_axis import program_id_for_proposal as _pid
                 _pf = punch_filter(technique_for_mode(variant), clip.get("fragment_id"),
-                                   float(clip["start"]), float(clip["end"]), 1280, 720,
+                                   float(clip["start"]), float(clip["end"]),
+                                   int(_pv["w"]), int(_pv["h"]),
                                    program_id=_pid(proposal_id))
                 if _pf:
                     _vf += "," + _pf
@@ -161,7 +184,14 @@ def ensure_proposal_preview(
                 "-i",  clip["source_path"],
                 "-vf", _vf,
                 "-c:v", "libx264", "-preset", "veryfast", "-crf", "28",
+                # [RENDER-1 되돌아옴 2026-08-09 · 실측으로 잡은 갈림] 오디오 규격도
+                #   내보내기와 같은 target 에서 상속한다. 구판 미리보기는 -ar/-ac 가
+                #   아예 없어서 클립마다 소스 rate 를 그대로 물고 갔고, concat 필터가
+                #   자동 협상으로 하나를 골랐다. 실측(3규격·44100/48000/44100 혼재):
+                #     내보내기 48000  vs  미리보기 44100  — 들은 소리와 나온 소리가 달랐다.
+                #   단일 규격 프로젝트에서는 상속값 == 소스값이라 항등(동작 무변).
                 "-c:a", "aac", "-b:a", "96k",
+                "-ar", str(int(_pv["sample_rate"])), "-ac", str(int(_pv["channels"])),
                 "-movflags", "+faststart",
                 temp_out
             ]
@@ -212,9 +242,12 @@ def ensure_proposal_preview(
             "-map", "[v]", "-map", "[a]",
             "-c:v", "libx264", "-preset", "veryfast", "-crf", "23",
             # [STREAM-FIX] 1초마다 keyframe — 긴 제안에서 조각 경계 멈춤 방지
-            "-g", "30", "-keyint_min", "30", "-sc_threshold", "0",
+            # [RENDER-1] 30 상수 → 미리보기 target fps(=소스 상속).
+            "-g", str(_pv_gop), "-keyint_min", str(_pv_gop), "-sc_threshold", "0",
             "-pix_fmt", "yuv420p",
+            # [RENDER-1 되돌아옴] 내보내기 concat 단과 같은 자리에 같은 값을 명시한다.
             "-c:a", "aac", "-b:a", "128k",
+            "-ar", str(int(_pv["sample_rate"])), "-ac", str(int(_pv["channels"])),
             "-movflags", "+faststart",
             concat_out
         ])
