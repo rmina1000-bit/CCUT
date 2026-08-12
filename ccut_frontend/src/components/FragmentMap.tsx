@@ -19,6 +19,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import type { SoundRole, SoundRoleItem } from "@/utils/soundRoleClient";
+import { GLYPH } from "@/lib/ccutGlyph";
 
 interface FragmentMapProps {
   fragments: Fragment[];
@@ -96,6 +97,16 @@ interface FragmentMapProps {
   soundRoleSavingIds?: Set<string>;
   onSoundViewChange?: (enabled: boolean) => void;
   onSoundRoleChange?: (item: SoundRoleItem, role: SoundRole) => void | Promise<void>;
+  reservedCount?: number;
+  candidateCount?: number;
+  reservedOpen?: boolean;
+  onToggleReserved?: () => void;
+  /** [DESIGN-2] 정밀편집 판을 조각맵 안에 붙인다. 편집 로직은 FragmentMap 밖에 있다. */
+  inlineEditor?: React.ReactNode;
+  /** [PBE-INLINE] 선택 타일에서만 쓰는 정적 파노라마 프레임. 영상은 만들지 않는다. */
+  pbeFrameUrls?: string[];
+  pbePosMs?: number;
+  pbeTargetId?: string | null;
 }
 
 // [LAYER-FIX6 2026-08-05 국장 지시] 조각맵 버튼줄은 ★한 벌이다.
@@ -157,17 +168,26 @@ const FragmentMap: React.FC<FragmentMapProps> = ({
   soundRoleSavingIds = new Set<string>(),
   onSoundViewChange,
   onSoundRoleChange,
+  reservedCount = 0,
+  candidateCount = 0,
+  reservedOpen = false,
+  onToggleReserved,
+  inlineEditor,
+  pbeFrameUrls = [],
+  pbePosMs,
+  pbeTargetId = null,
 }) => {
   const [draggedId, setDraggedId] = useState<string | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
   const [hoveredSeamKey, setHoveredSeamKey] = useState<string | null>(null);
   const [activeTextRowId, setActiveTextRowId] = useState<string | null>(null);
-  const [hoveredImagePlayId, setHoveredImagePlayId] = useState<string | null>(null);
   const [textEditing, setTextEditing] = useState<TextEditing | null>(null);
   const [textEditItem, setTextEditItem] = useState<(typeof storyTextItems)[number] | null>(null);
   const [textEditNotice, setTextEditNotice] = useState<string | null>(null);
   const hiddenTextInputRef = useRef<HTMLInputElement | null>(null);
   const rootRef = useRef<HTMLDivElement>(null);
+  const mapRef = useRef<HTMLDivElement>(null);
+  const [mapCols, setMapCols] = useState(1);
 
   // 가편집 배치는 전체 조각 풀 위에 순서 필터만 얹는다. 아래 visibleFragments는
   // 기존 선택·제외 계약을 그대로 유지하며, 안 보이는 조각의 상태는 바꾸지 않는다.
@@ -246,6 +266,32 @@ const FragmentMap: React.FC<FragmentMapProps> = ({
       return inTier(fragment);
     });
   }, [visibleFragments, previewTier, manualShow, manualHide, inTier, storyOnly]);
+
+  // [PBE-INLINE] CSS 폭을 추측하지 않고 실제 줄바꿈을 측정한다. 패널이 끼어도
+  // 타일 offsetTop만 읽으므로 flex/grid 변경에 의존하지 않는다.
+  React.useLayoutEffect(() => {
+    const el = mapRef.current;
+    if (!el) return;
+    const recount = () => {
+      const tiles = Array.from(el.querySelectorAll<HTMLElement>("[data-fragment-tile]"));
+      let next = tiles.length;
+      if (tiles.length < 2) next = 1;
+      else {
+        const top = tiles[0].offsetTop;
+        const firstBreak = tiles.findIndex((tile) => tile.offsetTop > top);
+        next = firstBreak > 0 ? firstBreak : tiles.length;
+      }
+      setMapCols((current) => current === next ? current : next);
+    };
+    recount();
+    const resizeObserver = typeof ResizeObserver !== "undefined" ? new ResizeObserver(recount) : null;
+    resizeObserver?.observe(el);
+    window.addEventListener("resize", recount);
+    return () => {
+      resizeObserver?.disconnect();
+      window.removeEventListener("resize", recount);
+    };
+  }, [fragments.length, shownFragments.length, fragmentFace, modeGateEnabled]);
 
   const previewCount = shownFragments.length;
 
@@ -571,7 +617,7 @@ const FragmentMap: React.FC<FragmentMapProps> = ({
     <TooltipProvider delayDuration={300}>
       <div
         ref={rootRef}
-        className={`flex flex-col ${title === "" && !showFaceControls ? "" : "bg-card/50 rounded-lg border border-border/20"}`} data-dropzone="fragment-map"
+        className={`ccut-fragment-map flex flex-col ${title === "" && !showFaceControls ? "" : "bg-card/50 rounded-lg border border-border/20"}`} data-dropzone="fragment-map"
         onDragOver={(e) => {
                 const types = e.dataTransfer.types;
           if (
@@ -624,7 +670,7 @@ const FragmentMap: React.FC<FragmentMapProps> = ({
         }}
       >
         {!(title === "" && !showFaceControls) && (
-        <div className="flex items-center justify-between px-3 py-2">
+        <div className="ccut-map-heading flex items-center justify-between px-3 py-2">
           <div className="flex items-center gap-1.5">
             <h3 className="text-[12px] font-semibold text-foreground/80 uppercase tracking-widest">
               {title ?? "조각맵"}
@@ -633,6 +679,17 @@ const FragmentMap: React.FC<FragmentMapProps> = ({
               {activeCount}
               {excludedCount > 0 ? ` · ${excludedCount}` : ""}
             </span>
+            {onToggleReserved && (
+              <button
+                type="button"
+                className="ccut-map-count ml-1 border-0 bg-transparent px-1 text-[10px] hover:text-foreground"
+                aria-expanded={reservedOpen}
+                onClick={onToggleReserved}
+                title="보류 조각과 원고 밖 후보 보기"
+              >
+                보류 {reservedCount} · 후보 {candidateCount} {reservedOpen ? GLYPH.unfold : GLYPH.fold}
+              </button>
+            )}
             {/* [PREVIEW-CUT STEP2] 먼저 보기 N / 전체 M — 상시 표시. 숨긴 조각은 제외가 아니다.
                 N은 어느 모드에서든 간단히에 들 조각 수(추천 규모)를 말한다. */}
             {!storyOnly && (
@@ -792,6 +849,7 @@ const FragmentMap: React.FC<FragmentMapProps> = ({
         )}
 
         <div
+          ref={mapRef}
           className={`flex ${modeGateEnabled && fragmentFace === "text" ? "flex-col items-stretch gap-0 min-h-[360px]" : "flex-wrap items-start content-start gap-0.5 min-h-[160px]"} px-2 py-1.5 pb-8 overflow-y-auto`}
           onDragOver={(e) => {
             // 議곌컖 tile ?꾩뿉?쒕뒗 tile??onDragOver媛 泥섎━ ???ш린?쒕뒗 鍮?怨듦컙留?泥섎━
@@ -859,10 +917,40 @@ const FragmentMap: React.FC<FragmentMapProps> = ({
             const fid = (f as any).fragment_id ?? uid;
             const activeId = activeFragmentId || selectedFragmentId;
             const fragmentActive = activeId === uid || activeId === fid || activeTextRowId === uid || activeTextRowId === fid;
+            const panelSelected = pbeTargetId === uid || pbeTargetId === fid || selectedFragmentId === uid || selectedFragmentId === fid;
+            const rowCount = modeGateEnabled && fragmentFace === "text" ? transcriptRows.length : shownFragments.length;
+            const panelTargetIndex = pbeTargetId
+              ? shownFragments.findIndex(({ fragment }) => {
+                const targetUid = getUid(fragment);
+                const targetFid = String((fragment as any).fragment_id ?? targetUid);
+                return pbeTargetId === targetUid || pbeTargetId === targetFid;
+              })
+              : -1;
+            const panelRowEndIndex = panelTargetIndex >= 0
+              ? Math.min(
+                rowCount - 1,
+                Math.floor(panelTargetIndex / Math.max(1, mapCols)) * Math.max(1, mapCols) + Math.max(1, mapCols) - 1,
+              )
+              : -1;
+            const panelRowEnd = panelTargetIndex >= 0 && visIdx === panelRowEndIndex;
             const soundOrdinal = modeGateEnabled && fragmentFace === "text" ? selectedIndex : realIndex;
             const soundRole = soundViewEnabled && soundOrdinal >= 0
               ? soundRoleForFragment(f, soundOrdinal)
               : undefined;
+            const pbeVisual = panelSelected && pbeFrameUrls.length > 0 && Number.isFinite(pbePosMs)
+              ? (() => {
+                const startRaw = Number((f as any).start_sec ?? (f as any).start_time ?? (f as any).start);
+                const endRaw = Number((f as any).end_sec ?? (f as any).end_time ?? (f as any).end);
+                const startMs = Number.isFinite(startRaw) ? startRaw * 1000 : ((Number((f as any).start_frame) || 0) / 30) * 1000;
+                const endMs = Number.isFinite(endRaw) && endRaw > startRaw
+                  ? endRaw * 1000
+                  : ((Number((f as any).end_frame) || Number((f as any).start_frame) || 0) / 30) * 1000;
+                const spanMs = Math.max(1, endMs - startMs);
+                const progress = Math.max(0, Math.min(1, ((pbePosMs as number) - startMs) / spanMs));
+                const imageIndex = Math.min(pbeFrameUrls.length - 1, Math.floor(progress * pbeFrameUrls.length));
+                return { url: pbeFrameUrls[imageIndex], progress };
+              })()
+              : null;
 
             return (
               <React.Fragment key={(f as any).stable_key || uid}>
@@ -874,15 +962,21 @@ const FragmentMap: React.FC<FragmentMapProps> = ({
                   onDragOver={(e) => handleDragOver(e, realIndex, fragments.length)}
                   onDrop={(e) => handleDrop(e, realIndex)}
                   onDragEnd={handleDragEnd}
-                  onClick={modeGateEnabled && fragmentFace !== "text" ? () => onFragmentClick(f) : undefined}
-                  onMouseDown={modeGateEnabled && fragmentFace !== "text" ? (e) => {
-                    if ((e.target as HTMLElement).closest("[data-image-play]")) return;
+                  // [TILE-DOOR 2026-08-06] onMouseDown 중복 제거.
+                  //   같은 한 번의 누름에 onFragmentClick 이 mousedown 과 click 두 단계에서
+                  //   각각 돌았다. 선택 토글은 두 번 돌면 제자리로 돌아오고, 정밀편집창은
+                  //   mousedown 에서 먼저 열린 뒤 이어지는 click 이 창 바깥으로 판정돼
+                  //   Radix 가 닫고, 손잡이의 click 이 다시 열었다 — "떴다 사라졌다 다시 뜬다".
+                  //   누름은 한 번이므로 처리도 한 번이면 된다. onClick 만 남긴다.
+                  onClick={modeGateEnabled && fragmentFace !== "text" ? (e) => {
                     onFragmentClick(f);
                   } : undefined}
                   className={`flex items-stretch relative ${modeGateEnabled && fragmentFace === "text" ? "w-full" : ""}`}
                   data-dropzone="fragment-map-item"
                   data-frag-index={realIndex}
                   data-map-fid={fid}
+                  data-fragment-tile="true"
+                  data-fragment-selected={panelSelected ? "true" : "false"}
                   data-fragment-active={fragmentActive ? "true" : "false"}
                   style={{
                     opacity: draggedId === uid ? 0.4 : f.selection_state === "N" ? 0.35 : 1,
@@ -938,9 +1032,6 @@ const FragmentMap: React.FC<FragmentMapProps> = ({
                   )}
                   <div
                     className={`relative group group/frag flex items-stretch ${modeGateEnabled && fragmentFace === "text" ? "w-full" : ""}`}
-                    onMouseEnter={() => setHoveredImagePlayId(fid)}
-                    onMouseMove={() => setHoveredImagePlayId(fid)}
-                    onMouseLeave={() => setHoveredImagePlayId((current) => current === fid ? null : current)}
                   >
                     {modeGateEnabled && fragmentFace === "text" ? (
                       (() => {
@@ -1034,7 +1125,7 @@ const FragmentMap: React.FC<FragmentMapProps> = ({
                       <>
                         <FragmentTile
                           fragment={f}
-                          isSelected={selectedFragmentId === uid}
+                          isSelected={panelSelected}
                           isHighlighted={fragmentActive}
                           isExpanded={expandedFragmentId === uid}
                           hasActiveSelection={!!selectedFragmentId}
@@ -1043,6 +1134,14 @@ const FragmentMap: React.FC<FragmentMapProps> = ({
                           onEditFragment={onEditFragment ? () => onEditFragment(f) : undefined}
                           videoPath={sourceVideoUrls?.[(f as any).source_id] ?? null}
                           compactLabelOnly={modeGateEnabled}
+                          selectedFrameUrl={pbeVisual?.url}
+                          selectedProgress={pbeVisual?.progress}
+                          showPlayButton={!!onFragmentPlay}
+                          playButtonVisible
+                          onPlay={(event) => onFragmentPlay?.({
+                            ...f,
+                            video_url: (f as any).video_url ?? sourceVideoUrls?.[(f as any).source_id] ?? sourceVideoUrls?.[(f as any).source_video],
+                          } as Fragment)}
                           widthScale={0.7}
                           variant="edit"
                           orderBadge={modeGateEnabled ? selectedIndex + 1 : null}
@@ -1053,35 +1152,8 @@ const FragmentMap: React.FC<FragmentMapProps> = ({
                             compact
                             saving={soundRoleSavingIds.has(soundRole.timeline_item_id)}
                             onChange={onSoundRoleChange}
-                            onPlay={() => onFragmentPlay?.({
-                              ...f,
-                              video_url: (f as any).video_url ?? sourceVideoUrls?.[(f as any).source_id] ?? sourceVideoUrls?.[(f as any).source_video],
-                            } as Fragment)}
                             className="absolute bottom-1 left-1 z-40"
                           />
-                        )}
-                        {modeGateEnabled && !soundRole && (
-                          <button
-                            type="button"
-                            data-image-play="true"
-                            className={`absolute left-1/2 bottom-1 z-30 pointer-events-auto -translate-x-1/2 rounded bg-black/60 px-1.5 py-0.5 text-[12px] text-white/90 transition-opacity hover:bg-black/80 ${hoveredImagePlayId === fid ? "opacity-100" : "opacity-0"}`}
-                            onMouseDown={(e) => {
-                              e.stopPropagation();
-                              onFragmentPlay?.({
-                                ...f,
-                                video_url: (f as any).video_url ?? sourceVideoUrls?.[(f as any).source_id] ?? sourceVideoUrls?.[(f as any).source_video],
-                              } as Fragment);
-                            }}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              onFragmentPlay?.({
-                                ...f,
-                                video_url: (f as any).video_url ?? sourceVideoUrls?.[(f as any).source_id] ?? sourceVideoUrls?.[(f as any).source_video],
-                              } as Fragment);
-                            }}
-                          >
-                            ▶
-                          </button>
                         )}
                       </>
                     )}
@@ -1107,6 +1179,17 @@ const FragmentMap: React.FC<FragmentMapProps> = ({
                     </div>
                   )}
                 </div>
+                {panelRowEnd && inlineEditor && (
+                  <div
+                    key="pbe"
+                    data-precision-inline="true"
+                    className="ccut-panel-slot ccut-panel w-full px-2 pb-2"
+                    style={{ flex: "0 0 100%", width: "100%" }}
+                    onClick={(event) => event.stopPropagation()}
+                  >
+                    {inlineEditor}
+                  </div>
+                )}
               </React.Fragment>
             );
           })}
@@ -1125,6 +1208,16 @@ const FragmentMap: React.FC<FragmentMapProps> = ({
           />
         )}
       </div>
+      {inlineEditor && !pbeTargetId && !selectedFragmentId && (
+        <div
+          data-precision-inline="true"
+          className="ccut-panel-slot ccut-panel w-full px-2 pb-2"
+          style={{ flex: "0 0 100%", width: "100%" }}
+          onClick={(event) => event.stopPropagation()}
+        >
+          {inlineEditor}
+        </div>
+      )}
     </TooltipProvider>
   );
 };

@@ -10,6 +10,8 @@ import AdminIndex from "./pages/AdminIndex.tsx";
 import BasketPortal from "./pages/BasketPortal.tsx";
 import NotFound from "./pages/NotFound.tsx";
 import QwenDirect from "./pages/QwenDirect.tsx";
+import FragmentPanelPreview from "./components/FragmentPanelPreview.tsx";
+import "./ccut-ui.css";
 
 const queryClient = new QueryClient();
 
@@ -35,6 +37,8 @@ const App = () => (
           <Route path="/basket-portal" element={<BasketPortal />} />
           {/* [QWEN-DIRECT] 국장↔큐원 직통 — 게이트·프롬프트·필터·저장 없음 */}
           <Route path="/qwen" element={<QwenDirect />} />
+          {/* [PBE-PREVIEW] 외부 데이터·저장·재생 연결 없는 패널 목업 */}
+          <Route path="/pbe-preview" element={<FragmentPanelPreview />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
         </Routes>

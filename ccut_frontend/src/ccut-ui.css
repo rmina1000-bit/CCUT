@@ -1,0 +1,622 @@
+/* DESIGN-1: 제품 화면의 조용한 표면. 데이터·렌더·원장은 이 파일을 모른다. */
+:root {
+  --ccut-bg-0: hsl(228 12% 9%);
+  --ccut-bg-1: hsl(228 10% 12%);
+  --ccut-bg-2: hsl(228 8% 16%);
+  --ccut-line: hsl(228 7% 25%);
+  --ccut-line2: hsl(228 7% 32%);
+  --ccut-line-soft: hsl(228 7% 20%);
+  --ccut-text-1: hsl(220 12% 92%);
+  --ccut-text-2: hsl(220 8% 72%);
+  --ccut-text-3: hsl(220 7% 57%);
+  --ccut-lit: hsl(31 76% 62%);
+  --ccut-lit-soft: hsl(31 76% 62% / 0.14);
+  --ccut-radius: 4px;
+  --snd-row: 40px;
+  --snd-gap: 6px;
+  --pbe-body: calc(var(--snd-row) * 3 + var(--snd-gap) * 2);
+  --pbe-cell: 88px;
+  --ccut-font: Pretendard, -apple-system, BlinkMacSystemFont, system-ui,
+    "Segoe UI", "Malgun Gothic", "Apple SD Gothic Neo", sans-serif;
+}
+
+.ccut-app-shell {
+  --primary: 31 76% 62%;
+  --ring: 31 76% 62%;
+  font-family: var(--ccut-font);
+  color: var(--ccut-text-1);
+  background: var(--ccut-bg-0);
+}
+
+.ccut-app-shell .text-primary {
+  color: var(--ccut-lit) !important;
+}
+
+.ccut-app-shell button,
+.ccut-app-shell input,
+.ccut-app-shell select,
+.ccut-app-shell textarea {
+  font-family: inherit;
+}
+
+.ccut-app-shell button {
+  letter-spacing: 0;
+}
+
+.ccut-left-nav {
+  background: var(--ccut-bg-0) !important;
+  border-color: var(--ccut-line-soft) !important;
+}
+
+.ccut-left-nav [aria-current="true"],
+.ccut-left-nav .ccut-nav-active {
+  color: var(--ccut-text-1);
+  background: var(--ccut-lit-soft);
+  box-shadow: none;
+}
+
+.ccut-left-nav .ccut-nav-label {
+  font-size: 12px;
+  color: var(--ccut-text-2);
+}
+
+.ccut-fragment-map {
+  border-color: var(--ccut-line-soft) !important;
+  background: color-mix(in srgb, var(--ccut-bg-1) 72%, transparent) !important;
+}
+
+.ccut-map-heading {
+  min-height: 34px;
+  border-bottom: 1px solid var(--ccut-line-soft);
+}
+
+.ccut-map-count {
+  color: var(--ccut-text-2);
+  font-variant-numeric: tabular-nums;
+}
+
+.ccut-drawer-shell {
+  position: relative;
+  min-height: 0;
+  overflow: visible !important;
+  border-top: 1px solid var(--ccut-line-soft);
+  background: var(--ccut-bg-1);
+  transition: height 140ms ease, background-color 140ms ease;
+}
+
+.ccut-drawer-shell[data-open="false"] {
+  height: 28px !important;
+  flex: 0 0 28px !important;
+  min-height: 28px !important;
+  overflow: visible;
+}
+
+.ccut-drawer-shell[data-open="true"] {
+  min-height: 120px;
+}
+
+.ccut-drawer-shell[data-open="false"] > :not(.ccut-drawer-tab) {
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.ccut-drawer-tab {
+  position: absolute;
+  z-index: 20;
+  top: 0;
+  left: 0;
+  right: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 28px;
+  padding: 0 10px;
+  border: 0;
+  border-bottom: 1px solid var(--ccut-line-soft);
+  background: var(--ccut-bg-1);
+  color: var(--ccut-text-2);
+  font-size: 11px;
+  text-align: left;
+}
+
+.ccut-drawer-tab:hover,
+.ccut-drawer-tab[aria-expanded="true"] {
+  color: var(--ccut-text-1);
+  background: var(--ccut-bg-2);
+}
+
+.ccut-drawer-body {
+  height: 100%;
+  padding-top: 28px;
+}
+
+.ccut-drawer-shell[data-open="false"] .ccut-drawer-body {
+  height: 0;
+  overflow: hidden;
+  padding-top: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.ccut-drawer-grip {
+  color: var(--ccut-text-3);
+  font-size: 12px;
+  user-select: none;
+}
+
+.ccut-role-control {
+  border-color: var(--ccut-line-soft) !important;
+}
+
+.ccut-role-control select {
+  border-radius: var(--ccut-radius);
+}
+
+.ccut-app-shell [data-sound-role] {
+  --tw-ring-color: var(--ccut-lit);
+}
+
+.ccut-app-shell [data-precision-pane] {
+  border-color: var(--ccut-line-soft);
+}
+
+.ccut-pbe-dialog {
+  border-width: 1px !important;
+  border-color: var(--ccut-line) !important;
+  border-radius: var(--ccut-radius) !important;
+  background: var(--ccut-bg-1) !important;
+}
+
+.ccut-panel {
+  border-top: 1px solid var(--ccut-line2);
+  background: var(--ccut-bg-1);
+}
+
+.ccut-pbe-inline {
+  width: 100% !important;
+  max-width: none !important;
+  max-height: none !important;
+  height: auto !important;
+  transform: none !important;
+  border-color: var(--ccut-line2) !important;
+  border-radius: var(--ccut-radius) !important;
+}
+
+.ccut-ph {
+  display: flex;
+  min-height: 28px;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+}
+
+.ccut-ph-no {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 2px;
+}
+
+.ccut-ph-count {
+  color: var(--ccut-text-3);
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.ccut-ph-line {
+  min-width: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
+  color: var(--ccut-text-2);
+  font-size: 13px;
+  letter-spacing: -.01em;
+  line-height: 1.1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ccut-ph-tabs {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 16px;
+  margin-left: 28px;
+}
+
+.ccut-ph-close {
+  margin-left: 10px;
+}
+
+.ccut-act,
+.ccut-sym,
+.ccut-pick-act,
+.ccut-save {
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  cursor: pointer;
+}
+
+.ccut-act,
+.ccut-app-shell .ccut-act {
+  padding: 0;
+  color: var(--ccut-text-3);
+  font-size: 11px;
+  letter-spacing: .16em;
+  line-height: 1.35;
+  white-space: nowrap;
+}
+
+.ccut-act:hover,
+.ccut-act:focus-visible,
+.ccut-act[aria-pressed="true"] {
+  color: var(--ccut-text-1);
+  outline: none;
+  box-shadow: 0 1px 0 var(--ccut-lit);
+}
+
+.ccut-sym {
+  display: inline-flex;
+  width: 20px;
+  height: 20px;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  color: var(--ccut-text-3);
+  font-size: 13px;
+  line-height: 1;
+}
+
+.ccut-sym:hover,
+.ccut-sym:focus-visible {
+  color: var(--ccut-text-1);
+  outline: none;
+}
+
+.ccut-sym:disabled {
+  color: var(--ccut-line2);
+  cursor: default;
+}
+
+.ccut-ph2 {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 26px;
+  margin-bottom: 9px;
+}
+
+.ccut-ph2 select {
+  height: 22px;
+  padding: 0 22px 0 8px;
+  border: 1px solid var(--ccut-line2);
+  border-radius: 3px;
+  background: none;
+  color: var(--ccut-text-1);
+  font-size: 12px;
+}
+
+.ccut-ph2-src {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--ccut-text-2);
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ccut-ph2-right {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.ccut-ph2-right[data-sound-role-row="true"] {
+  gap: 14px;
+  min-height: 26px;
+}
+
+.ccut-ph2-right[data-sound-role-row="true"] .ccut-role-control {
+  min-height: 26px !important;
+  height: 26px;
+}
+
+.ccut-gap-now {
+  margin-right: 4px;
+  color: var(--ccut-text-1);
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 11px;
+}
+
+.ccut-pick-act {
+  position: absolute;
+  top: 4px;
+  z-index: 30;
+  transform: translateX(-50%);
+  padding: 0;
+  color: var(--ccut-text-2);
+  font-size: 10px;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.ccut-pick-act:hover,
+.ccut-pick-act:focus-visible {
+  color: var(--ccut-text-1);
+  outline: none;
+}
+
+.ccut-foot {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--ccut-text-2);
+  font-size: 11px;
+}
+
+.ccut-foot-len {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ccut-foot-state {
+  margin-left: auto;
+  color: var(--ccut-text-3);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.ccut-foot-state:empty {
+  display: none;
+}
+
+.ccut-save {
+  flex: none;
+  margin-left: 16px;
+  padding: 0;
+  color: var(--ccut-text-1);
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: .10em;
+  line-height: 1.35;
+}
+
+.ccut-save:hover,
+.ccut-save:focus-visible {
+  color: #fff;
+  outline: none;
+}
+
+.ccut-save:disabled {
+  color: var(--ccut-text-3);
+  cursor: default;
+  font-weight: 400;
+}
+
+.ccut-warn {
+  margin: 0;
+  color: var(--ccut-text-2);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.ccut-snd {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: 150px minmax(0, 1fr);
+  column-gap: 14px;
+  align-items: start;
+}
+
+.ccut-snd-controls {
+  grid-column: 1;
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+}
+
+.ccut-snd-ctrl {
+  display: flex;
+  height: var(--snd-row);
+  margin-bottom: var(--snd-gap);
+  align-items: center;
+  gap: 10px;
+}
+
+.ccut-snd-ctrl:last-child {
+  margin-bottom: 0;
+}
+
+.ccut-snd-name {
+  width: 34px;
+  flex: none;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  color: var(--ccut-text-1);
+  cursor: pointer;
+  font-size: 12px;
+  letter-spacing: .08em;
+  line-height: 1.2;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.ccut-snd-name:hover,
+.ccut-snd-name:focus-visible {
+  color: #fff;
+  outline: none;
+}
+
+.ccut-snd-ctrl.is-off .ccut-snd-name {
+  color: var(--ccut-text-3);
+}
+
+.ccut-vol {
+  width: 78px;
+  height: 3px;
+  flex: none;
+  accent-color: var(--ccut-text-2);
+}
+
+.ccut-snd-ctrl.is-off .ccut-vol {
+  opacity: .35;
+}
+
+.ccut-snd-scroll {
+  grid-column: 2;
+  grid-row: 1;
+  align-self: start;
+  min-width: 0;
+}
+
+.ccut-scrollx {
+  overflow-x: scroll;
+  overflow-y: hidden;
+  scrollbar-color: var(--ccut-line2) var(--ccut-bg-1);
+  scrollbar-width: thin;
+}
+
+.ccut-scrollx::-webkit-scrollbar {
+  height: 6px;
+}
+
+.ccut-scrollx::-webkit-scrollbar-track {
+  border-radius: 3px;
+  background: var(--ccut-bg-1);
+}
+
+.ccut-scrollx::-webkit-scrollbar-thumb {
+  border-radius: 3px;
+  background: var(--ccut-line2);
+}
+
+.ccut-scrollx::-webkit-scrollbar-thumb:hover {
+  background: var(--ccut-text-3);
+}
+
+.ccut-snd-lane {
+  position: relative;
+  height: var(--snd-row);
+  margin-bottom: var(--snd-gap);
+  overflow: hidden;
+  border-radius: 4px;
+  background: var(--ccut-bg-1);
+}
+
+.ccut-snd-lane:nth-child(3) {
+  margin-bottom: 0;
+}
+
+.ccut-snd-lane.is-off i {
+  opacity: .13;
+}
+
+.ccut-track {
+  height: var(--pbe-body) !important;
+  border-color: var(--ccut-line2) !important;
+}
+
+.ccut-words {
+  border-color: var(--ccut-line2) !important;
+}
+
+.ccut-keep {
+  position: relative;
+  height: 14px;
+  color: var(--ccut-text-1);
+}
+
+.ccut-keep-time {
+  position: absolute;
+  top: 0;
+  font-size: 10px;
+  color: var(--ccut-text-3);
+}
+
+.ccut-keep-time.is-start {
+  left: 0;
+}
+
+.ccut-keep-time.is-end {
+  right: 0;
+}
+
+.ccut-tile-act {
+  position: absolute;
+  bottom: 6px;
+  z-index: 30;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 20px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 3px;
+  background: rgba(10, 12, 15, .66);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .22);
+  color: #fff;
+  font-size: 11px;
+  line-height: 1;
+  letter-spacing: 0;
+  opacity: 0;
+  transition: opacity .12s, background .12s, box-shadow .12s;
+}
+
+.ccut-tile:hover .ccut-tile-act,
+.ccut-tile:focus-within .ccut-tile-act,
+.ccut-tile.is-selected .ccut-tile-act {
+  opacity: 1;
+}
+
+.ccut-tile-act:hover {
+  background: rgba(10, 12, 15, .86);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .5);
+}
+
+.ccut-tile-act.is-edit {
+  left: 6px;
+}
+
+.ccut-tile-act.is-play {
+  right: 6px;
+  padding: 0 7px;
+}
+
+.ccut-tile:hover .ccut-tile-dur,
+.ccut-tile.is-selected .ccut-tile-dur {
+  opacity: 0;
+}
+
+.ccut-pbe-dialog .pbe-rail-scroll {
+  border-top: 1px solid var(--ccut-line-soft);
+  border-bottom: 1px solid var(--ccut-line-soft);
+}
+
+.ccut-basket-lock {
+  cursor: not-allowed;
+}
+
+@media (max-width: 840px) {
+  .ccut-nav-column {
+    position: fixed !important;
+    z-index: 80 !important;
+    inset: 0 auto 0 0 !important;
+    width: 196px !important;
+    box-shadow: 16px 0 32px hsl(228 20% 4% / 0.35);
+  }
+
+  .ccut-nav-column + div {
+    display: none;
+  }
+}

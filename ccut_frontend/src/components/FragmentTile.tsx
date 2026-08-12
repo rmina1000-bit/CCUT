@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { Fragment, formatDuration } from "@/data/fragmentData";
 import { displayName } from "@/lib/fragmentIdentity";
-import { Play } from "lucide-react";
+import { GLYPH } from "@/lib/ccutGlyph";
 import { DEBUG_LOG } from "@/utils/debugFlags";
 
 interface FragmentTileProps {
@@ -15,12 +15,14 @@ interface FragmentTileProps {
   videoPath?: string | null;
   onClick?: () => void;
   onDoubleClick?: () => void;
-  onEditFragment?: () => void;   // [2-2b] 조각편집 진입 (variant=edit에서만 버튼 노출)
+  onEditFragment?: () => void;   // [2-2b] 정밀편집 진입 (variant=edit에서만 버튼 노출)
 
   compactLabelOnly?: boolean;
   showPlayButton?: boolean;
   playButtonVisible?: boolean;
   onPlay?: (e: React.MouseEvent) => void;
+  selectedFrameUrl?: string;
+  selectedProgress?: number;
   widthScale?: number;
   orderBadge?: number | null;
 }
@@ -42,6 +44,8 @@ const FragmentTile: React.FC<FragmentTileProps> = ({
   showPlayButton = false,
   playButtonVisible = false,
   onPlay,
+  selectedFrameUrl,
+  selectedProgress,
   widthScale = 0.7,
   orderBadge = null,
 }) => {
@@ -145,16 +149,17 @@ const FragmentTile: React.FC<FragmentTileProps> = ({
   };
 
   const resolvedUrl = resolveThumbnailUrl(fragment);
+  const displayUrl = isSelected && selectedFrameUrl ? selectedFrameUrl : resolvedUrl;
   const isProgrammed = orderBadge != null;
 
   return (
     <div
       onClick={onClick}
       onDoubleClick={onDoubleClick}
-      className={`relative group cursor-pointer overflow-hidden border-[0.5px] flex-shrink-0 fragment-tile rounded-lg
+      className={`relative group ccut-tile cursor-pointer overflow-hidden border-[0.5px] flex-shrink-0 fragment-tile rounded-lg
         transition-all duration-200 bg-[hsl(228_10%_13%)]
         ${isSelected
-          ? "border-primary ring-2 ring-primary/80 shadow-[0_0_0_2px_rgba(96,165,250,0.42),0_0_22px_rgba(96,165,250,0.35),0_10px_24px_rgba(0,0,0,0.28)]"
+          ? "is-selected border border-primary"
           : isHighlighted
             ? "border-primary ring-2 ring-primary/70 shadow-[0_0_0_2px_rgba(96,165,250,0.36),0_0_18px_rgba(96,165,250,0.28)]"
             : "border-border/20 hover:border-primary/20"
@@ -174,14 +179,14 @@ const FragmentTile: React.FC<FragmentTileProps> = ({
         />
       </div>
 
-      {hasImageError || !resolvedUrl ? (
+      {hasImageError || !displayUrl ? (
         <div className="absolute inset-0 flex flex-col items-center justify-center bg-muted/20 border border-dashed border-muted-foreground/30 z-[1]">
           <span className="text-[10px] text-muted-foreground font-medium">이미지 없음</span>
         </div>
       ) : (
         <img
           draggable={false}
-          src={resolvedUrl}
+          src={displayUrl}
           alt={fragment.fragment_id}
           // [THUMB-LAZY 2026-08-01] 화면 밖 썸네일까지 전부 받고 있었다.
           //   실측(Adhara 40소스): img 95개 중 화면 안 25개 — 74%가 낭비.
@@ -203,50 +208,21 @@ const FragmentTile: React.FC<FragmentTileProps> = ({
             const img = e.currentTarget;
             const naturalWidth = img.naturalWidth;
             const fallbackUsed = naturalWidth > 0 ? 0 : 1;
-            DEBUG_LOG && console.log(`[THUMB_RESOLVE] fragId=${fragment.fragment_id} display_id=${fragment.display_id || fragment.fragment_id} directThumbnail=${fragment.thumbnail?.thumbnail_url || "none"} base=${getBaseFragmentId(fragment)} resolvedThumbnail=${resolvedUrl} naturalWidth=${naturalWidth} fallbackUsed=${fallbackUsed}`);
+            DEBUG_LOG && console.log(`[THUMB_RESOLVE] fragId=${fragment.fragment_id} display_id=${fragment.display_id || fragment.fragment_id} directThumbnail=${fragment.thumbnail?.thumbnail_url || "none"} base=${getBaseFragmentId(fragment)} resolvedThumbnail=${displayUrl} naturalWidth=${naturalWidth} fallbackUsed=${fallbackUsed}`);
           }}
           onError={(e) => {
             setHasImageError(true);
-            DEBUG_LOG && console.log(`[THUMB_RESOLVE] fragId=${fragment.fragment_id} display_id=${fragment.display_id || fragment.fragment_id} directThumbnail=${fragment.thumbnail?.thumbnail_url || "none"} base=${getBaseFragmentId(fragment)} resolvedThumbnail=${resolvedUrl} naturalWidth=0 fallbackUsed=1`);
+            DEBUG_LOG && console.log(`[THUMB_RESOLVE] fragId=${fragment.fragment_id} display_id=${fragment.display_id || fragment.fragment_id} directThumbnail=${fragment.thumbnail?.thumbnail_url || "none"} base=${getBaseFragmentId(fragment)} resolvedThumbnail=${displayUrl} naturalWidth=0 fallbackUsed=1`);
           }}
-        />
-      )}
-
-      {videoPath && (hasImageError || !resolvedUrl) && (
-        <video
-          draggable={false}
-          src={videoPath}
-          className="absolute inset-0 w-full h-full object-cover opacity-100 z-[2]"
-          preload="metadata"
-          muted
-          playsInline
-          onLoadedMetadata={(e) => {
-            const v = e.currentTarget;
-            v.currentTime = (fragment.start_frame ?? 0) / 30;
-          }}
-          onError={() => setHasImageError(true)}
         />
       )}
 
       <div className="absolute inset-0 bg-black/38" />
       <div className="absolute inset-0 bg-gradient-to-t from-black/72 via-transparent to-black/16 pointer-events-none" />
 
-      {/* [2-2b] 조각편집 진입 버튼: variant=edit + onEditFragment 있을 때만, hover 시 중앙 표시. 선택 토글(onClick)과 분리. */}
-      {variant === "edit" && onEditFragment && (
-        <div className="absolute inset-0 z-20 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none">
-          <button
-            type="button"
-            onClick={(e) => { e.stopPropagation(); onEditFragment(); }}
-            className="pointer-events-auto px-2.5 py-1 rounded-md bg-black/60 hover:bg-black/80 text-white text-[11px] font-bold border border-white/20 backdrop-blur-sm"
-          >
-            ✂ 조각편집
-          </button>
-        </div>
-      )}
-
       <div className="absolute inset-0 z-10">
         {isProgrammed && (
-          <span className="absolute left-[6px] top-[6px] flex h-[18px] w-[18px] items-center justify-center rounded-[5px] bg-primary font-mono text-[11px] font-medium leading-none text-primary-foreground">
+          <span className="absolute left-[6px] top-[6px] flex h-[18px] w-[18px] items-center justify-center rounded-[5px] bg-black/55 font-mono text-[11px] font-medium leading-none text-white/70">
             {orderBadge}
           </span>
         )}
@@ -255,32 +231,51 @@ const FragmentTile: React.FC<FragmentTileProps> = ({
             {fragment.display_id}
           </span>
         )}
-        <span className="absolute bottom-[6px] left-[7px] font-mono text-[10px] font-normal leading-none text-muted-foreground">
+        <span className="ccut-tile-dur absolute bottom-[6px] left-[7px] font-mono text-[10px] font-normal leading-none text-muted-foreground">
           {formatDuration(fragment.duration)}
         </span>
 
-        {showPlayButton && (
+        {variant === "edit" && onEditFragment && (
           <button
             type="button"
+            data-precision-open="true"
+            aria-label="정밀 편집"
+            onMouseDown={(e) => e.stopPropagation()}
+            onClick={(e) => { e.stopPropagation(); onEditFragment(); }}
+            className="ccut-tile-act is-edit"
+          >
+            편집
+          </button>
+        )}
+
+        {showPlayButton && onPlay && (
+          <button
+            type="button"
+            aria-label="재생"
             onClick={(e) => {
               e.stopPropagation();
               onPlay?.(e);
             }}
-            className={`absolute bottom-[6px] right-[7px] h-6 w-6 rounded-lg bg-primary/18 border border-primary/20
-              flex items-center justify-center ${playButtonVisible ? "opacity-100" : "opacity-0"} group-hover:opacity-100
-              transition-all duration-200 translate-y-1 group-hover:translate-y-0`}
+            data-selected-fragment-play={isSelected ? "true" : undefined}
+            className="ccut-tile-act is-play"
           >
-            <Play size={12} className="text-primary fill-primary" />
+            {GLYPH.play}
           </button>
         )}
       </div>
 
-      <div className="absolute bottom-0 left-0 w-full h-1 bg-white/6 overflow-hidden">
-        <div
-          className="h-full bg-primary/55 shadow-[0_0_8px_rgba(96,165,250,0.22)]"
-          style={{ width: hookWidth }}
-        />
-      </div>
+      {isSelected && selectedProgress != null ? (
+        <div data-selected-fragment-progress="true" className="absolute bottom-0 left-0 z-20 h-[2px] w-full overflow-hidden bg-black/40">
+          <div className="h-full bg-white/80" style={{ width: `${Math.max(0, Math.min(1, selectedProgress)) * 100}%` }} />
+        </div>
+      ) : (
+        <div className="absolute bottom-0 left-0 w-full h-1 bg-white/6 overflow-hidden">
+          <div
+            className="h-full bg-primary/55 shadow-[0_0_8px_rgba(96,165,250,0.22)]"
+            style={{ width: hookWidth }}
+          />
+        </div>
+      )}
     </div>
   );
 };
